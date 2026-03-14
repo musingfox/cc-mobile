@@ -7,6 +7,6 @@ const sessionManager = new SessionManager();
 
 const app = new Elysia()
   .use(createWsPlugin(sessionManager, createPermissionHandler))
-  .listen(3001);
+  .listen({ port: 3001, hostname: "0.0.0.0" });
 
-console.log("cc-touch server listening on :3001");
+console.log("cc-touch server listening on 0.0.0.0:3001");

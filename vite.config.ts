@@ -9,6 +9,7 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
+    allowedHosts: true,
     proxy: {
       "/ws": {
         target: "ws://localhost:3001",

@@ -1,38 +1,52 @@
-import { unstable_v2_createSession } from "@anthropic-ai/claude-agent-sdk";
-import type { CanUseToolFn, SDKMessage, SDKSession } from "@anthropic-ai/claude-agent-sdk";
+import { query } from "@anthropic-ai/claude-agent-sdk";
+import type {
+  CanUseTool,
+  SDKMessage,
+  Query,
+  SlashCommand,
+  AgentInfo,
+} from "@anthropic-ai/claude-agent-sdk";
+import { loadUserPlugins } from "./settings-loader";
 
-interface SessionInfo {
-  session: SDKSession;
+type SdkPluginConfig = { type: "local"; path: string };
+
+interface SessionConfig {
   cwd: string;
-  status: "active" | "idle";
+  canUseTool: CanUseTool;
+  sdkSessionId: string | null;
+}
+
+export interface Capabilities {
+  commands: SlashCommand[];
+  agents: AgentInfo[];
+  model: string;
 }
 
 export class SessionManager {
-  private sessions = new Map<string, SessionInfo>();
+  private sessions = new Map<string, SessionConfig>();
+  private plugins: SdkPluginConfig[] | null = null;
+  private activeQueries = new Map<string, Query>();
+
+  private async getPlugins(): Promise<SdkPluginConfig[]> {
+    if (!this.plugins) {
+      this.plugins = await loadUserPlugins();
+    }
+    return this.plugins;
+  }
 
   async createSession(
     sessionId: string,
     cwd: string,
-    canUseTool: CanUseToolFn
+    canUseTool: CanUseTool
   ): Promise<void> {
     if (this.sessions.has(sessionId)) {
       throw new Error(`Session ${sessionId} already exists`);
     }
 
-    const session = await unstable_v2_createSession({
-      model: "claude-sonnet-4-6",
-      settingSources: ["user", "project", "local"],
-      systemPrompt: { type: "preset", preset: "claude_code" },
-      includePartialMessages: true,
-      permissionMode: "default",
+    this.sessions.set(sessionId, {
       cwd,
       canUseTool,
-    });
-
-    this.sessions.set(sessionId, {
-      session,
-      cwd,
-      status: "idle",
+      sdkSessionId: null,
     });
   }
 
@@ -40,25 +54,75 @@ export class SessionManager {
     sessionId: string,
     content: string
   ): AsyncGenerator<SDKMessage> {
-    const sessionInfo = this.sessions.get(sessionId);
-    if (!sessionInfo) {
+    const config = this.sessions.get(sessionId);
+    if (!config) {
       throw new Error(`Session ${sessionId} not found`);
     }
 
-    await sessionInfo.session.send(content);
+    const plugins = await this.getPlugins();
 
-    for await (const message of sessionInfo.session.stream()) {
-      yield message;
+    const q = query({
+      prompt: content,
+      options: {
+        model: "claude-sonnet-4-6",
+        settingSources: ["user", "project", "local"],
+        systemPrompt: { type: "preset", preset: "claude_code" },
+        includePartialMessages: true,
+        permissionMode: "default",
+        allowedTools: ["Skill"],
+        plugins,
+        cwd: config.cwd,
+        canUseTool: config.canUseTool,
+        ...(config.sdkSessionId ? { resume: config.sdkSessionId } : {}),
+      },
+    });
+
+    this.activeQueries.set(sessionId, q);
+
+    try {
+      for await (const msg of q) {
+        // Capture SDK session ID for future resume
+        if (
+          msg.type === "system" &&
+          msg.subtype === "init" &&
+          !config.sdkSessionId
+        ) {
+          config.sdkSessionId = (msg as any).session_id;
+        }
+
+        yield msg;
+      }
+    } finally {
+      this.activeQueries.delete(sessionId);
+      q.close();
+    }
+  }
+
+  async getCapabilities(sessionId: string): Promise<Capabilities | null> {
+    const q = this.activeQueries.get(sessionId);
+    if (!q) return null;
+
+    try {
+      const [commands, agents] = await Promise.all([
+        q.supportedCommands(),
+        q.supportedAgents(),
+      ]);
+      return {
+        commands,
+        agents,
+        model: "claude-sonnet-4-6",
+      };
+    } catch {
+      return null;
     }
   }
 
   destroySession(sessionId: string): void {
-    const sessionInfo = this.sessions.get(sessionId);
-    if (!sessionInfo) {
-      return; // no-op
+    const q = this.activeQueries.get(sessionId);
+    if (q) {
+      q.close();
+      this.activeQueries.delete(sessionId);
     }
-
-    sessionInfo.session.close();
     this.sessions.delete(sessionId);
   }
 }

@@ -1,19 +1,8 @@
+import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk";
+
 interface ToolUse {
   name: string;
   parameters: Record<string, unknown>;
-}
-
-interface CanUseToolOptions {
-  toolUseID: string;
-  signal?: AbortSignal;
-  suggestions?: unknown[];
-}
-
-interface CanUseToolResult {
-  behavior: "allow" | "deny";
-  updatedInput?: unknown;
-  toolUseID: string;
-  message?: string;
 }
 
 type SendToClientFn = (requestId: string, tool: ToolUse) => void;
@@ -30,19 +19,15 @@ export function createPermissionHandler(
   const pendingRequests = new Map<
     string,
     {
-      resolve: (result: CanUseToolResult) => void;
+      resolve: (result: PermissionResult) => void;
       timeoutId: ReturnType<typeof setTimeout>;
     }
   >();
 
-  const canUseTool = async (
-    toolName: string,
-    input: Record<string, unknown>,
-    options: CanUseToolOptions
-  ): Promise<CanUseToolResult> => {
+  const canUseTool: CanUseTool = async (toolName, input, options) => {
     const requestId = options.toolUseID;
 
-    return new Promise<CanUseToolResult>((resolve) => {
+    return new Promise<PermissionResult>((resolve) => {
       const timeoutId = setTimeout(() => {
         pendingRequests.delete(requestId);
         resolve({
@@ -70,10 +55,11 @@ export function createPermissionHandler(
     clearTimeout(pending.timeoutId);
     pendingRequests.delete(requestId);
 
-    pending.resolve({
-      behavior: allow ? "allow" : "deny",
-      toolUseID: requestId,
-    });
+    pending.resolve(
+      allow
+        ? { behavior: "allow", updatedInput: undefined, toolUseID: requestId }
+        : { behavior: "deny", message: "Denied by user", toolUseID: requestId }
+    );
   };
 
   return {
