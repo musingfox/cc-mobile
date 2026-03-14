@@ -14,7 +14,7 @@ export function createWsPlugin(
     body: t.Any(), // We'll validate with Zod
 
     open(ws) {
-      // Store permission handler per connection
+      console.log("[ws] client connected");
       const handler = permissionBridgeFactory((requestId, tool) => {
         ws.send({
           type: "permission_request",
@@ -27,8 +27,10 @@ export function createWsPlugin(
     },
 
     async message(ws, data) {
+      console.log("[ws] received:", (data as any)?.type ?? "unknown");
       const parsed = ClientMessage.safeParse(data);
       if (!parsed.success) {
+        console.warn("[ws] invalid message:", parsed.error.message);
         ws.send({
           type: "error",
           code: "invalid_message",
@@ -92,6 +94,7 @@ export function createWsPlugin(
           }
         }
       } catch (error) {
+        console.error("[ws] error handling message:", error);
         ws.send({
           type: "error",
           code: "session_error",
@@ -104,7 +107,7 @@ export function createWsPlugin(
     },
 
     close(ws) {
-      // Clean up any active sessions if needed
+      console.log("[ws] client disconnected");
     },
   });
 }
