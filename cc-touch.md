@@ -377,6 +377,9 @@ Files:
 - Dark/light theme toggle
 - Settings page (default cwd, permission mode preferences)
 - Haptic feedback on approve/deny (via Vibration API)
+- Token-level streaming (display text incrementally, not all at once)
+- Status line — mirror Claude Code's status bar data (model, token usage, cost, session duration). Source candidates: SDK `result` message fields (`total_cost_usd`, `num_turns`, `duration_ms`), or SDK `rate_limit_event` for quota info
+- Configurable `permissionMode` via UI toggle or `--permission-mode` CLI flag
 
 ## Development Setup
 
