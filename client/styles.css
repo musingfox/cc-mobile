@@ -211,6 +211,58 @@ button {
   }
 }
 
+/* Quick Actions */
+.quick-actions {
+  padding: 8px 16px;
+  background: #16213e;
+  border-top: 1px solid #2a2a3e;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.quick-actions-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.quick-actions-row::-webkit-scrollbar {
+  display: none;
+}
+
+.quick-action-btn {
+  min-height: 36px;
+  padding: 6px 14px;
+  border-radius: 18px;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: opacity 0.2s;
+}
+
+.quick-action-btn:active:not(:disabled) {
+  opacity: 0.7;
+}
+
+.quick-action-btn:disabled {
+  opacity: 0.3;
+}
+
+.quick-action-btn.command {
+  background: #1e3a5f;
+  color: #7cb3e0;
+}
+
+.quick-action-btn.agent {
+  background: #2d1f4e;
+  color: #b38adb;
+}
+
 /* Permission Bar */
 .permission-bar {
   position: sticky;

@@ -1,5 +1,6 @@
 import { useSocket } from "./hooks/useSocket";
 import ChatView from "./components/ChatView";
+import QuickActions from "./components/QuickActions";
 import PermissionBar from "./components/PermissionBar";
 import InputBar from "./components/InputBar";
 
@@ -9,7 +10,9 @@ export default function App() {
     messages,
     pendingPermission,
     isStreaming,
+    capabilities,
     send,
+    sendCommand,
     approvePermission,
     denyPermission,
   } = useSocket();
@@ -33,6 +36,12 @@ export default function App() {
       </div>
 
       <ChatView messages={messages} isStreaming={isStreaming} />
+
+      <QuickActions
+        capabilities={capabilities}
+        onCommand={sendCommand}
+        disabled={state !== "connected" || isStreaming}
+      />
 
       <PermissionBar
         pending={pendingPermission}

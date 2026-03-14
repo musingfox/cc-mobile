@@ -17,6 +17,12 @@ export type PendingPermission = {
   };
 };
 
+export type Capabilities = {
+  commands: string[];
+  agents: string[];
+  model: string;
+};
+
 type SocketState = "connecting" | "connected" | "disconnected";
 
 /**
@@ -44,6 +50,7 @@ export function useSocket() {
   const [pendingPermission, setPendingPermission] =
     useState<PendingPermission | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
@@ -125,6 +132,14 @@ export function useSocket() {
             setPendingPermission({
               requestId: msg.requestId,
               tool: msg.tool,
+            });
+            break;
+
+          case "capabilities":
+            setCapabilities({
+              commands: msg.commands || [],
+              agents: msg.agents || [],
+              model: msg.model || "unknown",
             });
             break;
 
@@ -210,6 +225,33 @@ export function useSocket() {
     [sessionId]
   );
 
+  const sendCommand = useCallback(
+    (command: string) => {
+      if (!wsRef.current || !sessionId) return;
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `cmd-${Date.now()}`,
+          role: "user",
+          content: command,
+          timestamp: Date.now(),
+        },
+      ]);
+
+      wsRef.current.send(
+        JSON.stringify({
+          type: "command",
+          sessionId,
+          command,
+        })
+      );
+
+      setIsStreaming(true);
+    },
+    [sessionId]
+  );
+
   const approvePermission = useCallback(() => {
     if (!wsRef.current || !pendingPermission) return;
 
@@ -244,7 +286,9 @@ export function useSocket() {
     messages,
     pendingPermission,
     isStreaming,
+    capabilities,
     send,
+    sendCommand,
     approvePermission,
     denyPermission,
   };
