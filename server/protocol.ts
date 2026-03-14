@@ -18,6 +18,12 @@ const PermissionMessage = z.object({
   allow: z.boolean(),
 });
 
+const CommandMessage = z.object({
+  type: z.literal("command"),
+  sessionId: z.string(),
+  command: z.string(),
+});
+
 const InterruptMessage = z.object({
   type: z.literal("interrupt"),
   sessionId: z.string(),
@@ -27,6 +33,7 @@ export const ClientMessage = z.discriminatedUnion("type", [
   NewSessionMessage,
   SendMessage,
   PermissionMessage,
+  CommandMessage,
   InterruptMessage,
 ]);
 
@@ -41,9 +48,7 @@ const SessionCreatedMessage = z.object({
 const StreamChunkMessage = z.object({
   type: z.literal("stream_chunk"),
   sessionId: z.string(),
-  chunk: z.object({
-    text: z.string(),
-  }).passthrough(),
+  chunk: z.record(z.unknown()),
 });
 
 const StreamEndMessage = z.object({
@@ -75,6 +80,14 @@ const ErrorMessage = z.object({
   sessionId: z.string().optional(),
 });
 
+const CapabilitiesMessage = z.object({
+  type: z.literal("capabilities"),
+  sessionId: z.string(),
+  commands: z.array(z.string()),
+  agents: z.array(z.string()),
+  model: z.string(),
+});
+
 export const ServerMessage = z.discriminatedUnion("type", [
   SessionCreatedMessage,
   StreamChunkMessage,
@@ -82,6 +95,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
   PermissionRequestMessage,
   ResultMessage,
   ErrorMessage,
+  CapabilitiesMessage,
 ]);
 
 export type ServerMessage = z.infer<typeof ServerMessage>;

@@ -18,11 +18,29 @@ describe("ClientMessage schema", () => {
     const result = ClientMessage.safeParse({ type: "permission", requestId: "r1", allow: true });
     expect(result.success).toBe(true);
   });
+  test("command valid", () => {
+    const result = ClientMessage.safeParse({ type: "command", sessionId: "s1", command: "/commit" });
+    expect(result.success).toBe(true);
+  });
+  test("command missing command field", () => {
+    const result = ClientMessage.safeParse({ type: "command", sessionId: "s1" });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe("ServerMessage schema", () => {
-  test("stream_chunk valid", () => {
-    const result = ServerMessage.safeParse({ type: "stream_chunk", sessionId: "s1", chunk: { text: "hi" } });
+  test("stream_chunk with SDK message structure", () => {
+    const result = ServerMessage.safeParse({
+      type: "stream_chunk", sessionId: "s1",
+      chunk: { type: "assistant", message: { content: [{ type: "text", text: "hi" }] } }
+    });
+    expect(result.success).toBe(true);
+  });
+  test("capabilities valid", () => {
+    const result = ServerMessage.safeParse({
+      type: "capabilities", sessionId: "s1",
+      commands: ["commit", "review-pr"], agents: ["Explore"], model: "claude-sonnet-4-6"
+    });
     expect(result.success).toBe(true);
   });
   test("permission_request valid", () => {
