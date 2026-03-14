@@ -49,7 +49,12 @@ export default function App() {
         onDeny={denyPermission}
       />
 
-      <InputBar onSend={send} disabled={state !== "connected" || isStreaming} />
+      <InputBar
+        onSend={send}
+        onCommand={sendCommand}
+        disabled={state !== "connected" || isStreaming}
+        capabilities={capabilities}
+      />
     </div>
   );
 }

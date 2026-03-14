@@ -263,6 +263,46 @@ button {
   color: #b38adb;
 }
 
+.quick-action-btn.manage {
+  background: #2a2a3e;
+  color: #808080;
+  min-width: 44px;
+}
+
+/* Command Manager */
+.command-manager {
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 8px 16px;
+  background: #1a1a2e;
+  border-top: 1px solid #2a2a3e;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.manager-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: #2a2a3e;
+  color: #e0e0e0;
+  font-size: 14px;
+  min-height: 40px;
+}
+
+.manager-item.pinned {
+  background: #1e3a5f;
+  color: #7cb3e0;
+}
+
+.manager-item-pin {
+  font-size: 12px;
+  color: #808080;
+}
+
 /* Permission Bar */
 .permission-bar {
   position: sticky;
@@ -325,6 +365,44 @@ button {
 }
 
 /* Input Bar */
+.input-bar-container {
+  flex-shrink: 0;
+  position: relative;
+}
+
+.autocomplete-list {
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 8px 16px;
+  background: #1a1a2e;
+  border-top: 1px solid #2a2a3e;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.autocomplete-item {
+  padding: 8px 14px;
+  border-radius: 18px;
+  font-size: 14px;
+  min-height: 36px;
+  white-space: nowrap;
+}
+
+.autocomplete-item.command {
+  background: #1e3a5f;
+  color: #7cb3e0;
+}
+
+.autocomplete-item.agent {
+  background: #2d1f4e;
+  color: #b38adb;
+}
+
+.autocomplete-item:active {
+  opacity: 0.7;
+}
+
 .input-bar {
   position: sticky;
   bottom: 0;
