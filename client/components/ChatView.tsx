@@ -3,9 +3,10 @@ import type { Message } from "../hooks/useSocket";
 
 type ChatViewProps = {
   messages: Message[];
+  isStreaming?: boolean;
 };
 
-export default function ChatView({ messages }: ChatViewProps) {
+export default function ChatView({ messages, isStreaming }: ChatViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
@@ -68,6 +69,13 @@ export default function ChatView({ messages }: ChatViewProps) {
           <div className="message-timestamp">{formatTimestamp(msg.timestamp)}</div>
         </div>
       ))}
+      {isStreaming && (
+        <div className="message assistant">
+          <div className="message-content typing-indicator">
+            <span></span><span></span><span></span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

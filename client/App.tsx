@@ -32,7 +32,7 @@ export default function App() {
         <span>{getStatusLabel()}</span>
       </div>
 
-      <ChatView messages={messages} />
+      <ChatView messages={messages} isStreaming={isStreaming} />
 
       <PermissionBar
         pending={pendingPermission}
