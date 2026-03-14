@@ -19,6 +19,24 @@ export type PendingPermission = {
 
 type SocketState = "connecting" | "connected" | "disconnected";
 
+/**
+ * Extract displayable text from an SDK stream chunk.
+ * Returns null if the chunk should be skipped (system events, results, etc.)
+ */
+export function extractTextFromChunk(chunk: Record<string, unknown>): string | null {
+  if (chunk.type === "assistant") {
+    const message = chunk.message as { content?: Array<{ type: string; text?: string }> } | undefined;
+    if (!message?.content) return null;
+    const text = message.content
+      .filter((b) => b.type === "text")
+      .map((b) => b.text ?? "")
+      .join("");
+    return text || null;
+  }
+  // system, rate_limit_event, result, etc — skip
+  return null;
+}
+
 export function useSocket() {
   const [state, setState] = useState<SocketState>("connecting");
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -64,23 +82,7 @@ export function useSocket() {
             break;
 
           case "stream_chunk": {
-            const chunk = msg.chunk;
-
-            // Extract text from SDK message types
-            let text = "";
-            if (chunk.type === "assistant" && chunk.message?.content) {
-              text = chunk.message.content
-                .filter((b: { type: string }) => b.type === "text")
-                .map((b: { text: string }) => b.text)
-                .join("");
-            } else if (chunk.type === "result" && chunk.result) {
-              // Turn complete — skip, handled by stream_end
-              break;
-            } else {
-              // system, rate_limit_event, etc — skip
-              break;
-            }
-
+            const text = extractTextFromChunk(msg.chunk);
             if (!text) break;
 
             setIsStreaming(true);
