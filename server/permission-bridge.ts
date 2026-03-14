@@ -1,0 +1,83 @@
+interface ToolUse {
+  name: string;
+  parameters: Record<string, unknown>;
+}
+
+interface CanUseToolOptions {
+  toolUseID: string;
+  signal?: AbortSignal;
+  suggestions?: unknown[];
+}
+
+interface CanUseToolResult {
+  behavior: "allow" | "deny";
+  updatedInput?: unknown;
+  toolUseID: string;
+  message?: string;
+}
+
+type SendToClientFn = (requestId: string, tool: ToolUse) => void;
+
+interface PermissionHandlerOptions {
+  timeoutMs?: number;
+}
+
+export function createPermissionHandler(
+  sendToClient: SendToClientFn,
+  options: PermissionHandlerOptions = {}
+) {
+  const timeoutMs = options.timeoutMs ?? 60000;
+  const pendingRequests = new Map<
+    string,
+    {
+      resolve: (result: CanUseToolResult) => void;
+      timeoutId: ReturnType<typeof setTimeout>;
+    }
+  >();
+
+  const canUseTool = async (
+    toolName: string,
+    input: Record<string, unknown>,
+    options: CanUseToolOptions
+  ): Promise<CanUseToolResult> => {
+    const requestId = options.toolUseID;
+
+    return new Promise<CanUseToolResult>((resolve) => {
+      const timeoutId = setTimeout(() => {
+        pendingRequests.delete(requestId);
+        resolve({
+          behavior: "deny",
+          message: "Permission timeout — session interrupted",
+          toolUseID: options.toolUseID,
+        });
+      }, timeoutMs);
+
+      pendingRequests.set(requestId, { resolve, timeoutId });
+
+      sendToClient(requestId, {
+        name: toolName,
+        parameters: input,
+      });
+    });
+  };
+
+  const resolvePermission = (requestId: string, allow: boolean): void => {
+    const pending = pendingRequests.get(requestId);
+    if (!pending) {
+      return; // no-op for unknown requestId
+    }
+
+    clearTimeout(pending.timeoutId);
+    pendingRequests.delete(requestId);
+
+    pending.resolve({
+      behavior: allow ? "allow" : "deny",
+      toolUseID: requestId,
+    });
+  };
+
+  return {
+    canUseTool,
+    resolvePermission,
+  };
+}
