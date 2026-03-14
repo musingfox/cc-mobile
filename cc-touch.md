@@ -38,19 +38,15 @@ A PWA that runs on the dev machine, accessible via Tailscale/local network. It c
                               Uses existing ANTHROPIC_API_KEY
 ```
 
-### Why V2 SDK API
+### SDK API Choice — V1 `query()` (see [ADR-007](docs/adr/007-use-v1-query-api.md))
 
-The SDK offers two interfaces. V2 (`unstable_v2_createSession`) is preferred for this project:
+The SDK offers V1 `query()` (stable) and V2 `unstable_v2_createSession()` (preview). This project uses **V1** because V2 does not support the `plugins` option — installed plugins, skills, and agents are not loaded.
 
-| | V1 `query()` | V2 `createSession()` |
-|---|---|---|
-| Multi-turn | Manage async generator state | `send()` + `stream()` per turn |
-| WebSocket mapping | Complex — generator must stay alive | Clean — each turn is request/response |
-| Session lifecycle | Implicit in generator | Explicit create/resume/close |
+V1 uses an async generator pattern with a **resume model** for multi-turn:
+1. First turn: `query({ prompt, options })` → iterate generator → close
+2. Subsequent turns: `query({ prompt, options: { resume: sessionId } })` → iterate → close
 
-V2's `send()` / `stream()` pattern maps directly to WebSocket message exchange.
-
-**Fallback**: V2 is still `unstable_`. If breaking changes occur, fallback to V1 `query()` with `streamInput()`.
+Each turn creates a fresh `query()` with `resume` pointing to the SDK session ID captured from the system init message.
 
 ## Dependencies
 
@@ -58,74 +54,42 @@ V2's `send()` / `stream()` pattern maps directly to WebSocket message exchange.
 |---------|---------|
 | `@anthropic-ai/claude-agent-sdk` | Core — programmatic Claude Code access |
 | `elysia` | Bun-native server — routing, WebSocket (native), schema validation |
+| `zod` | Runtime validation for WebSocket messages (see [ADR-001](docs/adr/001-zod-runtime-validation.md)) |
 | `react` + `react-dom` | Frontend UI |
 | `vite` | Frontend build + dev server |
 
-**Why Elysia over raw Bun.serve**: This project's WebSocket protocol has 10+ message types. Elysia provides schema validation on WS messages, type-safe `ws.data` context, and declarative routing — avoiding manual `if/else` dispatch and `JSON.parse` boilerplate. Elysia's WebSocket runs on Bun's native implementation with zero overhead.
+**Why Elysia over raw Bun.serve** (see [ADR-005](docs/adr/005-elysia-ws-plugin-pattern.md)): This project's WebSocket protocol has 10+ message types. Elysia provides declarative routing and plugin architecture. WS handler is exported as an Elysia plugin from `ws.ts`, mounted via `.use()` in `index.ts` for testability and separation of concerns.
 
 **No additional API keys or LLM services required.** The SDK wraps the locally installed `claude` CLI binary and uses the existing `ANTHROPIC_API_KEY`.
 
 ## WebSocket Protocol
 
+All messages are Zod-validated (see [ADR-001](docs/adr/001-zod-runtime-validation.md)). Schemas defined in `server/protocol.ts`.
+
 ### Client → Server
 
 ```typescript
-// Send a chat message (creates session if needed)
-{ type: "message", text: string, sessionId?: string }
-
-// Trigger a slash command
-{ type: "command", command: string, sessionId: string }
-// e.g. { type: "command", command: "/commit", sessionId: "abc" }
-
-// Respond to a permission prompt
-{ type: "permission", toolUseId: string, allow: boolean, message?: string }
-
-// Session lifecycle
-{ type: "session.create", cwd: string }
-{ type: "session.list" }
-{ type: "session.close", sessionId: string }
-
-// Query available commands and agents (called on connect)
-{ type: "capabilities" }
-
-// Interrupt current operation
+{ type: "new_session", cwd: string }
+{ type: "send", sessionId: string, content: string }
+{ type: "command", sessionId: string, command: string }
+{ type: "permission", requestId: string, allow: boolean }
 { type: "interrupt", sessionId: string }
 ```
 
 ### Server → Client
 
 ```typescript
-// Streaming assistant text (token by token when partial messages enabled)
-{ type: "assistant", sessionId: string, text: string, uuid: string }
-
-// Partial streaming token
-{ type: "stream", sessionId: string, event: BetaRawMessageStreamEvent }
-
-// Tool execution notification
-{ type: "tool_use", sessionId: string, tool: string, input: Record<string, unknown> }
-
-// Tool execution summary (after tool completes)
-{ type: "tool_summary", sessionId: string, toolName: string, summary: string }
-
-// Permission prompt — client must respond
-{ type: "permission_request", sessionId: string, toolUseId: string, toolName: string,
-  input: Record<string, unknown>, suggestions?: PermissionUpdate[],
-  decisionReason?: string }
-
-// Session completed one turn
-{ type: "result", sessionId: string, success: boolean, text: string,
-  cost: number, turns: number }
-
-// Error
-{ type: "error", sessionId: string?, message: string, code?: string }
-
-// Session info
-{ type: "session", sessionId: string, cwd: string, status: "active" | "idle" | "closed" }
-
-// Available capabilities (response to "capabilities" request)
-{ type: "capabilities", commands: SlashCommand[], agents: AgentInfo[],
-  models: ModelInfo[], outputStyles: string[] }
+{ type: "session_created", sessionId: string }
+{ type: "stream_chunk", sessionId: string, chunk: Record<string, unknown> }
+{ type: "stream_end", sessionId: string }
+{ type: "permission_request", sessionId: string, requestId: string,
+  tool: { name: string, parameters: Record<string, unknown> } }
+{ type: "capabilities", sessionId: string, commands: string[], agents: string[], model: string }
+{ type: "result", sessionId: string, success: boolean, cost?: number }
+{ type: "error", code: string, message: string, sessionId?: string }
 ```
+
+Note: `stream_chunk.chunk` contains raw SDK message objects (e.g., `{ type: "assistant", message: { content: [...] } }`). The frontend's `extractTextFromChunk()` parses these into displayable text.
 
 ## Project Structure
 
@@ -134,144 +98,65 @@ cc-touch/
 ├── package.json
 ├── tsconfig.json
 ├── vite.config.ts
+├── docs/adr/                    # Architecture Decision Records
 ├── server/
-│   ├── index.ts                 # Elysia app entry, serves API + WS + static
-│   ├── ws.ts                    # WebSocket handler with schema validation
-│   ├── session-manager.ts       # Multi-session lifecycle (V2 SDK)
-│   ├── permission-bridge.ts     # canUseTool ↔ WebSocket relay
-│   └── protocol.ts              # Shared types (client ↔ server)
+│   ├── index.ts                 # Elysia app entry, listens on 0.0.0.0:3001
+│   ├── ws.ts                    # WebSocket handler as Elysia plugin (ADR-005)
+│   ├── session-manager.ts       # V1 query() with resume pattern (ADR-007)
+│   ├── permission-bridge.ts     # canUseTool ↔ WebSocket relay (ADR-002)
+│   ├── settings-loader.ts       # Loads user plugins from ~/.claude/ (ADR-006)
+│   ├── protocol.ts              # Zod schemas for WS messages (ADR-001)
+│   └── __tests__/               # Bun test files
 ├── client/
 │   ├── index.html               # PWA shell
+│   ├── tsconfig.json            # Frontend-specific TS config
 │   ├── main.tsx                 # React entry
-│   ├── App.tsx                  # Layout + routing
+│   ├── App.tsx                  # Layout: status bar + chat + quick actions + input
+│   ├── styles.css               # Mobile-first dark theme CSS
 │   ├── components/
-│   │   ├── ChatView.tsx         # Message list, auto-scroll
-│   │   ├── MessageBubble.tsx    # Single message (text, tool use, etc.)
-│   │   ├── QuickActions.tsx     # Command & agent shortcut bar
-│   │   ├── PermissionBar.tsx    # Approve/Deny sticky bar
-│   │   ├── SessionTabs.tsx      # Horizontal swipeable tabs
-│   │   └── InputBar.tsx         # Text input + send button
+│   │   ├── ChatView.tsx         # Message list, auto-scroll, typing indicator
+│   │   ├── QuickActions.tsx     # Pinnable command/agent buttons (localStorage)
+│   │   ├── PermissionBar.tsx    # Approve/Deny sticky bar (48px+ targets)
+│   │   └── InputBar.tsx         # Text input + autocomplete for / and @
 │   ├── hooks/
-│   │   ├── useSocket.ts         # WebSocket connection + reconnect
-│   │   └── useSession.ts        # Session state management
-│   ├── stores/
-│   │   └── app-store.ts         # Global state (sessions, messages, capabilities)
-│   └── styles.css               # Mobile-first CSS
-└── public/
-    ├── manifest.json            # PWA manifest
-    └── icon-192.png             # App icon
+│   │   └── useSocket.ts         # WebSocket state + extractTextFromChunk (ADR-004)
+│   └── __tests__/               # Frontend unit tests
+└── public/                      # (Phase 4: PWA manifest, icons)
 ```
 
 ## Key Implementation Details
 
-### 1. Session Manager (`session-manager.ts`)
+### 1. Session Manager — V1 Resume Pattern ([ADR-007](docs/adr/007-use-v1-query-api.md))
 
-Wraps the V2 SDK API. Each session maps to a `cwd` (project directory).
+Uses V1 `query()` API. `createSession()` is lightweight (stores config only). Each `sendMessage()` creates a fresh `query()` with `resume: sdkSessionId` for multi-turn continuity.
 
 ```typescript
-import {
-  unstable_v2_createSession,
-  unstable_v2_resumeSession,
-  listSessions,
-  type SDKMessage,
-  type SDKSession,
-} from "@anthropic-ai/claude-agent-sdk";
-
 class SessionManager {
-  private sessions: Map<string, ManagedSession>;
-
-  async create(cwd: string): Promise<string>;
-  async send(sessionId: string, text: string): Promise<AsyncGenerator<SDKMessage>>;
-  async close(sessionId: string): Promise<void>;
-  async list(): Promise<SessionInfo[]>;
-}
-
-interface ManagedSession {
-  sdk: SDKSession;
-  cwd: string;
-  status: "active" | "idle" | "closed";
-  pendingPermissions: Map<string, PermissionResolver>;
+  async createSession(sessionId, cwd, canUseTool): Promise<void>;  // stores config
+  async *sendMessage(sessionId, content): AsyncGenerator<SDKMessage>;  // query() + resume
+  destroySession(sessionId): void;  // closes active query
 }
 ```
 
-Key behaviors:
-- Creates sessions with `settingSources: ["user", "project", "local"]` to load CLAUDE.md
-- Uses `systemPrompt: { type: "preset", preset: "claude_code" }` for full Claude Code behavior
-- Sets `includePartialMessages: true` for token-level streaming
-- Permission mode starts as `"default"` — all tool approvals relay through WebSocket
+SDK options: `settingSources: ["user", "project", "local"]`, `systemPrompt: { type: "preset", preset: "claude_code" }`, `includePartialMessages: true`, `permissionMode: "default"`, `allowedTools: ["Skill"]`, `plugins` loaded from user settings.
 
-### 2. Permission Bridge (`permission-bridge.ts`)
+### 2. Plugin Loading ([ADR-006](docs/adr/006-plugin-loading-from-user-settings.md))
 
-The critical piece: connects SDK's `canUseTool` callback to the WebSocket client.
+`settings-loader.ts` reads `~/.claude/settings.json` (`enabledPlugins`) and `~/.claude/plugins/installed_plugins.json` (`installPath`), cross-references to produce `SdkPluginConfig[]` passed to each `query()` call. `allowedTools: ["Skill"]` is required for skills to activate.
 
-```typescript
-// When SDK needs permission:
-canUseTool: async (toolName, input, options) => {
-  // 1. Send permission_request to client via WebSocket
-  ws.send({ type: "permission_request", toolUseId: options.toolUseID, toolName, input });
+### 3. Permission Bridge — Promise + Timeout ([ADR-002](docs/adr/002-permission-bridge-promise-pattern.md))
 
-  // 2. Wait for client response (Promise that resolves when client responds)
-  const response = await waitForPermissionResponse(options.toolUseID, options.signal);
+Bridges SDK's `canUseTool` callback to WebSocket client via Promise relay. Each tool use creates a pending Promise; client's approve/deny response resolves it. 60s timeout defaults to interrupt (deny + pause conversation).
 
-  // 3. Return SDK-compatible result
-  return response.allow
-    ? { behavior: "allow", updatedInput: input, toolUseID: options.toolUseID }
-    : { behavior: "deny", message: response.message ?? "Denied by user", toolUseID: options.toolUseID };
-}
-```
+### 4. Quick Actions
 
-**Note on V2 and canUseTool**: V2's `createSession` accepts options similar to V1's `query()`. The `canUseTool` callback works the same way — it's called whenever a tool use isn't pre-approved. The V2 session keeps the callback alive across multiple `send()`/`stream()` turns.
+Capabilities extracted from SDK system init message (`slash_commands`, `agents` fields) during the first `sendMessage()` turn. Frontend features:
+- **Pinnable commands** — user pins frequently used commands to a compact bar (persisted in localStorage)
+- **Input autocomplete** — typing `/` or `@` in InputBar filters matching commands/agents
 
-### 3. Quick Actions (`QuickActions.tsx`)
+### 5. Frontend State — Centralized useSocket Hook ([ADR-004](docs/adr/004-centralized-socket-hook.md))
 
-Dynamically populated from the SDK's `supportedCommands()` and `supportedAgents()`.
-
-```typescript
-// On initial connection, server queries SDK:
-const initResult = await session.sdk.initializationResult?.();
-// Or for V1: await queryObj.supportedCommands() / supportedAgents()
-
-// Returns:
-// commands: [{ name: "/commit", description: "..." }, ...]
-// agents:   [{ name: "Explore", description: "..." }, ...]
-```
-
-Frontend renders these as tappable buttons. Tapping a command sends:
-```typescript
-ws.send({ type: "command", command: "/commit", sessionId: currentSession })
-```
-
-The server translates this to a `session.send("/commit")` call.
-
-### 4. Frontend State (`app-store.ts`)
-
-Minimal global state using React `useReducer` or Zustand:
-
-```typescript
-interface AppState {
-  // Connection
-  connected: boolean;
-
-  // Sessions
-  sessions: Map<string, SessionState>;
-  activeSessionId: string | null;
-
-  // Capabilities (loaded once on connect)
-  commands: SlashCommand[];
-  agents: AgentInfo[];
-
-  // Pending permission (at most one at a time per session)
-  pendingPermission: PermissionRequest | null;
-}
-
-interface SessionState {
-  id: string;
-  cwd: string;
-  status: "active" | "idle" | "closed";
-  messages: UIMessage[];
-  isStreaming: boolean;
-}
-```
+Single `useSocket()` hook manages WebSocket connection, messages, permissions, capabilities, and streaming state. No external state library for MVP. `extractTextFromChunk()` parses SDK message objects into displayable text.
 
 ### 5. Touch UX Design
 
@@ -329,34 +214,17 @@ Add to home screen → launches as standalone app (no browser chrome).
 
 ## Implementation Phases
 
-### Phase 1: Core Loop (MVP)
+### Phase 1: Core Loop (MVP) ✅
 
 **Goal**: Send a message → see streaming response → approve/deny tools.
 
-Files:
-1. `server/protocol.ts` — shared message types
-2. `server/session-manager.ts` — single session, V2 SDK
-3. `server/permission-bridge.ts` — canUseTool ↔ WebSocket
-4. `server/ws.ts` — WebSocket handler with Elysia schema validation
-5. `server/index.ts` — Elysia app entry
-6. `client/hooks/useSocket.ts` — WebSocket hook
-7. `client/components/ChatView.tsx` — message rendering
-8. `client/components/PermissionBar.tsx` — approve/deny
-9. `client/components/InputBar.tsx` — text input
-10. `client/App.tsx` + `client/main.tsx` — app shell
+**Done**: Full core loop working with V1 SDK, plugin loading, typing indicator, Tailscale access.
 
-**Definition of done**: Can open browser on phone, send "hello", see streaming response, approve a tool use.
-
-### Phase 2: Quick Actions
+### Phase 2: Quick Actions ✅
 
 **Goal**: Tap buttons to trigger commands and agents.
 
-Files:
-1. `client/components/QuickActions.tsx`
-2. Server-side: query `supportedCommands()` / `supportedAgents()` on session init
-3. `server/ws.ts` — handle `command` message type
-
-**Definition of done**: Quick action bar shows available commands/agents, tapping one sends it.
+**Done**: Pinnable quick actions bar, input autocomplete for `/` and `@`, all plugin commands/agents visible.
 
 ### Phase 3: Multi-Session
 
@@ -384,96 +252,13 @@ Files:
 ## Development Setup
 
 ```bash
-# Init project
-mkdir cc-touch && cd cc-touch
-bun init
-
-# Install dependencies
-bun add @anthropic-ai/claude-agent-sdk elysia
-bun add react react-dom
-bun add -d @types/react @types/react-dom vite @vitejs/plugin-react typescript
-
-# Dev server (serves both API and frontend)
-bun run dev
+bun install                # Install dependencies
+bun run dev:server         # Elysia backend on 0.0.0.0:3001
+bunx vite --host           # Vite frontend on :5173 (with Tailscale access)
+bun test                   # Run all tests
 ```
 
-### Vite Config
-
-Vite dev server proxies `/ws` and `/api` to the Elysia backend:
-
-```typescript
-// vite.config.ts
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    proxy: {
-      "/ws": { target: "ws://localhost:3001", ws: true },
-      "/api": { target: "http://localhost:3001" },
-    },
-  },
-  build: {
-    outDir: "dist/client",
-  },
-});
-```
-
-### Server Entry
-
-```typescript
-// server/index.ts
-import { Elysia, t } from "elysia";
-import { staticPlugin } from "@elysiajs/static";
-import { SessionManager } from "./session-manager";
-
-const sessionManager = new SessionManager();
-
-const app = new Elysia()
-  // REST endpoints
-  .get("/api/sessions", () => sessionManager.list())
-  .post("/api/sessions", ({ body }) => sessionManager.create(body.cwd), {
-    body: t.Object({ cwd: t.String() }),
-  })
-
-  // WebSocket — schema-validated, type-safe ws.data
-  .ws("/ws", {
-    body: t.Object({
-      type: t.String(),
-      text: t.Optional(t.String()),
-      sessionId: t.Optional(t.String()),
-      command: t.Optional(t.String()),
-      toolUseId: t.Optional(t.String()),
-      allow: t.Optional(t.Boolean()),
-      cwd: t.Optional(t.String()),
-      message: t.Optional(t.String()),
-    }),
-    open(ws) {
-      // Send capabilities on connect
-    },
-    message(ws, data) {
-      // data is typed — no manual JSON.parse needed
-      switch (data.type) {
-        case "message": /* ... */ break;
-        case "command": /* ... */ break;
-        case "permission": /* ... */ break;
-        case "session.create": /* ... */ break;
-        case "interrupt": /* ... */ break;
-      }
-    },
-    close(ws) {
-      // Cleanup
-    },
-  })
-
-  // Static files (production)
-  .use(staticPlugin({ assets: "dist/client", prefix: "/" }))
-
-  .listen(3001);
-
-console.log(`Claude Touch running at http://localhost:${app.server!.port}`);
-```
+Vite proxies `/ws` → `ws://localhost:3001` and `/api` → `http://localhost:3001`. Vite root is `client/`, build output goes to `dist/client/`.
 
 ## Network Access
 
@@ -498,39 +283,14 @@ cloudflared tunnel --url http://localhost:3001
 ## Security Considerations
 
 1. **No auth on Tailscale** — acceptable because Tailscale is a private mesh network. Only your devices can connect.
-2. **Permission mode defaults to `"default"`** — every tool use requires explicit approval on the phone. This is intentional for remote usage.
-3. **No `bypassPermissions`** — never auto-approve from a remote device. The whole point is interactive control.
-4. **Session persistence** — sessions are persisted by default (`persistSession: true`), allowing resume after disconnects.
-5. **WebSocket reconnect** — client auto-reconnects with exponential backoff. Pending permission prompts are re-sent on reconnect.
+2. **Permission mode defaults to `"default"`** — every tool use requires explicit approval on the phone. This is intentional for remote usage. (see [ADR-003](docs/adr/003-permission-mode-default.md))
+3. **Configurable permissionMode** — planned for Phase 4 via UI toggle or CLI flag. Must require server-side opt-in, never allow setting from WebSocket client alone.
+4. **Session persistence** — SDK sessions are resumed via `resume: sessionId` option in each `query()` call.
+5. **WebSocket reconnect** — client auto-reconnects with exponential backoff (1s → 30s max).
 
 ## SDK API Quick Reference
 
-### V2 (Primary)
-
-```typescript
-import {
-  unstable_v2_createSession,
-  unstable_v2_resumeSession,
-  unstable_v2_prompt,
-  listSessions,
-  getSessionMessages,
-} from "@anthropic-ai/claude-agent-sdk";
-
-// Create session
-const session = unstable_v2_createSession({
-  model: "claude-sonnet-4-6",
-  // ... options same as V1
-});
-
-// Send + stream
-await session.send("Review this code");
-for await (const msg of session.stream()) { /* ... */ }
-
-// Resume
-const resumed = unstable_v2_resumeSession(sessionId, { model: "claude-sonnet-4-6" });
-```
-
-### V1 (Fallback)
+### V1 `query()` — Primary (see [ADR-007](docs/adr/007-use-v1-query-api.md))
 
 ```typescript
 import { query } from "@anthropic-ai/claude-agent-sdk";
@@ -538,22 +298,26 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 const q = query({
   prompt: "Review this code",
   options: {
+    model: "claude-sonnet-4-6",
     cwd: "/path/to/project",
     permissionMode: "default",
     canUseTool: async (toolName, input, opts) => { /* ... */ },
     settingSources: ["user", "project", "local"],
     systemPrompt: { type: "preset", preset: "claude_code" },
     includePartialMessages: true,
+    allowedTools: ["Skill"],  // Required for plugin skills
+    plugins: [{ type: "local", path: "/path/to/plugin" }],
+    resume: "sdk-session-id",  // For multi-turn
   },
 });
 
-// Useful Query methods:
-await q.supportedCommands();  // → SlashCommand[]
-await q.supportedAgents();    // → AgentInfo[]
-await q.initializationResult(); // → commands, agents, models, account, output_style
-await q.interrupt();
+for await (const msg of q) { /* ... */ }
 q.close();
 ```
+
+### V2 `unstable_v2_createSession()` — Not Used
+
+Cleaner `send()`/`stream()` API but does **not support `plugins` option**. Monitor for future feature parity.
 
 ### Key Message Types
 

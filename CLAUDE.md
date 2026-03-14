@@ -4,33 +4,37 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Claude Touch — a touch-optimized PWA for interacting with Claude Code from phones/tablets. Runs on the dev machine, accessed via Tailscale or local network. Translates terminal interactions (permission prompts, slash commands, agent invocations) into tap-friendly UI elements.
+Claude Touch (cc-touch) — a touch-optimized PWA for interacting with Claude Code from phones/tablets. Runs on the dev machine, accessed via Tailscale or local network. Translates terminal interactions (permission prompts, slash commands, agent invocations) into tap-friendly UI elements.
 
 ## Tech Stack
 
 - **Runtime**: Bun
 - **Backend**: Elysia (Bun-native server with native WebSocket support)
-- **Frontend**: React + Vite
-- **Claude integration**: `@anthropic-ai/claude-agent-sdk` (V2 API preferred, V1 as fallback)
+- **Frontend**: React + Vite (root: `client/`)
+- **Claude integration**: `@anthropic-ai/claude-agent-sdk` V1 `query()` API (see ADR-007)
+- **Validation**: Zod for WebSocket message schemas (see ADR-001)
 - **No additional API keys needed** — the SDK wraps the local `claude` CLI binary
 
 ## Commands
 
 ```bash
-bun install          # Install dependencies
-bun run dev          # Dev server (Vite frontend + Elysia backend)
-bun run build        # Production build (Vite outputs to dist/client/)
+bun install              # Install dependencies
+bun run dev:server       # Elysia backend on 0.0.0.0:3001
+bunx vite --host         # Vite frontend on :5173 (network accessible)
+bun test                 # Run all tests (bun:test)
+bun run build            # Production build (Vite outputs to dist/client/)
 ```
 
-Vite dev server proxies `/ws` (WebSocket) and `/api` to Elysia backend on port 3001.
+Vite dev server proxies `/ws` and `/api` to Elysia backend on port 3001.
 
 ## Architecture
 
 ```
-Mobile Browser (PWA) ←──WebSocket──→ Elysia Server (port 3001)
-                                       ├─ WebSocket handler (ws.ts) — schema-validated messages
-                                       ├─ Session Manager — multi-session lifecycle via V2 SDK
-                                       ├─ Permission Bridge — relays canUseTool ↔ WebSocket
+Mobile Browser (PWA) ←──WebSocket──→ Elysia Server (0.0.0.0:3001)
+                                       ├─ WS Plugin (ws.ts) — Zod-validated messages
+                                       ├─ Session Manager — V1 query() + resume pattern
+                                       ├─ Permission Bridge — canUseTool ↔ WebSocket Promise relay
+                                       ├─ Settings Loader — reads ~/.claude/ for plugins
                                        └─ Static file serving (production)
                                               ↓
                                      Claude Code CLI (local)
@@ -38,21 +42,24 @@ Mobile Browser (PWA) ←──WebSocket──→ Elysia Server (port 3001)
 
 ### Key Architectural Decisions
 
-- **V2 SDK (`unstable_v2_createSession`)**: Its `send()`/`stream()` pattern maps cleanly to WebSocket request/response. V2 sessions keep the `canUseTool` callback alive across turns, unlike V1 where the async generator must stay alive.
-- **Elysia over raw Bun.serve**: The WebSocket protocol has 10+ message types. Elysia provides schema validation on WS messages, typed `ws.data` context, and declarative routing.
-- **Permission Bridge pattern**: SDK's `canUseTool` callback creates a Promise per tool use, WebSocket client resolves it via `permission` message. This is the critical bridge between SDK and touch UI.
+All recorded in `docs/adr/`. Key decisions:
+
+- **V1 SDK** (ADR-007): V2 does not support plugins. V1 `query()` with resume pattern for multi-turn.
+- **Plugin loading** (ADR-006): Reads `~/.claude/settings.json` + `installed_plugins.json` to pass plugin paths to SDK. `allowedTools: ["Skill"]` required.
+- **Permission Bridge** (ADR-002): Promise + 60s timeout pattern. Timeout interrupts conversation.
+- **Zod validation** (ADR-001): Runtime validation on WS messages, single source of truth for types.
+- **useSocket hook** (ADR-004): Centralized frontend state management for connection, messages, permissions.
 
 ### WebSocket Protocol
 
-Client→Server message types: `message`, `command`, `permission`, `session.create`, `session.list`, `session.close`, `capabilities`, `interrupt`
+Client→Server: `new_session`, `send`, `command`, `permission`, `interrupt`
 
-Server→Client message types: `assistant`, `stream`, `tool_use`, `tool_summary`, `permission_request`, `result`, `error`, `session`, `capabilities`
+Server→Client: `session_created`, `stream_chunk`, `stream_end`, `permission_request`, `capabilities`, `result`, `error`
 
-Full protocol spec is in `cc-touch.md`.
+Schemas defined in `server/protocol.ts`. Full spec in `cc-touch.md`.
 
 ## Security Constraints
 
-- Permission mode is always `"default"` — every tool use requires explicit phone approval
-- Never set `bypassPermissions` — interactive control is the core purpose
-- No auth layer when using Tailscale (network membership = auth)
+- Permission mode defaults to `"default"` — configurable in Phase 4 (ADR-003)
+- No auth layer on Tailscale (network membership = auth)
 - If exposing via Cloudflare Tunnel, auth must be added
