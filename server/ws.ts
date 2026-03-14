@@ -61,18 +61,32 @@ export function createWsPlugin(
             break;
           }
 
-          case "send": {
+          case "send":
+          case "command": {
+            const content = message.type === "send" ? message.content : message.command;
             const generator = sessionManager.sendMessage(
               message.sessionId,
-              message.content
+              content
             );
 
             for await (const sdkMessage of generator) {
-              // Send each chunk to client
+              const msg = sdkMessage as Record<string, unknown>;
+
+              // Extract capabilities from system init message
+              if (msg.type === "system" && msg.subtype === "init") {
+                ws.send({
+                  type: "capabilities",
+                  sessionId: message.sessionId,
+                  commands: (msg.slash_commands as string[]) || [],
+                  agents: (msg.agents as string[]) || [],
+                  model: (msg.model as string) || "unknown",
+                });
+              }
+
               ws.send({
                 type: "stream_chunk",
                 sessionId: message.sessionId,
-                chunk: sdkMessage as any,
+                chunk: msg,
               });
             }
 
