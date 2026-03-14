@@ -63,15 +63,31 @@ export function useSocket() {
             setState("connected");
             break;
 
-          case "stream_chunk":
-            setIsStreaming(true);
-            const text = msg.chunk.text || "";
+          case "stream_chunk": {
+            const chunk = msg.chunk;
 
+            // Extract text from SDK message types
+            let text = "";
+            if (chunk.type === "assistant" && chunk.message?.content) {
+              text = chunk.message.content
+                .filter((b: { type: string }) => b.type === "text")
+                .map((b: { text: string }) => b.text)
+                .join("");
+            } else if (chunk.type === "result" && chunk.result) {
+              // Turn complete — skip, handled by stream_end
+              break;
+            } else {
+              // system, rate_limit_event, etc — skip
+              break;
+            }
+
+            if (!text) break;
+
+            setIsStreaming(true);
             setMessages((prev) => {
               const lastMsg = prev[prev.length - 1];
               const streamId = currentStreamMessageIdRef.current;
 
-              // If last message is assistant and matches current stream, append
               if (
                 streamId &&
                 lastMsg?.id === streamId &&
@@ -83,7 +99,6 @@ export function useSocket() {
                 ];
               }
 
-              // Otherwise, start a new assistant message
               const newId = `msg-${Date.now()}-${Math.random()}`;
               currentStreamMessageIdRef.current = newId;
               return [
@@ -97,6 +112,7 @@ export function useSocket() {
               ];
             });
             break;
+          }
 
           case "stream_end":
             setIsStreaming(false);
