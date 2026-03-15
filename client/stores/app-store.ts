@@ -22,6 +22,22 @@ export type Capabilities = {
   model: string;
 };
 
+export type ActiveTool = {
+  toolName: string;
+  startedAt: number;
+  elapsedSeconds?: number;
+  parentToolUseId?: string | null;
+};
+
+export type ActiveAgent = {
+  description: string;
+  taskType?: string;
+  status: "running" | "completed" | "failed" | "stopped";
+  toolCount?: number;
+  tokenCount?: number;
+  summary?: string;
+};
+
 export type SessionState = {
   id: string;
   cwd: string;
@@ -30,6 +46,8 @@ export type SessionState = {
   isStreaming: boolean;
   currentStreamMessageId: string | null;
   activeToolStatus?: { toolName: string; description: string } | null;
+  activeTools: Map<string, ActiveTool>;
+  activeAgents: Map<string, ActiveAgent>;
 };
 
 export type SessionListItem = {
@@ -67,9 +85,19 @@ interface AppState {
   // Permissions
   setPermission: (sessionId: string, permission: PendingPermission | null) => void;
 
-  // Tool Status
+  // Tool Status (legacy)
   setActiveToolStatus: (sessionId: string, status: { toolName: string; description: string } | null) => void;
   addToolMessage: (sessionId: string, toolName: string, summary: string) => void;
+
+  // Active Tool Management
+  addActiveTool: (sessionId: string, toolUseId: string, tool: ActiveTool) => void;
+  updateActiveTool: (sessionId: string, toolUseId: string, updates: Partial<ActiveTool>) => void;
+  removeActiveTool: (sessionId: string, toolUseId: string) => void;
+
+  // Active Agent Management
+  addActiveAgent: (sessionId: string, taskId: string, agent: ActiveAgent) => void;
+  updateActiveAgent: (sessionId: string, taskId: string, updates: Partial<ActiveAgent>) => void;
+  completeActiveAgent: (sessionId: string, taskId: string, completion: Partial<ActiveAgent>) => void;
 
   // Capabilities (shared across sessions)
   capabilities: Capabilities | null;
@@ -119,6 +147,8 @@ export const useAppStore = create<AppState>((set) => ({
         isStreaming: false,
         currentStreamMessageId: null,
         activeToolStatus: null,
+        activeTools: new Map(),
+        activeAgents: new Map(),
       });
       return {
         sessions: next,
@@ -246,5 +276,66 @@ export const useAppStore = create<AppState>((set) => ({
           timestamp: m.timestamp,
         })),
       })),
+    })),
+
+  addActiveTool: (sessionId, toolUseId, tool) =>
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (s) => {
+        const next = new Map(s.activeTools);
+        next.set(toolUseId, tool);
+        return { ...s, activeTools: next };
+      }),
+    })),
+
+  updateActiveTool: (sessionId, toolUseId, updates) =>
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (s) => {
+        const tool = s.activeTools.get(toolUseId);
+        if (!tool) return s;
+        const next = new Map(s.activeTools);
+        next.set(toolUseId, { ...tool, ...updates });
+        return { ...s, activeTools: next };
+      }),
+    })),
+
+  removeActiveTool: (sessionId, toolUseId) =>
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (s) => {
+        const next = new Map(s.activeTools);
+        next.delete(toolUseId);
+        return { ...s, activeTools: next };
+      }),
+    })),
+
+  addActiveAgent: (sessionId, taskId, agent) =>
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (s) => {
+        const next = new Map(s.activeAgents);
+        next.set(taskId, agent);
+        return { ...s, activeAgents: next };
+      }),
+    })),
+
+  updateActiveAgent: (sessionId, taskId, updates) =>
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (s) => {
+        const agent = s.activeAgents.get(taskId);
+        if (!agent) return s;
+        const next = new Map(s.activeAgents);
+        next.set(taskId, { ...agent, ...updates });
+        return { ...s, activeAgents: next };
+      }),
+    })),
+
+  completeActiveAgent: (sessionId, taskId, completion) =>
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (s) => {
+        const agent = s.activeAgents.get(taskId);
+        if (!agent) return s;
+        const next = new Map(s.activeAgents);
+        next.set(taskId, { ...agent, ...completion });
+        // Auto-remove after brief display delay (handled in UI)
+        return { ...s, activeAgents: next };
+      }),
     })),
 }));

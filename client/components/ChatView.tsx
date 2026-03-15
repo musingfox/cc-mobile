@@ -1,15 +1,26 @@
 import { useEffect, useRef, useState } from "react";
-import type { Message } from "../stores/app-store";
+import type { Message, ActiveTool, ActiveAgent } from "../stores/app-store";
+import ActivityPanel from "./ActivityPanel";
 
 type ChatViewProps = {
   messages: Message[];
   isStreaming?: boolean;
   activeToolStatus?: { toolName: string; description: string } | null;
+  activeTools?: Map<string, ActiveTool>;
+  activeAgents?: Map<string, ActiveAgent>;
   cwd?: string;
   onResumeSession?: (cwd: string) => void;
 };
 
-export default function ChatView({ messages, isStreaming, activeToolStatus, cwd, onResumeSession }: ChatViewProps) {
+export default function ChatView({
+  messages,
+  isStreaming,
+  activeToolStatus,
+  activeTools = new Map(),
+  activeAgents = new Map(),
+  cwd,
+  onResumeSession,
+}: ChatViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
@@ -88,16 +99,25 @@ export default function ChatView({ messages, isStreaming, activeToolStatus, cwd,
         </div>
       ))}
       {isStreaming && (
-        <div className="message assistant">
-          <div className="message-content status-indicator">
-            <span className="status-verb">
-              {activeToolStatus ? activeToolStatus.toolName : "Thinking"}
-            </span>
-            {activeToolStatus && activeToolStatus.description !== activeToolStatus.toolName && (
-              <span className="status-detail">{activeToolStatus.description}</span>
-            )}
-          </div>
-        </div>
+        <>
+          {/* New rich activity panel */}
+          {(activeTools.size > 0 || activeAgents.size > 0) && (
+            <ActivityPanel activeTools={activeTools} activeAgents={activeAgents} />
+          )}
+          {/* Fallback to legacy simple indicator if no rich status */}
+          {activeTools.size === 0 && activeAgents.size === 0 && (
+            <div className="message assistant">
+              <div className="message-content status-indicator">
+                <span className="status-verb">
+                  {activeToolStatus ? activeToolStatus.toolName : "Thinking"}
+                </span>
+                {activeToolStatus && activeToolStatus.description !== activeToolStatus.toolName && (
+                  <span className="status-detail">{activeToolStatus.description}</span>
+                )}
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

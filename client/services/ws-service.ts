@@ -1,6 +1,13 @@
 import { useAppStore } from "../stores/app-store";
 import { saveProject } from "./projects";
-import { isToolProgress, isToolUseSummary, isTaskProgress } from "./tool-events";
+import {
+  isToolStart,
+  isToolProgress,
+  isToolUseSummary,
+  isTaskStarted,
+  isTaskProgress,
+  isTaskNotification,
+} from "./tool-events";
 
 export function extractTextFromChunk(
   chunk: Record<string, unknown>
@@ -109,23 +116,86 @@ class WsService {
         if (!sessionId) break;
         const chunk = msg.chunk as Record<string, unknown>;
 
-        // Handle tool events first
+        // Handle tool start (earliest signal)
+        if (isToolStart(chunk)) {
+          const { event } = chunk;
+          const { content_block } = event;
+          store.addActiveTool(sessionId, content_block.id, {
+            toolName: content_block.name,
+            startedAt: Date.now(),
+          });
+          // Maintain backward compatibility with legacy status indicator
+          store.setActiveToolStatus(sessionId, {
+            toolName: content_block.name,
+            description: content_block.name,
+          });
+          break;
+        }
+
+        // Handle tool progress updates
         if (isToolProgress(chunk)) {
-          store.setActiveToolStatus(sessionId, { toolName: chunk.tool_name, description: chunk.tool_name });
+          store.updateActiveTool(sessionId, chunk.tool_use_id, {
+            elapsedSeconds: chunk.elapsed_time_seconds,
+            parentToolUseId: chunk.parent_tool_use_id,
+          });
+          // Maintain backward compatibility
+          store.setActiveToolStatus(sessionId, {
+            toolName: chunk.tool_name,
+            description: chunk.tool_name,
+          });
           break;
         }
-        if (isTaskProgress(chunk)) {
-          if (chunk.last_tool_name) {
-            store.setActiveToolStatus(sessionId, { toolName: chunk.last_tool_name, description: chunk.description });
-          }
-          break;
-        }
+
+        // Handle tool completion summary
         if (isToolUseSummary(chunk)) {
-          // Use the last known tool name, or "Tool" as fallback
           const session = store.sessions.get(sessionId);
           const toolName = session?.activeToolStatus?.toolName ?? "Tool";
           store.addToolMessage(sessionId, toolName, chunk.summary);
+          // Remove all completed tools
+          chunk.preceding_tool_use_ids.forEach((id) => {
+            store.removeActiveTool(sessionId, id);
+          });
+          // Clear legacy status
           store.setActiveToolStatus(sessionId, null);
+          break;
+        }
+
+        // Handle agent/task started
+        if (isTaskStarted(chunk)) {
+          store.addActiveAgent(sessionId, chunk.task_id, {
+            description: chunk.description,
+            taskType: chunk.task_type,
+            status: "running",
+          });
+          break;
+        }
+
+        // Handle agent/task progress
+        if (isTaskProgress(chunk)) {
+          if (chunk.task_id) {
+            store.updateActiveAgent(sessionId, chunk.task_id, {
+              toolCount: chunk.usage?.tool_uses,
+              tokenCount: chunk.usage?.total_tokens,
+            });
+          }
+          // Update legacy status if tool name present
+          if (chunk.last_tool_name) {
+            store.setActiveToolStatus(sessionId, {
+              toolName: chunk.last_tool_name,
+              description: chunk.description,
+            });
+          }
+          break;
+        }
+
+        // Handle agent/task completion
+        if (isTaskNotification(chunk)) {
+          store.completeActiveAgent(sessionId, chunk.task_id, {
+            status: chunk.status,
+            summary: chunk.summary,
+            toolCount: chunk.usage?.tool_uses,
+            tokenCount: chunk.usage?.total_tokens,
+          });
           break;
         }
 
