@@ -32,6 +32,19 @@ export default function App() {
     return () => wsService.destroy();
   }, []);
 
+  // Update theme-color meta tag dynamically
+  useEffect(() => {
+    const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+    if (metaThemeColor) {
+      const themeColors = {
+        dark: "#0066ff",
+        light: "#0066ff",
+        claude: "#da7756",
+      };
+      metaThemeColor.setAttribute("content", themeColors[theme]);
+    }
+  }, [theme]);
+
 
   const getStatusLabel = () => {
     switch (connectionState) {
