@@ -1,17 +1,21 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAppStore } from "./stores/app-store";
+import { useSettingsStore } from "./stores/settings-store";
 import { wsService } from "./services/ws-service";
 import SessionTabs from "./components/SessionTabs";
 import ChatView from "./components/ChatView";
 import QuickActions from "./components/QuickActions";
 import PermissionBar from "./components/PermissionBar";
 import InputBar from "./components/InputBar";
+import Settings from "./components/Settings";
 
 export default function App() {
   const connectionState = useAppStore((s) => s.connectionState);
   const activeSessionId = useAppStore((s) => s.activeSessionId);
   const sessions = useAppStore((s) => s.sessions);
   const capabilities = useAppStore((s) => s.capabilities);
+  const theme = useSettingsStore((s) => s.theme);
+  const [showSettings, setShowSettings] = useState(false);
 
   const activeSession = activeSessionId
     ? sessions.get(activeSessionId)
@@ -40,10 +44,13 @@ export default function App() {
     !!activeSession?.isStreaming;
 
   return (
-    <div className="app">
+    <div className={`app theme-${theme}`}>
       <div className="status-bar">
         <div className={`status-dot ${connectionState}`} />
         <span>{getStatusLabel()}</span>
+        <button className="status-settings-btn" onClick={() => setShowSettings(true)}>
+          ⚙
+        </button>
       </div>
 
       <SessionTabs />
@@ -75,6 +82,8 @@ export default function App() {
         disabled={isDisabled}
         capabilities={capabilities}
       />
+
+      {showSettings && <Settings onClose={() => setShowSettings(false)} />}
     </div>
   );
 }

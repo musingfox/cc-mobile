@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAppStore } from "../stores/app-store";
+import { useSettingsStore } from "../stores/settings-store";
 import { wsService } from "../services/ws-service";
 import { loadProjects, removeProject } from "../services/projects";
 
@@ -9,6 +10,7 @@ export default function SessionTabs() {
   const setActiveSession = useAppStore((s) => s.setActiveSession);
   const globalError = useAppStore((s) => s.globalError);
   const setGlobalError = useAppStore((s) => s.setGlobalError);
+  const defaultCwd = useSettingsStore((s) => s.defaultCwd);
   const [showNewSession, setShowNewSession] = useState(sessions.size === 0);
   const [newCwd, setNewCwd] = useState("");
   const [savedProjects, setSavedProjects] = useState(loadProjects);
@@ -17,10 +19,13 @@ export default function SessionTabs() {
     if (sessions.size === 0) setShowNewSession(true);
   }, [sessions.size]);
 
-  // Refresh saved projects when panel opens
+  // Refresh saved projects and pre-fill defaultCwd when panel opens
   useEffect(() => {
-    if (showNewSession) setSavedProjects(loadProjects());
-  }, [showNewSession]);
+    if (showNewSession) {
+      setSavedProjects(loadProjects());
+      setNewCwd(defaultCwd);
+    }
+  }, [showNewSession, defaultCwd]);
 
   useEffect(() => {
     if (!globalError) return;
