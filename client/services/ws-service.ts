@@ -73,11 +73,7 @@ class WsService {
     switch (msg.type) {
       case "session_created":
         if (sessionId) {
-          // Find pending cwd for this session
-          const pendingCwd =
-            (this as any)._pendingCwd ?? "/";
-          delete (this as any)._pendingCwd;
-          store.addSession(sessionId, pendingCwd);
+          store.addSession(sessionId, (msg.cwd as string) || "/");
         }
         break;
 
@@ -144,7 +140,6 @@ class WsService {
 
   createSession(cwd: string) {
     if (!this.ws) return;
-    (this as any)._pendingCwd = cwd;
     this.ws.send(JSON.stringify({ type: "new_session", cwd }));
   }
 

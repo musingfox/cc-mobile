@@ -43,6 +43,7 @@ export type ClientMessage = z.infer<typeof ClientMessage>;
 const SessionCreatedMessage = z.object({
   type: z.literal("session_created"),
   sessionId: z.string(),
+  cwd: z.string(),
 });
 
 const StreamChunkMessage = z.object({

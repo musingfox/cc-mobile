@@ -1,7 +1,16 @@
 import { Elysia, t } from "elysia";
+import { homedir } from "os";
+import { resolve } from "path";
 import type { SessionManager } from "./session-manager";
 import type { createPermissionHandler } from "./permission-bridge";
 import { ClientMessage, ServerMessage } from "./protocol";
+
+function expandPath(p: string): string {
+  if (p.startsWith("~/") || p === "~") {
+    return resolve(homedir(), p.slice(2));
+  }
+  return resolve(p);
+}
 
 type PermissionHandlerFactory = typeof createPermissionHandler;
 type PermissionHandler = ReturnType<PermissionHandlerFactory>;
@@ -46,17 +55,19 @@ export function createWsPlugin(
         switch (message.type) {
           case "new_session": {
             const sessionId = crypto.randomUUID();
+            const cwd = expandPath(message.cwd);
             (ws.data as any).currentSessionId = sessionId;
 
             await sessionManager.createSession(
               sessionId,
-              message.cwd,
+              cwd,
               handler.canUseTool
             );
 
             ws.send({
               type: "session_created",
               sessionId,
+              cwd,
             });
             break;
           }
