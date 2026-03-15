@@ -254,9 +254,9 @@ Add to home screen → launches as standalone app (no browser chrome).
 - Startup script (`bun run start`) for one-command launch (server + built frontend)
 
 #### Integration
+- Session resume — list previous sessions via `listSessions()` API, show in new session panel for one-tap resume (replaces CLI `/resume` which is not available through SDK)
 - Voice input support (Web Speech API)
 - Notification on permission request when app is backgrounded (Notification API)
-- Session resume on reconnect (re-fetch messages from SDK session history)
 
 ## Development Setup
 
