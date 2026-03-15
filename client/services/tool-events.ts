@@ -59,6 +59,22 @@ export type TaskNotificationEvent = {
   };
 };
 
+export type ResultMessage = {
+  type: "result";
+  subtype: "success" | "error";
+  total_cost_usd?: number;
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_read_input_tokens?: number;
+    cache_creation_input_tokens?: number;
+  };
+  num_turns?: number;
+  duration_ms?: number;
+  is_error: boolean;
+  error?: string;
+};
+
 export function isToolStart(
   chunk: Record<string, unknown>
 ): chunk is ToolStartEvent {
@@ -72,6 +88,7 @@ export function isToolStart(
     typeof block.id === "string"
   );
 }
+
 
 export function isToolProgress(
   chunk: Record<string, unknown>
@@ -127,5 +144,15 @@ export function isTaskNotification(
     typeof chunk.task_id === "string" &&
     typeof chunk.status === "string" &&
     ["completed", "failed", "stopped"].includes(chunk.status as string)
+  );
+}
+
+export function isResultMessage(
+  chunk: Record<string, unknown>
+): chunk is ResultMessage {
+  return (
+    chunk.type === "result" &&
+    (chunk.subtype === "success" || chunk.subtype === "error") &&
+    typeof chunk.is_error === "boolean"
   );
 }

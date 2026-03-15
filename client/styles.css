@@ -716,6 +716,35 @@ button {
   color: white;
 }
 
+/* Usage Status Bar */
+.usage-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 6px 16px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.usage-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.usage-label {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.usage-value {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
 /* Input Bar */
 .input-bar-container {
   flex-shrink: 0;

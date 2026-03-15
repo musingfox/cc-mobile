@@ -38,6 +38,16 @@ export type ActiveAgent = {
   summary?: string;
 };
 
+export type UsageData = {
+  totalCost: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  turns: number;
+  durationMs: number;
+};
+
 export type SessionState = {
   id: string;
   cwd: string;
@@ -48,6 +58,7 @@ export type SessionState = {
   activeToolStatus?: { toolName: string; description: string } | null;
   activeTools: Map<string, ActiveTool>;
   activeAgents: Map<string, ActiveAgent>;
+  usage: UsageData | null;
 };
 
 export type SessionListItem = {
@@ -99,6 +110,9 @@ interface AppState {
   updateActiveAgent: (sessionId: string, taskId: string, updates: Partial<ActiveAgent>) => void;
   completeActiveAgent: (sessionId: string, taskId: string, completion: Partial<ActiveAgent>) => void;
 
+  // Usage
+  updateUsage: (sessionId: string, usage: UsageData) => void;
+
   // Capabilities (shared across sessions)
   capabilities: Capabilities | null;
   setCapabilities: (capabilities: Capabilities) => void;
@@ -149,6 +163,7 @@ export const useAppStore = create<AppState>((set) => ({
         activeToolStatus: null,
         activeTools: new Map(),
         activeAgents: new Map(),
+        usage: null,
       });
       return {
         sessions: next,
@@ -334,8 +349,15 @@ export const useAppStore = create<AppState>((set) => ({
         if (!agent) return s;
         const next = new Map(s.activeAgents);
         next.set(taskId, { ...agent, ...completion });
-        // Auto-remove after brief display delay (handled in UI)
         return { ...s, activeAgents: next };
       }),
+    })),
+
+  updateUsage: (sessionId, usage) =>
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (s) => ({
+        ...s,
+        usage,
+      })),
     })),
 }));

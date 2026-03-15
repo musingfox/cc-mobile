@@ -7,6 +7,7 @@ import {
   isTaskStarted,
   isTaskProgress,
   isTaskNotification,
+  isResultMessage,
 } from "./tool-events";
 
 export function extractTextFromChunk(
@@ -116,6 +117,20 @@ class WsService {
         if (!sessionId) break;
         const chunk = msg.chunk as Record<string, unknown>;
 
+        // Handle result messages (cost/token data)
+        if (isResultMessage(chunk)) {
+          store.updateUsage(sessionId, {
+            totalCost: chunk.total_cost_usd ?? 0,
+            inputTokens: chunk.usage?.input_tokens ?? 0,
+            outputTokens: chunk.usage?.output_tokens ?? 0,
+            cacheReadTokens: chunk.usage?.cache_read_input_tokens ?? 0,
+            cacheCreationTokens: chunk.usage?.cache_creation_input_tokens ?? 0,
+            turns: chunk.num_turns ?? 0,
+            durationMs: chunk.duration_ms ?? 0,
+          });
+          break;
+        }
+
         // Handle tool start (earliest signal)
         if (isToolStart(chunk)) {
           const { event } = chunk;
@@ -124,7 +139,6 @@ class WsService {
             toolName: content_block.name,
             startedAt: Date.now(),
           });
-          // Maintain backward compatibility with legacy status indicator
           store.setActiveToolStatus(sessionId, {
             toolName: content_block.name,
             description: content_block.name,
