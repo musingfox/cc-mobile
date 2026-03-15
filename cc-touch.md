@@ -226,28 +226,37 @@ Add to home screen → launches as standalone app (no browser chrome).
 
 **Done**: Pinnable quick actions bar, input autocomplete for `/` and `@`, all plugin commands/agents visible.
 
-### Phase 3: Multi-Session
+### Phase 3: Multi-Session ✅
 
 **Goal**: Multiple sessions in parallel, tab switching.
 
-Files:
-1. `server/session-manager.ts` — extend to multi-session Map
-2. `client/components/SessionTabs.tsx`
-3. `client/stores/app-store.ts` — session state management
-4. `client/hooks/useSession.ts`
-
-**Definition of done**: Can create multiple sessions with different cwds, switch between them.
+**Done**: Zustand store with per-session state (ADR-008), WsService singleton, SessionTabs component with cwd input, tab switching, close button.
 
 ### Phase 4: Polish
 
-- PWA manifest + service worker for offline shell
-- Reconnect logic (WebSocket drop handling)
-- Dark/light theme toggle
-- Settings page (default cwd, permission mode preferences)
-- Haptic feedback on approve/deny (via Vibration API)
+#### UX
 - Token-level streaming (display text incrementally, not all at once)
 - Status line — mirror Claude Code's status bar data (model, token usage, cost, session duration). Source candidates: SDK `result` message fields (`total_cost_usd`, `num_turns`, `duration_ms`), or SDK `rate_limit_event` for quota info
-- Configurable `permissionMode` via UI toggle or `--permission-mode` CLI flag
+- Haptic feedback on approve/deny (via Vibration API)
+- Dark/light theme toggle
+
+#### Settings
+- Settings page with persistent config (localStorage)
+  - Default working directory for new sessions
+  - Configurable `permissionMode` via UI toggle (ADR-003), must require server-side opt-in
+  - Theme preference
+  - Quick action pin management (currently inline, could move to settings)
+- Server-side CLI flags: `--default-cwd`, `--permission-mode`, `--port`
+
+#### Infrastructure
+- PWA manifest + service worker for offline shell
+- Production build: Elysia serves `dist/client/` static files
+- Startup script (`bun run start`) for one-command launch (server + built frontend)
+
+#### Integration
+- Voice input support (Web Speech API)
+- Notification on permission request when app is backgrounded (Notification API)
+- Session resume on reconnect (re-fetch messages from SDK session history)
 
 ## Development Setup
 
