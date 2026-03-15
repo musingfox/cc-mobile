@@ -10,7 +10,7 @@ import InputBar from "./components/InputBar";
 import Settings from "./components/Settings";
 import SessionListModal from "./components/SessionListModal";
 import StatusBar from "./components/StatusBar";
-import CommandPanel from "./components/CommandPanel";
+import PickerPanel from "./components/PickerPanel";
 
 export default function App() {
   const connectionState = useAppStore((s) => s.connectionState);
@@ -21,7 +21,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showResumeModal, setShowResumeModal] = useState(false);
   const [resumeCwd, setResumeCwd] = useState("");
-  const [isCommandPanelOpen, setIsCommandPanelOpen] = useState(false);
+  const [openPanel, setOpenPanel] = useState<"command" | "agent" | null>(null);
 
   const activeSession = activeSessionId
     ? sessions.get(activeSessionId)
@@ -46,8 +46,7 @@ export default function App() {
 
   const isDisabled =
     connectionState !== "connected" ||
-    !activeSessionId ||
-    !!activeSession?.isStreaming;
+    !activeSessionId;
 
   return (
     <div className={`app theme-${theme}`}>
@@ -67,6 +66,7 @@ export default function App() {
         activeToolStatus={activeSession?.activeToolStatus}
         activeTools={activeSession?.activeTools}
         activeAgents={activeSession?.activeAgents}
+        activeHook={activeSession?.activeHook}
         cwd={activeSession?.cwd}
         onResumeSession={(cwd) => {
           setResumeCwd(cwd);
@@ -97,22 +97,22 @@ export default function App() {
         }
         disabled={isDisabled}
         capabilities={capabilities}
-        onOpenCommandPanel={() => setIsCommandPanelOpen(true)}
+        onOpenCommandPanel={() => setOpenPanel("command")}
+        onOpenAgentPanel={() => setOpenPanel("agent")}
       />
 
       {showSettings && <Settings onClose={() => setShowSettings(false)} />}
 
-      {isCommandPanelOpen && (
-        <CommandPanel
+      {openPanel && (
+        <PickerPanel
+          mode={openPanel}
           capabilities={capabilities}
           disabled={isDisabled}
           onSelect={(value) => {
-            if (activeSessionId) {
-              wsService.sendCommand(activeSessionId, value);
-            }
-            setIsCommandPanelOpen(false);
+            useAppStore.getState().setInputDraft(value + " ");
+            setOpenPanel(null);
           }}
-          onClose={() => setIsCommandPanelOpen(false)}
+          onClose={() => setOpenPanel(null)}
         />
       )}
 

@@ -4,9 +4,10 @@ import type { ActiveTool, ActiveAgent } from "../stores/app-store";
 type ActivityPanelProps = {
   activeTools: Map<string, ActiveTool>;
   activeAgents: Map<string, ActiveAgent>;
+  activeHook?: { hookId: string; hookName: string } | null;
 };
 
-export default function ActivityPanel({ activeTools, activeAgents }: ActivityPanelProps) {
+export default function ActivityPanel({ activeTools, activeAgents, activeHook }: ActivityPanelProps) {
   const [currentTime, setCurrentTime] = useState(Date.now());
 
   // Update elapsed time every second
@@ -31,12 +32,19 @@ export default function ActivityPanel({ activeTools, activeAgents }: ActivityPan
   );
 
   // Show nothing if no active items
-  if (activeTools.size === 0 && runningAgents.length === 0) {
+  if (activeTools.size === 0 && runningAgents.length === 0 && !activeHook) {
     return null;
   }
 
   return (
     <div className="activity-panel">
+      {/* Active Hook */}
+      {activeHook && (
+        <div className="activity-hook">
+          <span className="activity-hook-name">Hook: {activeHook.hookName}</span>
+        </div>
+      )}
+
       {/* Active Agents */}
       {runningAgents.map(([taskId, agent]) => {
         // Find tools that belong to this agent

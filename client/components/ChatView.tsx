@@ -8,6 +8,7 @@ type ChatViewProps = {
   activeToolStatus?: { toolName: string; description: string } | null;
   activeTools?: Map<string, ActiveTool>;
   activeAgents?: Map<string, ActiveAgent>;
+  activeHook?: { hookId: string; hookName: string } | null;
   cwd?: string;
   onResumeSession?: (cwd: string) => void;
 };
@@ -18,6 +19,7 @@ export default function ChatView({
   activeToolStatus,
   activeTools = new Map(),
   activeAgents = new Map(),
+  activeHook,
   cwd,
   onResumeSession,
 }: ChatViewProps) {
@@ -101,11 +103,11 @@ export default function ChatView({
       {isStreaming && (
         <>
           {/* New rich activity panel */}
-          {(activeTools.size > 0 || activeAgents.size > 0) && (
-            <ActivityPanel activeTools={activeTools} activeAgents={activeAgents} />
+          {(activeTools.size > 0 || activeAgents.size > 0 || activeHook) && (
+            <ActivityPanel activeTools={activeTools} activeAgents={activeAgents} activeHook={activeHook} />
           )}
           {/* Fallback to legacy simple indicator if no rich status */}
-          {activeTools.size === 0 && activeAgents.size === 0 && (
+          {activeTools.size === 0 && activeAgents.size === 0 && !activeHook && (
             <div className="message assistant">
               <div className="message-content status-indicator">
                 <span className="status-verb">

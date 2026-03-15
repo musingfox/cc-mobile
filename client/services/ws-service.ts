@@ -8,6 +8,8 @@ import {
   isTaskProgress,
   isTaskNotification,
   isResultMessage,
+  isHookStarted,
+  isHookResponse,
 } from "./tool-events";
 
 export function extractTextFromChunk(
@@ -116,6 +118,18 @@ class WsService {
       case "stream_chunk": {
         if (!sessionId) break;
         const chunk = msg.chunk as Record<string, unknown>;
+
+        // Handle hook started
+        if (isHookStarted(chunk)) {
+          store.setActiveHook(sessionId, { hookId: chunk.hook_id, hookName: chunk.hook_name });
+          break;
+        }
+
+        // Handle hook response
+        if (isHookResponse(chunk)) {
+          store.setActiveHook(sessionId, null);
+          break;
+        }
 
         // Handle result messages (cost/token data)
         if (isResultMessage(chunk)) {
@@ -261,6 +275,7 @@ class WsService {
           store.setActiveToolStatus(sessionId, null);
           store.clearActiveTools(sessionId);
           store.clearActiveAgents(sessionId);
+          store.setActiveHook(sessionId, null);
         }
         break;
 

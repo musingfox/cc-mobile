@@ -58,6 +58,7 @@ export type SessionState = {
   activeToolStatus?: { toolName: string; description: string } | null;
   activeTools: Map<string, ActiveTool>;
   activeAgents: Map<string, ActiveAgent>;
+  activeHook: { hookId: string; hookName: string } | null;
   usage: UsageData | null;
 };
 
@@ -114,6 +115,9 @@ interface AppState {
   clearActiveTools: (sessionId: string) => void;
   clearActiveAgents: (sessionId: string) => void;
 
+  // Active Hook Management
+  setActiveHook: (sessionId: string, hook: { hookId: string; hookName: string } | null) => void;
+
   // Usage
   updateUsage: (sessionId: string, usage: UsageData) => void;
 
@@ -167,6 +171,7 @@ export const useAppStore = create<AppState>((set) => ({
         activeToolStatus: null,
         activeTools: new Map(),
         activeAgents: new Map(),
+        activeHook: null,
         usage: null,
       });
       return {
@@ -370,6 +375,14 @@ export const useAppStore = create<AppState>((set) => ({
       sessions: updateSession(state.sessions, sessionId, (s) => ({
         ...s,
         activeAgents: new Map(),
+      })),
+    })),
+
+  setActiveHook: (sessionId, hook) =>
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (s) => ({
+        ...s,
+        activeHook: hook,
       })),
     })),
 

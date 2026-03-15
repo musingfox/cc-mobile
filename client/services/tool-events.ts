@@ -150,3 +150,27 @@ export function isResultMessage(
     typeof chunk.is_error === "boolean"
   );
 }
+
+export type HookStartedEvent = {
+  type: "system";
+  subtype: "hook_started";
+  hook_id: string;
+  hook_name: string;
+  hook_event: string;
+};
+
+export type HookResponseEvent = {
+  type: "system";
+  subtype: "hook_response";
+  hook_id: string;
+  hook_name: string;
+  hook_event: string;
+};
+
+export function isHookStarted(chunk: Record<string, unknown>): chunk is HookStartedEvent {
+  return chunk.type === "system" && chunk.subtype === "hook_started" && typeof chunk.hook_name === "string";
+}
+
+export function isHookResponse(chunk: Record<string, unknown>): chunk is HookResponseEvent {
+  return chunk.type === "system" && chunk.subtype === "hook_response" && typeof chunk.hook_name === "string";
+}

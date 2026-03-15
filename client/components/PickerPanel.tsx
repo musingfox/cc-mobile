@@ -3,19 +3,21 @@ import type { Capabilities } from "../stores/app-store";
 import { filterAndSortItems } from "../utils/command-filter";
 import { loadPins, savePins, togglePin } from "../services/pins";
 
-type CommandPanelProps = {
+type PickerPanelProps = {
+  mode: "command" | "agent";
   capabilities: Capabilities | null;
   disabled: boolean;
   onSelect: (value: string) => void;
   onClose: () => void;
 };
 
-export default function CommandPanel({
+export default function PickerPanel({
+  mode,
   capabilities,
   disabled,
   onSelect,
   onClose,
-}: CommandPanelProps) {
+}: PickerPanelProps) {
   const [query, setQuery] = useState("");
   const [pinnedItems, setPinnedItems] = useState<string[]>([]);
 
@@ -26,13 +28,16 @@ export default function CommandPanel({
   const filteredItems = useMemo(() => {
     if (!capabilities) return [];
 
-    return filterAndSortItems({
+    const allItems = filterAndSortItems({
       query,
       commands: capabilities.commands,
       agents: capabilities.agents,
       pinnedItems,
     });
-  }, [query, capabilities, pinnedItems]);
+
+    // Filter by mode
+    return allItems.filter((item) => item.type === mode);
+  }, [query, capabilities, pinnedItems, mode]);
 
   const handleTogglePin = (item: string) => {
     const updated = togglePin({ item, currentPins: pinnedItems });
@@ -51,6 +56,8 @@ export default function CommandPanel({
     }
   };
 
+  const placeholder = mode === "command" ? "Search commands..." : "Search agents...";
+
   return (
     <div className="command-panel-overlay" onClick={handleBackdropClick}>
       <div className="command-panel">
@@ -58,7 +65,7 @@ export default function CommandPanel({
           <input
             type="text"
             className="command-panel-search"
-            placeholder="Search commands and agents..."
+            placeholder={placeholder}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             autoFocus
@@ -74,7 +81,7 @@ export default function CommandPanel({
 
         <div className="command-panel-list">
           {!capabilities ? (
-            <div className="command-panel-loading">Loading commands...</div>
+            <div className="command-panel-loading">Loading...</div>
           ) : filteredItems.length === 0 ? (
             <div className="command-panel-empty">No results found</div>
           ) : (

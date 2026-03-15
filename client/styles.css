@@ -597,6 +597,22 @@ button {
   flex-shrink: 0;
 }
 
+.activity-hook {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg-accent);
+  border-radius: 8px;
+  border-left: 3px solid var(--accent-warning);
+}
+
+.activity-hook-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
 /* Quick Actions */
 .quick-actions {
   padding: 8px 16px;
@@ -1296,6 +1312,31 @@ button {
   opacity: 0.7;
 }
 
+.input-bar-action-btn {
+  min-height: 36px;
+  width: 36px;
+  border-radius: 50%;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: opacity 0.2s;
+}
+
+.input-bar-action-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.input-bar-action-btn:active:not(:disabled) {
+  opacity: 0.7;
+}
+
+/* Legacy alias for backward compatibility */
 .input-bar-slash-btn {
   min-height: 36px;
   width: 36px;

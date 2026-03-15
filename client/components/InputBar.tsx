@@ -6,9 +6,10 @@ type InputBarProps = {
   disabled: boolean;
   capabilities: Capabilities | null;
   onOpenCommandPanel: () => void;
+  onOpenAgentPanel: () => void;
 };
 
-export default function InputBar({ onSend, disabled, capabilities, onOpenCommandPanel }: InputBarProps) {
+export default function InputBar({ onSend, disabled, capabilities, onOpenCommandPanel, onOpenAgentPanel }: InputBarProps) {
   const value = useAppStore((s) => s.inputDraft);
   const setValue = useAppStore((s) => s.setInputDraft);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -78,12 +79,20 @@ export default function InputBar({ onSend, disabled, capabilities, onOpenCommand
       )}
       <div className="input-bar">
         <button
-          className="input-bar-slash-btn"
+          className="input-bar-action-btn"
           onClick={onOpenCommandPanel}
           disabled={disabled || !capabilities}
           aria-label="Open command panel"
         >
           /
+        </button>
+        <button
+          className="input-bar-action-btn"
+          onClick={onOpenAgentPanel}
+          disabled={disabled || !capabilities}
+          aria-label="Open agent panel"
+        >
+          @
         </button>
         <textarea
           ref={textareaRef}
