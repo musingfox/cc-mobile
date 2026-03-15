@@ -29,6 +29,16 @@ export type SessionState = {
   pendingPermission: PendingPermission | null;
   isStreaming: boolean;
   currentStreamMessageId: string | null;
+  activeToolStatus?: { toolName: string; description: string } | null;
+};
+
+export type SessionListItem = {
+  sdkSessionId: string;
+  displayTitle: string;
+  cwd: string;
+  gitBranch?: string;
+  lastModified: number;
+  createdAt?: number;
 };
 
 type ConnectionState = "connecting" | "connected" | "disconnected";
@@ -57,6 +67,10 @@ interface AppState {
   // Permissions
   setPermission: (sessionId: string, permission: PendingPermission | null) => void;
 
+  // Tool Status
+  setActiveToolStatus: (sessionId: string, status: { toolName: string; description: string } | null) => void;
+  addToolMessage: (sessionId: string, toolName: string, summary: string) => void;
+
   // Capabilities (shared across sessions)
   capabilities: Capabilities | null;
   setCapabilities: (capabilities: Capabilities) => void;
@@ -68,6 +82,11 @@ interface AppState {
   // Input draft (shared so QuickActions can fill it)
   inputDraft: string;
   setInputDraft: (draft: string) => void;
+
+  // Session list for resume
+  sessionList: SessionListItem[];
+  setSessionList: (sessions: SessionListItem[]) => void;
+  loadSessionHistory: (sessionId: string, messages: Array<{ id: string; role: string; content: string; timestamp: number }>) => void;
 }
 
 function updateSession(
@@ -99,6 +118,7 @@ export const useAppStore = create<AppState>((set) => ({
         pendingPermission: null,
         isStreaming: false,
         currentStreamMessageId: null,
+        activeToolStatus: null,
       });
       return {
         sessions: next,
@@ -179,6 +199,31 @@ export const useAppStore = create<AppState>((set) => ({
       })),
     })),
 
+  setActiveToolStatus: (sessionId, status) =>
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (s) => ({
+        ...s,
+        activeToolStatus: status,
+      })),
+    })),
+
+  addToolMessage: (sessionId, toolName, summary) =>
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (s) => ({
+        ...s,
+        messages: [
+          ...s.messages,
+          {
+            id: `tool-${Date.now()}-${Math.random()}`,
+            role: "tool" as const,
+            toolName,
+            content: summary,
+            timestamp: Date.now(),
+          },
+        ],
+      })),
+    })),
+
   capabilities: null,
   setCapabilities: (capabilities) => set({ capabilities }),
 
@@ -187,4 +232,19 @@ export const useAppStore = create<AppState>((set) => ({
 
   inputDraft: "",
   setInputDraft: (inputDraft) => set({ inputDraft }),
+
+  sessionList: [],
+  setSessionList: (sessions) => set({ sessionList: sessions }),
+  loadSessionHistory: (sessionId, messages) =>
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (s) => ({
+        ...s,
+        messages: messages.map((m) => ({
+          id: m.id,
+          role: m.role as "user" | "assistant",
+          content: m.content,
+          timestamp: m.timestamp,
+        })),
+      })),
+    })),
 }));

@@ -1,15 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import type { Message } from "../stores/app-store";
+import { loadProjects } from "../services/projects";
 
 type ChatViewProps = {
   messages: Message[];
   isStreaming?: boolean;
+  activeToolStatus?: { toolName: string; description: string } | null;
+  onNewSession?: (cwd: string) => void;
+  onResumeSession?: (cwd: string) => void;
 };
 
-export default function ChatView({ messages, isStreaming }: ChatViewProps) {
+export default function ChatView({ messages, isStreaming, activeToolStatus, onNewSession, onResumeSession }: ChatViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
+  const [selectedCwd, setSelectedCwd] = useState<string | null>(null);
+  const [customPath, setCustomPath] = useState("");
 
   useEffect(() => {
     if (autoScroll && scrollRef.current) {
@@ -44,8 +50,68 @@ export default function ChatView({ messages, isStreaming }: ChatViewProps) {
     });
   };
 
+  const showEmpty = messages.length === 0 && !isStreaming && onNewSession && onResumeSession;
+  const savedProjects = showEmpty ? loadProjects() : [];
+
   return (
     <div className="chat-view" ref={scrollRef} onScroll={handleScroll}>
+      {showEmpty && (
+        <div className="chat-empty">
+          {!selectedCwd ? (
+            <div className="chat-empty-actions">
+              <div className="chat-empty-title">Select a project</div>
+              {savedProjects.map((p) => (
+                <button
+                  key={p.cwd}
+                  className="chat-empty-btn"
+                  onClick={() => setSelectedCwd(p.cwd)}
+                >
+                  <div className="chat-empty-btn-label">{p.label}</div>
+                  <div className="chat-empty-btn-path">{p.cwd}</div>
+                </button>
+              ))}
+              <div className="chat-empty-custom">
+                <input
+                  className="chat-empty-input"
+                  value={customPath}
+                  onChange={(e) => setCustomPath(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && customPath.trim()) {
+                      setSelectedCwd(customPath.trim());
+                    }
+                  }}
+                  placeholder="Or type a path..."
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="chat-empty-actions">
+              <div className="chat-empty-title">
+                {selectedCwd.split("/").pop() || selectedCwd}
+              </div>
+              <div className="chat-empty-subtitle">{selectedCwd}</div>
+              <button
+                className="chat-empty-btn"
+                onClick={() => onNewSession(selectedCwd)}
+              >
+                + New Session
+              </button>
+              <button
+                className="chat-empty-btn resume"
+                onClick={() => onResumeSession(selectedCwd)}
+              >
+                Resume Session
+              </button>
+              <button
+                className="chat-empty-back"
+                onClick={() => setSelectedCwd(null)}
+              >
+                Back
+              </button>
+            </div>
+          )}
+        </div>
+      )}
       {messages.map((msg) => (
         <div key={msg.id} className={`message ${msg.role}`}>
           {msg.role === "tool" ? (
@@ -71,8 +137,13 @@ export default function ChatView({ messages, isStreaming }: ChatViewProps) {
       ))}
       {isStreaming && (
         <div className="message assistant">
-          <div className="message-content typing-indicator">
-            <span></span><span></span><span></span>
+          <div className="message-content status-indicator">
+            <span className="status-verb">
+              {activeToolStatus ? activeToolStatus.toolName : "Thinking"}
+            </span>
+            {activeToolStatus && activeToolStatus.description !== activeToolStatus.toolName && (
+              <span className="status-detail">{activeToolStatus.description}</span>
+            )}
           </div>
         </div>
       )}

@@ -1,5 +1,6 @@
 import { useAppStore } from "../stores/app-store";
 import { saveProject } from "./projects";
+import { isToolProgress, isToolUseSummary, isTaskProgress } from "./tool-events";
 
 export function extractTextFromChunk(
   chunk: Record<string, unknown>
@@ -99,6 +100,27 @@ class WsService {
       case "stream_chunk": {
         if (!sessionId) break;
         const chunk = msg.chunk as Record<string, unknown>;
+
+        // Handle tool events first
+        if (isToolProgress(chunk)) {
+          store.setActiveToolStatus(sessionId, { toolName: chunk.tool_name, description: chunk.tool_name });
+          break;
+        }
+        if (isTaskProgress(chunk)) {
+          if (chunk.last_tool_name) {
+            store.setActiveToolStatus(sessionId, { toolName: chunk.last_tool_name, description: chunk.description });
+          }
+          break;
+        }
+        if (isToolUseSummary(chunk)) {
+          // Use the last known tool name, or "Tool" as fallback
+          const session = store.sessions.get(sessionId);
+          const toolName = session?.activeToolStatus?.toolName ?? "Tool";
+          store.addToolMessage(sessionId, toolName, chunk.summary);
+          store.setActiveToolStatus(sessionId, null);
+          break;
+        }
+
         const text = extractTextFromChunk(chunk);
         if (!text) break;
 
@@ -140,6 +162,7 @@ class WsService {
       case "stream_end":
         if (sessionId) {
           store.setStreaming(sessionId, false);
+          store.setActiveToolStatus(sessionId, null);
         }
         break;
 
@@ -176,6 +199,27 @@ class WsService {
           store.setGlobalError(msg.message as string);
         }
         break;
+
+      case "session_list": {
+        // Store session list in app store
+        store.setSessionList((msg.sessions as Array<{
+          sdkSessionId: string;
+          displayTitle: string;
+          cwd: string;
+          gitBranch?: string;
+          lastModified: number;
+          createdAt?: number;
+        }>) || []);
+        break;
+      }
+
+      case "session_history": {
+        if (sessionId) {
+          const messages = (msg.messages as Array<{ id: string; role: string; content: string; timestamp: number }>) || [];
+          store.loadSessionHistory(sessionId, messages);
+        }
+        break;
+      }
     }
   }
 
@@ -255,6 +299,25 @@ class WsService {
       );
     }
     useAppStore.getState().removeSession(sessionId);
+  }
+
+  listSessions(dir?: string, limit?: number, offset?: number) {
+    if (!this.ws) return;
+    this.ws.send(JSON.stringify({
+      type: "list_sessions",
+      ...(dir && { dir }),
+      ...(limit && { limit }),
+      ...(offset && { offset }),
+    }));
+  }
+
+  resumeSession(sdkSessionId: string, cwd: string) {
+    if (!this.ws) return;
+    this.ws.send(JSON.stringify({
+      type: "resume_session",
+      sdkSessionId,
+      cwd,
+    }));
   }
 
   destroy() {

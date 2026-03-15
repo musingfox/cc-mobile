@@ -8,6 +8,8 @@ import QuickActions from "./components/QuickActions";
 import PermissionBar from "./components/PermissionBar";
 import InputBar from "./components/InputBar";
 import Settings from "./components/Settings";
+import SessionListModal from "./components/SessionListModal";
+
 
 export default function App() {
   const connectionState = useAppStore((s) => s.connectionState);
@@ -16,6 +18,8 @@ export default function App() {
   const capabilities = useAppStore((s) => s.capabilities);
   const theme = useSettingsStore((s) => s.theme);
   const [showSettings, setShowSettings] = useState(false);
+  const [showResumeModal, setShowResumeModal] = useState(false);
+  const [resumeCwd, setResumeCwd] = useState("");
 
   const activeSession = activeSessionId
     ? sessions.get(activeSessionId)
@@ -58,6 +62,12 @@ export default function App() {
       <ChatView
         messages={activeSession?.messages ?? []}
         isStreaming={activeSession?.isStreaming}
+        activeToolStatus={activeSession?.activeToolStatus}
+        onNewSession={(cwd) => wsService.createSession(cwd)}
+        onResumeSession={(cwd) => {
+          setResumeCwd(cwd);
+          setShowResumeModal(true);
+        }}
       />
 
       <QuickActions
@@ -84,6 +94,16 @@ export default function App() {
       />
 
       {showSettings && <Settings onClose={() => setShowSettings(false)} />}
+
+      <SessionListModal
+        isOpen={showResumeModal}
+        dir={resumeCwd}
+        onClose={() => setShowResumeModal(false)}
+        onSelectSession={(sdkSessionId, cwd) => {
+          wsService.resumeSession(sdkSessionId, cwd);
+          setShowResumeModal(false);
+        }}
+      />
     </div>
   );
 }

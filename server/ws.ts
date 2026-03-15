@@ -6,6 +6,8 @@ import type { SessionManager } from "./session-manager";
 import type { createPermissionHandler } from "./permission-bridge";
 import type { ServerConfig } from "./config";
 import { ClientMessage, ServerMessage } from "./protocol";
+import { listClaudeSessions } from "./session-listing";
+import { loadSessionHistory } from "./session-history";
 
 function expandPath(p: string): string {
   if (p.startsWith("~/") || p === "~") {
@@ -28,6 +30,12 @@ export function createWsPlugin(
   permissionBridgeFactory: PermissionHandlerFactory,
   serverConfig: ServerConfig
 ) {
+  let cachedCapabilities: {
+    commands: string[];
+    agents: string[];
+    model: string;
+  } | null = null;
+
   return new Elysia().ws("/ws", {
     body: t.Any(), // We'll validate with Zod
 
@@ -42,6 +50,14 @@ export function createWsPlugin(
         });
       });
       (ws.data as any).permissionHandler = handler;
+
+      // Send cached capabilities on reconnect
+      if (cachedCapabilities) {
+        ws.send({
+          type: "capabilities",
+          ...cachedCapabilities,
+        });
+      }
     },
 
     async message(ws, data) {
@@ -102,14 +118,17 @@ export function createWsPlugin(
             for await (const sdkMessage of generator) {
               const msg = sdkMessage as Record<string, unknown>;
 
-              // Extract capabilities from system init message
+              // Extract and cache capabilities from system init message
               if (msg.type === "system" && msg.subtype === "init") {
-                ws.send({
-                  type: "capabilities",
-                  sessionId: message.sessionId,
+                cachedCapabilities = {
                   commands: (msg.slash_commands as string[]) || [],
                   agents: (msg.agents as string[]) || [],
                   model: (msg.model as string) || "unknown",
+                };
+                ws.send({
+                  type: "capabilities",
+                  sessionId: message.sessionId,
+                  ...cachedCapabilities,
                 });
               }
 
@@ -144,6 +163,72 @@ export function createWsPlugin(
                 permissionMode: serverConfig.permissionMode,
               },
             });
+            break;
+          }
+
+          case "list_sessions": {
+            const sessions = await listClaudeSessions({
+              dir: message.dir,
+              limit: message.limit ?? 20,
+              offset: message.offset ?? 0,
+            });
+            ws.send({ type: "session_list", sessions });
+            break;
+          }
+
+          case "resume_session": {
+            const cwd = expandPath(message.cwd);
+            const cwdError = validateCwd(cwd);
+            if (cwdError) {
+              ws.send({
+                type: "error",
+                code: "invalid_cwd",
+                message: cwdError,
+              });
+              break;
+            }
+
+            const sessionId = crypto.randomUUID();
+            (ws.data as any).currentSessionId = sessionId;
+
+            await sessionManager.createSession(
+              sessionId,
+              cwd,
+              handler.canUseTool,
+              message.sdkSessionId
+            );
+
+            ws.send({
+              type: "session_created",
+              sessionId,
+              cwd,
+            });
+
+            // Load and send history
+            try {
+              const messages = await loadSessionHistory(message.sdkSessionId);
+              ws.send({
+                type: "session_history",
+                sessionId,
+                messages,
+              });
+            } catch (err) {
+              // Session created but history load failed - not fatal
+              ws.send({
+                type: "session_history",
+                sessionId,
+                messages: [],
+              });
+            }
+
+            // Send cached capabilities if available
+            if (cachedCapabilities) {
+              ws.send({
+                type: "capabilities",
+                sessionId,
+                ...cachedCapabilities,
+              });
+            }
             break;
           }
         }
