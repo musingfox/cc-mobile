@@ -34,21 +34,41 @@ export default function QuickActions({
   ];
 
   const pinnedItems = allItems.filter((item) => pins.includes(item.value));
+  const pinnedCommands = pinnedItems.filter((item) => item.type === "command");
+  const pinnedAgents = pinnedItems.filter((item) => item.type === "agent");
+
+  if (pinnedCommands.length === 0 && pinnedAgents.length === 0) return null;
 
   return (
     <div className="quick-actions">
-      <div className="quick-actions-row">
-        {pinnedItems.map((item) => (
-          <button
-            key={item.value}
-            className={`quick-action-btn ${item.type}`}
-            onClick={() => setInputDraft(item.value + " ")}
-            disabled={disabled}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
+      {pinnedCommands.length > 0 && (
+        <div className="quick-actions-row">
+          {pinnedCommands.map((item) => (
+            <button
+              key={item.value}
+              className={`quick-action-btn ${item.type}`}
+              onClick={() => setInputDraft(item.value + " ")}
+              disabled={disabled}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {pinnedAgents.length > 0 && (
+        <div className="quick-actions-row">
+          {pinnedAgents.map((item) => (
+            <button
+              key={item.value}
+              className={`quick-action-btn ${item.type}`}
+              onClick={() => setInputDraft(item.value + " ")}
+              disabled={disabled}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
