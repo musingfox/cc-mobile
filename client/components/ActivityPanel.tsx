@@ -38,15 +38,15 @@ export default function ActivityPanel({ activeTools, activeAgents, activeHook }:
 
   return (
     <div className="activity-panel">
-      {/* Active Hook */}
+      {/* Active Hook — shown exclusively (replaces tool/agent display) */}
       {activeHook && (
         <div className="activity-hook">
           <span className="activity-hook-name">Hook: {activeHook.hookName}</span>
         </div>
       )}
 
-      {/* Active Agents */}
-      {runningAgents.map(([taskId, agent]) => {
+      {/* Active Agents — only when no hook running */}
+      {!activeHook && runningAgents.map(([taskId, agent]) => {
         // Find tools that belong to this agent
         const childTools = Array.from(activeTools.entries()).filter(
           ([, tool]) => tool.parentToolUseId === taskId
@@ -91,8 +91,8 @@ export default function ActivityPanel({ activeTools, activeAgents, activeHook }:
         );
       })}
 
-      {/* Root-level tools (no parent agent) */}
-      {Array.from(activeTools.entries())
+      {/* Root-level tools (no parent agent) — only when no hook running */}
+      {!activeHook && Array.from(activeTools.entries())
         .filter(([, tool]) => !tool.parentToolUseId)
         .map(([toolId, tool]) => (
           <div key={toolId} className="activity-tool">

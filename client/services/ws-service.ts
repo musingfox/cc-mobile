@@ -132,6 +132,7 @@ class WsService {
         }
 
         // Handle result messages (cost/token data)
+        // Result marks end of turn — clear stale tool/agent state
         if (isResultMessage(chunk)) {
           store.updateUsage(sessionId, {
             totalCost: chunk.total_cost_usd ?? 0,
@@ -142,6 +143,9 @@ class WsService {
             turns: chunk.num_turns ?? 0,
             durationMs: chunk.duration_ms ?? 0,
           });
+          store.clearActiveTools(sessionId);
+          store.clearActiveAgents(sessionId);
+          store.setActiveToolStatus(sessionId, null);
           break;
         }
 
