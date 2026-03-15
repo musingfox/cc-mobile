@@ -55,9 +55,6 @@ export default function App() {
 
       <QuickActions
         capabilities={capabilities}
-        onCommand={(cmd) =>
-          activeSessionId && wsService.sendCommand(activeSessionId, cmd)
-        }
         disabled={isDisabled}
       />
 
@@ -74,9 +71,6 @@ export default function App() {
       <InputBar
         onSend={(content) =>
           activeSessionId && wsService.send(activeSessionId, content)
-        }
-        onCommand={(cmd) =>
-          activeSessionId && wsService.sendCommand(activeSessionId, cmd)
         }
         disabled={isDisabled}
         capabilities={capabilities}

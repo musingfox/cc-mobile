@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import type { Capabilities } from "../stores/app-store";
+import { useAppStore, type Capabilities } from "../stores/app-store";
 
 const PINS_KEY = "cc-touch-pinned-commands";
 
@@ -18,15 +18,14 @@ function savePins(pins: string[]) {
 
 type QuickActionsProps = {
   capabilities: Capabilities | null;
-  onCommand: (command: string) => void;
   disabled: boolean;
 };
 
 export default function QuickActions({
   capabilities,
-  onCommand,
   disabled,
 }: QuickActionsProps) {
+  const setInputDraft = useAppStore((s) => s.setInputDraft);
   const [pins, setPins] = useState<string[]>(loadPins);
   const [showManager, setShowManager] = useState(false);
 
@@ -57,7 +56,7 @@ export default function QuickActions({
             <button
               key={item.value}
               className={`quick-action-btn ${item.type}`}
-              onClick={() => onCommand(item.value)}
+              onClick={() => setInputDraft(item.value + " ")}
               disabled={disabled}
             >
               {item.label}

@@ -1,15 +1,15 @@
-import { useState, useRef, useEffect, useMemo, type KeyboardEvent } from "react";
-import type { Capabilities } from "../stores/app-store";
+import { useRef, useEffect, useMemo, type KeyboardEvent } from "react";
+import { useAppStore, type Capabilities } from "../stores/app-store";
 
 type InputBarProps = {
   onSend: (content: string) => void;
-  onCommand: (command: string) => void;
   disabled: boolean;
   capabilities: Capabilities | null;
 };
 
-export default function InputBar({ onSend, onCommand, disabled, capabilities }: InputBarProps) {
-  const [value, setValue] = useState("");
+export default function InputBar({ onSend, disabled, capabilities }: InputBarProps) {
+  const value = useAppStore((s) => s.inputDraft);
+  const setValue = useAppStore((s) => s.setInputDraft);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -49,11 +49,8 @@ export default function InputBar({ onSend, onCommand, disabled, capabilities }: 
   };
 
   const handleSelect = (item: { value: string }) => {
-    onCommand(item.value);
-    setValue("");
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-    }
+    setValue(item.value + " ");
+    textareaRef.current?.focus();
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {

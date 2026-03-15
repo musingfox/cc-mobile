@@ -64,6 +64,10 @@ interface AppState {
   // Global error (e.g., invalid cwd)
   globalError: string | null;
   setGlobalError: (error: string | null) => void;
+
+  // Input draft (shared so QuickActions can fill it)
+  inputDraft: string;
+  setInputDraft: (draft: string) => void;
 }
 
 function updateSession(
@@ -180,4 +184,7 @@ export const useAppStore = create<AppState>((set) => ({
 
   globalError: null,
   setGlobalError: (globalError) => set({ globalError }),
+
+  inputDraft: "",
+  setInputDraft: (inputDraft) => set({ inputDraft }),
 }));
