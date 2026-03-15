@@ -4,6 +4,7 @@ import { resolve } from "path";
 import { existsSync, statSync } from "fs";
 import type { SessionManager } from "./session-manager";
 import type { createPermissionHandler } from "./permission-bridge";
+import type { ServerConfig } from "./config";
 import { ClientMessage, ServerMessage } from "./protocol";
 
 function expandPath(p: string): string {
@@ -24,7 +25,8 @@ type PermissionHandler = ReturnType<PermissionHandlerFactory>;
 
 export function createWsPlugin(
   sessionManager: SessionManager,
-  permissionBridgeFactory: PermissionHandlerFactory
+  permissionBridgeFactory: PermissionHandlerFactory,
+  serverConfig: ServerConfig
 ) {
   return new Elysia().ws("/ws", {
     body: t.Any(), // We'll validate with Zod
@@ -132,6 +134,16 @@ export function createWsPlugin(
 
           case "interrupt": {
             sessionManager.destroySession(message.sessionId);
+            break;
+          }
+
+          case "get_server_config": {
+            ws.send({
+              type: "server_config",
+              config: {
+                permissionMode: serverConfig.permissionMode,
+              },
+            });
             break;
           }
         }

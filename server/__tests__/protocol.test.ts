@@ -26,6 +26,10 @@ describe("ClientMessage schema", () => {
     const result = ClientMessage.safeParse({ type: "command", sessionId: "s1" });
     expect(result.success).toBe(false);
   });
+  test("get_server_config valid", () => {
+    const result = ClientMessage.safeParse({ type: "get_server_config" });
+    expect(result.success).toBe(true);
+  });
 });
 
 describe("ServerMessage schema", () => {
@@ -53,5 +57,13 @@ describe("ServerMessage schema", () => {
   test("error valid", () => {
     const result = ServerMessage.safeParse({ type: "error", code: "session_error", message: "not found" });
     expect(result.success).toBe(true);
+  });
+  test("server_config valid", () => {
+    const result = ServerMessage.safeParse({ type: "server_config", config: { permissionMode: "default" } });
+    expect(result.success).toBe(true);
+  });
+  test("server_config invalid permissionMode", () => {
+    const result = ServerMessage.safeParse({ type: "server_config", config: { permissionMode: "invalid" } });
+    expect(result.success).toBe(false);
   });
 });

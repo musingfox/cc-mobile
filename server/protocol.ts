@@ -29,12 +29,17 @@ const InterruptMessage = z.object({
   sessionId: z.string(),
 });
 
+const GetServerConfigMessage = z.object({
+  type: z.literal("get_server_config"),
+});
+
 export const ClientMessage = z.discriminatedUnion("type", [
   NewSessionMessage,
   SendMessage,
   PermissionMessage,
   CommandMessage,
   InterruptMessage,
+  GetServerConfigMessage,
 ]);
 
 export type ClientMessage = z.infer<typeof ClientMessage>;
@@ -89,6 +94,13 @@ const CapabilitiesMessage = z.object({
   model: z.string(),
 });
 
+const ServerConfigMessage = z.object({
+  type: z.literal("server_config"),
+  config: z.object({
+    permissionMode: z.enum(["default", "acceptEdits", "bypassPermissions"]),
+  }),
+});
+
 export const ServerMessage = z.discriminatedUnion("type", [
   SessionCreatedMessage,
   StreamChunkMessage,
@@ -97,6 +109,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
   ResultMessage,
   ErrorMessage,
   CapabilitiesMessage,
+  ServerConfigMessage,
 ]);
 
 export type ServerMessage = z.infer<typeof ServerMessage>;
