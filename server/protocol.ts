@@ -33,6 +33,19 @@ const GetServerConfigMessage = z.object({
   type: z.literal("get_server_config"),
 });
 
+const ListSessionsMessage = z.object({
+  type: z.literal("list_sessions"),
+  dir: z.string().optional(),
+  limit: z.number().optional(),
+  offset: z.number().optional(),
+});
+
+const ResumeSessionMessage = z.object({
+  type: z.literal("resume_session"),
+  sdkSessionId: z.string(),
+  cwd: z.string(),
+});
+
 export const ClientMessage = z.discriminatedUnion("type", [
   NewSessionMessage,
   SendMessage,
@@ -40,6 +53,8 @@ export const ClientMessage = z.discriminatedUnion("type", [
   CommandMessage,
   InterruptMessage,
   GetServerConfigMessage,
+  ListSessionsMessage,
+  ResumeSessionMessage,
 ]);
 
 export type ClientMessage = z.infer<typeof ClientMessage>;

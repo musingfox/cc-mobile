@@ -43,7 +43,8 @@ export class SessionManager {
   async createSession(
     sessionId: string,
     cwd: string,
-    canUseTool: CanUseTool
+    canUseTool: CanUseTool,
+    sdkSessionId?: string
   ): Promise<void> {
     if (this.sessions.has(sessionId)) {
       throw new Error(`Session ${sessionId} already exists`);
@@ -52,7 +53,7 @@ export class SessionManager {
     this.sessions.set(sessionId, {
       cwd,
       canUseTool,
-      sdkSessionId: null,
+      sdkSessionId: sdkSessionId ?? null,
     });
   }
 
