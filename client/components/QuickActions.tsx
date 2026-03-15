@@ -12,10 +12,6 @@ function loadPins(): string[] {
   }
 }
 
-function savePins(pins: string[]) {
-  localStorage.setItem(PINS_KEY, JSON.stringify(pins));
-}
-
 type QuickActionsProps = {
   capabilities: Capabilities | null;
   disabled: boolean;
@@ -27,11 +23,18 @@ export default function QuickActions({
 }: QuickActionsProps) {
   const setInputDraft = useAppStore((s) => s.setInputDraft);
   const [pins, setPins] = useState<string[]>(loadPins);
-  const [showManager, setShowManager] = useState(false);
 
   useEffect(() => {
-    savePins(pins);
-  }, [pins]);
+    const handleStorageChange = () => {
+      setPins(loadPins());
+    };
+    window.addEventListener("storage", handleStorageChange);
+    const interval = setInterval(handleStorageChange, 500);
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+      clearInterval(interval);
+    };
+  }, []);
 
   if (!capabilities) return null;
 
@@ -42,51 +45,20 @@ export default function QuickActions({
 
   const pinnedItems = allItems.filter((item) => pins.includes(item.value));
 
-  const togglePin = (value: string) => {
-    setPins((prev) =>
-      prev.includes(value) ? prev.filter((p) => p !== value) : [...prev, value]
-    );
-  };
-
   return (
-    <>
-      <div className="quick-actions">
-        <div className="quick-actions-row">
-          {pinnedItems.map((item) => (
-            <button
-              key={item.value}
-              className={`quick-action-btn ${item.type}`}
-              onClick={() => setInputDraft(item.value + " ")}
-              disabled={disabled}
-            >
-              {item.label}
-            </button>
-          ))}
+    <div className="quick-actions">
+      <div className="quick-actions-row">
+        {pinnedItems.map((item) => (
           <button
-            className="quick-action-btn manage"
-            onClick={() => setShowManager(!showManager)}
+            key={item.value}
+            className={`quick-action-btn ${item.type}`}
+            onClick={() => setInputDraft(item.value + " ")}
+            disabled={disabled}
           >
-            {showManager ? "Done" : "..."}
+            {item.label}
           </button>
-        </div>
+        ))}
       </div>
-
-      {showManager && (
-        <div className="command-manager">
-          {allItems.map((item) => (
-            <button
-              key={item.value}
-              className={`manager-item ${pins.includes(item.value) ? "pinned" : ""}`}
-              onClick={() => togglePin(item.value)}
-            >
-              <span className="manager-item-label">{item.label}</span>
-              <span className="manager-item-pin">
-                {pins.includes(item.value) ? "Unpin" : "Pin"}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-    </>
+    </div>
   );
 }
