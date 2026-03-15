@@ -2,17 +2,32 @@ import { describe, test, expect } from "bun:test";
 import { parseServerConfig } from "../config";
 
 describe("parseServerConfig", () => {
+  const originalEnv = process.env.CLAUDE_MOBILE_ALLOWED_ROOTS;
+
+  // Clean up after each test
+  const cleanup = () => {
+    if (originalEnv === undefined) {
+      delete process.env.CLAUDE_MOBILE_ALLOWED_ROOTS;
+    } else {
+      process.env.CLAUDE_MOBILE_ALLOWED_ROOTS = originalEnv;
+    }
+  };
+
   test("defaults", () => {
+    delete process.env.CLAUDE_MOBILE_ALLOWED_ROOTS;
     const result = parseServerConfig(["node", "index.ts"]);
     expect(result).toEqual({
       port: 3001,
       hostname: "0.0.0.0",
       defaultCwd: null,
       permissionMode: "default",
+      allowedRoots: null,
     });
+    cleanup();
   });
 
   test("all flags", () => {
+    delete process.env.CLAUDE_MOBILE_ALLOWED_ROOTS;
     const result = parseServerConfig([
       "node", "index.ts",
       "--port", "4000",
@@ -24,7 +39,9 @@ describe("parseServerConfig", () => {
       hostname: "0.0.0.0",
       defaultCwd: "/workspace",
       permissionMode: "acceptEdits",
+      allowedRoots: null,
     });
+    cleanup();
   });
 
   test("invalid permission-mode", () => {

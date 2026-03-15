@@ -1,3 +1,5 @@
+import { resolve } from "path";
+
 export type PermissionMode = "default" | "acceptEdits" | "bypassPermissions";
 
 export interface ServerConfig {
@@ -5,6 +7,7 @@ export interface ServerConfig {
   hostname: string;
   defaultCwd: string | null;
   permissionMode: PermissionMode;
+  allowedRoots: string[] | null;
 }
 
 export function parseServerConfig(argv: string[]): ServerConfig {
@@ -13,6 +16,7 @@ export function parseServerConfig(argv: string[]): ServerConfig {
     hostname: "0.0.0.0",
     defaultCwd: null,
     permissionMode: "default",
+    allowedRoots: parseAllowedRoots(),
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -47,4 +51,17 @@ export function parseServerConfig(argv: string[]): ServerConfig {
   }
 
   return config;
+}
+
+function parseAllowedRoots(): string[] | null {
+  const envVar = process.env.CLAUDE_MOBILE_ALLOWED_ROOTS;
+  if (!envVar || envVar.trim() === "") {
+    return null;
+  }
+
+  return envVar
+    .split(",")
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0)
+    .map((p) => resolve(p));
 }

@@ -1,7 +1,7 @@
 import { Elysia, t } from "elysia";
 import { homedir } from "os";
-import { resolve } from "path";
-import { existsSync, statSync } from "fs";
+import { resolve, sep } from "path";
+import { existsSync, statSync, realpathSync } from "fs";
 import type { SessionManager } from "./session-manager";
 import type { createPermissionHandler } from "./permission-bridge";
 import type { ServerConfig } from "./config";
@@ -20,6 +20,40 @@ function validateCwd(cwd: string): string | null {
   if (!existsSync(cwd)) return `Path does not exist: ${cwd}`;
   if (!statSync(cwd).isDirectory()) return `Not a directory: ${cwd}`;
   return null;
+}
+
+function validateAllowedPath(cwd: string, allowedRoots: string[] | null): boolean {
+  if (allowedRoots === null) {
+    return true;
+  }
+
+  // Normalize cwd to absolute and resolve symlinks
+  let normalizedCwd: string;
+  try {
+    normalizedCwd = realpathSync(cwd);
+  } catch {
+    // If realpath fails, use resolved path
+    normalizedCwd = resolve(cwd);
+  }
+
+  // Ensure path ends with separator for prefix matching
+  const ensureTrailingSep = (p: string) => p.endsWith(sep) ? p : p + sep;
+
+  for (const root of allowedRoots) {
+    let normalizedRoot: string;
+    try {
+      normalizedRoot = realpathSync(root);
+    } catch {
+      normalizedRoot = resolve(root);
+    }
+
+    // Check if cwd is exactly the root or starts with root/
+    if (normalizedCwd === normalizedRoot || normalizedCwd.startsWith(ensureTrailingSep(normalizedRoot))) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 type PermissionHandlerFactory = typeof createPermissionHandler;
@@ -86,6 +120,15 @@ export function createWsPlugin(
                 type: "error",
                 code: "invalid_cwd",
                 message: cwdError,
+              });
+              break;
+            }
+
+            if (!validateAllowedPath(cwd, serverConfig.allowedRoots)) {
+              ws.send({
+                type: "error",
+                code: "path_not_allowed",
+                message: "Project path is not in the allowed roots",
               });
               break;
             }
@@ -184,6 +227,15 @@ export function createWsPlugin(
                 type: "error",
                 code: "invalid_cwd",
                 message: cwdError,
+              });
+              break;
+            }
+
+            if (!validateAllowedPath(cwd, serverConfig.allowedRoots)) {
+              ws.send({
+                type: "error",
+                code: "path_not_allowed",
+                message: "Project path is not in the allowed roots",
               });
               break;
             }
