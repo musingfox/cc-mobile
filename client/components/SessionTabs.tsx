@@ -6,13 +6,14 @@ export default function SessionTabs() {
   const sessions = useAppStore((s) => s.sessions);
   const activeSessionId = useAppStore((s) => s.activeSessionId);
   const setActiveSession = useAppStore((s) => s.setActiveSession);
-  const [showNewSession, setShowNewSession] = useState(false);
+  const [showNewSession, setShowNewSession] = useState(sessions.size === 0);
   const [newCwd, setNewCwd] = useState("");
 
   const sessionList = [...sessions.values()];
 
   const handleCreate = () => {
-    const cwd = newCwd.trim() || "/";
+    const cwd = newCwd.trim();
+    if (!cwd) return;
     wsService.createSession(cwd);
     setNewCwd("");
     setShowNewSession(false);
@@ -61,7 +62,7 @@ export default function SessionTabs() {
             value={newCwd}
             onChange={(e) => setNewCwd(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-            placeholder="Working directory (default: /)"
+            placeholder="Working directory (e.g. ~/workspace/my-project)"
             autoFocus
           />
           <button className="new-session-btn" onClick={handleCreate}>

@@ -22,12 +22,6 @@ export default function App() {
     return () => wsService.destroy();
   }, []);
 
-  // Auto-create first session on connect if none exist
-  useEffect(() => {
-    if (connectionState === "connected" && sessions.size === 0) {
-      wsService.createSession("/");
-    }
-  }, [connectionState, sessions.size]);
 
   const getStatusLabel = () => {
     switch (connectionState) {

@@ -1,6 +1,7 @@
 import { Elysia, t } from "elysia";
 import { homedir } from "os";
 import { resolve } from "path";
+import { existsSync, statSync } from "fs";
 import type { SessionManager } from "./session-manager";
 import type { createPermissionHandler } from "./permission-bridge";
 import { ClientMessage, ServerMessage } from "./protocol";
@@ -10,6 +11,12 @@ function expandPath(p: string): string {
     return resolve(homedir(), p.slice(2));
   }
   return resolve(p);
+}
+
+function validateCwd(cwd: string): string | null {
+  if (!existsSync(cwd)) return `Path does not exist: ${cwd}`;
+  if (!statSync(cwd).isDirectory()) return `Not a directory: ${cwd}`;
+  return null;
 }
 
 type PermissionHandlerFactory = typeof createPermissionHandler;
@@ -54,8 +61,18 @@ export function createWsPlugin(
       try {
         switch (message.type) {
           case "new_session": {
-            const sessionId = crypto.randomUUID();
             const cwd = expandPath(message.cwd);
+            const cwdError = validateCwd(cwd);
+            if (cwdError) {
+              ws.send({
+                type: "error",
+                code: "invalid_cwd",
+                message: cwdError,
+              });
+              break;
+            }
+
+            const sessionId = crypto.randomUUID();
             (ws.data as any).currentSessionId = sessionId;
 
             await sessionManager.createSession(
