@@ -76,6 +76,9 @@ export class SessionManager {
         systemPrompt: { type: "preset", preset: "claude_code" },
         includePartialMessages: true,
         permissionMode: this.permissionMode,
+        ...(this.permissionMode === "bypassPermissions"
+          ? { allowDangerouslySkipPermissions: true }
+          : {}),
         allowedTools: ["Skill"],
         plugins,
         cwd: config.cwd,

@@ -1,4 +1,4 @@
-import type { PendingPermission } from "../hooks/useSocket";
+import type { PendingPermission } from "../stores/app-store";
 
 type PermissionBarProps = {
   pending: PendingPermission | null;

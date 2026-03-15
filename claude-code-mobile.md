@@ -74,12 +74,15 @@ All messages are Zod-validated (see [ADR-001](docs/adr/001-zod-runtime-validatio
 { type: "command", sessionId: string, command: string }
 { type: "permission", requestId: string, allow: boolean }
 { type: "interrupt", sessionId: string }
+{ type: "get_server_config" }
+{ type: "list_sessions", dir?: string, limit?: number, offset?: number }
+{ type: "resume_session", sdkSessionId: string, cwd: string }
 ```
 
 ### Server → Client
 
 ```typescript
-{ type: "session_created", sessionId: string }
+{ type: "session_created", sessionId: string, cwd: string }
 { type: "stream_chunk", sessionId: string, chunk: Record<string, unknown> }
 { type: "stream_end", sessionId: string }
 { type: "permission_request", sessionId: string, requestId: string,
@@ -87,6 +90,7 @@ All messages are Zod-validated (see [ADR-001](docs/adr/001-zod-runtime-validatio
 { type: "capabilities", sessionId: string, commands: string[], agents: string[], model: string }
 { type: "result", sessionId: string, success: boolean, cost?: number }
 { type: "error", code: string, message: string, sessionId?: string }
+{ type: "server_config", config: { permissionMode: string } }
 ```
 
 Note: `stream_chunk.chunk` contains raw SDK message objects (e.g., `{ type: "assistant", message: { content: [...] } }`). The frontend's `extractTextFromChunk()` parses these into displayable text.
@@ -98,12 +102,16 @@ claude-code-mobile/
 ├── package.json
 ├── tsconfig.json
 ├── vite.config.ts
+├── playwright.config.ts
 ├── docs/adr/                    # Architecture Decision Records
 ├── server/
 │   ├── index.ts                 # Elysia app entry, listens on 0.0.0.0:3001
+│   ├── config.ts                # CLI flag + env var parsing
 │   ├── ws.ts                    # WebSocket handler as Elysia plugin (ADR-005)
 │   ├── session-manager.ts       # V1 query() with resume pattern (ADR-007)
 │   ├── permission-bridge.ts     # canUseTool ↔ WebSocket relay (ADR-002)
+│   ├── session-listing.ts       # List resumable sessions per project
+│   ├── session-history.ts       # Session message history
 │   ├── settings-loader.ts       # Loads user plugins from ~/.claude/ (ADR-006)
 │   ├── protocol.ts              # Zod schemas for WS messages (ADR-001)
 │   └── __tests__/               # Bun test files
@@ -112,16 +120,32 @@ claude-code-mobile/
 │   ├── tsconfig.json            # Frontend-specific TS config
 │   ├── main.tsx                 # React entry
 │   ├── App.tsx                  # Layout: status bar + chat + quick actions + input
-│   ├── styles.css               # Mobile-first dark theme CSS
+│   ├── styles.css               # Mobile-first CSS with dark/light/Claude themes
 │   ├── components/
 │   │   ├── ChatView.tsx         # Message list, auto-scroll, typing indicator
-│   │   ├── QuickActions.tsx     # Pinnable command/agent buttons (localStorage)
+│   │   ├── InputBar.tsx         # Text input + autocomplete for / and @
+│   │   ├── QuickActions.tsx     # Pinned command/agent buttons
+│   │   ├── PickerPanel.tsx      # Full command/agent search panel
 │   │   ├── PermissionBar.tsx    # Approve/Deny sticky bar (48px+ targets)
-│   │   └── InputBar.tsx         # Text input + autocomplete for / and @
+│   │   ├── SessionTabs.tsx      # Multi-session tab switching
+│   │   ├── SessionListModal.tsx # Resume previous sessions
+│   │   ├── ActivityPanel.tsx    # Live tool/agent status display
+│   │   ├── StatusBar.tsx        # Cost, tokens, turns display
+│   │   └── Settings.tsx         # Settings modal
+│   ├── stores/
+│   │   ├── app-store.ts         # Zustand: sessions, messages, permissions
+│   │   └── settings-store.ts    # Zustand: defaultCwd, theme
+│   ├── services/
+│   │   ├── ws-service.ts        # WebSocket singleton
+│   │   ├── settings.ts          # localStorage persistence
+│   │   ├── projects.ts          # Saved projects persistence
+│   │   ├── pins.ts              # Pin management
+│   │   └── tool-events.ts       # Tool event processing
 │   ├── hooks/
-│   │   └── useSocket.ts         # WebSocket state + extractTextFromChunk (ADR-004)
+│   │   └── useSocket.ts         # WebSocket state + extractTextFromChunk
 │   └── __tests__/               # Frontend unit tests
-└── public/                      # (Phase 4: PWA manifest, icons)
+├── e2e/                         # Playwright e2e tests
+└── public/                      # (Future: PWA manifest, icons)
 ```
 
 ## Key Implementation Details
@@ -154,11 +178,11 @@ Capabilities extracted from SDK system init message (`slash_commands`, `agents` 
 - **Pinnable commands** — user pins frequently used commands to a compact bar (persisted in localStorage)
 - **Input autocomplete** — typing `/` or `@` in InputBar filters matching commands/agents
 
-### 5. Frontend State — Centralized useSocket Hook ([ADR-004](docs/adr/004-centralized-socket-hook.md))
+### 5. Frontend State — Zustand + WsService ([ADR-008](docs/adr/008-zustand-multi-session-state.md))
 
-Single `useSocket()` hook manages WebSocket connection, messages, permissions, capabilities, and streaming state. No external state library for MVP. `extractTextFromChunk()` parses SDK message objects into displayable text.
+Zustand store with per-session state isolation. `WsService` singleton manages the WebSocket connection. `extractTextFromChunk()` parses SDK message objects into displayable text. (Supersedes ADR-004 centralized useSocket hook from Phase 1.)
 
-### 5. Touch UX Design
+### 6. Touch UX Design
 
 ```
 ┌─────────────────────────────────┐
@@ -192,7 +216,7 @@ Design principles:
 - **Sticky permission bar** — appears above quick actions when pending, can't be scrolled away
 - **Auto-scroll** — follows streaming output, stops if user scrolls up
 
-### 6. PWA Configuration
+### 7. PWA Configuration (Planned)
 
 ```json
 // public/manifest.json
@@ -224,7 +248,7 @@ Add to home screen → launches as standalone app (no browser chrome).
 
 **Goal**: Tap buttons to trigger commands and agents.
 
-**Done**: Pinnable quick actions bar, input autocomplete for `/` and `@`, all plugin commands/agents visible.
+**Done**: Pinnable quick actions bar, input autocomplete for `/` and `@`, all plugin commands/agents visible. PickerPanel with full search and pin management.
 
 ### Phase 3: Multi-Session ✅
 
@@ -232,29 +256,26 @@ Add to home screen → launches as standalone app (no browser chrome).
 
 **Done**: Zustand store with per-session state (ADR-008), WsService singleton, SessionTabs component with cwd input, tab switching, close button.
 
-### Phase 4: Polish
+### Phase 4: Polish ✅
 
-#### UX
-- Token-level streaming (display text incrementally, not all at once)
-- Status line — mirror Claude Code's status bar data (model, token usage, cost, session duration). Source candidates: SDK `result` message fields (`total_cost_usd`, `num_turns`, `duration_ms`), or SDK `rate_limit_event` for quota info
-- Haptic feedback on approve/deny (via Vibration API)
-- Dark/light theme toggle
+**Done**:
+- Token-level streaming with deduplication (incremental text display)
+- Cost & usage status bar (tokens, cost, turns, duration) via SDK result messages
+- Session resume — list previous sessions via `listSessions()` API, one-tap resume (SessionListModal)
+- Tool & agent execution status display (ActivityPanel — live progress, completion, nested tools)
+- Hook status display
+- Dark/light/Claude theme toggle
+- Settings page (default CWD, theme, pin management, localStorage persistence)
+- Server-side CLI flags: `--default-cwd`, `--permission-mode`, `--port`, `--hostname`
+- `CLAUDE_MOBILE_ALLOWED_ROOTS` env var for project path whitelist
+- E2E test suite (Playwright with mock server)
 
-#### Settings
-- Settings page with persistent config (localStorage)
-  - Default working directory for new sessions
-  - Configurable `permissionMode` via UI toggle (ADR-003), must require server-side opt-in
-  - Theme preference
-  - Quick action pin management (currently inline, could move to settings)
-- Server-side CLI flags: `--default-cwd`, `--permission-mode`, `--port`
+### Phase 5: Future
 
-#### Infrastructure
+- Haptic feedback on approve/deny (Vibration API)
 - PWA manifest + service worker for offline shell
 - Production build: Elysia serves `dist/client/` static files
 - Startup script (`bun run start`) for one-command launch (server + built frontend)
-
-#### Integration
-- Session resume — list previous sessions via `listSessions()` API, show in new session panel for one-tap resume (replaces CLI `/resume` which is not available through SDK)
 - Voice input support (Web Speech API)
 - Notification on permission request when app is backgrounded (Notification API)
 

@@ -2,3 +2,24 @@ node_modules/
 dist/
 *.tsbuildinfo
 .vite/
+
+# Dev scripts with hardcoded paths
+scripts/
+
+# Environment and secrets
+.env
+.env.*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+*~
+
+# Test artifacts
+test-results/
+playwright-report/
+blob-report/

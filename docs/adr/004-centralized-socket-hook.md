@@ -1,7 +1,7 @@
 # ADR-004: Centralized useSocket Hook for WebSocket State
 
 ## Status
-Accepted
+Superseded by [ADR-008](008-zustand-multi-session-state.md)
 
 ## Context
 The frontend needs to manage three categories of state from a single WebSocket connection:

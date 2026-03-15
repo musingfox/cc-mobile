@@ -21,7 +21,8 @@ Claude Code Mobile — a touch-optimized PWA for interacting with Claude Code fr
 bun install              # Install dependencies
 bun run dev:server       # Elysia backend on 0.0.0.0:3001
 bunx vite --host         # Vite frontend on :5173 (network accessible)
-bun test                 # Run all tests (bun:test)
+bun test                 # Run unit tests (bun:test)
+bun run test:e2e         # Run e2e tests (Playwright)
 bun run build            # Production build (Vite outputs to dist/client/)
 ```
 
@@ -48,18 +49,19 @@ All recorded in `docs/adr/`. Key decisions:
 - **Plugin loading** (ADR-006): Reads `~/.claude/settings.json` + `installed_plugins.json` to pass plugin paths to SDK. `allowedTools: ["Skill"]` required.
 - **Permission Bridge** (ADR-002): Promise + 60s timeout pattern. Timeout interrupts conversation.
 - **Zod validation** (ADR-001): Runtime validation on WS messages, single source of truth for types.
-- **useSocket hook** (ADR-004): Centralized frontend state management for connection, messages, permissions.
+- **Zustand + WsService** (ADR-008): Per-session state isolation via Zustand store + WebSocket singleton service.
 
 ### WebSocket Protocol
 
-Client→Server: `new_session`, `send`, `command`, `permission`, `interrupt`
+Client→Server: `new_session`, `send`, `command`, `permission`, `interrupt`, `get_server_config`, `list_sessions`, `resume_session`
 
-Server→Client: `session_created`, `stream_chunk`, `stream_end`, `permission_request`, `capabilities`, `result`, `error`
+Server→Client: `session_created`, `stream_chunk`, `stream_end`, `permission_request`, `capabilities`, `result`, `error`, `server_config`
 
 Schemas defined in `server/protocol.ts`. Full spec in `claude-code-mobile.md`.
 
 ## Security Constraints
 
-- Permission mode defaults to `"default"` — configurable in Phase 4 (ADR-003)
+- Permission mode defaults to `"default"` — configurable via `--permission-mode` CLI flag (ADR-003)
+- `CLAUDE_MOBILE_ALLOWED_ROOTS` env var restricts allowed working directories
 - No auth layer on Tailscale (network membership = auth)
 - If exposing via Cloudflare Tunnel, auth must be added
