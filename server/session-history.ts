@@ -1,11 +1,5 @@
 import { getSessionMessages, type SessionMessage } from "@anthropic-ai/claude-agent-sdk";
-
-export type HistoryMessage = {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp: number;
-};
+import type { HistoryMessage } from "./protocol";
 
 /**
  * Classify a user message into: "human", "command", "skip"

@@ -116,6 +116,33 @@ const ServerConfigMessage = z.object({
   }),
 });
 
+export const SessionListItemSchema = z.object({
+  sdkSessionId: z.string(),
+  displayTitle: z.string(),
+  cwd: z.string(),
+  gitBranch: z.string().optional(),
+  lastModified: z.number(),
+  createdAt: z.number().optional(),
+});
+
+export const HistoryMessageSchema = z.object({
+  id: z.string(),
+  role: z.enum(["user", "assistant"]),
+  content: z.string(),
+  timestamp: z.number(),
+});
+
+const SessionListMessage = z.object({
+  type: z.literal("session_list"),
+  sessions: z.array(SessionListItemSchema),
+});
+
+const SessionHistoryMessage = z.object({
+  type: z.literal("session_history"),
+  sessionId: z.string(),
+  messages: z.array(HistoryMessageSchema),
+});
+
 export const ServerMessage = z.discriminatedUnion("type", [
   SessionCreatedMessage,
   StreamChunkMessage,
@@ -125,6 +152,10 @@ export const ServerMessage = z.discriminatedUnion("type", [
   ErrorMessage,
   CapabilitiesMessage,
   ServerConfigMessage,
+  SessionListMessage,
+  SessionHistoryMessage,
 ]);
 
 export type ServerMessage = z.infer<typeof ServerMessage>;
+export type SessionListItem = z.infer<typeof SessionListItemSchema>;
+export type HistoryMessage = z.infer<typeof HistoryMessageSchema>;

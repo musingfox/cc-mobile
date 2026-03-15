@@ -8,6 +8,7 @@ import type { ServerConfig } from "./config";
 import { ClientMessage, ServerMessage } from "./protocol";
 import { listClaudeSessions } from "./session-listing";
 import { loadSessionHistory } from "./session-history";
+import { loadCachedCapabilities, saveCachedCapabilities, type Capabilities } from "./capabilities-cache";
 
 function expandPath(p: string): string {
   if (p.startsWith("~/") || p === "~") {
@@ -64,11 +65,7 @@ export function createWsPlugin(
   permissionBridgeFactory: PermissionHandlerFactory,
   serverConfig: ServerConfig
 ) {
-  let cachedCapabilities: {
-    commands: string[];
-    agents: string[];
-    model: string;
-  } | null = null;
+  let cachedCapabilities: Capabilities | null = loadCachedCapabilities();
 
   return new Elysia().ws("/ws", {
     body: t.Any(), // We'll validate with Zod
@@ -168,6 +165,7 @@ export function createWsPlugin(
                   agents: (msg.agents as string[]) || [],
                   model: (msg.model as string) || "unknown",
                 };
+                saveCachedCapabilities(cachedCapabilities);
                 ws.send({
                   type: "capabilities",
                   sessionId: message.sessionId,
@@ -215,7 +213,13 @@ export function createWsPlugin(
               limit: message.limit ?? 20,
               offset: message.offset ?? 0,
             });
-            ws.send({ type: "session_list", sessions });
+            try {
+              const validated = ServerMessage.parse({ type: "session_list", sessions });
+              ws.send(validated);
+            } catch (err) {
+              console.error("[ws] session_list validation failed:", err);
+              ws.send({ type: "session_list", sessions });
+            }
             break;
           }
 
@@ -259,18 +263,28 @@ export function createWsPlugin(
             // Load and send history
             try {
               const messages = await loadSessionHistory(message.sdkSessionId);
-              ws.send({
+              const validated = ServerMessage.parse({
                 type: "session_history",
                 sessionId,
                 messages,
               });
+              ws.send(validated);
             } catch (err) {
               // Session created but history load failed - not fatal
-              ws.send({
-                type: "session_history",
-                sessionId,
-                messages: [],
-              });
+              try {
+                const validated = ServerMessage.parse({
+                  type: "session_history",
+                  sessionId,
+                  messages: [],
+                });
+                ws.send(validated);
+              } catch {
+                ws.send({
+                  type: "session_history",
+                  sessionId,
+                  messages: [],
+                });
+              }
             }
 
             // Send cached capabilities if available

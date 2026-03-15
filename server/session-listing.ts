@@ -1,13 +1,5 @@
 import { listSessions, type SDKSessionInfo } from "@anthropic-ai/claude-agent-sdk";
-
-export type SessionListItem = {
-  sdkSessionId: string;
-  displayTitle: string;
-  cwd: string;
-  gitBranch?: string;
-  lastModified: number;
-  createdAt?: number;
-};
+import type { SessionListItem } from "./protocol";
 
 /**
  * List Claude Code sessions with transformed metadata.

@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { SessionListItem } from "../../server/protocol";
 
 export type Message = {
   id: string;
@@ -60,15 +61,6 @@ export type SessionState = {
   activeAgents: Map<string, ActiveAgent>;
   activeHook: { hookId: string; hookName: string } | null;
   usage: UsageData | null;
-};
-
-export type SessionListItem = {
-  sdkSessionId: string;
-  displayTitle: string;
-  cwd: string;
-  gitBranch?: string;
-  lastModified: number;
-  createdAt?: number;
 };
 
 type ConnectionState = "connecting" | "connected" | "disconnected";
