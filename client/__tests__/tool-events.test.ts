@@ -24,15 +24,12 @@ describe("Tool Event Type Guards", () => {
       expect(isToolProgress(event)).toBe(false);
     });
 
-    it("should return false for wrong field types", () => {
+    it("should match with only type and tool_name (minimal fields)", () => {
       const event = {
         type: "tool_progress",
-        tool_use_id: 123, // should be string
         tool_name: "Read",
-        parent_tool_use_id: null,
-        elapsed_time_seconds: 1.5,
       };
-      expect(isToolProgress(event)).toBe(false);
+      expect(isToolProgress(event)).toBe(true);
     });
   });
 
@@ -51,13 +48,12 @@ describe("Tool Event Type Guards", () => {
       expect(isToolUseSummary(event)).toBe(false);
     });
 
-    it("should return false for non-array preceding_tool_use_ids", () => {
+    it("should match without preceding_tool_use_ids", () => {
       const event = {
         type: "tool_use_summary",
         summary: "Read file auth.ts",
-        preceding_tool_use_ids: "t123", // should be array
       };
-      expect(isToolUseSummary(event)).toBe(false);
+      expect(isToolUseSummary(event)).toBe(true);
     });
   });
 

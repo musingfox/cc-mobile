@@ -95,11 +95,7 @@ export function isToolProgress(
 ): chunk is ToolProgressEvent {
   return (
     chunk.type === "tool_progress" &&
-    typeof chunk.tool_use_id === "string" &&
-    typeof chunk.tool_name === "string" &&
-    (chunk.parent_tool_use_id === null ||
-      typeof chunk.parent_tool_use_id === "string") &&
-    typeof chunk.elapsed_time_seconds === "number"
+    typeof chunk.tool_name === "string"
   );
 }
 
@@ -108,9 +104,7 @@ export function isToolUseSummary(
 ): chunk is ToolUseSummaryEvent {
   return (
     chunk.type === "tool_use_summary" &&
-    typeof chunk.summary === "string" &&
-    Array.isArray(chunk.preceding_tool_use_ids) &&
-    chunk.preceding_tool_use_ids.every((id) => typeof id === "string")
+    typeof chunk.summary === "string"
   );
 }
 

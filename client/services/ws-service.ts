@@ -148,10 +148,12 @@ class WsService {
 
         // Handle tool progress updates
         if (isToolProgress(chunk)) {
-          store.updateActiveTool(sessionId, chunk.tool_use_id, {
-            elapsedSeconds: chunk.elapsed_time_seconds,
-            parentToolUseId: chunk.parent_tool_use_id,
-          });
+          if (chunk.tool_use_id) {
+            store.updateActiveTool(sessionId, chunk.tool_use_id, {
+              ...(chunk.elapsed_time_seconds !== undefined && { elapsedSeconds: chunk.elapsed_time_seconds }),
+              ...(chunk.parent_tool_use_id !== undefined && { parentToolUseId: chunk.parent_tool_use_id }),
+            });
+          }
           // Maintain backward compatibility
           store.setActiveToolStatus(sessionId, {
             toolName: chunk.tool_name,
@@ -166,9 +168,11 @@ class WsService {
           const toolName = session?.activeToolStatus?.toolName ?? "Tool";
           store.addToolMessage(sessionId, toolName, chunk.summary);
           // Remove all completed tools
-          chunk.preceding_tool_use_ids.forEach((id) => {
-            store.removeActiveTool(sessionId, id);
-          });
+          if (Array.isArray(chunk.preceding_tool_use_ids)) {
+            chunk.preceding_tool_use_ids.forEach((id) => {
+              store.removeActiveTool(sessionId, id);
+            });
+          }
           // Clear legacy status
           store.setActiveToolStatus(sessionId, null);
           break;
@@ -255,6 +259,8 @@ class WsService {
         if (sessionId) {
           store.setStreaming(sessionId, false);
           store.setActiveToolStatus(sessionId, null);
+          store.clearActiveTools(sessionId);
+          store.clearActiveAgents(sessionId);
         }
         break;
 

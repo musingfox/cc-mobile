@@ -110,6 +110,10 @@ interface AppState {
   updateActiveAgent: (sessionId: string, taskId: string, updates: Partial<ActiveAgent>) => void;
   completeActiveAgent: (sessionId: string, taskId: string, completion: Partial<ActiveAgent>) => void;
 
+  // Cleanup
+  clearActiveTools: (sessionId: string) => void;
+  clearActiveAgents: (sessionId: string) => void;
+
   // Usage
   updateUsage: (sessionId: string, usage: UsageData) => void;
 
@@ -351,6 +355,22 @@ export const useAppStore = create<AppState>((set) => ({
         next.set(taskId, { ...agent, ...completion });
         return { ...s, activeAgents: next };
       }),
+    })),
+
+  clearActiveTools: (sessionId) =>
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (s) => ({
+        ...s,
+        activeTools: new Map(),
+      })),
+    })),
+
+  clearActiveAgents: (sessionId) =>
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (s) => ({
+        ...s,
+        activeAgents: new Map(),
+      })),
     })),
 
   updateUsage: (sessionId, usage) =>
