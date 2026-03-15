@@ -119,8 +119,11 @@ class WsService {
         if (!sessionId) break;
         const chunk = msg.chunk as Record<string, unknown>;
 
-        // Handle hook started
+        // Handle hook started — clear stale tools since hooks run after turn completes
         if (isHookStarted(chunk)) {
+          store.clearActiveTools(sessionId);
+          store.clearActiveAgents(sessionId);
+          store.setActiveToolStatus(sessionId, null);
           store.setActiveHook(sessionId, { hookId: chunk.hook_id, hookName: chunk.hook_name });
           break;
         }
