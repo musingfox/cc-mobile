@@ -1,0 +1,4 @@
+[test]
+root = "./"
+# Exclude e2e tests (run via Playwright, not bun:test)
+exclude = ["e2e/**", "node_modules/**"]

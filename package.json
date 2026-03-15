@@ -7,7 +7,9 @@
     "dev:client": "bunx vite",
     "dev": "bun run dev:server & bun run dev:client",
     "build": "bunx vite build",
-    "test": "bun test"
+    "test": "bun test client/__tests__ server/__tests__",
+    "test:e2e": "bunx playwright test",
+    "test:e2e:ui": "bunx playwright test --ui"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",
@@ -18,6 +20,7 @@
     "zustand": "^5.0.11"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@testing-library/react": "^16.3.2",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",

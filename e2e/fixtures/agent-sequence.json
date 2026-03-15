@@ -1,0 +1,104 @@
+[
+  {
+    "type": "system",
+    "subtype": "init",
+    "cwd": "/Users/test/playground",
+    "session_id": "mock-sdk-session-002",
+    "tools": ["Bash", "Glob", "Grep", "Read"],
+    "slash_commands": ["/compact", "/clear"],
+    "agents": ["Explore", "Plan"],
+    "model": "claude-sonnet-4-6"
+  },
+  {
+    "type": "stream_event",
+    "event": {
+      "type": "message_start",
+      "message": { "model": "claude-sonnet-4-6", "id": "msg_mock_002", "type": "message", "role": "assistant", "content": [], "stop_reason": null }
+    },
+    "session_id": "mock-sdk-session-002",
+    "parent_tool_use_id": null
+  },
+  {
+    "_description": "Agent tool_use block starts",
+    "type": "stream_event",
+    "event": {
+      "type": "content_block_start",
+      "index": 0,
+      "content_block": { "type": "tool_use", "id": "toolu_agent_001", "name": "Agent", "input": {} }
+    },
+    "session_id": "mock-sdk-session-002",
+    "parent_tool_use_id": null
+  },
+  {
+    "_description": "Sub-agent task started",
+    "type": "system",
+    "subtype": "task_started",
+    "task_id": "task_mock_001",
+    "description": "Explore: searching codebase for config patterns",
+    "task_type": "agent",
+    "tool_use_id": "toolu_agent_001"
+  },
+  {
+    "_description": "Nested tool inside agent",
+    "type": "tool_progress",
+    "tool_use_id": "toolu_nested_001",
+    "tool_name": "Grep",
+    "parent_tool_use_id": "toolu_agent_001",
+    "elapsed_time_seconds": 0.8
+  },
+  {
+    "_description": "Agent progress update with stats",
+    "type": "system",
+    "subtype": "task_progress",
+    "task_id": "task_mock_001",
+    "description": "Explore: searching codebase for config patterns",
+    "last_tool_name": "Grep",
+    "usage": { "total_tokens": 5200, "tool_uses": 3 }
+  },
+  {
+    "_description": "Agent completed",
+    "type": "system",
+    "subtype": "task_notification",
+    "task_id": "task_mock_001",
+    "status": "completed",
+    "summary": "Found 12 matching files across 3 directories",
+    "usage": { "total_tokens": 8400, "tool_uses": 5, "duration_ms": 3200 }
+  },
+  {
+    "_description": "Text response after agent",
+    "type": "stream_event",
+    "event": {
+      "type": "content_block_start",
+      "index": 1,
+      "content_block": { "type": "text", "text": "" }
+    },
+    "session_id": "mock-sdk-session-002",
+    "parent_tool_use_id": null
+  },
+  {
+    "type": "stream_event",
+    "event": {
+      "type": "content_block_delta",
+      "index": 1,
+      "delta": { "type": "text_delta", "text": "I found 12 config files in the codebase." }
+    },
+    "session_id": "mock-sdk-session-002",
+    "parent_tool_use_id": null
+  },
+  {
+    "type": "result",
+    "subtype": "success",
+    "is_error": false,
+    "duration_ms": 5500,
+    "num_turns": 1,
+    "result": "I found 12 config files in the codebase.",
+    "session_id": "mock-sdk-session-002",
+    "total_cost_usd": 0.0815,
+    "usage": {
+      "input_tokens": 18000,
+      "output_tokens": 520,
+      "cache_read_input_tokens": 12000,
+      "cache_creation_input_tokens": 2000
+    }
+  }
+]
