@@ -4,7 +4,7 @@
 Accepted
 
 ## Context
-cc-touch operates remotely — users control their dev machine from a phone. The SDK supports multiple permission modes: `"default"`, `"acceptEdits"`, `"bypassPermissions"`.
+claude-code-mobile operates remotely — users control their dev machine from a phone. The SDK supports multiple permission modes: `"default"`, `"acceptEdits"`, `"bypassPermissions"`.
 
 ## Decision
 Phase 1 (MVP) hardcodes `permissionMode: "default"`. In a future phase, make it configurable via UI toggle or server startup flag.

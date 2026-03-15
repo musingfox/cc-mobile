@@ -11,4 +11,4 @@ const app = new Elysia()
   .use(createWsPlugin(sessionManager, createPermissionHandler, serverConfig))
   .listen({ port: serverConfig.port, hostname: serverConfig.hostname });
 
-console.log(`cc-touch server listening on ${serverConfig.hostname}:${serverConfig.port}`);
+console.log(`claude-code-mobile server listening on ${serverConfig.hostname}:${serverConfig.port}`);

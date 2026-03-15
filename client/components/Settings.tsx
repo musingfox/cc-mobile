@@ -3,7 +3,7 @@ import { useSettingsStore } from "../stores/settings-store";
 import type { Theme } from "../services/settings";
 import { useAppStore } from "../stores/app-store";
 
-const PINS_KEY = "cc-touch-pinned-commands";
+const PINS_KEY = "claude-code-mobile-pinned-commands";
 
 function loadPins(): string[] {
   try {

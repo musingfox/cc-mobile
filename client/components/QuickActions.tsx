@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAppStore, type Capabilities } from "../stores/app-store";
 
-const PINS_KEY = "cc-touch-pinned-commands";
+const PINS_KEY = "claude-code-mobile-pinned-commands";
 
 function loadPins(): string[] {
   try {

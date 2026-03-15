@@ -1,4 +1,4 @@
-# Claude Touch
+# Claude Code Mobile
 
 Touch-optimized web UI for [Claude Code](https://claude.ai/code), designed for phones and tablets.
 
@@ -48,7 +48,7 @@ Not a terminal replacement — a touch translation of terminal interactions. Run
 ## Quick Start
 
 ```bash
-git clone <repo-url> && cd cc-touch
+git clone <repo-url> && cd claude-code-mobile
 bun install
 bun run dev:server    # Backend on 0.0.0.0:3001
 bunx vite --host      # Frontend on :5173 (in another terminal)
@@ -125,7 +125,7 @@ Vite dev server proxies `/ws` and `/api` to Elysia backend on port 3001.
 ### Project Structure
 
 ```
-cc-touch/
+claude-code-mobile/
 ├── server/
 │   ├── index.ts                # Elysia app entry
 │   ├── config.ts               # CLI flag parsing

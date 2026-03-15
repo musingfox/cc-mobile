@@ -1,4 +1,4 @@
-# Claude Touch — Plan Document
+# Claude Code Mobile — Plan Document
 
 > Touch-optimized web UI for Claude Code, designed for phones and tablets.
 > Not a terminal replacement — a touch translation of terminal interactions.
@@ -94,7 +94,7 @@ Note: `stream_chunk.chunk` contains raw SDK message objects (e.g., `{ type: "ass
 ## Project Structure
 
 ```
-cc-touch/
+claude-code-mobile/
 ├── package.json
 ├── tsconfig.json
 ├── vite.config.ts
@@ -197,7 +197,7 @@ Design principles:
 ```json
 // public/manifest.json
 {
-  "name": "Claude Touch",
+  "name": "Claude Code Mobile",
   "short_name": "Claude",
   "start_url": "/",
   "display": "standalone",

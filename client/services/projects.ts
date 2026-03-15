@@ -1,4 +1,4 @@
-const PROJECTS_KEY = "cc-touch-projects";
+const PROJECTS_KEY = "claude-code-mobile-projects";
 
 export type SavedProject = {
   cwd: string;
