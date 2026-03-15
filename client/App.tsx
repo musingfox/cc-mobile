@@ -10,6 +10,7 @@ import InputBar from "./components/InputBar";
 import Settings from "./components/Settings";
 import SessionListModal from "./components/SessionListModal";
 import StatusBar from "./components/StatusBar";
+import CommandPanel from "./components/CommandPanel";
 
 export default function App() {
   const connectionState = useAppStore((s) => s.connectionState);
@@ -20,6 +21,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showResumeModal, setShowResumeModal] = useState(false);
   const [resumeCwd, setResumeCwd] = useState("");
+  const [isCommandPanelOpen, setIsCommandPanelOpen] = useState(false);
 
   const activeSession = activeSessionId
     ? sessions.get(activeSessionId)
@@ -95,9 +97,24 @@ export default function App() {
         }
         disabled={isDisabled}
         capabilities={capabilities}
+        onOpenCommandPanel={() => setIsCommandPanelOpen(true)}
       />
 
       {showSettings && <Settings onClose={() => setShowSettings(false)} />}
+
+      {isCommandPanelOpen && (
+        <CommandPanel
+          capabilities={capabilities}
+          disabled={isDisabled}
+          onSelect={(value) => {
+            if (activeSessionId) {
+              wsService.sendCommand(activeSessionId, value);
+            }
+            setIsCommandPanelOpen(false);
+          }}
+          onClose={() => setIsCommandPanelOpen(false)}
+        />
+      )}
 
       <SessionListModal
         isOpen={showResumeModal}

@@ -1148,3 +1148,175 @@ button {
   flex-wrap: wrap;
 }
 
+/* Command Panel */
+.command-panel-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.command-panel {
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 500px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.command-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.command-panel-search {
+  flex: 1;
+  min-height: 48px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 16px;
+  outline: none;
+}
+
+.command-panel-search:focus {
+  border-color: var(--accent-primary);
+}
+
+.command-panel-close-btn {
+  min-height: 48px;
+  width: 48px;
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 20px;
+  transition: opacity 0.2s;
+  flex-shrink: 0;
+}
+
+.command-panel-close-btn:active {
+  opacity: 0.7;
+}
+
+.command-panel-list {
+  flex: 1;
+  overflow-y: auto;
+  max-height: calc(100vh - 200px);
+  padding: 8px;
+}
+
+.command-panel-loading,
+.command-panel-empty {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 32px 16px;
+  font-size: 14px;
+}
+
+.command-panel-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: var(--bg-primary);
+  cursor: pointer;
+  transition: background 0.2s;
+  margin-bottom: 6px;
+}
+
+.command-panel-item:active {
+  opacity: 0.8;
+}
+
+.command-panel-item.pinned {
+  background: var(--bg-highlight);
+}
+
+.command-panel-item .type-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  letter-spacing: 0.5px;
+}
+
+.command-panel-item .type-badge.command {
+  background: var(--accent-command);
+  color: white;
+}
+
+.command-panel-item .type-badge.agent {
+  background: var(--accent-agent);
+  color: white;
+}
+
+.command-panel-label {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-panel-pin-btn {
+  min-height: 32px;
+  width: 32px;
+  border-radius: 50%;
+  background: var(--bg-tertiary);
+  color: var(--accent-warning);
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: opacity 0.2s;
+}
+
+.command-panel-pin-btn:active {
+  opacity: 0.7;
+}
+
+.input-bar-slash-btn {
+  min-height: 36px;
+  width: 36px;
+  border-radius: 50%;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: opacity 0.2s;
+}
+
+.input-bar-slash-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.input-bar-slash-btn:active:not(:disabled) {
+  opacity: 0.7;
+}
+
