@@ -1,3 +1,15 @@
+export type ToolStartEvent = {
+  type: "stream_event";
+  event: {
+    type: "content_block_start";
+    content_block: {
+      type: "tool_use";
+      name: string;
+      id: string;
+    };
+  };
+};
+
 export type ToolProgressEvent = {
   type: "tool_progress";
   tool_use_id: string;
@@ -12,13 +24,54 @@ export type ToolUseSummaryEvent = {
   preceding_tool_use_ids: string[];
 };
 
+export type TaskStartedEvent = {
+  type: "system";
+  subtype: "task_started";
+  task_id: string;
+  description: string;
+  task_type?: string;
+  tool_use_id?: string;
+};
+
 export type TaskProgressEvent = {
   type: "system";
   subtype: "task_progress";
+  task_id?: string;
   description: string;
   last_tool_name?: string;
   summary?: string;
+  usage?: {
+    total_tokens: number;
+    tool_uses: number;
+  };
 };
+
+export type TaskNotificationEvent = {
+  type: "system";
+  subtype: "task_notification";
+  task_id: string;
+  status: "completed" | "failed" | "stopped";
+  summary?: string;
+  usage?: {
+    total_tokens: number;
+    tool_uses: number;
+    duration_ms: number;
+  };
+};
+
+export function isToolStart(
+  chunk: Record<string, unknown>
+): chunk is ToolStartEvent {
+  if (chunk.type !== "stream_event") return false;
+  const event = chunk.event as Record<string, unknown> | undefined;
+  if (!event || event.type !== "content_block_start") return false;
+  const block = event.content_block as Record<string, unknown> | undefined;
+  return (
+    block?.type === "tool_use" &&
+    typeof block.name === "string" &&
+    typeof block.id === "string"
+  );
+}
 
 export function isToolProgress(
   chunk: Record<string, unknown>
@@ -44,15 +97,35 @@ export function isToolUseSummary(
   );
 }
 
+export function isTaskStarted(
+  chunk: Record<string, unknown>
+): chunk is TaskStartedEvent {
+  return (
+    chunk.type === "system" &&
+    chunk.subtype === "task_started" &&
+    typeof chunk.task_id === "string" &&
+    typeof chunk.description === "string"
+  );
+}
+
 export function isTaskProgress(
   chunk: Record<string, unknown>
 ): chunk is TaskProgressEvent {
   return (
     chunk.type === "system" &&
     chunk.subtype === "task_progress" &&
-    typeof chunk.description === "string" &&
-    (chunk.last_tool_name === undefined ||
-      typeof chunk.last_tool_name === "string") &&
-    (chunk.summary === undefined || typeof chunk.summary === "string")
+    typeof chunk.description === "string"
+  );
+}
+
+export function isTaskNotification(
+  chunk: Record<string, unknown>
+): chunk is TaskNotificationEvent {
+  return (
+    chunk.type === "system" &&
+    chunk.subtype === "task_notification" &&
+    typeof chunk.task_id === "string" &&
+    typeof chunk.status === "string" &&
+    ["completed", "failed", "stopped"].includes(chunk.status as string)
   );
 }

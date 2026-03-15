@@ -62,6 +62,8 @@ export default function App() {
         messages={activeSession?.messages ?? []}
         isStreaming={activeSession?.isStreaming}
         activeToolStatus={activeSession?.activeToolStatus}
+        activeTools={activeSession?.activeTools}
+        activeAgents={activeSession?.activeAgents}
         cwd={activeSession?.cwd}
         onResumeSession={(cwd) => {
           setResumeCwd(cwd);
