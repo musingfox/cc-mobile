@@ -1,21 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import type { Message } from "../stores/app-store";
-import { loadProjects } from "../services/projects";
 
 type ChatViewProps = {
   messages: Message[];
   isStreaming?: boolean;
   activeToolStatus?: { toolName: string; description: string } | null;
-  onNewSession?: (cwd: string) => void;
+  cwd?: string;
   onResumeSession?: (cwd: string) => void;
 };
 
-export default function ChatView({ messages, isStreaming, activeToolStatus, onNewSession, onResumeSession }: ChatViewProps) {
+export default function ChatView({ messages, isStreaming, activeToolStatus, cwd, onResumeSession }: ChatViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
-  const [selectedCwd, setSelectedCwd] = useState<string | null>(null);
-  const [customPath, setCustomPath] = useState("");
 
   useEffect(() => {
     if (autoScroll && scrollRef.current) {
@@ -50,65 +47,20 @@ export default function ChatView({ messages, isStreaming, activeToolStatus, onNe
     });
   };
 
-  const showEmpty = messages.length === 0 && !isStreaming && onNewSession && onResumeSession;
-  const savedProjects = showEmpty ? loadProjects() : [];
-
   return (
     <div className="chat-view" ref={scrollRef} onScroll={handleScroll}>
-      {showEmpty && (
+      {messages.length === 0 && !isStreaming && (
         <div className="chat-empty">
-          {!selectedCwd ? (
-            <div className="chat-empty-actions">
-              <div className="chat-empty-title">Select a project</div>
-              {savedProjects.map((p) => (
-                <button
-                  key={p.cwd}
-                  className="chat-empty-btn"
-                  onClick={() => setSelectedCwd(p.cwd)}
-                >
-                  <div className="chat-empty-btn-label">{p.label}</div>
-                  <div className="chat-empty-btn-path">{p.cwd}</div>
-                </button>
-              ))}
-              <div className="chat-empty-custom">
-                <input
-                  className="chat-empty-input"
-                  value={customPath}
-                  onChange={(e) => setCustomPath(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && customPath.trim()) {
-                      setSelectedCwd(customPath.trim());
-                    }
-                  }}
-                  placeholder="Or type a path..."
-                />
-              </div>
-            </div>
-          ) : (
-            <div className="chat-empty-actions">
-              <div className="chat-empty-title">
-                {selectedCwd.split("/").pop() || selectedCwd}
-              </div>
-              <div className="chat-empty-subtitle">{selectedCwd}</div>
-              <button
-                className="chat-empty-btn"
-                onClick={() => onNewSession(selectedCwd)}
-              >
-                + New Session
-              </button>
-              <button
-                className="chat-empty-btn resume"
-                onClick={() => onResumeSession(selectedCwd)}
-              >
-                Resume Session
-              </button>
-              <button
-                className="chat-empty-back"
-                onClick={() => setSelectedCwd(null)}
-              >
-                Back
-              </button>
-            </div>
+          <div className="chat-empty-welcome">
+            Type a message to start, or
+          </div>
+          {cwd && onResumeSession && (
+            <button
+              className="chat-empty-resume"
+              onClick={() => onResumeSession(cwd)}
+            >
+              Resume a previous session
+            </button>
           )}
         </div>
       )}

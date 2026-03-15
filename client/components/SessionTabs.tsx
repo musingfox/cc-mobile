@@ -1,9 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useAppStore } from "../stores/app-store";
 import { useSettingsStore } from "../stores/settings-store";
 import { wsService } from "../services/ws-service";
 import { loadProjects, removeProject } from "../services/projects";
-import SessionListModal from "./SessionListModal";
 
 export default function SessionTabs() {
   const sessions = useAppStore((s) => s.sessions);
@@ -12,24 +11,20 @@ export default function SessionTabs() {
   const globalError = useAppStore((s) => s.globalError);
   const setGlobalError = useAppStore((s) => s.setGlobalError);
   const defaultCwd = useSettingsStore((s) => s.defaultCwd);
-  const [showNewSession, setShowNewSession] = useState(sessions.size === 0);
+  const [showProjectPicker, setShowProjectPicker] = useState(sessions.size === 0);
   const [newCwd, setNewCwd] = useState("");
   const [savedProjects, setSavedProjects] = useState(loadProjects);
-  const [showMenu, setShowMenu] = useState(false);
-  const [showResumeModal, setShowResumeModal] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (sessions.size === 0) setShowNewSession(true);
+    if (sessions.size === 0) setShowProjectPicker(true);
   }, [sessions.size]);
 
-  // Refresh saved projects and pre-fill defaultCwd when panel opens
   useEffect(() => {
-    if (showNewSession) {
+    if (showProjectPicker) {
       setSavedProjects(loadProjects());
       setNewCwd(defaultCwd);
     }
-  }, [showNewSession, defaultCwd]);
+  }, [showProjectPicker, defaultCwd]);
 
   useEffect(() => {
     if (!globalError) return;
@@ -47,9 +42,9 @@ export default function SessionTabs() {
   };
 
   useEffect(() => {
-    if (sessions.size > 0 && showNewSession && newCwd.trim()) {
+    if (sessions.size > 0 && showProjectPicker && newCwd.trim()) {
       setNewCwd("");
-      setShowNewSession(false);
+      setShowProjectPicker(false);
     }
   }, [sessions.size]);
 
@@ -64,35 +59,8 @@ export default function SessionTabs() {
     setSavedProjects(loadProjects());
   };
 
-  const handleNewSession = () => {
-    setShowMenu(false);
-    setShowNewSession(true);
-  };
-
-  const handleResumeSession = () => {
-    setShowMenu(false);
-    setShowResumeModal(true);
-  };
-
-  const handleSelectSession = (sdkSessionId: string, cwd: string) => {
-    wsService.resumeSession(sdkSessionId, cwd);
-  };
-
-  // Close menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setShowMenu(false);
-      }
-    };
-    if (showMenu) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
-    }
-  }, [showMenu]);
-
   return (
-    <div className="session-tabs-container" ref={menuRef}>
+    <div className="session-tabs-container">
       <div className="session-tabs">
         {sessionList.map((session) => (
           <button
@@ -116,21 +84,11 @@ export default function SessionTabs() {
         ))}
         <button
           className="session-tab add"
-          onClick={() => setShowMenu(!showMenu)}
+          onClick={() => setShowProjectPicker(!showProjectPicker)}
         >
           +
         </button>
       </div>
-      {showMenu && (
-        <div className="tab-menu">
-          <button className="tab-menu-item" onClick={handleNewSession}>
-            New Session
-          </button>
-          <button className="tab-menu-item" onClick={handleResumeSession}>
-            Resume Session
-          </button>
-        </div>
-      )}
 
       {globalError && (
         <div className="global-error">
@@ -144,7 +102,7 @@ export default function SessionTabs() {
         </div>
       )}
 
-      {showNewSession && (
+      {showProjectPicker && (
         <div className="new-session-panel">
           {savedProjects.length > 0 && (
             <div className="saved-projects">
@@ -185,12 +143,6 @@ export default function SessionTabs() {
           </div>
         </div>
       )}
-
-      <SessionListModal
-        isOpen={showResumeModal}
-        onClose={() => setShowResumeModal(false)}
-        onSelectSession={handleSelectSession}
-      />
     </div>
   );
 }

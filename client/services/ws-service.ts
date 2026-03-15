@@ -91,6 +91,14 @@ class WsService {
       case "session_created": {
         const cwd = (msg.cwd as string) || "/";
         if (sessionId) {
+          // Replace current session if it's empty
+          const activeId = store.activeSessionId;
+          if (activeId) {
+            const activeSession = store.sessions.get(activeId);
+            if (activeSession && activeSession.messages.length === 0) {
+              store.removeSession(activeId);
+            }
+          }
           store.addSession(sessionId, cwd);
           saveProject(cwd);
         }

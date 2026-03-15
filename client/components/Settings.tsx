@@ -2,21 +2,7 @@ import { useState, useEffect } from "react";
 import { useSettingsStore } from "../stores/settings-store";
 import type { Theme } from "../services/settings";
 import { useAppStore } from "../stores/app-store";
-
-const PINS_KEY = "claude-code-mobile-pinned-commands";
-
-function loadPins(): string[] {
-  try {
-    const stored = localStorage.getItem(PINS_KEY);
-    return stored ? JSON.parse(stored) : [];
-  } catch {
-    return [];
-  }
-}
-
-function savePins(pins: string[]) {
-  localStorage.setItem(PINS_KEY, JSON.stringify(pins));
-}
+import { loadPins, savePins } from "../services/pins";
 
 interface SettingsProps {
   onClose: () => void;
@@ -54,11 +40,11 @@ export default function Settings({ onClose }: SettingsProps) {
     : [];
 
   return (
-    <div className="settings-overlay" onClick={onClose}>
-      <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="settings-header">
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
           <h2>Settings</h2>
-          <button className="settings-close" onClick={onClose}>
+          <button className="modal-close" onClick={onClose}>
             ×
           </button>
         </div>

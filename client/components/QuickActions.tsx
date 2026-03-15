@@ -1,16 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAppStore, type Capabilities } from "../stores/app-store";
-
-const PINS_KEY = "claude-code-mobile-pinned-commands";
-
-function loadPins(): string[] {
-  try {
-    const stored = localStorage.getItem(PINS_KEY);
-    return stored ? JSON.parse(stored) : [];
-  } catch {
-    return [];
-  }
-}
+import { loadPins } from "../services/pins";
 
 type QuickActionsProps = {
   capabilities: Capabilities | null;

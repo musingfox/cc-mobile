@@ -79,14 +79,14 @@ describe("session-history", () => {
     expect(result[0].id).toBe("msg-2");
   });
 
-  test("T6: extractMessageContent with string content", async () => {
+  test("T6: extractMessageContent with string content field", async () => {
     const mockMessages: SessionMessage[] = [
       {
         type: "user",
         uuid: "msg-4",
         session_id: "session-1",
         parent_tool_use_id: null,
-        message: "plain string content",
+        message: { role: "user", content: "plain string content" },
       },
     ];
 
@@ -139,7 +139,7 @@ describe("session-history", () => {
         uuid: "msg-1",
         session_id: "session-1",
         parent_tool_use_id: null,
-        message: "string message",
+        message: { role: "user", content: "string message" },
       },
       {
         type: "assistant",

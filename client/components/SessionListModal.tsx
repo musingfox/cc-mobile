@@ -32,11 +32,11 @@ export default function SessionListModal({ isOpen, dir, onClose, onSelectSession
   if (!isOpen) return null;
 
   return (
-    <div className="settings-overlay" onClick={onClose}>
-      <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="settings-header">
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
           <h2>Resume Session</h2>
-          <button className="settings-close" onClick={onClose}>×</button>
+          <button className="modal-close" onClick={onClose}>×</button>
         </div>
         <div className="session-list-body">
           {sessionList.length === 0 ? (

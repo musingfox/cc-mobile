@@ -180,7 +180,7 @@ button {
   gap: 6px;
   padding: 8px 14px;
   font-size: 13px;
-  color: #808080;
+  color: var(--text-secondary);
   white-space: nowrap;
   flex-shrink: 0;
   border-bottom: 2px solid transparent;
@@ -188,12 +188,12 @@ button {
 }
 
 .session-tab.active {
-  color: #e0e0e0;
-  border-bottom-color: #0066ff;
+  color: var(--text-primary);
+  border-bottom-color: var(--accent-primary);
 }
 
 .session-tab.add {
-  color: #808080;
+  color: var(--text-secondary);
   font-size: 18px;
   padding: 8px 12px;
 }
@@ -202,7 +202,7 @@ button {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #4ade80;
+  background: var(--accent-success);
   animation: pulse 1s infinite;
 }
 
@@ -213,13 +213,13 @@ button {
 
 .session-tab-close {
   font-size: 16px;
-  color: #808080;
+  color: var(--text-secondary);
   padding: 0 2px;
   cursor: pointer;
 }
 
 .session-tab-close:hover {
-  color: #f87171;
+  color: var(--accent-error);
 }
 
 .global-error {
@@ -241,7 +241,7 @@ button {
 }
 
 .new-session-panel {
-  border-top: 1px solid #2a2a3e;
+  border-top: 1px solid var(--border-color);
 }
 
 .saved-projects {
@@ -257,8 +257,8 @@ button {
   gap: 8px;
   padding: 8px 12px;
   border-radius: 8px;
-  background: #1e3a5f;
-  color: #e0e0e0;
+  background: var(--bg-highlight);
+  color: var(--text-primary);
   font-size: 14px;
   min-height: 40px;
   text-align: left;
@@ -275,7 +275,7 @@ button {
 
 .saved-project-path {
   font-size: 11px;
-  color: #808080;
+  color: var(--text-secondary);
   max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -283,21 +283,21 @@ button {
 }
 
 .saved-project-remove {
-  color: #808080;
+  color: var(--text-secondary);
   font-size: 16px;
   padding: 0 2px;
   flex-shrink: 0;
 }
 
 .saved-project-remove:hover {
-  color: #f87171;
+  color: var(--accent-error);
 }
 
 .new-session-bar {
   display: flex;
   gap: 8px;
   padding: 8px 16px;
-  border-top: 1px solid #2a2a3e;
+  border-top: 1px solid var(--border-color);
 }
 
 .new-session-input {
@@ -305,22 +305,22 @@ button {
   min-height: 36px;
   padding: 6px 12px;
   border-radius: 8px;
-  border: 1px solid #2a2a3e;
-  background: #1a1a2e;
-  color: #e0e0e0;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-primary);
   font-size: 14px;
   outline: none;
 }
 
 .new-session-input:focus {
-  border-color: #0066ff;
+  border-color: var(--accent-primary);
 }
 
 .new-session-btn {
   min-height: 36px;
   padding: 6px 16px;
   border-radius: 8px;
-  background: #0066ff;
+  background: var(--accent-primary);
   color: white;
   font-size: 14px;
   font-weight: 500;
@@ -343,99 +343,26 @@ button {
   justify-content: center;
 }
 
-.chat-empty-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  width: 280px;
-}
-
-.chat-empty-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-primary);
-  text-align: center;
-  margin-bottom: 4px;
-}
-
-.chat-empty-subtitle {
-  font-size: 12px;
+.chat-empty-welcome {
   color: var(--text-secondary);
-  text-align: center;
-  margin-bottom: 8px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chat-empty-btn {
-  padding: 14px 24px;
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-secondary);
-  color: var(--text-primary);
   font-size: 15px;
-  font-weight: 500;
-  cursor: pointer;
-  text-align: left;
-}
-
-.chat-empty-btn:hover {
-  border-color: var(--accent-primary);
-}
-
-.chat-empty-btn-label {
-  font-weight: 500;
-}
-
-.chat-empty-btn-path {
-  font-size: 11px;
-  color: var(--text-secondary);
-  margin-top: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chat-empty-btn.resume {
-  background: var(--accent-primary);
-  color: white;
-  border-color: var(--accent-primary);
   text-align: center;
+  padding: 0 32px;
+  margin-bottom: 12px;
 }
 
-.chat-empty-custom {
-  margin-top: 4px;
-}
-
-.chat-empty-input {
-  width: 100%;
-  padding: 12px 16px;
-  border-radius: 12px;
+.chat-empty-resume {
+  padding: 10px 20px;
+  border-radius: 8px;
   border: 1px solid var(--border-color);
   background: var(--bg-secondary);
-  color: var(--text-primary);
-  font-size: 14px;
-  box-sizing: border-box;
-}
-
-.chat-empty-input:focus {
-  outline: none;
-  border-color: var(--accent-primary);
-}
-
-.chat-empty-back {
-  background: none;
-  border: none;
-  color: var(--text-secondary);
+  color: var(--accent-primary);
   font-size: 14px;
   cursor: pointer;
-  padding: 8px;
-  text-align: center;
 }
 
-.chat-empty-back:hover {
-  color: var(--text-primary);
+.chat-empty-resume:hover {
+  border-color: var(--accent-primary);
 }
 
 .message {
@@ -586,7 +513,7 @@ button {
 }
 
 .quick-action-btn {
-  min-height: 36px;
+  min-height: 44px;
   padding: 6px 14px;
   border-radius: 18px;
   font-size: 14px;
@@ -615,55 +542,9 @@ button {
 }
 
 .quick-action-btn.manage {
-  background: #2a2a3e;
-  color: #808080;
-  min-width: 44px;
-}
-
-/* Command Manager */
-.command-manager {
-  max-height: 240px;
-  overflow-y: auto;
-  padding: 8px 16px;
-  background: #1a1a2e;
-  border-top: 1px solid #2a2a3e;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.manager-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border-radius: 8px;
-  background: #2a2a3e;
-  color: #e0e0e0;
-  font-size: 14px;
-  min-height: 40px;
-}
-
-.manager-item.pinned {
-  background: #1e3a5f;
-  color: #7cb3e0;
-}
-
-.manager-item-pin {
-  font-size: 12px;
-  color: #808080;
-}
-
-/* Tool Status Bar */
-.tool-status-bar {
-  background: var(--bg-secondary);
-  padding: 8px 16px;
-  font-size: 13px;
+  background: var(--bg-tertiary);
   color: var(--text-secondary);
-  border-top: 1px solid var(--border-color);
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  min-width: 44px;
 }
 
 /* Permission Bar */
@@ -840,7 +721,61 @@ button {
   background: var(--border-color);
 }
 
-/* Settings Modal */
+/* Modal (shared by Settings and SessionListModal) */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.modal-content {
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.modal-header h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.modal-close {
+  min-height: 40px;
+  width: 40px;
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 24px;
+  transition: opacity 0.2s;
+}
+
+.modal-close:active {
+  opacity: 0.7;
+}
+
+/* Settings Modal (legacy aliases for backward compatibility) */
 .settings-overlay {
   position: fixed;
   top: 0;
@@ -1076,32 +1011,3 @@ button {
   flex-wrap: wrap;
 }
 
-/* Tab menu dropdown */
-.tab-menu {
-  position: absolute;
-  right: 8px;
-  top: 100%;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 4px;
-  z-index: 100;
-  min-width: 140px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-.tab-menu-item {
-  width: 100%;
-  text-align: left;
-  padding: 8px 12px;
-  background: none;
-  border: none;
-  color: var(--text-primary);
-  font-size: 14px;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.tab-menu-item:hover {
-  background: var(--bg-primary);
-}

@@ -10,7 +10,6 @@ import InputBar from "./components/InputBar";
 import Settings from "./components/Settings";
 import SessionListModal from "./components/SessionListModal";
 
-
 export default function App() {
   const connectionState = useAppStore((s) => s.connectionState);
   const activeSessionId = useAppStore((s) => s.activeSessionId);
@@ -63,7 +62,7 @@ export default function App() {
         messages={activeSession?.messages ?? []}
         isStreaming={activeSession?.isStreaming}
         activeToolStatus={activeSession?.activeToolStatus}
-        onNewSession={(cwd) => wsService.createSession(cwd)}
+        cwd={activeSession?.cwd}
         onResumeSession={(cwd) => {
           setResumeCwd(cwd);
           setShowResumeModal(true);

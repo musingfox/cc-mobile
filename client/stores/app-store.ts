@@ -122,7 +122,7 @@ export const useAppStore = create<AppState>((set) => ({
       });
       return {
         sessions: next,
-        activeSessionId: state.activeSessionId ?? sessionId,
+        activeSessionId: sessionId,
       };
     }),
 
