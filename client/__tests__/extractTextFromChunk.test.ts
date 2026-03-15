@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { extractTextFromChunk } from "../hooks/useSocket";
+import { extractTextFromChunk } from "../services/ws-service";
 
 describe("extractTextFromChunk", () => {
   test("extracts text from assistant message with text blocks", () => {

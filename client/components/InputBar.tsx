@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo, type KeyboardEvent } from "react";
-import type { Capabilities } from "../hooks/useSocket";
+import type { Capabilities } from "../stores/app-store";
 
 type InputBarProps = {
   onSend: (content: string) => void;

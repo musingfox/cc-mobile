@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { Message } from "../hooks/useSocket";
+import type { Message } from "../stores/app-store";
 
 type ChatViewProps = {
   messages: Message[];

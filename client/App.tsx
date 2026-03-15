@@ -1,58 +1,90 @@
-import { useSocket } from "./hooks/useSocket";
+import { useEffect } from "react";
+import { useAppStore } from "./stores/app-store";
+import { wsService } from "./services/ws-service";
+import SessionTabs from "./components/SessionTabs";
 import ChatView from "./components/ChatView";
 import QuickActions from "./components/QuickActions";
 import PermissionBar from "./components/PermissionBar";
 import InputBar from "./components/InputBar";
 
 export default function App() {
-  const {
-    state,
-    messages,
-    pendingPermission,
-    isStreaming,
-    capabilities,
-    send,
-    sendCommand,
-    approvePermission,
-    denyPermission,
-  } = useSocket();
+  const connectionState = useAppStore((s) => s.connectionState);
+  const activeSessionId = useAppStore((s) => s.activeSessionId);
+  const sessions = useAppStore((s) => s.sessions);
+  const capabilities = useAppStore((s) => s.capabilities);
+
+  const activeSession = activeSessionId
+    ? sessions.get(activeSessionId)
+    : undefined;
+
+  useEffect(() => {
+    wsService.connect();
+    return () => wsService.destroy();
+  }, []);
+
+  // Auto-create first session on connect if none exist
+  useEffect(() => {
+    if (connectionState === "connected" && sessions.size === 0) {
+      wsService.createSession("/");
+    }
+  }, [connectionState, sessions.size]);
 
   const getStatusLabel = () => {
-    switch (state) {
+    switch (connectionState) {
       case "connecting":
         return "Connecting...";
       case "connected":
-        return "Connected";
+        return `Connected${activeSession ? ` — ${activeSession.cwd}` : ""}`;
       case "disconnected":
         return "Disconnected";
     }
   };
 
+  const isDisabled =
+    connectionState !== "connected" ||
+    !activeSessionId ||
+    !!activeSession?.isStreaming;
+
   return (
     <div className="app">
       <div className="status-bar">
-        <div className={`status-dot ${state}`} />
+        <div className={`status-dot ${connectionState}`} />
         <span>{getStatusLabel()}</span>
       </div>
 
-      <ChatView messages={messages} isStreaming={isStreaming} />
+      <SessionTabs />
+
+      <ChatView
+        messages={activeSession?.messages ?? []}
+        isStreaming={activeSession?.isStreaming}
+      />
 
       <QuickActions
         capabilities={capabilities}
-        onCommand={sendCommand}
-        disabled={state !== "connected" || isStreaming}
+        onCommand={(cmd) =>
+          activeSessionId && wsService.sendCommand(activeSessionId, cmd)
+        }
+        disabled={isDisabled}
       />
 
       <PermissionBar
-        pending={pendingPermission}
-        onApprove={approvePermission}
-        onDeny={denyPermission}
+        pending={activeSession?.pendingPermission ?? null}
+        onApprove={() =>
+          activeSessionId && wsService.approvePermission(activeSessionId)
+        }
+        onDeny={() =>
+          activeSessionId && wsService.denyPermission(activeSessionId)
+        }
       />
 
       <InputBar
-        onSend={send}
-        onCommand={sendCommand}
-        disabled={state !== "connected" || isStreaming}
+        onSend={(content) =>
+          activeSessionId && wsService.send(activeSessionId, content)
+        }
+        onCommand={(cmd) =>
+          activeSessionId && wsService.sendCommand(activeSessionId, cmd)
+        }
+        disabled={isDisabled}
         capabilities={capabilities}
       />
     </div>

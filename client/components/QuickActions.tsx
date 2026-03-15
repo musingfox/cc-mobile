@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import type { Capabilities } from "../hooks/useSocket";
+import type { Capabilities } from "../stores/app-store";
 
 const PINS_KEY = "cc-touch-pinned-commands";
 
