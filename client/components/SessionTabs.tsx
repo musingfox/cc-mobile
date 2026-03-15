@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAppStore } from "../stores/app-store";
 import { wsService } from "../services/ws-service";
 
@@ -6,18 +6,40 @@ export default function SessionTabs() {
   const sessions = useAppStore((s) => s.sessions);
   const activeSessionId = useAppStore((s) => s.activeSessionId);
   const setActiveSession = useAppStore((s) => s.setActiveSession);
+  const globalError = useAppStore((s) => s.globalError);
+  const setGlobalError = useAppStore((s) => s.setGlobalError);
   const [showNewSession, setShowNewSession] = useState(sessions.size === 0);
   const [newCwd, setNewCwd] = useState("");
+
+  // Auto-show input when no sessions
+  useEffect(() => {
+    if (sessions.size === 0) setShowNewSession(true);
+  }, [sessions.size]);
+
+  // Auto-dismiss error after 5s
+  useEffect(() => {
+    if (!globalError) return;
+    const timer = setTimeout(() => setGlobalError(null), 5000);
+    return () => clearTimeout(timer);
+  }, [globalError, setGlobalError]);
 
   const sessionList = [...sessions.values()];
 
   const handleCreate = () => {
     const cwd = newCwd.trim();
     if (!cwd) return;
+    setGlobalError(null);
     wsService.createSession(cwd);
-    setNewCwd("");
-    setShowNewSession(false);
+    // Don't clear input yet — wait for success or error
   };
+
+  // Clear input and hide on successful session creation
+  useEffect(() => {
+    if (sessions.size > 0 && showNewSession && newCwd.trim()) {
+      setNewCwd("");
+      setShowNewSession(false);
+    }
+  }, [sessions.size]);
 
   const handleClose = (e: React.MouseEvent, sessionId: string) => {
     e.stopPropagation();
@@ -34,7 +56,7 @@ export default function SessionTabs() {
             onClick={() => setActiveSession(session.id)}
           >
             <span className="session-tab-label">
-              {session.cwd === "/" ? "~" : session.cwd.split("/").pop()}
+              {session.cwd.split("/").pop() || session.cwd}
             </span>
             {session.isStreaming && <span className="session-tab-streaming" />}
             {sessionList.length > 1 && (
@@ -55,6 +77,18 @@ export default function SessionTabs() {
         </button>
       </div>
 
+      {globalError && (
+        <div className="global-error">
+          {globalError}
+          <button
+            className="global-error-dismiss"
+            onClick={() => setGlobalError(null)}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       {showNewSession && (
         <div className="new-session-bar">
           <input
@@ -65,7 +99,11 @@ export default function SessionTabs() {
             placeholder="Working directory (e.g. ~/workspace/my-project)"
             autoFocus
           />
-          <button className="new-session-btn" onClick={handleCreate}>
+          <button
+            className="new-session-btn"
+            onClick={handleCreate}
+            disabled={!newCwd.trim()}
+          >
             Create
           </button>
         </div>

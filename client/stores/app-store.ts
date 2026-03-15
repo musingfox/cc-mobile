@@ -60,6 +60,10 @@ interface AppState {
   // Capabilities (shared across sessions)
   capabilities: Capabilities | null;
   setCapabilities: (capabilities: Capabilities) => void;
+
+  // Global error (e.g., invalid cwd)
+  globalError: string | null;
+  setGlobalError: (error: string | null) => void;
 }
 
 function updateSession(
@@ -173,4 +177,7 @@ export const useAppStore = create<AppState>((set) => ({
 
   capabilities: null,
   setCapabilities: (capabilities) => set({ capabilities }),
+
+  globalError: null,
+  setGlobalError: (globalError) => set({ globalError }),
 }));

@@ -133,6 +133,8 @@ class WsService {
             timestamp: Date.now(),
           });
           store.setStreaming(sessionId, false);
+        } else {
+          store.setGlobalError(msg.message as string);
         }
         break;
     }

@@ -144,6 +144,24 @@ button {
   color: #f87171;
 }
 
+.global-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: #7f1d1d;
+  color: #fca5a5;
+  font-size: 14px;
+  animation: fadeIn 0.2s ease-in;
+}
+
+.global-error-dismiss {
+  color: #fca5a5;
+  font-size: 18px;
+  padding: 0 4px;
+  min-height: auto;
+}
+
 .new-session-bar {
   display: flex;
   gap: 8px;
