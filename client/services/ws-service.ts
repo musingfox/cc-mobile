@@ -15,6 +15,21 @@ export function extractTextFromChunk(
       .join("");
     return text || null;
   }
+
+  if (chunk.type === "stream_event") {
+    const event = chunk.event as Record<string, unknown> | undefined;
+    if (!event) return null;
+
+    if (event.type === "content_block_delta") {
+      const delta = event.delta as Record<string, unknown> | undefined;
+      if (!delta) return null;
+
+      if (delta.type === "text_delta") {
+        return (delta.text as string) ?? null;
+      }
+    }
+  }
+
   return null;
 }
 
@@ -83,9 +98,8 @@ class WsService {
 
       case "stream_chunk": {
         if (!sessionId) break;
-        const text = extractTextFromChunk(
-          msg.chunk as Record<string, unknown>
-        );
+        const chunk = msg.chunk as Record<string, unknown>;
+        const text = extractTextFromChunk(chunk);
         if (!text) break;
 
         const session = store.sessions.get(sessionId);
@@ -93,11 +107,32 @@ class WsService {
 
         store.setStreaming(sessionId, true);
 
-        if (session.currentStreamMessageId) {
-          store.appendToLastAssistantMessage(sessionId, text);
-        } else {
+        // Handle stream_event chunks: create/append incrementally
+        if (chunk.type === "stream_event") {
+          if (session.currentStreamMessageId) {
+            store.appendToLastAssistantMessage(sessionId, text);
+          } else {
+            const newId = `msg-${Date.now()}-${Math.random()}`;
+            store.startStreamMessage(sessionId, newId, text);
+          }
+        }
+        // Handle assistant messages: dedup if already streamed
+        else if (chunk.type === "assistant") {
+          // Dedup: skip if this is the final message matching the current stream
+          if (session.currentStreamMessageId) {
+            const lastMsg = session.messages[session.messages.length - 1];
+            if (lastMsg?.id === session.currentStreamMessageId && lastMsg.content === text) {
+              break;
+            }
+          }
+          // Not a duplicate: create new message
           const newId = `msg-${Date.now()}-${Math.random()}`;
-          store.startStreamMessage(sessionId, newId, text);
+          store.addMessage(sessionId, {
+            id: newId,
+            role: "assistant",
+            content: text,
+            timestamp: Date.now(),
+          });
         }
         break;
       }

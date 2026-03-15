@@ -66,4 +66,66 @@ describe("extractTextFromChunk", () => {
     const chunk = { type: "assistant" };
     expect(extractTextFromChunk(chunk)).toBeNull();
   });
+
+  // T1: stream_event with text_delta returns delta text
+  test("extracts text from stream_event with text_delta", () => {
+    const chunk = {
+      type: "stream_event",
+      event: {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "text_delta", text: "Hello" },
+      },
+    };
+    expect(extractTextFromChunk(chunk)).toBe("Hello");
+  });
+
+  // T2: stream_event with thinking_delta returns null
+  test("returns null for stream_event with thinking_delta", () => {
+    const chunk = {
+      type: "stream_event",
+      event: {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "thinking_delta", thinking: "..." },
+      },
+    };
+    expect(extractTextFromChunk(chunk)).toBeNull();
+  });
+
+  // T3: stream_event content_block_start returns null
+  test("returns null for stream_event content_block_start", () => {
+    const chunk = {
+      type: "stream_event",
+      event: {
+        type: "content_block_start",
+        index: 0,
+        content_block: { type: "text", text: "" },
+      },
+    };
+    expect(extractTextFromChunk(chunk)).toBeNull();
+  });
+
+  // T4: stream_event message_start returns null
+  test("returns null for stream_event message_start", () => {
+    const chunk = {
+      type: "stream_event",
+      event: {
+        type: "message_start",
+        message: { id: "msg_123", role: "assistant" },
+      },
+    };
+    expect(extractTextFromChunk(chunk)).toBeNull();
+  });
+
+  // T5: existing assistant message still works
+  test("extracts text from existing assistant message format", () => {
+    const chunk = {
+      type: "assistant",
+      message: {
+        content: [{ type: "text", text: "complete message" }],
+      },
+    };
+    expect(extractTextFromChunk(chunk)).toBe("complete message");
+  });
 });
