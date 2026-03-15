@@ -7,6 +7,7 @@ import type {
   AgentInfo,
 } from "@anthropic-ai/claude-agent-sdk";
 import { loadUserPlugins } from "./settings-loader";
+import type { PermissionMode } from "./config";
 
 type SdkPluginConfig = { type: "local"; path: string };
 
@@ -26,6 +27,11 @@ export class SessionManager {
   private sessions = new Map<string, SessionConfig>();
   private plugins: SdkPluginConfig[] | null = null;
   private activeQueries = new Map<string, Query>();
+  private permissionMode: PermissionMode;
+
+  constructor(config: { permissionMode: PermissionMode }) {
+    this.permissionMode = config.permissionMode;
+  }
 
   private async getPlugins(): Promise<SdkPluginConfig[]> {
     if (!this.plugins) {
@@ -68,7 +74,7 @@ export class SessionManager {
         settingSources: ["user", "project", "local"],
         systemPrompt: { type: "preset", preset: "claude_code" },
         includePartialMessages: true,
-        permissionMode: "default",
+        permissionMode: this.permissionMode,
         allowedTools: ["Skill"],
         plugins,
         cwd: config.cwd,
