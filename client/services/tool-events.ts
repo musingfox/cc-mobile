@@ -20,6 +20,22 @@ export type TaskProgressEvent = {
   summary?: string;
 };
 
+export type ResultMessage = {
+  type: "result";
+  subtype: "success" | "error";
+  total_cost_usd?: number;
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_read_input_tokens?: number;
+    cache_creation_input_tokens?: number;
+  };
+  num_turns?: number;
+  duration_ms?: number;
+  is_error: boolean;
+  error?: string;
+};
+
 export function isToolProgress(
   chunk: Record<string, unknown>
 ): chunk is ToolProgressEvent {
@@ -54,5 +70,15 @@ export function isTaskProgress(
     (chunk.last_tool_name === undefined ||
       typeof chunk.last_tool_name === "string") &&
     (chunk.summary === undefined || typeof chunk.summary === "string")
+  );
+}
+
+export function isResultMessage(
+  chunk: Record<string, unknown>
+): chunk is ResultMessage {
+  return (
+    chunk.type === "result" &&
+    (chunk.subtype === "success" || chunk.subtype === "error") &&
+    typeof chunk.is_error === "boolean"
   );
 }

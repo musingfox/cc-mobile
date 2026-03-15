@@ -22,6 +22,16 @@ export type Capabilities = {
   model: string;
 };
 
+export type UsageData = {
+  totalCost: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  turns: number;
+  durationMs: number;
+};
+
 export type SessionState = {
   id: string;
   cwd: string;
@@ -30,6 +40,7 @@ export type SessionState = {
   isStreaming: boolean;
   currentStreamMessageId: string | null;
   activeToolStatus?: { toolName: string; description: string } | null;
+  usage: UsageData | null;
 };
 
 export type SessionListItem = {
@@ -70,6 +81,9 @@ interface AppState {
   // Tool Status
   setActiveToolStatus: (sessionId: string, status: { toolName: string; description: string } | null) => void;
   addToolMessage: (sessionId: string, toolName: string, summary: string) => void;
+
+  // Usage
+  updateUsage: (sessionId: string, usage: UsageData) => void;
 
   // Capabilities (shared across sessions)
   capabilities: Capabilities | null;
@@ -119,6 +133,7 @@ export const useAppStore = create<AppState>((set) => ({
         isStreaming: false,
         currentStreamMessageId: null,
         activeToolStatus: null,
+        usage: null,
       });
       return {
         sessions: next,
@@ -245,6 +260,14 @@ export const useAppStore = create<AppState>((set) => ({
           content: m.content,
           timestamp: m.timestamp,
         })),
+      })),
+    })),
+
+  updateUsage: (sessionId, usage) =>
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (s) => ({
+        ...s,
+        usage,
       })),
     })),
 }));

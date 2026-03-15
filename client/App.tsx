@@ -9,6 +9,7 @@ import PermissionBar from "./components/PermissionBar";
 import InputBar from "./components/InputBar";
 import Settings from "./components/Settings";
 import SessionListModal from "./components/SessionListModal";
+import StatusBar from "./components/StatusBar";
 
 export default function App() {
   const connectionState = useAppStore((s) => s.connectionState);
@@ -83,6 +84,8 @@ export default function App() {
           activeSessionId && wsService.denyPermission(activeSessionId)
         }
       />
+
+      <StatusBar />
 
       <InputBar
         onSend={(content) =>
