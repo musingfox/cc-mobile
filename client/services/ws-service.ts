@@ -1,4 +1,5 @@
 import { useAppStore } from "../stores/app-store";
+import { saveProject } from "./projects";
 
 export function extractTextFromChunk(
   chunk: Record<string, unknown>
@@ -71,11 +72,14 @@ class WsService {
     const sessionId = msg.sessionId as string | undefined;
 
     switch (msg.type) {
-      case "session_created":
+      case "session_created": {
+        const cwd = (msg.cwd as string) || "/";
         if (sessionId) {
-          store.addSession(sessionId, (msg.cwd as string) || "/");
+          store.addSession(sessionId, cwd);
+          saveProject(cwd);
         }
         break;
+      }
 
       case "stream_chunk": {
         if (!sessionId) break;

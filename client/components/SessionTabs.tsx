@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAppStore } from "../stores/app-store";
 import { wsService } from "../services/ws-service";
+import { loadProjects, removeProject } from "../services/projects";
 
 export default function SessionTabs() {
   const sessions = useAppStore((s) => s.sessions);
@@ -10,13 +11,17 @@ export default function SessionTabs() {
   const setGlobalError = useAppStore((s) => s.setGlobalError);
   const [showNewSession, setShowNewSession] = useState(sessions.size === 0);
   const [newCwd, setNewCwd] = useState("");
+  const [savedProjects, setSavedProjects] = useState(loadProjects);
 
-  // Auto-show input when no sessions
   useEffect(() => {
     if (sessions.size === 0) setShowNewSession(true);
   }, [sessions.size]);
 
-  // Auto-dismiss error after 5s
+  // Refresh saved projects when panel opens
+  useEffect(() => {
+    if (showNewSession) setSavedProjects(loadProjects());
+  }, [showNewSession]);
+
   useEffect(() => {
     if (!globalError) return;
     const timer = setTimeout(() => setGlobalError(null), 5000);
@@ -25,15 +30,13 @@ export default function SessionTabs() {
 
   const sessionList = [...sessions.values()];
 
-  const handleCreate = () => {
-    const cwd = newCwd.trim();
-    if (!cwd) return;
+  const handleCreate = (cwd?: string) => {
+    const target = cwd || newCwd.trim();
+    if (!target) return;
     setGlobalError(null);
-    wsService.createSession(cwd);
-    // Don't clear input yet — wait for success or error
+    wsService.createSession(target);
   };
 
-  // Clear input and hide on successful session creation
   useEffect(() => {
     if (sessions.size > 0 && showNewSession && newCwd.trim()) {
       setNewCwd("");
@@ -44,6 +47,12 @@ export default function SessionTabs() {
   const handleClose = (e: React.MouseEvent, sessionId: string) => {
     e.stopPropagation();
     wsService.closeSession(sessionId);
+  };
+
+  const handleRemoveProject = (e: React.MouseEvent, cwd: string) => {
+    e.stopPropagation();
+    removeProject(cwd);
+    setSavedProjects(loadProjects());
   };
 
   return (
@@ -90,22 +99,44 @@ export default function SessionTabs() {
       )}
 
       {showNewSession && (
-        <div className="new-session-bar">
-          <input
-            className="new-session-input"
-            value={newCwd}
-            onChange={(e) => setNewCwd(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-            placeholder="Working directory (e.g. ~/workspace/my-project)"
-            autoFocus
-          />
-          <button
-            className="new-session-btn"
-            onClick={handleCreate}
-            disabled={!newCwd.trim()}
-          >
-            Create
-          </button>
+        <div className="new-session-panel">
+          {savedProjects.length > 0 && (
+            <div className="saved-projects">
+              {savedProjects.map((project) => (
+                <button
+                  key={project.cwd}
+                  className="saved-project-btn"
+                  onClick={() => handleCreate(project.cwd)}
+                >
+                  <span className="saved-project-label">{project.label}</span>
+                  <span className="saved-project-path">{project.cwd}</span>
+                  <span
+                    className="saved-project-remove"
+                    onClick={(e) => handleRemoveProject(e, project.cwd)}
+                  >
+                    ×
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="new-session-bar">
+            <input
+              className="new-session-input"
+              value={newCwd}
+              onChange={(e) => setNewCwd(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+              placeholder="Or type a path (e.g. ~/workspace/my-project)"
+              autoFocus
+            />
+            <button
+              className="new-session-btn"
+              onClick={() => handleCreate()}
+              disabled={!newCwd.trim()}
+            >
+              Create
+            </button>
+          </div>
         </div>
       )}
     </div>
