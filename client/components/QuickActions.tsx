@@ -11,6 +11,7 @@ export default function QuickActions({
   capabilities,
   disabled,
 }: QuickActionsProps) {
+  const inputDraft = useAppStore((s) => s.inputDraft);
   const setInputDraft = useAppStore((s) => s.setInputDraft);
   const [pins, setPins] = useState<string[]>(loadPins);
 
@@ -47,7 +48,7 @@ export default function QuickActions({
             <button
               key={item.value}
               className={`quick-action-btn ${item.type}`}
-              onClick={() => setInputDraft(item.value + " ")}
+              onClick={() => setInputDraft(inputDraft + item.value + " ")}
               disabled={disabled}
             >
               {item.label}
@@ -61,7 +62,7 @@ export default function QuickActions({
             <button
               key={item.value}
               className={`quick-action-btn ${item.type}`}
-              onClick={() => setInputDraft(item.value + " ")}
+              onClick={() => setInputDraft(inputDraft + item.value + " ")}
               disabled={disabled}
             >
               {item.label}
