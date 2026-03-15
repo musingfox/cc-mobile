@@ -11,13 +11,14 @@ export default function SessionTabs() {
   const globalError = useAppStore((s) => s.globalError);
   const setGlobalError = useAppStore((s) => s.setGlobalError);
   const defaultCwd = useSettingsStore((s) => s.defaultCwd);
-  const [showProjectPicker, setShowProjectPicker] = useState(sessions.size === 0);
+  const [showProjectPicker, setShowProjectPicker] = useState(sessions.size === 0 && !activeSessionId);
   const [newCwd, setNewCwd] = useState("");
   const [savedProjects, setSavedProjects] = useState(loadProjects);
 
   useEffect(() => {
-    if (sessions.size === 0) setShowProjectPicker(true);
-  }, [sessions.size]);
+    if (sessions.size === 0 && !activeSessionId) setShowProjectPicker(true);
+    if (activeSessionId) setShowProjectPicker(false);
+  }, [sessions.size, activeSessionId]);
 
   useEffect(() => {
     if (showProjectPicker) {
