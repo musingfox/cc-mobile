@@ -1,7 +1,5 @@
-import { describe, test, expect } from "bun:test";
-import { resolve, sep } from "path";
-import { mkdtempSync, mkdirSync, symlinkSync, rmSync } from "fs";
-import { tmpdir } from "os";
+import { describe, expect, test } from "bun:test";
+import { resolve, sep } from "node:path";
 
 // Re-export the validation function for testing
 // Since it's not exported from ws.ts, we'll test it indirectly via the config flow
@@ -15,13 +13,16 @@ function validateAllowedPath(cwd: string, allowedRoots: string[] | null): boolea
   const normalizedCwd = resolve(cwd);
 
   // Ensure path ends with separator for prefix matching
-  const ensureTrailingSep = (p: string) => p.endsWith(sep) ? p : p + sep;
+  const ensureTrailingSep = (p: string) => (p.endsWith(sep) ? p : p + sep);
 
   for (const root of allowedRoots) {
     const normalizedRoot = resolve(root);
 
     // Check if cwd is exactly the root or starts with root/
-    if (normalizedCwd === normalizedRoot || normalizedCwd.startsWith(ensureTrailingSep(normalizedRoot))) {
+    if (
+      normalizedCwd === normalizedRoot ||
+      normalizedCwd.startsWith(ensureTrailingSep(normalizedRoot))
+    ) {
       return true;
     }
   }
@@ -149,10 +150,7 @@ describe("parseServerConfig - allowedRoots", () => {
     process.env.CLAUDE_MOBILE_ALLOWED_ROOTS = " /home/user/projects , /var/www ";
     const { parseServerConfig } = require("../config");
     const result = parseServerConfig(["node", "index.ts"]);
-    expect(result.allowedRoots).toEqual([
-      resolve("/home/user/projects"),
-      resolve("/var/www"),
-    ]);
+    expect(result.allowedRoots).toEqual([resolve("/home/user/projects"), resolve("/var/www")]);
     cleanup();
   });
 
@@ -160,10 +158,7 @@ describe("parseServerConfig - allowedRoots", () => {
     process.env.CLAUDE_MOBILE_ALLOWED_ROOTS = "/home/user/projects,,/var/www";
     const { parseServerConfig } = require("../config");
     const result = parseServerConfig(["node", "index.ts"]);
-    expect(result.allowedRoots).toEqual([
-      resolve("/home/user/projects"),
-      resolve("/var/www"),
-    ]);
+    expect(result.allowedRoots).toEqual([resolve("/home/user/projects"), resolve("/var/www")]);
     cleanup();
   });
 
@@ -171,10 +166,7 @@ describe("parseServerConfig - allowedRoots", () => {
     process.env.CLAUDE_MOBILE_ALLOWED_ROOTS = "./projects,../other";
     const { parseServerConfig } = require("../config");
     const result = parseServerConfig(["node", "index.ts"]);
-    expect(result.allowedRoots).toEqual([
-      resolve("./projects"),
-      resolve("../other"),
-    ]);
+    expect(result.allowedRoots).toEqual([resolve("./projects"), resolve("../other")]);
     cleanup();
   });
 });

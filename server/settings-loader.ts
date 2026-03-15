@@ -1,6 +1,6 @@
-import { readFile } from "fs/promises";
-import { homedir } from "os";
-import { join } from "path";
+import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 type SdkPluginConfig = { type: "local"; path: string };
 
@@ -33,15 +33,10 @@ export async function loadUserPlugins(): Promise<SdkPluginConfig[]> {
 
   let installed: InstalledPluginsFile;
   try {
-    const raw = await readFile(
-      join(claudeDir, "plugins", "installed_plugins.json"),
-      "utf-8"
-    );
+    const raw = await readFile(join(claudeDir, "plugins", "installed_plugins.json"), "utf-8");
     installed = JSON.parse(raw);
   } catch {
-    console.warn(
-      "[settings] could not read ~/.claude/plugins/installed_plugins.json"
-    );
+    console.warn("[settings] could not read ~/.claude/plugins/installed_plugins.json");
     return [];
   }
 

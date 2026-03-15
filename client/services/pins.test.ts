@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { loadPins, savePins } from "./pins";
 
 // Mock localStorage
@@ -19,7 +19,7 @@ const localStorageMock = (() => {
   };
 })();
 
-global.localStorage = localStorageMock as any;
+global.localStorage = localStorageMock as unknown as Storage;
 
 describe("PIN_SERVICE", () => {
   beforeEach(() => {

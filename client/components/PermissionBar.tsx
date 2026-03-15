@@ -6,11 +6,7 @@ type PermissionBarProps = {
   onDeny: () => void;
 };
 
-export default function PermissionBar({
-  pending,
-  onApprove,
-  onDeny,
-}: PermissionBarProps) {
+export default function PermissionBar({ pending, onApprove, onDeny }: PermissionBarProps) {
   if (!pending) return null;
 
   const formatParams = (params: Record<string, unknown>) => {
@@ -19,10 +15,7 @@ export default function PermissionBar({
 
     return entries
       .map(([key, value]) => {
-        const strValue =
-          typeof value === "string"
-            ? value
-            : JSON.stringify(value);
+        const strValue = typeof value === "string" ? value : JSON.stringify(value);
         return `${key}: ${strValue.slice(0, 50)}${strValue.length > 50 ? "..." : ""}`;
       })
       .join(", ");
@@ -32,15 +25,13 @@ export default function PermissionBar({
     <div className="permission-bar">
       <div className="permission-info">
         <div className="permission-tool-name">{pending.tool.name}</div>
-        <div className="permission-params">
-          {formatParams(pending.tool.parameters)}
-        </div>
+        <div className="permission-params">{formatParams(pending.tool.parameters)}</div>
       </div>
       <div className="permission-actions">
-        <button className="permission-btn deny" onClick={onDeny}>
+        <button type="button" className="permission-btn deny" onClick={onDeny}>
           Deny
         </button>
-        <button className="permission-btn approve" onClick={onApprove}>
+        <button type="button" className="permission-btn approve" onClick={onApprove}>
           Approve
         </button>
       </div>

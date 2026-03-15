@@ -1,16 +1,16 @@
 import { useEffect, useState } from "react";
+import ChatView from "./components/ChatView";
+import InputBar from "./components/InputBar";
+import PermissionBar from "./components/PermissionBar";
+import PickerPanel from "./components/PickerPanel";
+import QuickActions from "./components/QuickActions";
+import SessionListModal from "./components/SessionListModal";
+import SessionTabs from "./components/SessionTabs";
+import Settings from "./components/Settings";
+import StatusBar from "./components/StatusBar";
+import { wsService } from "./services/ws-service";
 import { useAppStore } from "./stores/app-store";
 import { useSettingsStore } from "./stores/settings-store";
-import { wsService } from "./services/ws-service";
-import SessionTabs from "./components/SessionTabs";
-import ChatView from "./components/ChatView";
-import QuickActions from "./components/QuickActions";
-import PermissionBar from "./components/PermissionBar";
-import InputBar from "./components/InputBar";
-import Settings from "./components/Settings";
-import SessionListModal from "./components/SessionListModal";
-import StatusBar from "./components/StatusBar";
-import PickerPanel from "./components/PickerPanel";
 
 export default function App() {
   const connectionState = useAppStore((s) => s.connectionState);
@@ -23,9 +23,7 @@ export default function App() {
   const [resumeCwd, setResumeCwd] = useState("");
   const [openPanel, setOpenPanel] = useState<"command" | "agent" | null>(null);
 
-  const activeSession = activeSessionId
-    ? sessions.get(activeSessionId)
-    : undefined;
+  const activeSession = activeSessionId ? sessions.get(activeSessionId) : undefined;
 
   useEffect(() => {
     wsService.connect();
@@ -45,7 +43,6 @@ export default function App() {
     }
   }, [theme]);
 
-
   const getStatusLabel = () => {
     switch (connectionState) {
       case "connecting":
@@ -57,16 +54,14 @@ export default function App() {
     }
   };
 
-  const isDisabled =
-    connectionState !== "connected" ||
-    !activeSessionId;
+  const isDisabled = connectionState !== "connected" || !activeSessionId;
 
   return (
     <div className={`app theme-${theme}`}>
       <div className="status-bar">
         <div className={`status-dot ${connectionState}`} />
         <span>{getStatusLabel()}</span>
-        <button className="status-settings-btn" onClick={() => setShowSettings(true)}>
+        <button type="button" className="status-settings-btn" onClick={() => setShowSettings(true)}>
           ⚙
         </button>
       </div>
@@ -87,27 +82,18 @@ export default function App() {
         }}
       />
 
-      <QuickActions
-        capabilities={capabilities}
-        disabled={isDisabled}
-      />
+      <QuickActions capabilities={capabilities} disabled={isDisabled} />
 
       <PermissionBar
         pending={activeSession?.pendingPermission ?? null}
-        onApprove={() =>
-          activeSessionId && wsService.approvePermission(activeSessionId)
-        }
-        onDeny={() =>
-          activeSessionId && wsService.denyPermission(activeSessionId)
-        }
+        onApprove={() => activeSessionId && wsService.approvePermission(activeSessionId)}
+        onDeny={() => activeSessionId && wsService.denyPermission(activeSessionId)}
       />
 
       <StatusBar />
 
       <InputBar
-        onSend={(content) =>
-          activeSessionId && wsService.send(activeSessionId, content)
-        }
+        onSend={(content) => activeSessionId && wsService.send(activeSessionId, content)}
         disabled={isDisabled}
         capabilities={capabilities}
         onOpenCommandPanel={() => setOpenPanel("command")}
@@ -122,7 +108,7 @@ export default function App() {
           capabilities={capabilities}
           disabled={isDisabled}
           onSelect={(value) => {
-            useAppStore.getState().setInputDraft(value + " ");
+            useAppStore.getState().setInputDraft(`${value} `);
             setOpenPanel(null);
           }}
           onClose={() => setOpenPanel(null)}

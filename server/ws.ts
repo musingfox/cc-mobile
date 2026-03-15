@@ -1,14 +1,18 @@
+import { existsSync, realpathSync, statSync } from "node:fs";
+import { homedir } from "node:os";
+import { resolve, sep } from "node:path";
 import { Elysia, t } from "elysia";
-import { homedir } from "os";
-import { resolve, sep } from "path";
-import { existsSync, statSync, realpathSync } from "fs";
-import type { SessionManager } from "./session-manager";
-import type { createPermissionHandler } from "./permission-bridge";
+import {
+  type Capabilities,
+  loadCachedCapabilities,
+  saveCachedCapabilities,
+} from "./capabilities-cache";
 import type { ServerConfig } from "./config";
+import type { createPermissionHandler } from "./permission-bridge";
 import { ClientMessage, ServerMessage } from "./protocol";
-import { listClaudeSessions } from "./session-listing";
 import { loadSessionHistory } from "./session-history";
-import { loadCachedCapabilities, saveCachedCapabilities, type Capabilities } from "./capabilities-cache";
+import { listClaudeSessions } from "./session-listing";
+import type { SessionManager } from "./session-manager";
 
 function expandPath(p: string): string {
   if (p.startsWith("~/") || p === "~") {
@@ -38,7 +42,7 @@ function validateAllowedPath(cwd: string, allowedRoots: string[] | null): boolea
   }
 
   // Ensure path ends with separator for prefix matching
-  const ensureTrailingSep = (p: string) => p.endsWith(sep) ? p : p + sep;
+  const ensureTrailingSep = (p: string) => (p.endsWith(sep) ? p : p + sep);
 
   for (const root of allowedRoots) {
     let normalizedRoot: string;
@@ -49,7 +53,10 @@ function validateAllowedPath(cwd: string, allowedRoots: string[] | null): boolea
     }
 
     // Check if cwd is exactly the root or starts with root/
-    if (normalizedCwd === normalizedRoot || normalizedCwd.startsWith(ensureTrailingSep(normalizedRoot))) {
+    if (
+      normalizedCwd === normalizedRoot ||
+      normalizedCwd.startsWith(ensureTrailingSep(normalizedRoot))
+    ) {
       return true;
     }
   }
@@ -60,10 +67,15 @@ function validateAllowedPath(cwd: string, allowedRoots: string[] | null): boolea
 type PermissionHandlerFactory = typeof createPermissionHandler;
 type PermissionHandler = ReturnType<PermissionHandlerFactory>;
 
+interface WsData {
+  permissionHandler?: PermissionHandler;
+  currentSessionId?: string;
+}
+
 export function createWsPlugin(
   sessionManager: SessionManager,
   permissionBridgeFactory: PermissionHandlerFactory,
-  serverConfig: ServerConfig
+  serverConfig: ServerConfig,
 ) {
   let cachedCapabilities: Capabilities | null = loadCachedCapabilities();
 
@@ -75,12 +87,12 @@ export function createWsPlugin(
       const handler = permissionBridgeFactory((requestId, tool) => {
         ws.send({
           type: "permission_request",
-          sessionId: (ws.data as any).currentSessionId || "",
+          sessionId: (ws.data as WsData).currentSessionId || "",
           requestId,
           tool,
         });
       });
-      (ws.data as any).permissionHandler = handler;
+      (ws.data as WsData).permissionHandler = handler;
 
       // Send cached capabilities on reconnect
       if (cachedCapabilities) {
@@ -92,7 +104,7 @@ export function createWsPlugin(
     },
 
     async message(ws, data) {
-      console.log("[ws] received:", (data as any)?.type ?? "unknown");
+      console.log("[ws] received:", (data as Record<string, unknown>)?.type ?? "unknown");
       const parsed = ClientMessage.safeParse(data);
       if (!parsed.success) {
         console.warn("[ws] invalid message:", parsed.error.message);
@@ -105,7 +117,12 @@ export function createWsPlugin(
       }
 
       const message = parsed.data;
-      const handler = (ws.data as any).permissionHandler as PermissionHandler;
+      const wsData = ws.data as WsData;
+      if (!wsData.permissionHandler) {
+        ws.send({ type: "error", code: "internal_error", message: "No permission handler" });
+        return;
+      }
+      const handler = wsData.permissionHandler;
 
       try {
         switch (message.type) {
@@ -131,13 +148,9 @@ export function createWsPlugin(
             }
 
             const sessionId = crypto.randomUUID();
-            (ws.data as any).currentSessionId = sessionId;
+            (ws.data as WsData).currentSessionId = sessionId;
 
-            await sessionManager.createSession(
-              sessionId,
-              cwd,
-              handler.canUseTool
-            );
+            await sessionManager.createSession(sessionId, cwd, handler.canUseTool);
 
             ws.send({
               type: "session_created",
@@ -150,10 +163,7 @@ export function createWsPlugin(
           case "send":
           case "command": {
             const content = message.type === "send" ? message.content : message.command;
-            const generator = sessionManager.sendMessage(
-              message.sessionId,
-              content
-            );
+            const generator = sessionManager.sendMessage(message.sessionId, content);
 
             for await (const sdkMessage of generator) {
               const msg = sdkMessage as Record<string, unknown>;
@@ -245,13 +255,13 @@ export function createWsPlugin(
             }
 
             const sessionId = crypto.randomUUID();
-            (ws.data as any).currentSessionId = sessionId;
+            (ws.data as WsData).currentSessionId = sessionId;
 
             await sessionManager.createSession(
               sessionId,
               cwd,
               handler.canUseTool,
-              message.sdkSessionId
+              message.sdkSessionId,
             );
 
             ws.send({
@@ -269,7 +279,7 @@ export function createWsPlugin(
                 messages,
               });
               ws.send(validated);
-            } catch (err) {
+            } catch (_err) {
               // Session created but history load failed - not fatal
               try {
                 const validated = ServerMessage.parse({
@@ -304,14 +314,15 @@ export function createWsPlugin(
           type: "error",
           code: "session_error",
           message: error instanceof Error ? error.message : String(error),
-          sessionId: message.type !== "new_session" && "sessionId" in message
-            ? message.sessionId
-            : undefined,
+          sessionId:
+            message.type !== "new_session" && "sessionId" in message
+              ? message.sessionId
+              : undefined,
         });
       }
     },
 
-    close(ws) {
+    close(_ws) {
       console.log("[ws] client disconnected");
     },
   });

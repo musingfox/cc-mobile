@@ -13,7 +13,7 @@ interface PermissionHandlerOptions {
 
 export function createPermissionHandler(
   sendToClient: SendToClientFn,
-  options: PermissionHandlerOptions = {}
+  options: PermissionHandlerOptions = {},
 ) {
   const timeoutMs = options.timeoutMs ?? 60000;
   const pendingRequests = new Map<
@@ -58,7 +58,7 @@ export function createPermissionHandler(
     pending.resolve(
       allow
         ? { behavior: "allow", updatedInput: undefined, toolUseID: requestId }
-        : { behavior: "deny", message: "Denied by user", toolUseID: requestId }
+        : { behavior: "deny", message: "Denied by user", toolUseID: requestId },
     );
   };
 

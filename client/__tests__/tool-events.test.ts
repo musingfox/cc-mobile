@@ -1,5 +1,11 @@
-import { describe, it, expect } from "bun:test";
-import { isToolProgress, isToolUseSummary, isTaskProgress, isHookStarted, isHookResponse } from "../services/tool-events";
+import { describe, expect, it } from "bun:test";
+import {
+  isHookResponse,
+  isHookStarted,
+  isTaskProgress,
+  isToolProgress,
+  isToolUseSummary,
+} from "../services/tool-events";
 
 describe("Tool Event Type Guards", () => {
   describe("isToolProgress", () => {
@@ -89,19 +95,50 @@ describe("Tool Event Type Guards", () => {
 
   describe("isHookStarted", () => {
     it("returns true for valid hook_started event", () => {
-      expect(isHookStarted({ type: "system", subtype: "hook_started", hook_id: "h1", hook_name: "SessionStart:startup", hook_event: "SessionStart" })).toBe(true);
+      expect(
+        isHookStarted({
+          type: "system",
+          subtype: "hook_started",
+          hook_id: "h1",
+          hook_name: "SessionStart:startup",
+          hook_event: "SessionStart",
+        }),
+      ).toBe(true);
     });
     it("returns false for other system events", () => {
-      expect(isHookStarted({ type: "system", subtype: "task_started", task_id: "t1", description: "test" })).toBe(false);
+      expect(
+        isHookStarted({
+          type: "system",
+          subtype: "task_started",
+          task_id: "t1",
+          description: "test",
+        }),
+      ).toBe(false);
     });
   });
 
   describe("isHookResponse", () => {
     it("returns true for valid hook_response event", () => {
-      expect(isHookResponse({ type: "system", subtype: "hook_response", hook_id: "h1", hook_name: "SessionStart:startup", hook_event: "SessionStart" })).toBe(true);
+      expect(
+        isHookResponse({
+          type: "system",
+          subtype: "hook_response",
+          hook_id: "h1",
+          hook_name: "SessionStart:startup",
+          hook_event: "SessionStart",
+        }),
+      ).toBe(true);
     });
     it("returns false for non-hook events", () => {
-      expect(isHookResponse({ type: "system", subtype: "hook_started", hook_id: "h1", hook_name: "test", hook_event: "test" })).toBe(false);
+      expect(
+        isHookResponse({
+          type: "system",
+          subtype: "hook_started",
+          hook_id: "h1",
+          hook_name: "test",
+          hook_event: "test",
+        }),
+      ).toBe(false);
     });
   });
 });

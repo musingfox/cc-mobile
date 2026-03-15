@@ -26,11 +26,7 @@ export async function listClaudeSessions(options?: {
  * Display title priority: customTitle > firstPrompt > summary > "Untitled"
  */
 function transformSessionInfo(info: SDKSessionInfo): SessionListItem {
-  const displayTitle =
-    info.customTitle ||
-    info.firstPrompt ||
-    info.summary ||
-    "Untitled";
+  const displayTitle = info.customTitle || info.firstPrompt || info.summary || "Untitled";
 
   return {
     sdkSessionId: info.sessionId,

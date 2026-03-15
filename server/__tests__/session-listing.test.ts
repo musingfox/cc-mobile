@@ -1,15 +1,21 @@
-import { describe, test, expect, mock, beforeEach } from "bun:test";
-import { listClaudeSessions } from "../session-listing";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { SDKSessionInfo } from "@anthropic-ai/claude-agent-sdk";
+import { listClaudeSessions } from "../session-listing";
+
+interface ListSessionsOptions {
+  dir?: string;
+  limit?: number;
+  offset?: number;
+}
 
 // Mock the SDK
 mock.module("@anthropic-ai/claude-agent-sdk", () => ({
-  listSessions: mock(async (options?: any) => {
+  listSessions: mock(async (options?: ListSessionsOptions) => {
     return mockListSessionsImpl(options);
   }),
 }));
 
-let mockListSessionsImpl: (options?: any) => Promise<SDKSessionInfo[]>;
+let mockListSessionsImpl: (options?: ListSessionsOptions) => Promise<SDKSessionInfo[]>;
 
 describe("session-listing", () => {
   beforeEach(() => {
@@ -117,8 +123,8 @@ describe("session-listing", () => {
   });
 
   test("passes options to SDK listSessions", async () => {
-    let capturedOptions: any = null;
-    mockListSessionsImpl = async (options?: any) => {
+    let capturedOptions: ListSessionsOptions | undefined | null = null;
+    mockListSessionsImpl = async (options?: ListSessionsOptions) => {
       capturedOptions = options;
       return [];
     };

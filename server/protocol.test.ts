@@ -1,5 +1,5 @@
-import { describe, test, expect } from "bun:test";
-import { SessionListItemSchema, HistoryMessageSchema, ServerMessage } from "./protocol";
+import { describe, expect, test } from "bun:test";
+import { HistoryMessageSchema, ServerMessage, SessionListItemSchema } from "./protocol";
 
 describe("SessionListItemSchema", () => {
   test("TC1: Valid SessionListItem passes", () => {

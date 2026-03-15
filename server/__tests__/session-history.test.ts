@@ -1,6 +1,6 @@
-import { describe, test, expect, mock, beforeEach } from "bun:test";
-import { loadSessionHistory } from "../session-history";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { SessionMessage } from "@anthropic-ai/claude-agent-sdk";
+import { loadSessionHistory } from "../session-history";
 
 // Mock the SDK
 mock.module("@anthropic-ai/claude-agent-sdk", () => ({
@@ -62,9 +62,7 @@ describe("session-history", () => {
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
-          content: [
-            { type: "tool_use", id: "t2", name: "Write" },
-          ],
+          content: [{ type: "tool_use", id: "t2", name: "Write" }],
         },
       },
     ];

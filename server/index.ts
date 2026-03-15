@@ -1,11 +1,11 @@
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Elysia } from "elysia";
-import { SessionManager } from "./session-manager";
-import { createPermissionHandler } from "./permission-bridge";
-import { createWsPlugin } from "./ws";
 import { parseServerConfig } from "./config";
-import { existsSync } from "fs";
-import { join, dirname } from "path";
-import { fileURLToPath } from "url";
+import { createPermissionHandler } from "./permission-bridge";
+import { SessionManager } from "./session-manager";
+import { createWsPlugin } from "./ws";
 
 const serverConfig = parseServerConfig(process.argv);
 const sessionManager = new SessionManager({ permissionMode: serverConfig.permissionMode });
@@ -13,7 +13,7 @@ const sessionManager = new SessionManager({ permissionMode: serverConfig.permiss
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = join(__dirname, "..", "dist", "client");
 
-const app = new Elysia()
+const _app = new Elysia()
   .use(createWsPlugin(sessionManager, createPermissionHandler, serverConfig))
   .get("*", async ({ request }) => {
     // Skip if dist/ doesn't exist (dev mode)

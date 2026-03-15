@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { ClientMessage, ServerMessage } from "../protocol";
 
 describe("ClientMessage schema", () => {
@@ -19,7 +19,11 @@ describe("ClientMessage schema", () => {
     expect(result.success).toBe(true);
   });
   test("command valid", () => {
-    const result = ClientMessage.safeParse({ type: "command", sessionId: "s1", command: "/commit" });
+    const result = ClientMessage.safeParse({
+      type: "command",
+      sessionId: "s1",
+      command: "/commit",
+    });
     expect(result.success).toBe(true);
   });
   test("command missing command field", () => {
@@ -80,35 +84,51 @@ describe("ClientMessage schema", () => {
 describe("ServerMessage schema", () => {
   test("stream_chunk with SDK message structure", () => {
     const result = ServerMessage.safeParse({
-      type: "stream_chunk", sessionId: "s1",
-      chunk: { type: "assistant", message: { content: [{ type: "text", text: "hi" }] } }
+      type: "stream_chunk",
+      sessionId: "s1",
+      chunk: { type: "assistant", message: { content: [{ type: "text", text: "hi" }] } },
     });
     expect(result.success).toBe(true);
   });
   test("capabilities valid", () => {
     const result = ServerMessage.safeParse({
-      type: "capabilities", sessionId: "s1",
-      commands: ["commit", "review-pr"], agents: ["Explore"], model: "claude-sonnet-4-6"
+      type: "capabilities",
+      sessionId: "s1",
+      commands: ["commit", "review-pr"],
+      agents: ["Explore"],
+      model: "claude-sonnet-4-6",
     });
     expect(result.success).toBe(true);
   });
   test("permission_request valid", () => {
     const result = ServerMessage.safeParse({
-      type: "permission_request", sessionId: "s1", requestId: "r1",
-      tool: { name: "Read", parameters: { file_path: "/a" } }
+      type: "permission_request",
+      sessionId: "s1",
+      requestId: "r1",
+      tool: { name: "Read", parameters: { file_path: "/a" } },
     });
     expect(result.success).toBe(true);
   });
   test("error valid", () => {
-    const result = ServerMessage.safeParse({ type: "error", code: "session_error", message: "not found" });
+    const result = ServerMessage.safeParse({
+      type: "error",
+      code: "session_error",
+      message: "not found",
+    });
     expect(result.success).toBe(true);
   });
   test("server_config valid", () => {
-    const result = ServerMessage.safeParse({ type: "server_config", config: { permissionMode: "default" } });
+    const result = ServerMessage.safeParse({
+      type: "server_config",
+      config: { permissionMode: "default" },
+    });
     expect(result.success).toBe(true);
   });
   test("server_config invalid permissionMode", () => {
-    const result = ServerMessage.safeParse({ type: "server_config", config: { permissionMode: "invalid" } });
+    const result = ServerMessage.safeParse({
+      type: "server_config",
+      config: { permissionMode: "invalid" },
+    });
     expect(result.success).toBe(false);
   });
 });

@@ -14,9 +14,7 @@ export default function StatusBar() {
   const activeSessionId = useAppStore((s) => s.activeSessionId);
   const sessions = useAppStore((s) => s.sessions);
 
-  const activeSession = activeSessionId
-    ? sessions.get(activeSessionId)
-    : undefined;
+  const activeSession = activeSessionId ? sessions.get(activeSessionId) : undefined;
 
   const usage = activeSession?.usage;
 

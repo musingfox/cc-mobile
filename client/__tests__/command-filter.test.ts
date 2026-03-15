@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { filterAndSortItems } from "../utils/command-filter";
 
 describe("filterAndSortItems", () => {
@@ -51,9 +51,7 @@ describe("filterAndSortItems", () => {
       pinnedItems: [],
     });
 
-    expect(result).toEqual([
-      { label: "@github", value: "@github", type: "agent", pinned: false },
-    ]);
+    expect(result).toEqual([{ label: "@github", value: "@github", type: "agent", pinned: false }]);
   });
 
   it("returns empty array when no items exist", () => {

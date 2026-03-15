@@ -1,7 +1,7 @@
-import { useState, useMemo, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { loadPins, savePins, togglePin } from "../services/pins";
 import type { Capabilities } from "../stores/app-store";
 import { filterAndSortItems } from "../utils/command-filter";
-import { loadPins, savePins, togglePin } from "../services/pins";
 
 type PickerPanelProps = {
   mode: "command" | "agent";
@@ -59,7 +59,15 @@ export default function PickerPanel({
   const placeholder = mode === "command" ? "Search commands..." : "Search agents...";
 
   return (
-    <div className="command-panel-overlay" onClick={handleBackdropClick}>
+    <div
+      className="command-panel-overlay"
+      role="dialog"
+      tabIndex={-1}
+      onClick={handleBackdropClick}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") onClose();
+      }}
+    >
       <div className="command-panel">
         <div className="command-panel-header">
           <input
@@ -68,9 +76,9 @@ export default function PickerPanel({
             placeholder={placeholder}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            autoFocus
           />
           <button
+            type="button"
             className="command-panel-close-btn"
             onClick={onClose}
             aria-label="Close"
@@ -88,14 +96,20 @@ export default function PickerPanel({
             filteredItems.map((item) => (
               <div
                 key={item.value}
+                role="option"
+                tabIndex={0}
                 className={`command-panel-item ${item.pinned ? "pinned" : ""}`}
                 onClick={() => handleSelect(item.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") handleSelect(item.value);
+                }}
               >
                 <span className={`type-badge ${item.type}`}>
                   {item.type === "command" ? "CMD" : "AGT"}
                 </span>
                 <span className="command-panel-label">{item.label}</span>
                 <button
+                  type="button"
                   className="command-panel-pin-btn"
                   onClick={(e) => {
                     e.stopPropagation();

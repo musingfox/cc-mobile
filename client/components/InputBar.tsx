@@ -1,5 +1,5 @@
-import { useRef, useEffect, useMemo, type KeyboardEvent } from "react";
-import { useAppStore, type Capabilities } from "../stores/app-store";
+import { type KeyboardEvent, useEffect, useMemo, useRef } from "react";
+import { type Capabilities, useAppStore } from "../stores/app-store";
 
 type InputBarProps = {
   onSend: (content: string) => void;
@@ -9,7 +9,13 @@ type InputBarProps = {
   onOpenAgentPanel: () => void;
 };
 
-export default function InputBar({ onSend, disabled, capabilities, onOpenCommandPanel, onOpenAgentPanel }: InputBarProps) {
+export default function InputBar({
+  onSend,
+  disabled,
+  capabilities,
+  onOpenCommandPanel,
+  onOpenAgentPanel,
+}: InputBarProps) {
   const value = useAppStore((s) => s.inputDraft);
   const setValue = useAppStore((s) => s.setInputDraft);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -19,7 +25,7 @@ export default function InputBar({ onSend, disabled, capabilities, onOpenCommand
       textareaRef.current.style.height = "auto";
       textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
     }
-  }, [value]);
+  }, []);
 
   const suggestions = useMemo(() => {
     if (!capabilities || !value) return [];
@@ -51,7 +57,7 @@ export default function InputBar({ onSend, disabled, capabilities, onOpenCommand
   };
 
   const handleSelect = (item: { value: string }) => {
-    setValue(item.value + " ");
+    setValue(`${item.value} `);
     textareaRef.current?.focus();
   };
 
@@ -68,6 +74,7 @@ export default function InputBar({ onSend, disabled, capabilities, onOpenCommand
         <div className="autocomplete-list">
           {suggestions.map((item) => (
             <button
+              type="button"
               key={item.value}
               className={`autocomplete-item ${item.type}`}
               onClick={() => handleSelect(item)}
@@ -79,6 +86,7 @@ export default function InputBar({ onSend, disabled, capabilities, onOpenCommand
       )}
       <div className="input-bar">
         <button
+          type="button"
           className="input-bar-action-btn"
           onClick={onOpenCommandPanel}
           disabled={disabled || !capabilities}
@@ -87,6 +95,7 @@ export default function InputBar({ onSend, disabled, capabilities, onOpenCommand
           /
         </button>
         <button
+          type="button"
           className="input-bar-action-btn"
           onClick={onOpenAgentPanel}
           disabled={disabled || !capabilities}
@@ -105,6 +114,7 @@ export default function InputBar({ onSend, disabled, capabilities, onOpenCommand
           rows={1}
         />
         <button
+          type="button"
           className="send-btn"
           onClick={handleSend}
           disabled={disabled || !value.trim()}

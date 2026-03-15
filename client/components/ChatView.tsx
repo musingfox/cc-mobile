@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { Message, ActiveTool, ActiveAgent } from "../stores/app-store";
+import type { ActiveAgent, ActiveTool, Message } from "../stores/app-store";
 import ActivityPanel from "./ActivityPanel";
 
 type ChatViewProps = {
@@ -31,7 +31,7 @@ export default function ChatView({
     if (autoScroll && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, autoScroll]);
+  }, [autoScroll]);
 
   const handleScroll = () => {
     if (!scrollRef.current) return;
@@ -64,11 +64,10 @@ export default function ChatView({
     <div className="chat-view" ref={scrollRef} onScroll={handleScroll}>
       {messages.length === 0 && !isStreaming && (
         <div className="chat-empty">
-          <div className="chat-empty-welcome">
-            Type a message to start, or
-          </div>
+          <div className="chat-empty-welcome">Type a message to start, or</div>
           {cwd && onResumeSession && (
             <button
+              type="button"
               className="chat-empty-resume"
               onClick={() => onResumeSession(cwd)}
             >
@@ -80,20 +79,17 @@ export default function ChatView({
       {messages.map((msg) => (
         <div key={msg.id} className={`message ${msg.role}`}>
           {msg.role === "tool" ? (
-            <div
-              className={`message-content ${
-                expandedTools.has(msg.id) ? "tool-expanded" : ""
-              }`}
+            <button
+              type="button"
+              className={`message-content ${expandedTools.has(msg.id) ? "tool-expanded" : ""}`}
               onClick={() => toggleToolExpanded(msg.id)}
             >
               <div className="tool-header">
                 <span className="tool-expand-icon">▶</span>
                 <span>Tool: {msg.toolName || "Unknown"}</span>
               </div>
-              {expandedTools.has(msg.id) && (
-                <div className="tool-details">{msg.content}</div>
-              )}
-            </div>
+              {expandedTools.has(msg.id) && <div className="tool-details">{msg.content}</div>}
+            </button>
           ) : (
             <div className="message-content">{msg.content}</div>
           )}
@@ -104,7 +100,11 @@ export default function ChatView({
         <>
           {/* New rich activity panel */}
           {(activeTools.size > 0 || activeAgents.size > 0 || activeHook) && (
-            <ActivityPanel activeTools={activeTools} activeAgents={activeAgents} activeHook={activeHook} />
+            <ActivityPanel
+              activeTools={activeTools}
+              activeAgents={activeAgents}
+              activeHook={activeHook}
+            />
           )}
           {/* Fallback to legacy simple indicator if no rich status */}
           {activeTools.size === 0 && activeAgents.size === 0 && !activeHook && (

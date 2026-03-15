@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { parseServerConfig } from "../config";
 
 describe("parseServerConfig", () => {
@@ -29,10 +29,14 @@ describe("parseServerConfig", () => {
   test("all flags", () => {
     delete process.env.CLAUDE_MOBILE_ALLOWED_ROOTS;
     const result = parseServerConfig([
-      "node", "index.ts",
-      "--port", "4000",
-      "--permission-mode", "acceptEdits",
-      "--default-cwd", "/workspace"
+      "node",
+      "index.ts",
+      "--port",
+      "4000",
+      "--permission-mode",
+      "acceptEdits",
+      "--default-cwd",
+      "/workspace",
     ]);
     expect(result).toEqual({
       port: 4000,
@@ -47,7 +51,9 @@ describe("parseServerConfig", () => {
   test("invalid permission-mode", () => {
     expect(() => {
       parseServerConfig(["node", "index.ts", "--permission-mode", "invalid"]);
-    }).toThrow("Invalid permission-mode: invalid. Allowed: default, acceptEdits, bypassPermissions");
+    }).toThrow(
+      "Invalid permission-mode: invalid. Allowed: default, acceptEdits, bypassPermissions",
+    );
   });
 
   test("invalid port", () => {

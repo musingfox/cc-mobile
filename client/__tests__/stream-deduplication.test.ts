@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { useAppStore } from "../stores/app-store";
 
 // Helper to simulate WebSocket message handling
@@ -8,7 +8,9 @@ function handleStreamChunk(sessionId: string, chunk: Record<string, unknown>) {
   // Replicate the extractTextFromChunk logic
   let text: string | null = null;
   if (chunk.type === "assistant") {
-    const message = chunk.message as { content?: Array<{ type: string; text?: string }> } | undefined;
+    const message = chunk.message as
+      | { content?: Array<{ type: string; text?: string }> }
+      | undefined;
     if (message?.content) {
       text = message.content
         .filter((b) => b.type === "text")

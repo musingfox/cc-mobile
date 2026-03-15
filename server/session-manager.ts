@@ -1,13 +1,14 @@
-import { query } from "@anthropic-ai/claude-agent-sdk";
 import type {
-  CanUseTool,
-  SDKMessage,
-  Query,
-  SlashCommand,
   AgentInfo,
+  CanUseTool,
+  Query,
+  SDKMessage,
+  SDKSystemMessage,
+  SlashCommand,
 } from "@anthropic-ai/claude-agent-sdk";
-import { loadUserPlugins } from "./settings-loader";
+import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { PermissionMode } from "./config";
+import { loadUserPlugins } from "./settings-loader";
 
 type SdkPluginConfig = { type: "local"; path: string };
 
@@ -44,7 +45,7 @@ export class SessionManager {
     sessionId: string,
     cwd: string,
     canUseTool: CanUseTool,
-    sdkSessionId?: string
+    sdkSessionId?: string,
   ): Promise<void> {
     if (this.sessions.has(sessionId)) {
       throw new Error(`Session ${sessionId} already exists`);
@@ -57,10 +58,7 @@ export class SessionManager {
     });
   }
 
-  async *sendMessage(
-    sessionId: string,
-    content: string
-  ): AsyncGenerator<SDKMessage> {
+  async *sendMessage(sessionId: string, content: string): AsyncGenerator<SDKMessage> {
     const config = this.sessions.get(sessionId);
     if (!config) {
       throw new Error(`Session ${sessionId} not found`);
@@ -92,12 +90,8 @@ export class SessionManager {
     try {
       for await (const msg of q) {
         // Capture SDK session ID for future resume
-        if (
-          msg.type === "system" &&
-          msg.subtype === "init" &&
-          !config.sdkSessionId
-        ) {
-          config.sdkSessionId = (msg as any).session_id;
+        if (msg.type === "system" && msg.subtype === "init" && !config.sdkSessionId) {
+          config.sdkSessionId = (msg as SDKSystemMessage).session_id;
         }
 
         yield msg;
@@ -113,10 +107,7 @@ export class SessionManager {
     if (!q) return null;
 
     try {
-      const [commands, agents] = await Promise.all([
-        q.supportedCommands(),
-        q.supportedAgents(),
-      ]);
+      const [commands, agents] = await Promise.all([q.supportedCommands(), q.supportedAgents()]);
       return {
         commands,
         agents,

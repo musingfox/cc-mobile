@@ -26,8 +26,11 @@ export function loadSettings(): Settings {
     if (!stored) return defaultSettings;
     const parsed = JSON.parse(stored);
     return {
-      defaultCwd: typeof parsed.defaultCwd === "string" ? parsed.defaultCwd : defaultSettings.defaultCwd,
-      theme: ["dark", "light", "claude"].includes(parsed.theme) ? parsed.theme : defaultSettings.theme,
+      defaultCwd:
+        typeof parsed.defaultCwd === "string" ? parsed.defaultCwd : defaultSettings.defaultCwd,
+      theme: ["dark", "light", "claude"].includes(parsed.theme)
+        ? parsed.theme
+        : defaultSettings.theme,
     };
   } catch (error) {
     console.error("[settings] failed to load, using defaults:", error);

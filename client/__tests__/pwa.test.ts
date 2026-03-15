@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync, existsSync } from "fs";
-import { join } from "path";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
 const CLIENT_ROOT = join(import.meta.dir, "..");
 const PUBLIC_DIR = join(CLIENT_ROOT, "public");

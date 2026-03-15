@@ -1,20 +1,18 @@
 import { useAppStore } from "../stores/app-store";
 import { saveProject } from "./projects";
 import {
-  isToolStart,
-  isToolProgress,
-  isToolUseSummary,
-  isTaskStarted,
-  isTaskProgress,
-  isTaskNotification,
-  isResultMessage,
-  isHookStarted,
   isHookResponse,
+  isHookStarted,
+  isResultMessage,
+  isTaskNotification,
+  isTaskProgress,
+  isTaskStarted,
+  isToolProgress,
+  isToolStart,
+  isToolUseSummary,
 } from "./tool-events";
 
-export function extractTextFromChunk(
-  chunk: Record<string, unknown>
-): string | null {
+export function extractTextFromChunk(chunk: Record<string, unknown>): string | null {
   if (chunk.type === "assistant") {
     const message = chunk.message as
       | { content?: Array<{ type: string; text?: string }> }
@@ -171,8 +169,12 @@ class WsService {
         if (isToolProgress(chunk)) {
           if (chunk.tool_use_id) {
             store.updateActiveTool(sessionId, chunk.tool_use_id, {
-              ...(chunk.elapsed_time_seconds !== undefined && { elapsedSeconds: chunk.elapsed_time_seconds }),
-              ...(chunk.parent_tool_use_id !== undefined && { parentToolUseId: chunk.parent_tool_use_id }),
+              ...(chunk.elapsed_time_seconds !== undefined && {
+                elapsedSeconds: chunk.elapsed_time_seconds,
+              }),
+              ...(chunk.parent_tool_use_id !== undefined && {
+                parentToolUseId: chunk.parent_tool_use_id,
+              }),
             });
           }
           // Maintain backward compatibility
@@ -322,20 +324,28 @@ class WsService {
 
       case "session_list": {
         // Store session list in app store
-        store.setSessionList((msg.sessions as Array<{
-          sdkSessionId: string;
-          displayTitle: string;
-          cwd: string;
-          gitBranch?: string;
-          lastModified: number;
-          createdAt?: number;
-        }>) || []);
+        store.setSessionList(
+          (msg.sessions as Array<{
+            sdkSessionId: string;
+            displayTitle: string;
+            cwd: string;
+            gitBranch?: string;
+            lastModified: number;
+            createdAt?: number;
+          }>) || [],
+        );
         break;
       }
 
       case "session_history": {
         if (sessionId) {
-          const messages = (msg.messages as Array<{ id: string; role: string; content: string; timestamp: number }>) || [];
+          const messages =
+            (msg.messages as Array<{
+              id: string;
+              role: string;
+              content: string;
+              timestamp: number;
+            }>) || [];
           store.loadSessionHistory(sessionId, messages);
         }
         break;
@@ -358,9 +368,7 @@ class WsService {
       timestamp: Date.now(),
     });
 
-    this.ws.send(
-      JSON.stringify({ type: "send", sessionId, content })
-    );
+    this.ws.send(JSON.stringify({ type: "send", sessionId, content }));
 
     useAppStore.getState().setStreaming(sessionId, true);
   }
@@ -375,9 +383,7 @@ class WsService {
       timestamp: Date.now(),
     });
 
-    this.ws.send(
-      JSON.stringify({ type: "command", sessionId, command })
-    );
+    this.ws.send(JSON.stringify({ type: "command", sessionId, command }));
 
     useAppStore.getState().setStreaming(sessionId, true);
   }
@@ -391,7 +397,7 @@ class WsService {
         type: "permission",
         requestId: session.pendingPermission.requestId,
         allow: true,
-      })
+      }),
     );
 
     useAppStore.getState().setPermission(sessionId, null);
@@ -406,7 +412,7 @@ class WsService {
         type: "permission",
         requestId: session.pendingPermission.requestId,
         allow: false,
-      })
+      }),
     );
 
     useAppStore.getState().setPermission(sessionId, null);
@@ -414,30 +420,32 @@ class WsService {
 
   closeSession(sessionId: string) {
     if (this.ws) {
-      this.ws.send(
-        JSON.stringify({ type: "interrupt", sessionId })
-      );
+      this.ws.send(JSON.stringify({ type: "interrupt", sessionId }));
     }
     useAppStore.getState().removeSession(sessionId);
   }
 
   listSessions(dir?: string, limit?: number, offset?: number) {
     if (!this.ws) return;
-    this.ws.send(JSON.stringify({
-      type: "list_sessions",
-      ...(dir && { dir }),
-      ...(limit && { limit }),
-      ...(offset && { offset }),
-    }));
+    this.ws.send(
+      JSON.stringify({
+        type: "list_sessions",
+        ...(dir && { dir }),
+        ...(limit && { limit }),
+        ...(offset && { offset }),
+      }),
+    );
   }
 
   resumeSession(sdkSessionId: string, cwd: string) {
     if (!this.ws) return;
-    this.ws.send(JSON.stringify({
-      type: "resume_session",
-      sdkSessionId,
-      cwd,
-    }));
+    this.ws.send(
+      JSON.stringify({
+        type: "resume_session",
+        sdkSessionId,
+        cwd,
+      }),
+    );
   }
 
   destroy() {

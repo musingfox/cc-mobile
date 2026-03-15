@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import { loadProjects, removeProject } from "../services/projects";
+import { wsService } from "../services/ws-service";
 import { useAppStore } from "../stores/app-store";
 import { useSettingsStore } from "../stores/settings-store";
-import { wsService } from "../services/ws-service";
-import { loadProjects, removeProject } from "../services/projects";
 
 export default function SessionTabs() {
   const sessions = useAppStore((s) => s.sessions);
@@ -11,7 +11,9 @@ export default function SessionTabs() {
   const globalError = useAppStore((s) => s.globalError);
   const setGlobalError = useAppStore((s) => s.setGlobalError);
   const defaultCwd = useSettingsStore((s) => s.defaultCwd);
-  const [showProjectPicker, setShowProjectPicker] = useState(sessions.size === 0 && !activeSessionId);
+  const [showProjectPicker, setShowProjectPicker] = useState(
+    sessions.size === 0 && !activeSessionId,
+  );
   const [newCwd, setNewCwd] = useState("");
   const [savedProjects, setSavedProjects] = useState(loadProjects);
 
@@ -47,7 +49,7 @@ export default function SessionTabs() {
       setNewCwd("");
       setShowProjectPicker(false);
     }
-  }, [sessions.size]);
+  }, [sessions.size, newCwd.trim, showProjectPicker]);
 
   const handleClose = (e: React.MouseEvent, sessionId: string) => {
     e.stopPropagation();
@@ -64,26 +66,33 @@ export default function SessionTabs() {
     <div className="session-tabs-container">
       <div className="session-tabs">
         {sessionList.map((session) => (
-          <button
+          <div
             key={session.id}
             className={`session-tab ${session.id === activeSessionId ? "active" : ""}`}
-            onClick={() => setActiveSession(session.id)}
           >
-            <span className="session-tab-label">
-              {session.cwd.split("/").pop() || session.cwd}
-            </span>
-            {session.isStreaming && <span className="session-tab-streaming" />}
+            <button
+              type="button"
+              className="session-tab-main"
+              onClick={() => setActiveSession(session.id)}
+            >
+              <span className="session-tab-label">
+                {session.cwd.split("/").pop() || session.cwd}
+              </span>
+              {session.isStreaming && <span className="session-tab-streaming" />}
+            </button>
             {sessionList.length > 1 && (
-              <span
+              <button
+                type="button"
                 className="session-tab-close"
                 onClick={(e) => handleClose(e, session.id)}
               >
                 ×
-              </span>
+              </button>
             )}
-          </button>
+          </div>
         ))}
         <button
+          type="button"
           className="session-tab add"
           onClick={() => setShowProjectPicker(!showProjectPicker)}
         >
@@ -95,6 +104,7 @@ export default function SessionTabs() {
         <div className="global-error">
           {globalError}
           <button
+            type="button"
             className="global-error-dismiss"
             onClick={() => setGlobalError(null)}
           >
@@ -108,20 +118,23 @@ export default function SessionTabs() {
           {savedProjects.length > 0 && (
             <div className="saved-projects">
               {savedProjects.map((project) => (
-                <button
-                  key={project.cwd}
-                  className="saved-project-btn"
-                  onClick={() => handleCreate(project.cwd)}
-                >
-                  <span className="saved-project-label">{project.label}</span>
-                  <span className="saved-project-path">{project.cwd}</span>
-                  <span
+                <div key={project.cwd} className="saved-project-btn">
+                  <button
+                    type="button"
+                    className="saved-project-main"
+                    onClick={() => handleCreate(project.cwd)}
+                  >
+                    <span className="saved-project-label">{project.label}</span>
+                    <span className="saved-project-path">{project.cwd}</span>
+                  </button>
+                  <button
+                    type="button"
                     className="saved-project-remove"
                     onClick={(e) => handleRemoveProject(e, project.cwd)}
                   >
                     ×
-                  </span>
-                </button>
+                  </button>
+                </div>
               ))}
             </div>
           )}
@@ -132,9 +145,9 @@ export default function SessionTabs() {
               onChange={(e) => setNewCwd(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleCreate()}
               placeholder="Or type a path (e.g. ~/workspace/my-project)"
-              autoFocus
             />
             <button
+              type="button"
               className="new-session-btn"
               onClick={() => handleCreate()}
               disabled={!newCwd.trim()}

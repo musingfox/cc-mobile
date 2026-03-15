@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, it } from "bun:test";
 import { useAppStore } from "../stores/app-store";
 
 describe("Tool Messages", () => {
@@ -32,7 +32,7 @@ describe("Tool Messages", () => {
     store.addToolMessage("s1", "Write", "Second message");
 
     const session = useAppStore.getState().sessions.get("s1");
-    const ids = session?.messages.map(m => m.id) ?? [];
+    const ids = session?.messages.map((m) => m.id) ?? [];
 
     expect(new Set(ids).size).toBe(2); // All IDs should be unique
   });

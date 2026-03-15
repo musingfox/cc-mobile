@@ -1,5 +1,5 @@
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { resolve } from "path";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { resolve } from "node:path";
 
 describe("WebSocket path validation integration", () => {
   const originalEnv = process.env.CLAUDE_MOBILE_ALLOWED_ROOTS;
@@ -21,10 +21,7 @@ describe("WebSocket path validation integration", () => {
     const { parseServerConfig } = require("../config");
     const config = parseServerConfig(["node", "index.ts"]);
 
-    expect(config.allowedRoots).toEqual([
-      resolve("/allowed/path"),
-      resolve("/another/allowed"),
-    ]);
+    expect(config.allowedRoots).toEqual([resolve("/allowed/path"), resolve("/another/allowed")]);
   });
 
   test("no restriction when env var is not set", () => {

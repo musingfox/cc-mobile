@@ -17,7 +17,8 @@ const STATIC_ASSETS = [
 self.addEventListener("install", (event) => {
   console.log("[SW] Install event");
   event.waitUntil(
-    caches.open(CACHE_NAME)
+    caches
+      .open(CACHE_NAME)
       .then((cache) => {
         console.log("[SW] Caching static assets");
         return cache.addAll(STATIC_ASSETS);
@@ -25,7 +26,7 @@ self.addEventListener("install", (event) => {
       .catch((error) => {
         console.error("[SW] Cache installation failed:", error);
         // Continue without SW cache
-      })
+      }),
   );
   // Activate immediately
   self.skipWaiting();
@@ -37,14 +38,14 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
+        cacheNames
+          .filter((cacheName) => cacheName !== CACHE_NAME)
+          .map((cacheName) => {
             console.log("[SW] Deleting old cache:", cacheName);
             return caches.delete(cacheName);
-          }
-        })
+          }),
       );
-    })
+    }),
   );
   // Take control of all clients immediately
   self.clients.claim();
@@ -63,36 +64,33 @@ self.addEventListener("fetch", (event) => {
   // Network-first strategy for navigation requests
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request)
-        .catch(() => {
-          // Fallback to cached index.html if offline
-          return caches.match("/index.html");
-        })
+      fetch(request).catch(() => {
+        // Fallback to cached index.html if offline
+        return caches.match("/index.html");
+      }),
     );
     return;
   }
 
   // Cache-first for static assets
   event.respondWith(
-    caches.match(request)
-      .then((cachedResponse) => {
-        if (cachedResponse) {
-          return cachedResponse;
+    caches.match(request).then((cachedResponse) => {
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+      return fetch(request).then((response) => {
+        // Cache successful responses for JS, CSS, images
+        if (
+          response.ok &&
+          (request.url.match(/\.(js|css|png|jpg|jpeg|svg|ico)$/) || request.url.includes("/icons/"))
+        ) {
+          const responseToCache = response.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(request, responseToCache);
+          });
         }
-        return fetch(request).then((response) => {
-          // Cache successful responses for JS, CSS, images
-          if (
-            response.ok &&
-            (request.url.match(/\.(js|css|png|jpg|jpeg|svg|ico)$/) ||
-             request.url.includes("/icons/"))
-          ) {
-            const responseToCache = response.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, responseToCache);
-            });
-          }
-          return response;
-        });
-      })
+        return response;
+      });
+    }),
   );
 });

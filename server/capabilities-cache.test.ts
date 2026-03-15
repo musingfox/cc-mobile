@@ -1,12 +1,16 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { existsSync, rmSync, writeFileSync, mkdirSync, readFileSync } from "fs";
-import { join, dirname } from "path";
-import { loadCachedCapabilities, saveCachedCapabilities, type Capabilities } from "./capabilities-cache";
-import { homedir } from "os";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import {
+  type Capabilities,
+  loadCachedCapabilities,
+  saveCachedCapabilities,
+} from "./capabilities-cache";
 
 const CACHE_DIR = join(homedir(), ".claude-mobile");
 const CACHE_FILE = join(CACHE_DIR, "capabilities-cache.json");
-const BACKUP_FILE = CACHE_FILE + ".backup";
+const BACKUP_FILE = `${CACHE_FILE}.backup`;
 
 beforeEach(() => {
   // Backup existing cache if present

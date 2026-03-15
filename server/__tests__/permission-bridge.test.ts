@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { createPermissionHandler } from "../permission-bridge";
 
 const signal = AbortSignal.timeout(60000);
@@ -33,7 +33,11 @@ describe("Permission Bridge", () => {
 
   test("canUseTool timeout", async () => {
     const handler = createPermissionHandler(() => {}, { timeoutMs: 100 });
-    const result = await handler.canUseTool("Edit", { file_path: "/c" }, { toolUseID: "t3", signal });
+    const result = await handler.canUseTool(
+      "Edit",
+      { file_path: "/c" },
+      { toolUseID: "t3", signal },
+    );
     expect(result.behavior).toBe("deny");
   }, 5000);
 });

@@ -1,5 +1,5 @@
-import { describe, test, expect, beforeEach } from "bun:test";
-import { saveSettings, loadSettings } from "../services/settings";
+import { beforeEach, describe, expect, test } from "bun:test";
+import { loadSettings, saveSettings } from "../services/settings";
 
 // Mock localStorage
 const mockStorage = new Map<string, string>();

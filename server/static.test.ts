@@ -1,6 +1,6 @@
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { join } from "path";
-import { mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 const TEST_DIST_DIR = join(import.meta.dir, "..", "test-dist", "client");
 

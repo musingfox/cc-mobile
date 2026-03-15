@@ -1,6 +1,6 @@
 import { useEffect } from "react";
-import { useAppStore } from "../stores/app-store";
 import { wsService } from "../services/ws-service";
+import { useAppStore } from "../stores/app-store";
 
 interface SessionListModalProps {
   isOpen: boolean;
@@ -20,7 +20,12 @@ function formatRelativeTime(timestamp: number): string {
   return `${days}d ago`;
 }
 
-export default function SessionListModal({ isOpen, dir, onClose, onSelectSession }: SessionListModalProps) {
+export default function SessionListModal({
+  isOpen,
+  dir,
+  onClose,
+  onSelectSession,
+}: SessionListModalProps) {
   const sessionList = useAppStore((s) => s.sessionList);
 
   useEffect(() => {
@@ -32,11 +37,26 @@ export default function SessionListModal({ isOpen, dir, onClose, onSelectSession
   if (!isOpen) return null;
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="modal-overlay"
+      role="dialog"
+      tabIndex={-1}
+      onClick={onClose}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") onClose();
+      }}
+    >
+      <div
+        className="modal-content"
+        role="document"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
         <div className="modal-header">
           <h2>Resume Session</h2>
-          <button className="modal-close" onClick={onClose}>×</button>
+          <button type="button" className="modal-close" onClick={onClose}>
+            ×
+          </button>
         </div>
         <div className="session-list-body">
           {sessionList.length === 0 ? (
@@ -44,6 +64,7 @@ export default function SessionListModal({ isOpen, dir, onClose, onSelectSession
           ) : (
             sessionList.map((session) => (
               <button
+                type="button"
                 key={session.sdkSessionId}
                 className="session-list-item"
                 onClick={() => onSelectSession(session.sdkSessionId, session.cwd)}

@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { SessionManager } from "../session-manager";
 
 describe("SessionManager", () => {
@@ -12,7 +12,9 @@ describe("SessionManager", () => {
 
   test("sendMessage throws on unknown session", async () => {
     const mgr = new SessionManager({ permissionMode: "default" });
-    await expect(mgr.sendMessage("unknown", "hi").next()).rejects.toThrow("Session unknown not found");
+    await expect(mgr.sendMessage("unknown", "hi").next()).rejects.toThrow(
+      "Session unknown not found",
+    );
   });
 
   test("destroySession on unknown is no-op", () => {

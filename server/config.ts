@@ -1,4 +1,4 @@
-import { resolve } from "path";
+import { resolve } from "node:path";
 
 export type PermissionMode = "default" | "acceptEdits" | "bypassPermissions";
 
@@ -22,15 +22,16 @@ export function parseServerConfig(argv: string[]): ServerConfig {
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     switch (arg) {
-      case "--port":
+      case "--port": {
         const portValue = argv[i + 1];
         const port = parseInt(portValue, 10);
-        if (isNaN(port)) {
+        if (Number.isNaN(port)) {
           throw new Error("Port must be a valid number");
         }
         config.port = port;
         i++;
         break;
+      }
       case "--hostname":
         config.hostname = argv[i + 1];
         i++;
@@ -39,14 +40,17 @@ export function parseServerConfig(argv: string[]): ServerConfig {
         config.defaultCwd = argv[i + 1];
         i++;
         break;
-      case "--permission-mode":
+      case "--permission-mode": {
         const mode = argv[i + 1];
         if (mode !== "default" && mode !== "acceptEdits" && mode !== "bypassPermissions") {
-          throw new Error(`Invalid permission-mode: ${mode}. Allowed: default, acceptEdits, bypassPermissions`);
+          throw new Error(
+            `Invalid permission-mode: ${mode}. Allowed: default, acceptEdits, bypassPermissions`,
+          );
         }
         config.permissionMode = mode;
         i++;
         break;
+      }
     }
   }
 

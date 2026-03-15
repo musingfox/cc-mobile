@@ -1,4 +1,4 @@
-import { getSessionMessages, type SessionMessage } from "@anthropic-ai/claude-agent-sdk";
+import { getSessionMessages } from "@anthropic-ai/claude-agent-sdk";
 import type { HistoryMessage } from "./protocol";
 
 /**
@@ -15,9 +15,9 @@ function classifyUserMessage(rawMessage: unknown): "human" | "skip" {
 
   // Array content: tool_result or image+text
   if (Array.isArray(content)) {
-    if (content.some((b: any) => b.type === "tool_result")) return "skip";
+    if (content.some((b: { type: string }) => b.type === "tool_result")) return "skip";
     // Has text blocks (e.g. image+text messages) — treat as human
-    if (content.some((b: any) => b.type === "text")) return "human";
+    if (content.some((b: { type: string }) => b.type === "text")) return "human";
     return "skip";
   }
 
@@ -25,9 +25,20 @@ function classifyUserMessage(rawMessage: unknown): "human" | "skip" {
   if (typeof content === "string") {
     if (content.includes("<task-notification>")) return "skip";
     if (content.includes("<local-command-caveat>")) return "skip";
-    if (content.includes("<system-reminder>") && !content.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, "").trim()) return "skip";
+    if (
+      content.includes("<system-reminder>") &&
+      !content.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, "").trim()
+    )
+      return "skip";
     // local-command-stdout is system output, not human input
-    if (content.includes("<local-command-stdout>") && !content.replace(/<local-command-stdout>[\s\S]*?<\/local-command-stdout>/g, "").replace(/<[^>]+>/g, "").trim()) return "skip";
+    if (
+      content.includes("<local-command-stdout>") &&
+      !content
+        .replace(/<local-command-stdout>[\s\S]*?<\/local-command-stdout>/g, "")
+        .replace(/<[^>]+>/g, "")
+        .trim()
+    )
+      return "skip";
     // Commands are also user input, just with XML tags we'll clean up
     return "human";
   }
@@ -42,8 +53,11 @@ function isToolUse(rawMessage: unknown): boolean {
   if (typeof rawMessage !== "object" || rawMessage === null) return false;
   const obj = rawMessage as Record<string, unknown>;
   if (!Array.isArray(obj.content)) return false;
-  return obj.content.length > 0 && obj.content.every(
-    (block: any) => block.type === "tool_use" || block.type === "thinking"
+  return (
+    obj.content.length > 0 &&
+    obj.content.every(
+      (block: { type: string }) => block.type === "tool_use" || block.type === "thinking",
+    )
   );
 }
 
@@ -78,8 +92,8 @@ function extractTextContent(rawMessage: unknown): string {
 
   if (Array.isArray(obj.content)) {
     return obj.content
-      .filter((block: any) => block.type === "text")
-      .map((block: any) => block.text || "")
+      .filter((block: { type: string }) => block.type === "text")
+      .map((block: { type: string; text?: string }) => block.text || "")
       .join("");
   }
 
@@ -90,9 +104,7 @@ function extractTextContent(rawMessage: unknown): string {
  * Load conversation history from a Claude Code session.
  * Returns human messages, command labels, and assistant text — filters out tool noise.
  */
-export async function loadSessionHistory(
-  sdkSessionId: string
-): Promise<HistoryMessage[]> {
+export async function loadSessionHistory(sdkSessionId: string): Promise<HistoryMessage[]> {
   const messages = await getSessionMessages(sdkSessionId);
   const result: HistoryMessage[] = [];
 

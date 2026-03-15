@@ -1,5 +1,5 @@
-import { useAppStore } from "../stores/app-store";
 import { beforeEach, describe, expect, test } from "bun:test";
+import { useAppStore } from "../stores/app-store";
 
 describe("session history loading", () => {
   beforeEach(() => {

@@ -90,7 +90,10 @@ interface AppState {
   setPermission: (sessionId: string, permission: PendingPermission | null) => void;
 
   // Tool Status (legacy)
-  setActiveToolStatus: (sessionId: string, status: { toolName: string; description: string } | null) => void;
+  setActiveToolStatus: (
+    sessionId: string,
+    status: { toolName: string; description: string } | null,
+  ) => void;
   addToolMessage: (sessionId: string, toolName: string, summary: string) => void;
 
   // Active Tool Management
@@ -101,7 +104,11 @@ interface AppState {
   // Active Agent Management
   addActiveAgent: (sessionId: string, taskId: string, agent: ActiveAgent) => void;
   updateActiveAgent: (sessionId: string, taskId: string, updates: Partial<ActiveAgent>) => void;
-  completeActiveAgent: (sessionId: string, taskId: string, completion: Partial<ActiveAgent>) => void;
+  completeActiveAgent: (
+    sessionId: string,
+    taskId: string,
+    completion: Partial<ActiveAgent>,
+  ) => void;
 
   // Cleanup
   clearActiveTools: (sessionId: string) => void;
@@ -128,13 +135,16 @@ interface AppState {
   // Session list for resume
   sessionList: SessionListItem[];
   setSessionList: (sessions: SessionListItem[]) => void;
-  loadSessionHistory: (sessionId: string, messages: Array<{ id: string; role: string; content: string; timestamp: number }>) => void;
+  loadSessionHistory: (
+    sessionId: string,
+    messages: Array<{ id: string; role: string; content: string; timestamp: number }>,
+  ) => void;
 }
 
 function updateSession(
   sessions: Map<string, SessionState>,
   sessionId: string,
-  updater: (session: SessionState) => SessionState
+  updater: (session: SessionState) => SessionState,
 ): Map<string, SessionState> {
   const session = sessions.get(sessionId);
   if (!session) return sessions;
@@ -180,9 +190,7 @@ export const useAppStore = create<AppState>((set) => ({
       return {
         sessions: next,
         activeSessionId:
-          state.activeSessionId === sessionId
-            ? ids[0] ?? null
-            : state.activeSessionId,
+          state.activeSessionId === sessionId ? (ids[0] ?? null) : state.activeSessionId,
       };
     }),
 
@@ -203,10 +211,7 @@ export const useAppStore = create<AppState>((set) => ({
         if (!last || last.id !== s.currentStreamMessageId) return s;
         return {
           ...s,
-          messages: [
-            ...s.messages.slice(0, -1),
-            { ...last, content: last.content + text },
-          ],
+          messages: [...s.messages.slice(0, -1), { ...last, content: last.content + text }],
         };
       }),
     })),

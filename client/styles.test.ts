@@ -1,6 +1,6 @@
-import { describe, test, expect } from "bun:test";
-import { readFileSync } from "fs";
-import { join } from "path";
+import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 const clientDir = import.meta.dir;
 

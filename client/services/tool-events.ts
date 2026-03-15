@@ -75,42 +75,25 @@ export type ResultMessage = {
   error?: string;
 };
 
-export function isToolStart(
-  chunk: Record<string, unknown>
-): chunk is ToolStartEvent {
+export function isToolStart(chunk: Record<string, unknown>): chunk is ToolStartEvent {
   if (chunk.type !== "stream_event") return false;
   const event = chunk.event as Record<string, unknown> | undefined;
   if (!event || event.type !== "content_block_start") return false;
   const block = event.content_block as Record<string, unknown> | undefined;
   return (
-    block?.type === "tool_use" &&
-    typeof block.name === "string" &&
-    typeof block.id === "string"
+    block?.type === "tool_use" && typeof block.name === "string" && typeof block.id === "string"
   );
 }
 
-
-export function isToolProgress(
-  chunk: Record<string, unknown>
-): chunk is ToolProgressEvent {
-  return (
-    chunk.type === "tool_progress" &&
-    typeof chunk.tool_name === "string"
-  );
+export function isToolProgress(chunk: Record<string, unknown>): chunk is ToolProgressEvent {
+  return chunk.type === "tool_progress" && typeof chunk.tool_name === "string";
 }
 
-export function isToolUseSummary(
-  chunk: Record<string, unknown>
-): chunk is ToolUseSummaryEvent {
-  return (
-    chunk.type === "tool_use_summary" &&
-    typeof chunk.summary === "string"
-  );
+export function isToolUseSummary(chunk: Record<string, unknown>): chunk is ToolUseSummaryEvent {
+  return chunk.type === "tool_use_summary" && typeof chunk.summary === "string";
 }
 
-export function isTaskStarted(
-  chunk: Record<string, unknown>
-): chunk is TaskStartedEvent {
+export function isTaskStarted(chunk: Record<string, unknown>): chunk is TaskStartedEvent {
   return (
     chunk.type === "system" &&
     chunk.subtype === "task_started" &&
@@ -119,9 +102,7 @@ export function isTaskStarted(
   );
 }
 
-export function isTaskProgress(
-  chunk: Record<string, unknown>
-): chunk is TaskProgressEvent {
+export function isTaskProgress(chunk: Record<string, unknown>): chunk is TaskProgressEvent {
   return (
     chunk.type === "system" &&
     chunk.subtype === "task_progress" &&
@@ -129,9 +110,7 @@ export function isTaskProgress(
   );
 }
 
-export function isTaskNotification(
-  chunk: Record<string, unknown>
-): chunk is TaskNotificationEvent {
+export function isTaskNotification(chunk: Record<string, unknown>): chunk is TaskNotificationEvent {
   return (
     chunk.type === "system" &&
     chunk.subtype === "task_notification" &&
@@ -141,9 +120,7 @@ export function isTaskNotification(
   );
 }
 
-export function isResultMessage(
-  chunk: Record<string, unknown>
-): chunk is ResultMessage {
+export function isResultMessage(chunk: Record<string, unknown>): chunk is ResultMessage {
   return (
     chunk.type === "result" &&
     (chunk.subtype === "success" || chunk.subtype === "error") &&
@@ -168,9 +145,17 @@ export type HookResponseEvent = {
 };
 
 export function isHookStarted(chunk: Record<string, unknown>): chunk is HookStartedEvent {
-  return chunk.type === "system" && chunk.subtype === "hook_started" && typeof chunk.hook_name === "string";
+  return (
+    chunk.type === "system" &&
+    chunk.subtype === "hook_started" &&
+    typeof chunk.hook_name === "string"
+  );
 }
 
 export function isHookResponse(chunk: Record<string, unknown>): chunk is HookResponseEvent {
-  return chunk.type === "system" && chunk.subtype === "hook_response" && typeof chunk.hook_name === "string";
+  return (
+    chunk.type === "system" &&
+    chunk.subtype === "hook_response" &&
+    typeof chunk.hook_name === "string"
+  );
 }
