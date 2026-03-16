@@ -2,8 +2,10 @@ import DOMPurify from "dompurify";
 import { Marked } from "marked";
 import morphdom from "morphdom";
 import { useEffect, useRef } from "react";
+import { createRoot } from "react-dom/client";
 import { highlight, warmup } from "../services/highlighter";
 import { useSettingsStore } from "../stores/settings-store";
+import MermaidBlock from "./MermaidBlock";
 
 // Pre-warm shiki on module load
 warmup();
@@ -48,8 +50,11 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
       containerRef.current.appendChild(next);
     }
 
-    // Async-enhance code blocks with shiki
+    // Async-enhance code blocks with shiki (skip mermaid blocks)
     enhanceCodeBlocks(containerRef.current, theme);
+
+    // Render mermaid diagrams
+    renderMermaidBlocks(containerRef.current);
   }, [content, theme]);
 
   return <div ref={containerRef} className="md-renderer" />;
@@ -66,6 +71,8 @@ async function enhanceCodeBlocks(container: HTMLElement, theme: string): Promise
     const langClass = Array.from(codeEl.classList).find((c) => c.startsWith("language-"));
     const lang = langClass?.replace("language-", "") || "";
 
+    // Skip mermaid blocks (handled separately)
+    if (lang === "mermaid") continue;
     if (!lang) continue;
 
     const code = codeEl.textContent || "";
@@ -78,5 +85,25 @@ async function enhanceCodeBlocks(container: HTMLElement, theme: string): Promise
       wrapper.innerHTML = DOMPurify.sanitize(highlighted);
       pre.parentElement.replaceChild(wrapper, pre);
     }
+  }
+}
+
+function renderMermaidBlocks(container: HTMLElement): void {
+  const mermaidCodes = container.querySelectorAll("code.language-mermaid");
+
+  for (const codeEl of mermaidCodes) {
+    const pre = codeEl.parentElement;
+    if (!pre || pre.dataset.mermaid === "true") continue;
+
+    const code = codeEl.textContent || "";
+    pre.dataset.mermaid = "true";
+
+    // Replace <pre> with a mount point for MermaidBlock
+    const mountPoint = document.createElement("div");
+    mountPoint.className = "mermaid-mount";
+    pre.parentElement?.replaceChild(mountPoint, pre);
+
+    const root = createRoot(mountPoint);
+    root.render(<MermaidBlock code={code} />);
   }
 }
