@@ -1,12 +1,37 @@
+import { wsService } from "../services/ws-service";
+import { useAppStore } from "../stores/app-store";
 import { useSettingsStore } from "../stores/settings-store";
 
 interface SettingsProps {
   onClose: () => void;
 }
 
+const PERMISSION_MODES = [
+  {
+    id: "default",
+    label: "Default",
+    description: "Ask for permission on each tool use",
+  },
+  {
+    id: "acceptEdits",
+    label: "Accept Edits",
+    description: "Auto-approve file edits, ask for others",
+  },
+  {
+    id: "bypassPermissions",
+    label: "Bypass All",
+    description: "Auto-approve everything (use with caution)",
+  },
+] as const;
+
 export default function Settings({ onClose }: SettingsProps) {
   const theme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
+  const permissionMode = useAppStore((s) => s.permissionMode);
+
+  const handlePermissionModeChange = (mode: string) => {
+    wsService.setPermissionMode(mode);
+  };
 
   return (
     <div
@@ -56,6 +81,23 @@ export default function Settings({ onClose }: SettingsProps) {
               >
                 Claude
               </button>
+            </div>
+          </section>
+
+          <section className="settings-section">
+            <h3>Permission Mode</h3>
+            <div className="settings-permission-modes">
+              {PERMISSION_MODES.map((mode) => (
+                <button
+                  type="button"
+                  key={mode.id}
+                  className={`settings-permission-btn ${permissionMode === mode.id ? "active" : ""}`}
+                  onClick={() => handlePermissionModeChange(mode.id)}
+                >
+                  <span className="settings-permission-label">{mode.label}</span>
+                  <span className="settings-permission-desc">{mode.description}</span>
+                </button>
+              ))}
             </div>
           </section>
         </div>

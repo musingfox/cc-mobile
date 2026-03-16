@@ -58,6 +58,8 @@ class WsService {
       console.log("[ws-service] connected");
       useAppStore.getState().setConnectionState("connected");
       this.reconnectDelay = 1000;
+      // Request current server config (including permission mode)
+      ws.send(JSON.stringify({ type: "get_server_config" }));
     };
 
     ws.onmessage = (event) => {
@@ -337,6 +339,14 @@ class WsService {
         break;
       }
 
+      case "server_config": {
+        const config = msg.config as { permissionMode: string };
+        if (config?.permissionMode) {
+          store.setPermissionMode(config.permissionMode);
+        }
+        break;
+      }
+
       case "session_history": {
         if (sessionId) {
           const messages =
@@ -446,6 +456,11 @@ class WsService {
         cwd,
       }),
     );
+  }
+
+  setPermissionMode(mode: string) {
+    if (!this.ws) return;
+    this.ws.send(JSON.stringify({ type: "set_permission_mode", mode }));
   }
 
   destroy() {

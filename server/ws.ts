@@ -211,7 +211,19 @@ export function createWsPlugin(
             ws.send({
               type: "server_config",
               config: {
-                permissionMode: serverConfig.permissionMode,
+                permissionMode: sessionManager.getPermissionMode(),
+              },
+            });
+            break;
+          }
+
+          case "set_permission_mode": {
+            sessionManager.setPermissionMode(message.mode);
+            // Echo back updated config
+            ws.send({
+              type: "server_config",
+              config: {
+                permissionMode: message.mode,
               },
             });
             break;

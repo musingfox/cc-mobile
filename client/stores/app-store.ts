@@ -125,6 +125,10 @@ interface AppState {
   capabilities: Capabilities | null;
   setCapabilities: (capabilities: Capabilities) => void;
 
+  // Permission mode (server-side setting)
+  permissionMode: string;
+  setPermissionMode: (mode: string) => void;
+
   // Global error (e.g., invalid cwd)
   globalError: string | null;
   setGlobalError: (error: string | null) => void;
@@ -278,6 +282,9 @@ export const useAppStore = create<AppState>((set) => ({
 
   capabilities: null,
   setCapabilities: (capabilities) => set({ capabilities }),
+
+  permissionMode: "default",
+  setPermissionMode: (permissionMode) => set({ permissionMode }),
 
   globalError: null,
   setGlobalError: (globalError) => set({ globalError }),

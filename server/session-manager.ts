@@ -34,6 +34,14 @@ export class SessionManager {
     this.permissionMode = config.permissionMode;
   }
 
+  setPermissionMode(mode: PermissionMode): void {
+    this.permissionMode = mode;
+  }
+
+  getPermissionMode(): PermissionMode {
+    return this.permissionMode;
+  }
+
   private async getPlugins(): Promise<SdkPluginConfig[]> {
     if (!this.plugins) {
       this.plugins = await loadUserPlugins();
