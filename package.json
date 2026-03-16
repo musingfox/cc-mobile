@@ -20,9 +20,11 @@
     "dompurify": "^3.3.3",
     "elysia": "^1.2.0",
     "marked": "^17.0.4",
+    "marked-highlight": "^2.2.3",
     "morphdom": "^2.7.8",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "shiki": "^4.0.2",
     "zod": "^3.23.8",
     "zustand": "^5.0.11"
   },

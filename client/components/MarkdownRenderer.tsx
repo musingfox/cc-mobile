@@ -2,6 +2,11 @@ import DOMPurify from "dompurify";
 import { Marked } from "marked";
 import morphdom from "morphdom";
 import { useEffect, useRef } from "react";
+import { highlight, warmup } from "../services/highlighter";
+import { useSettingsStore } from "../stores/settings-store";
+
+// Pre-warm shiki on module load
+warmup();
 
 const marked = new Marked({
   gfm: true,
@@ -14,6 +19,7 @@ type MarkdownRendererProps = {
 
 export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const theme = useSettingsStore((s) => s.theme);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -32,7 +38,8 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
     if (containerRef.current.firstElementChild) {
       morphdom(containerRef.current.firstElementChild, next, {
         onBeforeElUpdated(fromEl, toEl) {
-          // Skip unchanged nodes for performance
+          // Preserve shiki-highlighted code blocks
+          if (fromEl.classList.contains("shiki")) return false;
           if (fromEl.isEqualNode(toEl)) return false;
           return true;
         },
@@ -40,7 +47,36 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
     } else {
       containerRef.current.appendChild(next);
     }
-  }, [content]);
+
+    // Async-enhance code blocks with shiki
+    enhanceCodeBlocks(containerRef.current, theme);
+  }, [content, theme]);
 
   return <div ref={containerRef} className="md-renderer" />;
+}
+
+async function enhanceCodeBlocks(container: HTMLElement, theme: string): Promise<void> {
+  const codeBlocks = container.querySelectorAll("pre code");
+
+  for (const codeEl of codeBlocks) {
+    const pre = codeEl.parentElement;
+    if (!pre || pre.dataset.highlighted === "true") continue;
+
+    // Extract language from class="language-xxx"
+    const langClass = Array.from(codeEl.classList).find((c) => c.startsWith("language-"));
+    const lang = langClass?.replace("language-", "") || "";
+
+    if (!lang) continue;
+
+    const code = codeEl.textContent || "";
+    const highlighted = await highlight(code, lang, theme);
+
+    if (highlighted && pre.parentElement) {
+      pre.dataset.highlighted = "true";
+      const wrapper = document.createElement("div");
+      wrapper.className = "shiki-wrapper";
+      wrapper.innerHTML = DOMPurify.sanitize(highlighted);
+      pre.parentElement.replaceChild(wrapper, pre);
+    }
+  }
 }

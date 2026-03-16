@@ -512,6 +512,30 @@ button {
   font-size: inherit;
 }
 
+/* Shiki syntax highlighting */
+.shiki-wrapper {
+  margin: 8px 0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.shiki-wrapper pre.shiki {
+  margin: 0;
+  padding: 12px;
+  overflow-x: auto;
+  font-family: "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.shiki-wrapper code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+}
+
 .md-content ul,
 .md-content ol {
   margin: 4px 0;
