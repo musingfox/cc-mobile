@@ -1576,7 +1576,7 @@ button {
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  min-height: 44px;
+  min-height: 48px;
   background: var(--bg-secondary);
   border: none;
   cursor: pointer;
