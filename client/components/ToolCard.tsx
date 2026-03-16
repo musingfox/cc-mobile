@@ -1,5 +1,9 @@
+import Ansi from "ansi-to-react";
 import { useState } from "react";
+import { darkStyles, defaultStyles, JsonView } from "react-json-view-lite";
+import "react-json-view-lite/dist/index.css";
 import { getToolDefinition } from "../services/tool-registry";
+import { useSettingsStore } from "../stores/settings-store";
 import DiffView from "./DiffView";
 
 type ToolCardProps = {
@@ -12,6 +16,22 @@ type ToolCardProps = {
   onToggle: () => void;
   children?: React.ReactNode; // For permission footer slot
 };
+
+/** Try to parse JSON, returns parsed object or null */
+function tryParseJson(text: string): unknown | null {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return null;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+}
+
+/** Check if text contains ANSI escape sequences */
+function hasAnsiCodes(text: string): boolean {
+  return text.includes("\x1b[") || text.includes("\u001b[");
+}
 
 export default function ToolCard({
   toolName,
@@ -26,6 +46,7 @@ export default function ToolCard({
   const toolDef = getToolDefinition(toolName);
   const icon = toolDef?.icon || "🔧";
   const title = toolDef?.title(input) || toolName;
+  const theme = useSettingsStore((s) => s.theme);
 
   const [diffCollapsed, setDiffCollapsed] = useState(true);
 
@@ -58,11 +79,48 @@ export default function ToolCard({
               onToggle={() => setDiffCollapsed(!diffCollapsed)}
             />
           ) : (
-            <pre className="tool-card-output">{content}</pre>
+            <ToolOutput content={content} toolName={toolName} theme={theme} />
           )}
           {children}
         </div>
       )}
     </div>
   );
+}
+
+/** Renders tool output with auto-detection: JSON tree > ANSI > plain text */
+function ToolOutput({
+  content,
+  toolName: _toolName,
+  theme,
+}: {
+  content: string;
+  toolName: string;
+  theme: string;
+}) {
+  // 1. Try JSON tree view
+  const parsed = tryParseJson(content);
+  if (parsed !== null) {
+    return (
+      <div className="tool-output-json">
+        <JsonView
+          data={parsed}
+          style={theme === "light" ? defaultStyles : darkStyles}
+          shouldExpandNode={(level) => level < 2}
+        />
+      </div>
+    );
+  }
+
+  // 2. Try ANSI rendering
+  if (hasAnsiCodes(content)) {
+    return (
+      <pre className="tool-output-ansi">
+        <Ansi>{content}</Ansi>
+      </pre>
+    );
+  }
+
+  // 3. Plain text fallback
+  return <pre className="tool-card-output">{content}</pre>;
 }

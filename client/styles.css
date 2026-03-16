@@ -734,6 +734,29 @@ button {
   word-break: break-word;
 }
 
+/* JSON tree view */
+.tool-output-json {
+  padding: 8px 12px;
+  max-height: 400px;
+  overflow-y: auto;
+  font-size: 13px;
+}
+
+/* ANSI terminal output */
+.tool-output-ansi {
+  padding: 12px;
+  margin: 0;
+  font-family: "Courier New", monospace;
+  font-size: 12px;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  overflow-x: auto;
+  max-height: 300px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* Activity Panel */
 .activity-panel {
   display: flex;
