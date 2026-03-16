@@ -1,7 +1,118 @@
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { ActiveAgent, ActiveTool, Message } from "../stores/app-store";
 import ActivityPanel from "./ActivityPanel";
 import ToolCard from "./ToolCard";
+
+/** Minimal markdown: code blocks, inline code, bold, italic, lists */
+function renderMarkdown(text: string): ReactNode {
+  // Split by code blocks first
+  const codeBlockRegex = /```(\w*)\n([\s\S]*?)```/g;
+  const parts: ReactNode[] = [];
+  let lastIndex = 0;
+  let key = 0;
+
+  for (const match of text.matchAll(codeBlockRegex)) {
+    const before = text.slice(lastIndex, match.index);
+    if (before) parts.push(...renderBlocks(before, key));
+    key += 200;
+    parts.push(
+      <pre key={`cb-${key}`} className="md-code-block">
+        <code>{match[2]}</code>
+      </pre>,
+    );
+    key++;
+    lastIndex = (match.index ?? 0) + match[0].length;
+  }
+
+  const remaining = text.slice(lastIndex);
+  if (remaining) parts.push(...renderBlocks(remaining, key));
+  return parts;
+}
+
+/** Split text into paragraphs and list blocks */
+function renderBlocks(text: string, startKey: number): ReactNode[] {
+  const lines = text.split("\n");
+  const result: ReactNode[] = [];
+  let key = startKey;
+  let currentList: ReactNode[] = [];
+  let currentParagraph: string[] = [];
+
+  const flushParagraph = () => {
+    if (currentParagraph.length > 0) {
+      const joined = currentParagraph.join("\n");
+      if (joined.trim()) {
+        result.push(
+          <p key={`p-${key++}`} className="md-paragraph">
+            {renderInlineSpans(joined, key)}
+          </p>,
+        );
+        key += 50;
+      }
+      currentParagraph = [];
+    }
+  };
+
+  const flushList = () => {
+    if (currentList.length > 0) {
+      result.push(
+        <ul key={`ul-${key++}`} className="md-list">
+          {currentList}
+        </ul>,
+      );
+      currentList = [];
+    }
+  };
+
+  for (const line of lines) {
+    const listMatch = line.match(/^(\s*[-*])\s+(.*)/);
+    if (listMatch) {
+      flushParagraph();
+      currentList.push(<li key={`li-${key++}`}>{renderInlineSpans(listMatch[2], key)}</li>);
+      key += 20;
+    } else if (line.trim() === "") {
+      flushParagraph();
+      flushList();
+    } else {
+      flushList();
+      currentParagraph.push(line);
+    }
+  }
+
+  flushParagraph();
+  flushList();
+  return result;
+}
+
+/** Render inline spans: `code`, **bold**, *italic* */
+function renderInlineSpans(text: string, startKey: number): ReactNode[] {
+  const inlineRegex = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/g;
+  const spans: ReactNode[] = [];
+  let lastIdx = 0;
+  let key = startKey;
+
+  for (const m of text.matchAll(inlineRegex)) {
+    const before = text.slice(lastIdx, m.index);
+    if (before) spans.push(before);
+
+    const matched = m[0];
+    if (matched.startsWith("`")) {
+      spans.push(
+        <code key={`ic-${key++}`} className="md-inline-code">
+          {matched.slice(1, -1)}
+        </code>,
+      );
+    } else if (matched.startsWith("**")) {
+      spans.push(<strong key={`b-${key++}`}>{matched.slice(2, -2)}</strong>);
+    } else if (matched.startsWith("*")) {
+      spans.push(<em key={`i-${key++}`}>{matched.slice(1, -1)}</em>);
+    }
+    lastIdx = (m.index ?? 0) + m[0].length;
+  }
+
+  const after = text.slice(lastIdx);
+  if (after) spans.push(after);
+  return spans.length > 0 ? spans : [text];
+}
 
 type ChatViewProps = {
   messages: Message[];
@@ -88,7 +199,9 @@ export default function ChatView({
               onToggle={() => toggleToolExpanded(msg.id)}
             />
           ) : (
-            <div className="message-content">{msg.content}</div>
+            <div className="message-content">
+              {msg.role === "assistant" ? renderMarkdown(msg.content) : msg.content}
+            </div>
           )}
           <div className="message-timestamp">{formatTimestamp(msg.timestamp)}</div>
         </div>

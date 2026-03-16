@@ -7,7 +7,6 @@ import QuickActions from "./components/QuickActions";
 import SessionListModal from "./components/SessionListModal";
 import SessionTabs from "./components/SessionTabs";
 import Settings from "./components/Settings";
-import StatusBar from "./components/StatusBar";
 import { wsService } from "./services/ws-service";
 import { useAppStore } from "./stores/app-store";
 import { useSettingsStore } from "./stores/settings-store";
@@ -89,8 +88,6 @@ export default function App() {
         onApprove={() => activeSessionId && wsService.approvePermission(activeSessionId)}
         onDeny={() => activeSessionId && wsService.denyPermission(activeSessionId)}
       />
-
-      <StatusBar />
 
       <InputBar
         onSend={(content) => activeSessionId && wsService.send(activeSessionId, content)}

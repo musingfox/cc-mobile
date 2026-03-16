@@ -8,7 +8,7 @@ describe("CSS Theme Variables", () => {
     const text = await cssContent.text();
 
     // Should find --bg-user-bubble in theme-dark section
-    expect(text).toContain("--bg-user-bubble: #2c2c2e;");
+    expect(text).toContain("--bg-user-bubble: #3a3a4e;");
   });
 
   it("light theme has correct --bg-user-bubble color", async () => {
@@ -38,12 +38,12 @@ describe("CSS Theme Variables", () => {
     expect(text).toContain("background: var(--bg-user-bubble);");
   });
 
-  it("assistant messages have transparent background", async () => {
+  it("assistant messages use secondary background", async () => {
     const cssContent = Bun.file("client/styles.css");
     const text = await cssContent.text();
 
-    // Should find assistant message content with transparent background
+    // Should find assistant message content with subtle background
     expect(text).toContain(".message.assistant .message-content");
-    expect(text).toContain("background: transparent;");
+    expect(text).toContain("background: var(--bg-secondary);");
   });
 });
