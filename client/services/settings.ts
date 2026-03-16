@@ -5,7 +5,7 @@ export interface Settings {
   theme: Theme;
 }
 
-const SETTINGS_KEY = "claude-code-mobile-settings";
+const SETTINGS_KEY = "cc-mobile-settings";
 
 const defaultSettings: Settings = {
   defaultCwd: "",

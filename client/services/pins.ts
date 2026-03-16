@@ -1,4 +1,4 @@
-const PINS_KEY = "claude-code-mobile-pinned-commands";
+const PINS_KEY = "cc-mobile-pinned-commands";
 
 export function loadPins(): string[] {
   try {

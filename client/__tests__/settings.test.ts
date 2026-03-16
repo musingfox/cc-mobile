@@ -21,24 +21,24 @@ describe("settings service", () => {
 
   test("saveSettings writes to localStorage", () => {
     saveSettings({ defaultCwd: "/tmp", theme: "light" });
-    const stored = mockStorage.get("claude-code-mobile-settings");
+    const stored = mockStorage.get("cc-mobile-settings");
     expect(stored).toBe('{"defaultCwd":"/tmp","theme":"light"}');
   });
 
   test("loadSettings returns defaults when key missing", () => {
-    mockStorage.delete("claude-code-mobile-settings");
+    mockStorage.delete("cc-mobile-settings");
     const result = loadSettings();
     expect(result).toEqual({ defaultCwd: "", theme: "dark" });
   });
 
   test("loadSettings returns defaults on invalid JSON", () => {
-    mockStorage.set("claude-code-mobile-settings", "not json");
+    mockStorage.set("cc-mobile-settings", "not json");
     const result = loadSettings();
     expect(result).toEqual({ defaultCwd: "", theme: "dark" });
   });
 
   test("loadSettings returns saved values", () => {
-    mockStorage.set("claude-code-mobile-settings", '{"defaultCwd":"/workspace","theme":"claude"}');
+    mockStorage.set("cc-mobile-settings", '{"defaultCwd":"/workspace","theme":"claude"}');
     const result = loadSettings();
     expect(result).toEqual({ defaultCwd: "/workspace", theme: "claude" });
   });

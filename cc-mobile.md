@@ -1,4 +1,4 @@
-# Claude Code Mobile — Plan Document
+# CCMobile — Plan Document
 
 > Touch-optimized web UI for Claude Code, designed for phones and tablets.
 > Not a terminal replacement — a touch translation of terminal interactions.
@@ -98,7 +98,7 @@ Note: `stream_chunk.chunk` contains raw SDK message objects (e.g., `{ type: "ass
 ## Project Structure
 
 ```
-claude-code-mobile/
+cc-mobile/
 ├── package.json
 ├── tsconfig.json
 ├── vite.config.ts
@@ -221,7 +221,7 @@ Design principles:
 ```json
 // public/manifest.json
 {
-  "name": "Claude Code Mobile",
+  "name": "CCMobile",
   "short_name": "Claude",
   "start_url": "/",
   "display": "standalone",
@@ -267,7 +267,7 @@ Add to home screen → launches as standalone app (no browser chrome).
 - Dark/light/Claude theme toggle
 - Settings page (default CWD, theme, pin management, localStorage persistence)
 - Server-side CLI flags: `--default-cwd`, `--permission-mode`, `--port`, `--hostname`
-- `CLAUDE_MOBILE_ALLOWED_ROOTS` env var for project path whitelist
+- `CC_MOBILE_ALLOWED_ROOTS` env var for project path whitelist
 - E2E test suite (Playwright with mock server)
 
 ### Phase 5: Future

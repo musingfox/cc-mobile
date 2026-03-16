@@ -21,7 +21,7 @@ V1 `query()` loads all 16 enabled plugins (52 slash commands, 26 skills) correct
 Use V1 `query()` as the SDK interface. Encapsulate SDK interaction behind SessionManager's interface so switching to V2 later requires only internal changes.
 
 ## Rationale
-- V2 cannot load plugins — this is a blocking gap for claude-code-mobile's goal of full Claude Code parity
+- V2 cannot load plugins — this is a blocking gap for cc-mobile's goal of full Claude Code parity
 - V1 is the stable, fully-featured API with no indication of deprecation
 - The async generator pattern is more complex to map to WebSocket, but manageable within session-manager
 - V2 is expected to eventually support plugins, but no timeline exists

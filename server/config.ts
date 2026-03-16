@@ -58,7 +58,7 @@ export function parseServerConfig(argv: string[]): ServerConfig {
 }
 
 function parseAllowedRoots(): string[] | null {
-  const envVar = process.env.CLAUDE_MOBILE_ALLOWED_ROOTS;
+  const envVar = process.env.CC_MOBILE_ALLOWED_ROOTS;
   if (!envVar || envVar.trim() === "") {
     return null;
   }

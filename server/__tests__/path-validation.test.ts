@@ -91,19 +91,19 @@ describe("validateAllowedPath", () => {
 });
 
 describe("parseServerConfig - allowedRoots", () => {
-  const originalEnv = process.env.CLAUDE_MOBILE_ALLOWED_ROOTS;
+  const originalEnv = process.env.CC_MOBILE_ALLOWED_ROOTS;
 
   // Clean up after tests
   const cleanup = () => {
     if (originalEnv === undefined) {
-      delete process.env.CLAUDE_MOBILE_ALLOWED_ROOTS;
+      delete process.env.CC_MOBILE_ALLOWED_ROOTS;
     } else {
-      process.env.CLAUDE_MOBILE_ALLOWED_ROOTS = originalEnv;
+      process.env.CC_MOBILE_ALLOWED_ROOTS = originalEnv;
     }
   };
 
   test("not set returns null", () => {
-    delete process.env.CLAUDE_MOBILE_ALLOWED_ROOTS;
+    delete process.env.CC_MOBILE_ALLOWED_ROOTS;
     const { parseServerConfig } = require("../config");
     const result = parseServerConfig(["node", "index.ts"]);
     expect(result.allowedRoots).toBe(null);
@@ -111,7 +111,7 @@ describe("parseServerConfig - allowedRoots", () => {
   });
 
   test("empty string returns null", () => {
-    process.env.CLAUDE_MOBILE_ALLOWED_ROOTS = "";
+    process.env.CC_MOBILE_ALLOWED_ROOTS = "";
     const { parseServerConfig } = require("../config");
     const result = parseServerConfig(["node", "index.ts"]);
     expect(result.allowedRoots).toBe(null);
@@ -119,7 +119,7 @@ describe("parseServerConfig - allowedRoots", () => {
   });
 
   test("whitespace only returns null", () => {
-    process.env.CLAUDE_MOBILE_ALLOWED_ROOTS = "   ";
+    process.env.CC_MOBILE_ALLOWED_ROOTS = "   ";
     const { parseServerConfig } = require("../config");
     const result = parseServerConfig(["node", "index.ts"]);
     expect(result.allowedRoots).toBe(null);
@@ -127,7 +127,7 @@ describe("parseServerConfig - allowedRoots", () => {
   });
 
   test("single path is parsed and resolved", () => {
-    process.env.CLAUDE_MOBILE_ALLOWED_ROOTS = "/home/user/projects";
+    process.env.CC_MOBILE_ALLOWED_ROOTS = "/home/user/projects";
     const { parseServerConfig } = require("../config");
     const result = parseServerConfig(["node", "index.ts"]);
     expect(result.allowedRoots).toEqual([resolve("/home/user/projects")]);
@@ -135,7 +135,7 @@ describe("parseServerConfig - allowedRoots", () => {
   });
 
   test("multiple paths are parsed correctly", () => {
-    process.env.CLAUDE_MOBILE_ALLOWED_ROOTS = "/home/user/projects,/var/www,/opt/apps";
+    process.env.CC_MOBILE_ALLOWED_ROOTS = "/home/user/projects,/var/www,/opt/apps";
     const { parseServerConfig } = require("../config");
     const result = parseServerConfig(["node", "index.ts"]);
     expect(result.allowedRoots).toEqual([
@@ -147,7 +147,7 @@ describe("parseServerConfig - allowedRoots", () => {
   });
 
   test("paths with spaces are trimmed", () => {
-    process.env.CLAUDE_MOBILE_ALLOWED_ROOTS = " /home/user/projects , /var/www ";
+    process.env.CC_MOBILE_ALLOWED_ROOTS = " /home/user/projects , /var/www ";
     const { parseServerConfig } = require("../config");
     const result = parseServerConfig(["node", "index.ts"]);
     expect(result.allowedRoots).toEqual([resolve("/home/user/projects"), resolve("/var/www")]);
@@ -155,7 +155,7 @@ describe("parseServerConfig - allowedRoots", () => {
   });
 
   test("empty entries are filtered out", () => {
-    process.env.CLAUDE_MOBILE_ALLOWED_ROOTS = "/home/user/projects,,/var/www";
+    process.env.CC_MOBILE_ALLOWED_ROOTS = "/home/user/projects,,/var/www";
     const { parseServerConfig } = require("../config");
     const result = parseServerConfig(["node", "index.ts"]);
     expect(result.allowedRoots).toEqual([resolve("/home/user/projects"), resolve("/var/www")]);
@@ -163,7 +163,7 @@ describe("parseServerConfig - allowedRoots", () => {
   });
 
   test("relative paths are converted to absolute", () => {
-    process.env.CLAUDE_MOBILE_ALLOWED_ROOTS = "./projects,../other";
+    process.env.CC_MOBILE_ALLOWED_ROOTS = "./projects,../other";
     const { parseServerConfig } = require("../config");
     const result = parseServerConfig(["node", "index.ts"]);
     expect(result.allowedRoots).toEqual([resolve("./projects"), resolve("../other")]);

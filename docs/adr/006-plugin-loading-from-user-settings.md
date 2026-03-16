@@ -6,7 +6,7 @@ Accepted
 ## Context
 The Agent SDK does not automatically load installed plugins or marketplace skills. `settingSources: ["user"]` loads settings like permissions and hooks from `~/.claude/settings.json`, but plugins require explicit `plugins: SdkPluginConfig[]` option with local paths. Skills require `allowedTools: ["Skill"]` to be enabled.
 
-Users expect claude-code-mobile to have the same capabilities as their local Claude Code — including all installed plugins, skills, and MCP servers.
+Users expect cc-mobile to have the same capabilities as their local Claude Code — including all installed plugins, skills, and MCP servers.
 
 ## Decision
 Session manager reads user settings at startup to discover and load plugins:

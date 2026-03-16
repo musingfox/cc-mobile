@@ -1,6 +1,8 @@
-# Claude Code Mobile
+# CCMobile
 
 Touch-optimized web UI for [Claude Code](https://claude.ai/code), designed for phones and tablets.
+
+> *This project is not affiliated with or endorsed by Anthropic. Claude and Claude Code are trademarks of Anthropic.*
 
 Not a terminal replacement — a touch translation of terminal interactions. Run it on your dev machine, access it from your phone via Tailscale or local network.
 
@@ -57,7 +59,7 @@ Not a terminal replacement — a touch translation of terminal interactions. Run
 
 ```bash
 # Clone the repo and install
-cd claude-code-mobile
+cd cc-mobile
 bun install
 
 # Start backend (terminal 1)
@@ -90,7 +92,7 @@ bun run dev:server -- --port 4000 --default-cwd ~/workspace --permission-mode ac
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CLAUDE_MOBILE_ALLOWED_ROOTS` | none | Comma-separated list of allowed working directory roots. When set, sessions can only be created under these paths. Example: `CLAUDE_MOBILE_ALLOWED_ROOTS=~/workspace,~/projects` |
+| `CC_MOBILE_ALLOWED_ROOTS` | none | Comma-separated list of allowed working directory roots. When set, sessions can only be created under these paths. Example: `CC_MOBILE_ALLOWED_ROOTS=~/workspace,~/projects` |
 
 ## Network Access
 
@@ -148,7 +150,7 @@ Vite dev server proxies `/ws` and `/api` to Elysia backend on port 3001.
 ### Project Structure
 
 ```
-claude-code-mobile/
+cc-mobile/
 ├── server/
 │   ├── index.ts                # Elysia app entry
 │   ├── config.ts               # CLI flag + env var parsing

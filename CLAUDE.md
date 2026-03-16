@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Claude Code Mobile — a touch-optimized PWA for interacting with Claude Code from phones/tablets. Runs on the dev machine, accessed via Tailscale or local network. Translates terminal interactions (permission prompts, slash commands, agent invocations) into tap-friendly UI elements.
+CCMobile — a touch-optimized PWA for interacting with Claude Code from phones/tablets. Runs on the dev machine, accessed via Tailscale or local network. Translates terminal interactions (permission prompts, slash commands, agent invocations) into tap-friendly UI elements.
 
 ## Tech Stack
 
@@ -57,11 +57,11 @@ Client→Server: `new_session`, `send`, `command`, `permission`, `interrupt`, `g
 
 Server→Client: `session_created`, `stream_chunk`, `stream_end`, `permission_request`, `capabilities`, `result`, `error`, `server_config`
 
-Schemas defined in `server/protocol.ts`. Full spec in `claude-code-mobile.md`.
+Schemas defined in `server/protocol.ts`. Full spec in `cc-mobile.md`.
 
 ## Security Constraints
 
 - Permission mode defaults to `"default"` — configurable via `--permission-mode` CLI flag (ADR-003)
-- `CLAUDE_MOBILE_ALLOWED_ROOTS` env var restricts allowed working directories
+- `CC_MOBILE_ALLOWED_ROOTS` env var restricts allowed working directories
 - No auth layer on Tailscale (network membership = auth)
 - If exposing via Cloudflare Tunnel, auth must be added

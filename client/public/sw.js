@@ -1,9 +1,9 @@
 /**
- * Service Worker for Claude Code Mobile PWA
+ * Service Worker for CCMobile PWA
  * Strategy: Cache static assets, network-first for navigation, skip WebSocket and API
  */
 
-const CACHE_NAME = "claude-code-mobile-v1";
+const CACHE_NAME = "cc-mobile-v1";
 const STATIC_ASSETS = [
   "/",
   "/index.html",

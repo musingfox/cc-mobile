@@ -47,4 +47,4 @@ const _app = new Elysia()
   })
   .listen({ port: serverConfig.port, hostname: serverConfig.hostname });
 
-console.log(`claude-code-mobile server listening on ${serverConfig.hostname}:${serverConfig.port}`);
+console.log(`cc-mobile server listening on ${serverConfig.hostname}:${serverConfig.port}`);

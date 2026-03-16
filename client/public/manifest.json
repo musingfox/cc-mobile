@@ -1,6 +1,6 @@
 {
-  "name": "Claude Code Mobile",
-  "short_name": "Claude Code",
+  "name": "CCMobile",
+  "short_name": "CCMobile",
   "description": "Touch-optimized PWA for interacting with Claude Code from phones and tablets",
   "start_url": "/",
   "display": "standalone",

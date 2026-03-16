@@ -2,19 +2,19 @@ import { describe, expect, test } from "bun:test";
 import { parseServerConfig } from "../config";
 
 describe("parseServerConfig", () => {
-  const originalEnv = process.env.CLAUDE_MOBILE_ALLOWED_ROOTS;
+  const originalEnv = process.env.CC_MOBILE_ALLOWED_ROOTS;
 
   // Clean up after each test
   const cleanup = () => {
     if (originalEnv === undefined) {
-      delete process.env.CLAUDE_MOBILE_ALLOWED_ROOTS;
+      delete process.env.CC_MOBILE_ALLOWED_ROOTS;
     } else {
-      process.env.CLAUDE_MOBILE_ALLOWED_ROOTS = originalEnv;
+      process.env.CC_MOBILE_ALLOWED_ROOTS = originalEnv;
     }
   };
 
   test("defaults", () => {
-    delete process.env.CLAUDE_MOBILE_ALLOWED_ROOTS;
+    delete process.env.CC_MOBILE_ALLOWED_ROOTS;
     const result = parseServerConfig(["node", "index.ts"]);
     expect(result).toEqual({
       port: 3001,
@@ -27,7 +27,7 @@ describe("parseServerConfig", () => {
   });
 
   test("all flags", () => {
-    delete process.env.CLAUDE_MOBILE_ALLOWED_ROOTS;
+    delete process.env.CC_MOBILE_ALLOWED_ROOTS;
     const result = parseServerConfig([
       "node",
       "index.ts",

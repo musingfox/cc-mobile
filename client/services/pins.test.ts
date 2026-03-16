@@ -38,7 +38,7 @@ describe("PIN_SERVICE", () => {
   });
 
   test("T3: loadPins() with corrupt localStorage returns []", () => {
-    localStorage.setItem("claude-code-mobile-pinned-commands", "invalid json");
+    localStorage.setItem("cc-mobile-pinned-commands", "invalid json");
     const result = loadPins();
     expect(result).toEqual([]);
   });
