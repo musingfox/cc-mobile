@@ -1,4 +1,5 @@
 import type { PendingPermission } from "../stores/app-store";
+import PermissionFooter from "./PermissionFooter";
 
 type PermissionBarProps = {
   pending: PendingPermission | null;
@@ -9,32 +10,23 @@ type PermissionBarProps = {
 export default function PermissionBar({ pending, onApprove, onDeny }: PermissionBarProps) {
   if (!pending) return null;
 
-  const formatParams = (params: Record<string, unknown>) => {
-    const entries = Object.entries(params);
-    if (entries.length === 0) return "No parameters";
-
-    return entries
-      .map(([key, value]) => {
-        const strValue = typeof value === "string" ? value : JSON.stringify(value);
-        return `${key}: ${strValue.slice(0, 50)}${strValue.length > 50 ? "..." : ""}`;
-      })
-      .join(", ");
+  const handleRespond = (action: "approve" | "approve_session" | "deny") => {
+    if (action === "deny") {
+      onDeny();
+    } else {
+      // For now, both "approve" and "approve_session" call onApprove
+      // Full session-level allow is deferred
+      onApprove();
+    }
   };
 
   return (
     <div className="permission-bar">
-      <div className="permission-info">
-        <div className="permission-tool-name">{pending.tool.name}</div>
-        <div className="permission-params">{formatParams(pending.tool.parameters)}</div>
-      </div>
-      <div className="permission-actions">
-        <button type="button" className="permission-btn deny" onClick={onDeny}>
-          Deny
-        </button>
-        <button type="button" className="permission-btn approve" onClick={onApprove}>
-          Approve
-        </button>
-      </div>
+      <PermissionFooter
+        toolName={pending.tool.name}
+        parameters={pending.tool.parameters}
+        onRespond={handleRespond}
+      />
     </div>
   );
 }

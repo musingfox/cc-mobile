@@ -771,61 +771,64 @@ button {
 .permission-bar {
   position: sticky;
   bottom: 0;
-  background: #2a2a3e;
-  border-top: 2px solid #ffd700;
-  padding: 12px 16px;
-  display: flex;
-  gap: 12px;
-  align-items: center;
+  background: var(--bg-secondary);
+  border-top: 2px solid var(--accent-highlight);
   flex-shrink: 0;
   z-index: 10;
 }
 
-.permission-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.permission-tool-name {
-  font-weight: 600;
-  color: #ffd700;
-  margin-bottom: 4px;
-}
-
-.permission-params {
-  font-size: 13px;
-  color: #b0b0b0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.permission-actions {
+.permission-footer {
   display: flex;
-  gap: 8px;
-  flex-shrink: 0;
+  flex-direction: column;
+  gap: 0;
 }
 
-.permission-btn {
+.permission-option {
   min-height: 48px;
-  padding: 0 20px;
-  border-radius: 8px;
-  font-weight: 600;
-  transition: opacity 0.2s;
+  padding: 12px 16px;
+  border: none;
+  border-left: 3px solid transparent;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  text-align: left;
+  font-size: 15px;
+  font-weight: 500;
+  transition:
+    opacity 0.2s,
+    border-color 0.2s;
+  cursor: pointer;
 }
 
-.permission-btn:active {
+.permission-option:active {
   opacity: 0.7;
 }
 
-.permission-btn.deny {
-  background: #dc2626;
-  color: white;
+.permission-option.green {
+  color: #16a34a;
 }
 
-.permission-btn.approve {
-  background: #16a34a;
-  color: white;
+.permission-option.blue {
+  color: #3b82f6;
+}
+
+.permission-option.red {
+  color: #dc2626;
+}
+
+.permission-option.green.selected {
+  border-left-color: #16a34a;
+}
+
+.permission-option.blue.selected {
+  border-left-color: #3b82f6;
+}
+
+.permission-option.red.selected {
+  border-left-color: #dc2626;
+}
+
+.permission-option.unselected {
+  opacity: 0.3;
 }
 
 /* Usage Status Bar */
