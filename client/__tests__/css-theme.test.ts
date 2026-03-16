@@ -2,30 +2,17 @@ import { describe, expect, it } from "bun:test";
 
 describe("CSS Theme Variables", () => {
   it("dark theme has correct --bg-user-bubble color", async () => {
-    // Verify the dark theme user bubble color matches contract
-    const expectedColor = "#2c2c2e";
-    const cssContent = Bun.file("client/styles.css");
-    const text = await cssContent.text();
-
-    // Should find --bg-user-bubble in theme-dark section
+    const text = await Bun.file("client/styles.css").text();
     expect(text).toContain("--bg-user-bubble: #3a3a4e;");
   });
 
   it("light theme has correct --bg-user-bubble color", async () => {
-    // Verify the light theme user bubble color matches contract (warm beige)
-    const expectedColor = "#f0eee6";
-    const cssContent = Bun.file("client/styles.css");
-    const text = await cssContent.text();
-
+    const text = await Bun.file("client/styles.css").text();
     expect(text).toContain("--bg-user-bubble: #f0eee6;");
   });
 
   it("claude theme has correct --bg-user-bubble color", async () => {
-    // Verify the claude theme user bubble color matches contract
-    const expectedColor = "#ebe4d8";
-    const cssContent = Bun.file("client/styles.css");
-    const text = await cssContent.text();
-
+    const text = await Bun.file("client/styles.css").text();
     expect(text).toContain("--bg-user-bubble: #ebe4d8;");
   });
 
