@@ -152,7 +152,7 @@ describe("ChatView with ToolCard", () => {
     // Assistant message content should have .message-content class
     const messageContent = container.querySelector(".message.assistant .message-content");
     expect(messageContent).not.toBeNull();
-    expect(messageContent?.textContent).toBe("Hello user");
+    expect(messageContent?.textContent?.trim()).toBe("Hello user");
   });
 
   it("tool messages still use ToolCard component (not message-content)", () => {

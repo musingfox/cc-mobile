@@ -470,16 +470,20 @@ button {
   text-align: right;
 }
 
-/* Markdown rendering */
-.md-paragraph {
+/* Markdown rendering (marked + morphdom output) */
+.md-renderer {
+  line-height: 1.6;
+}
+
+.md-content p {
   margin: 0 0 8px 0;
 }
 
-.md-paragraph:last-child {
+.md-content p:last-child {
   margin-bottom: 0;
 }
 
-.md-inline-code {
+.md-content code {
   background: var(--bg-tertiary);
   color: var(--accent-command);
   padding: 2px 6px;
@@ -488,7 +492,7 @@ button {
   font-size: 0.9em;
 }
 
-.md-code-block {
+.md-content pre {
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
@@ -500,18 +504,83 @@ button {
   line-height: 1.5;
 }
 
-.md-code-block code {
+.md-content pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
   color: var(--text-primary);
+  font-size: inherit;
 }
 
-.md-list {
+.md-content ul,
+.md-content ol {
   margin: 4px 0;
   padding-left: 20px;
 }
 
-.md-list li {
+.md-content li {
   margin: 4px 0;
   line-height: 1.5;
+}
+
+.md-content h1,
+.md-content h2,
+.md-content h3 {
+  margin: 12px 0 8px 0;
+  font-weight: 600;
+}
+
+.md-content h1 {
+  font-size: 1.3em;
+}
+.md-content h2 {
+  font-size: 1.15em;
+}
+.md-content h3 {
+  font-size: 1.05em;
+}
+
+.md-content table {
+  border-collapse: collapse;
+  margin: 8px 0;
+  width: 100%;
+  overflow-x: auto;
+  display: block;
+  font-size: 14px;
+}
+
+.md-content th,
+.md-content td {
+  border: 1px solid var(--border-color);
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.md-content th {
+  background: var(--bg-tertiary);
+  font-weight: 600;
+}
+
+.md-content blockquote {
+  border-left: 3px solid var(--accent-primary);
+  margin: 8px 0;
+  padding: 4px 12px;
+  color: var(--text-secondary);
+}
+
+.md-content hr {
+  border: none;
+  border-top: 1px solid var(--border-color);
+  margin: 12px 0;
+}
+
+.md-content a {
+  color: var(--accent-primary);
+  text-decoration: none;
+}
+
+.md-content a:hover {
+  text-decoration: underline;
 }
 
 .message.assistant .message-content {
