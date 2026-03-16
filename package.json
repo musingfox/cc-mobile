@@ -6,6 +6,7 @@
     "dev:server": "bun run server/index.ts",
     "dev:client": "bunx vite",
     "dev": "bun run dev:server & bun run dev:client",
+    "serve": "./dev.sh",
     "build": "bunx vite build",
     "start": "bun run server/index.ts",
     "lint": "bunx biome check .",
