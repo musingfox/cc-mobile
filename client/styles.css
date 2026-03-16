@@ -193,6 +193,15 @@ button {
     border-color 0.2s;
 }
 
+.session-tab-main {
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
 .session-tab.active {
   color: var(--text-primary);
   border-bottom-color: var(--accent-primary);
