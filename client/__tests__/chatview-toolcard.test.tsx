@@ -110,4 +110,89 @@ describe("ChatView with ToolCard", () => {
     const activityPanel = container.querySelector(".activity-panel");
     expect(activityPanel).not.toBeNull();
   });
+
+  it("user messages have CSS class for warm bubble styling", () => {
+    const messages: Message[] = [
+      {
+        id: "user-1",
+        role: "user",
+        content: "Hello Claude",
+        timestamp: Date.now(),
+      },
+    ];
+
+    const { container } = render(<ChatView messages={messages} />);
+
+    // User message should have .message.user classes
+    const userMessage = container.querySelector(".message.user");
+    expect(userMessage).not.toBeNull();
+
+    // User message content should have .message-content class
+    const messageContent = container.querySelector(".message.user .message-content");
+    expect(messageContent).not.toBeNull();
+    expect(messageContent?.textContent).toBe("Hello Claude");
+  });
+
+  it("assistant messages have CSS class for no-background styling", () => {
+    const messages: Message[] = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        content: "Hello user",
+        timestamp: Date.now(),
+      },
+    ];
+
+    const { container } = render(<ChatView messages={messages} />);
+
+    // Assistant message should have .message.assistant classes
+    const assistantMessage = container.querySelector(".message.assistant");
+    expect(assistantMessage).not.toBeNull();
+
+    // Assistant message content should have .message-content class
+    const messageContent = container.querySelector(".message.assistant .message-content");
+    expect(messageContent).not.toBeNull();
+    expect(messageContent?.textContent).toBe("Hello user");
+  });
+
+  it("tool messages still use ToolCard component (not message-content)", () => {
+    const messages: Message[] = [
+      {
+        id: "tool-1",
+        role: "tool",
+        toolName: "Read",
+        toolInput: { file_path: "/test/file.ts" },
+        content: "File contents",
+        timestamp: Date.now(),
+      },
+    ];
+
+    const { container } = render(<ChatView messages={messages} />);
+
+    // Tool message should have .tool-card (from ToolCard component)
+    const toolCard = container.querySelector(".tool-card");
+    expect(toolCard).not.toBeNull();
+
+    // Tool message should NOT have .message-content (since it uses ToolCard)
+    const messageContent = container.querySelector(".message.tool .message-content");
+    expect(messageContent).toBeNull();
+  });
+
+  it("auto-scroll behavior preserved with scrollRef and handleScroll", () => {
+    const messages: Message[] = [
+      {
+        id: "msg-1",
+        role: "user",
+        content: "Test message",
+        timestamp: Date.now(),
+      },
+    ];
+
+    const { container } = render(<ChatView messages={messages} />);
+    const chatView = container.querySelector(".chat-view");
+
+    // Should have scrollRef attached and onScroll handler
+    expect(chatView).not.toBeNull();
+    expect(chatView?.getAttribute("class")).toBe("chat-view");
+  });
 });

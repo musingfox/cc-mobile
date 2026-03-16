@@ -30,6 +30,7 @@ body {
   --bg-tertiary: #2a2a3e;
   --bg-highlight: #1e3a5f;
   --bg-accent: #2d1f4e;
+  --bg-user-bubble: #2c2c2e;
   --text-primary: #e0e0e0;
   --text-secondary: #808080;
   --text-tertiary: #b0b0b0;
@@ -48,6 +49,7 @@ body {
   --bg-tertiary: #e5e5e5;
   --bg-highlight: #d0e8ff;
   --bg-accent: #f0e5ff;
+  --bg-user-bubble: #f0eee6;
   --text-primary: #1a1a1a;
   --text-secondary: #666666;
   --text-tertiary: #888888;
@@ -66,6 +68,7 @@ body {
   --bg-tertiary: #ddd4c5;
   --bg-highlight: #f0e5d5;
   --bg-accent: #f5e8dc;
+  --bg-user-bubble: #ebe4d8;
   --text-primary: #3d2e1e;
   --text-secondary: #6b5a47;
   --text-tertiary: #8a7865;
@@ -409,13 +412,13 @@ button {
 }
 
 .message.user .message-content {
-  background: var(--accent-primary);
-  color: white;
+  background: var(--bg-user-bubble);
+  color: var(--text-primary);
   border-bottom-right-radius: 4px;
 }
 
 .message.assistant .message-content {
-  background: var(--bg-tertiary);
+  background: transparent;
   color: var(--text-primary);
   border-bottom-left-radius: 4px;
 }
