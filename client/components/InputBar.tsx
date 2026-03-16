@@ -1,5 +1,8 @@
-import { type KeyboardEvent, useEffect, useMemo, useRef } from "react";
-import { type Capabilities, useAppStore } from "../stores/app-store";
+import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import { clearDraft, loadDraft, saveDraft } from "../services/draft-persistence";
+import { type Capabilities, type UsageData, useAppStore } from "../stores/app-store";
+import FloatingAutocomplete from "./FloatingAutocomplete";
+import InputStatus from "./InputStatus";
 
 type InputBarProps = {
   onSend: (content: string) => void;
@@ -7,6 +10,9 @@ type InputBarProps = {
   capabilities: Capabilities | null;
   onOpenCommandPanel: () => void;
   onOpenAgentPanel: () => void;
+  connected: boolean;
+  usage: UsageData | null;
+  activeSessionId: string | null;
 };
 
 export default function InputBar({
@@ -15,18 +21,53 @@ export default function InputBar({
   capabilities,
   onOpenCommandPanel,
   onOpenAgentPanel,
+  connected,
+  usage,
+  activeSessionId,
 }: InputBarProps) {
   const value = useAppStore((s) => s.inputDraft);
   const setValue = useAppStore((s) => s.setInputDraft);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const debounceTimerRef = useRef<number | null>(null);
 
+  // Load draft when activeSessionId changes
   useEffect(() => {
+    if (activeSessionId) {
+      const draft = loadDraft(activeSessionId);
+      setValue(draft);
+    } else {
+      setValue("");
+    }
+  }, [activeSessionId, setValue]);
+
+  // Auto-save draft on typing with debounce
+  useEffect(() => {
+    if (!activeSessionId) return;
+
+    if (debounceTimerRef.current !== null) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    debounceTimerRef.current = setTimeout(() => {
+      saveDraft(activeSessionId, value);
+    }, 500) as unknown as number;
+
+    return () => {
+      if (debounceTimerRef.current !== null) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, [value, activeSessionId]);
+
+  const resizeTextarea = () => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
       textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
     }
-  }, []);
+  };
 
+  const prevSuggestionsLenRef = useRef(0);
   const suggestions = useMemo(() => {
     if (!capabilities || !value) return [];
 
@@ -35,33 +76,61 @@ export default function InputBar({
       const query = trimmed.slice(1).toLowerCase();
       return capabilities.commands
         .filter((c) => c.toLowerCase().includes(query))
-        .map((c) => ({ label: `/${c}`, value: `/${c}`, type: "command" as const }));
+        .map((c) => ({ label: `/${c}`, type: "command" as const }));
     }
     if (trimmed.startsWith("@")) {
       const query = trimmed.slice(1).toLowerCase();
       return capabilities.agents
         .filter((a) => a.toLowerCase().includes(query))
-        .map((a) => ({ label: `@${a}`, value: `@${a}`, type: "agent" as const }));
+        .map((a) => ({ label: `@${a}`, type: "agent" as const }));
     }
     return [];
   }, [value, capabilities]);
+
+  // Reset selected index when suggestions list changes
+  if (suggestions.length !== prevSuggestionsLenRef.current) {
+    prevSuggestionsLenRef.current = suggestions.length;
+    setSelectedIndex(0);
+  }
 
   const handleSend = () => {
     const trimmed = value.trim();
     if (!trimmed || disabled) return;
     onSend(trimmed);
     setValue("");
+    if (activeSessionId) {
+      clearDraft(activeSessionId);
+    }
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
   };
 
-  const handleSelect = (item: { value: string }) => {
-    setValue(`${item.value} `);
+  const handleSelect = (label: string) => {
+    setValue(`${label} `);
     textareaRef.current?.focus();
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // Handle autocomplete navigation
+    if (suggestions.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSelectedIndex((prev) => (prev + 1) % suggestions.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelectedIndex((prev) => (prev - 1 + suggestions.length) % suggestions.length);
+        return;
+      }
+      if (e.key === "Tab") {
+        e.preventDefault();
+        handleSelect(suggestions[selectedIndex].label);
+        return;
+      }
+    }
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -70,20 +139,13 @@ export default function InputBar({
 
   return (
     <div className="input-bar-container">
-      {suggestions.length > 0 && (
-        <div className="autocomplete-list">
-          {suggestions.map((item) => (
-            <button
-              type="button"
-              key={item.value}
-              className={`autocomplete-item ${item.type}`}
-              onClick={() => handleSelect(item)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      )}
+      <FloatingAutocomplete
+        suggestions={suggestions}
+        selectedIndex={selectedIndex}
+        onSelect={handleSelect}
+        visible={suggestions.length > 0}
+      />
+      <InputStatus connected={connected} usage={usage} />
       <div className="input-bar">
         <button
           type="button"
@@ -107,7 +169,10 @@ export default function InputBar({
           ref={textareaRef}
           className="input-textarea"
           value={value}
-          onChange={(e) => setValue(e.target.value)}
+          onChange={(e) => {
+            setValue(e.target.value);
+            resizeTextarea();
+          }}
           onKeyDown={handleKeyDown}
           placeholder="Type a message, / for commands, @ for agents"
           disabled={disabled}

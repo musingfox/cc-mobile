@@ -1,5 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/react";
 import type { PendingPermission } from "../stores/app-store";
 import PermissionBar from "./PermissionBar";
 

@@ -10,13 +10,13 @@ describe("computeDiff", () => {
     expect(result[0].content).toBe("hello world");
     expect(result[0].oldLineNum).toBe(1);
     expect(result[0].highlights).toBeDefined();
-    expect(result[0].highlights!.length).toBeGreaterThan(0);
+    expect((result[0].highlights ?? []).length).toBeGreaterThan(0);
 
     expect(result[1].type).toBe("add");
     expect(result[1].content).toBe("hello earth");
     expect(result[1].newLineNum).toBe(1);
     expect(result[1].highlights).toBeDefined();
-    expect(result[1].highlights!.length).toBeGreaterThan(0);
+    expect((result[1].highlights ?? []).length).toBeGreaterThan(0);
   });
 
   it("2. multi-line with context produces context + add + remove lines", () => {

@@ -1,8 +1,11 @@
-import { describe, expect, it, mock } from "bun:test";
-import { render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, mock } from "bun:test";
+import { cleanup, render, screen } from "@testing-library/react";
 import ToolCard from "./ToolCard";
 
 describe("ToolCard", () => {
+  afterEach(() => {
+    cleanup();
+  });
   it("7. renders with collapsed state showing only header", () => {
     const onToggle = mock(() => {});
     const { container } = render(

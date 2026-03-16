@@ -98,6 +98,9 @@ export default function App() {
         capabilities={capabilities}
         onOpenCommandPanel={() => setOpenPanel("command")}
         onOpenAgentPanel={() => setOpenPanel("agent")}
+        connected={connectionState === "connected"}
+        usage={activeSession?.usage ?? null}
+        activeSessionId={activeSessionId}
       />
 
       {showSettings && <Settings onClose={() => setShowSettings(false)} />}
