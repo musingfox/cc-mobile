@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { getToolDefinition } from "../services/tool-registry";
+import DiffView from "./DiffView";
 
 type ToolCardProps = {
   toolName: string;
@@ -25,6 +27,11 @@ export default function ToolCard({
   const icon = toolDef?.icon || "🔧";
   const title = toolDef?.title(input) || toolName;
 
+  const [diffCollapsed, setDiffCollapsed] = useState(true);
+
+  // Check if this is an edit-type tool
+  const isEditTool = toolName === "Edit" && "old_string" in input && "new_string" in input;
+
   return (
     <div className="tool-card">
       <button type="button" className="tool-card-header" onClick={onToggle}>
@@ -42,7 +49,17 @@ export default function ToolCard({
       </button>
       {expanded && (
         <div className="tool-card-content">
-          <pre className="tool-card-output">{content}</pre>
+          {isEditTool ? (
+            <DiffView
+              oldString={String(input.old_string ?? "")}
+              newString={String(input.new_string ?? "")}
+              filePath={typeof input.file_path === "string" ? input.file_path : undefined}
+              collapsed={diffCollapsed}
+              onToggle={() => setDiffCollapsed(!diffCollapsed)}
+            />
+          ) : (
+            <pre className="tool-card-output">{content}</pre>
+          )}
           {children}
         </div>
       )}

@@ -190,4 +190,55 @@ describe("ToolCard", () => {
 
     expect(screen.getByText("▶")).toBeDefined();
   });
+
+  it("8. Edit tool with toolInput renders DiffView collapsed", () => {
+    const onToggle = mock(() => {});
+    const { container } = render(
+      <ToolCard
+        toolName="Edit"
+        input={{
+          file_path: "/test/file.txt",
+          old_string: "hello world",
+          new_string: "hello earth",
+        }}
+        content=""
+        expanded={true}
+        onToggle={onToggle}
+      />,
+    );
+
+    // Should render DiffView
+    expect(container.querySelector(".diff-view")).not.toBeNull();
+
+    // DiffView should be collapsed by default
+    expect(container.querySelector(".diff-view-content")).toBeNull();
+
+    // Should show change counts
+    expect(screen.getByText("+1")).toBeDefined();
+    expect(screen.getByText("-1")).toBeDefined();
+  });
+
+  it("9. non-edit tool renders plain content", () => {
+    const onToggle = mock(() => {});
+    const content = `file1.txt
+file2.txt`;
+    const { container } = render(
+      <ToolCard
+        toolName="Bash"
+        input={{ command: "ls -la" }}
+        content={content}
+        expanded={true}
+        onToggle={onToggle}
+      />,
+    );
+
+    // Should NOT render DiffView
+    expect(container.querySelector(".diff-view")).toBeNull();
+
+    // Should render plain content
+    const output = container.querySelector(".tool-card-output");
+    expect(output).not.toBeNull();
+    expect(output?.textContent).toContain("file1.txt");
+    expect(output?.textContent).toContain("file2.txt");
+  });
 });

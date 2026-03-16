@@ -1456,3 +1456,163 @@ button {
 .input-bar-slash-btn:active:not(:disabled) {
   opacity: 0.7;
 }
+
+/* Diff View */
+.diff-view {
+  display: flex;
+  flex-direction: column;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-tertiary);
+  margin-top: 8px;
+}
+
+.diff-view-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  min-height: 44px;
+  background: var(--bg-secondary);
+  border: none;
+  cursor: pointer;
+  user-select: none;
+  text-align: left;
+  width: 100%;
+  transition: opacity 0.2s;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.diff-view-header:active {
+  opacity: 0.7;
+}
+
+.diff-view-expand-icon {
+  font-size: 12px;
+  color: var(--text-secondary);
+  transition: transform 0.2s;
+  flex-shrink: 0;
+}
+
+.diff-view-file-path {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  font-family: "Courier New", monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diff-view-stats {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: "Courier New", monospace;
+  flex-shrink: 0;
+}
+
+.diff-stat-add {
+  color: var(--accent-success);
+}
+
+.diff-stat-remove {
+  color: var(--accent-error);
+}
+
+.diff-view-content {
+  display: flex;
+  flex-direction: column;
+  overflow-x: auto;
+  background: var(--bg-primary);
+  font-family: "Courier New", monospace;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.diff-line {
+  display: flex;
+  align-items: center;
+  min-height: 20px;
+  white-space: pre;
+}
+
+.diff-line-context {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.diff-line-add {
+  background: rgba(34, 197, 94, 0.1);
+  color: var(--text-primary);
+}
+
+.theme-light .diff-line-add {
+  background: rgba(34, 197, 94, 0.15);
+}
+
+.theme-claude .diff-line-add {
+  background: rgba(111, 169, 104, 0.15);
+}
+
+.diff-line-remove {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--text-primary);
+}
+
+.theme-light .diff-line-remove {
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.theme-claude .diff-line-remove {
+  background: rgba(217, 95, 74, 0.15);
+}
+
+.diff-line-num {
+  display: inline-block;
+  width: 40px;
+  padding: 0 8px;
+  text-align: right;
+  color: var(--text-secondary);
+  user-select: none;
+  flex-shrink: 0;
+  font-size: 12px;
+}
+
+.diff-line-prefix {
+  display: inline-block;
+  width: 16px;
+  padding: 0 4px;
+  text-align: center;
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+.diff-line-add .diff-line-prefix {
+  color: var(--accent-success);
+}
+
+.diff-line-remove .diff-line-prefix {
+  color: var(--accent-error);
+}
+
+.diff-line-content {
+  flex: 1;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.diff-highlight {
+  background: rgba(255, 215, 0, 0.3);
+  font-weight: 600;
+}
+
+.theme-light .diff-highlight {
+  background: rgba(245, 158, 11, 0.25);
+}
+
+.theme-claude .diff-highlight {
+  background: rgba(224, 165, 70, 0.25);
+}
