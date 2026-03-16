@@ -289,6 +289,16 @@ button {
   opacity: 0.7;
 }
 
+.saved-project-main {
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
 .saved-project-label {
   font-weight: 500;
 }
