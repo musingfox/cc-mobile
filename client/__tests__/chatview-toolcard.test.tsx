@@ -65,9 +65,9 @@ describe("ChatView with ToolCard", () => {
 
     expect(screen.getByText("file1.ts")).toBeDefined();
     expect(screen.getByText("file2.ts")).toBeDefined();
-    // Use getAllByText for multiple icons
-    const toolCards = container.querySelectorAll(".tool-card");
-    expect(toolCards.length).toBe(2);
+    // Both render as chips (collapsed by default)
+    const toolChips = container.querySelectorAll(".tool-chip");
+    expect(toolChips.length).toBe(2);
   });
 
   it("preserves auto-scroll functionality", () => {
@@ -169,9 +169,9 @@ describe("ChatView with ToolCard", () => {
 
     const { container } = render(<ChatView messages={messages} />);
 
-    // Tool message should have .tool-card (from ToolCard component)
-    const toolCard = container.querySelector(".tool-card");
-    expect(toolCard).not.toBeNull();
+    // Tool message should have .tool-chip (collapsed ToolCard)
+    const toolChip = container.querySelector(".tool-chip");
+    expect(toolChip).not.toBeNull();
 
     // Tool message should NOT have .message-content (since it uses ToolCard)
     const messageContent = container.querySelector(".message.tool .message-content");

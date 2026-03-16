@@ -14,7 +14,7 @@ type ToolCardProps = {
   isRunning?: boolean;
   expanded: boolean;
   onToggle: () => void;
-  children?: React.ReactNode; // For permission footer slot
+  children?: React.ReactNode;
 };
 
 /** Try to parse JSON, returns parsed object or null */
@@ -49,41 +49,48 @@ export default function ToolCard({
   const theme = useSettingsStore((s) => s.theme);
 
   const [diffCollapsed, setDiffCollapsed] = useState(true);
-
-  // Check if this is an edit-type tool
   const isEditTool = toolName === "Edit" && "old_string" in input && "new_string" in input;
 
+  // Collapsed: render as compact inline chip
+  if (!expanded) {
+    return (
+      <button type="button" className="tool-chip" onClick={onToggle}>
+        <span className="tool-chip-icon">{icon}</span>
+        <span className="tool-chip-title">{title}</span>
+        {isRunning && elapsedSeconds !== undefined && (
+          <span className="tool-chip-elapsed">
+            {elapsedSeconds < 60
+              ? `${Math.floor(elapsedSeconds)}s`
+              : `${Math.floor(elapsedSeconds / 60)}m${Math.floor(elapsedSeconds % 60)}s`}
+          </span>
+        )}
+        {isRunning && <span className="tool-chip-spinner">⏳</span>}
+      </button>
+    );
+  }
+
+  // Expanded: full card with content
   return (
     <div className="tool-card">
       <button type="button" className="tool-card-header" onClick={onToggle}>
-        <span className="tool-card-expand-icon">{expanded ? "▼" : "▶"}</span>
         <span className="tool-card-icon">{icon}</span>
         <span className="tool-card-title">{title}</span>
-        {isRunning && elapsedSeconds !== undefined && (
-          <span className="tool-card-elapsed">
-            {elapsedSeconds < 60
-              ? `${Math.floor(elapsedSeconds)}s`
-              : `${Math.floor(elapsedSeconds / 60)}m ${Math.floor(elapsedSeconds % 60)}s`}
-          </span>
-        )}
-        {isRunning && <span className="tool-card-spinner">⏳</span>}
+        <span className="tool-card-collapse">▼</span>
       </button>
-      {expanded && (
-        <div className="tool-card-content">
-          {isEditTool ? (
-            <DiffView
-              oldString={String(input.old_string ?? "")}
-              newString={String(input.new_string ?? "")}
-              filePath={typeof input.file_path === "string" ? input.file_path : undefined}
-              collapsed={diffCollapsed}
-              onToggle={() => setDiffCollapsed(!diffCollapsed)}
-            />
-          ) : (
-            <ToolOutput content={content} toolName={toolName} theme={theme} />
-          )}
-          {children}
-        </div>
-      )}
+      <div className="tool-card-content">
+        {isEditTool ? (
+          <DiffView
+            oldString={String(input.old_string ?? "")}
+            newString={String(input.new_string ?? "")}
+            filePath={typeof input.file_path === "string" ? input.file_path : undefined}
+            collapsed={diffCollapsed}
+            onToggle={() => setDiffCollapsed(!diffCollapsed)}
+          />
+        ) : (
+          <ToolOutput content={content} toolName={toolName} theme={theme} />
+        )}
+        {children}
+      </div>
     </div>
   );
 }
@@ -98,7 +105,6 @@ function ToolOutput({
   toolName: string;
   theme: string;
 }) {
-  // 1. Try JSON tree view
   const parsed = tryParseJson(content);
   if (parsed !== null) {
     return (
@@ -112,7 +118,6 @@ function ToolOutput({
     );
   }
 
-  // 2. Try ANSI rendering
   if (hasAnsiCodes(content)) {
     return (
       <pre className="tool-output-ansi">
@@ -121,6 +126,5 @@ function ToolOutput({
     );
   }
 
-  // 3. Plain text fallback
   return <pre className="tool-card-output">{content}</pre>;
 }

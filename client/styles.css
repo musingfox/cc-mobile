@@ -665,7 +665,53 @@ button {
   }
 }
 
-/* Tool Card */
+/* Tool Chip (collapsed state) */
+.tool-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 16px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  max-width: 100%;
+}
+
+.tool-chip:active {
+  opacity: 0.7;
+}
+
+.tool-chip-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.tool-chip-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-chip-elapsed {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.tool-chip-spinner {
+  font-size: 12px;
+  flex-shrink: 0;
+  animation: pulse 1s infinite;
+}
+
+/* Tool Card (expanded state) */
 .tool-card {
   display: flex;
   flex-direction: column;
@@ -680,14 +726,16 @@ button {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px;
-  min-height: 48px;
+  padding: 8px 12px;
+  min-height: 40px;
   background: transparent;
   border: none;
   cursor: pointer;
   user-select: none;
   text-align: left;
   width: 100%;
+  color: inherit;
+  font: inherit;
   transition: opacity 0.2s;
 }
 
@@ -695,21 +743,14 @@ button {
   opacity: 0.7;
 }
 
-.tool-card-expand-icon {
-  font-size: 12px;
-  color: var(--text-secondary);
-  transition: transform 0.2s;
-  flex-shrink: 0;
-}
-
 .tool-card-icon {
-  font-size: 18px;
+  font-size: 16px;
   flex-shrink: 0;
 }
 
 .tool-card-title {
   flex: 1;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--text-primary);
   overflow: hidden;
@@ -717,20 +758,10 @@ button {
   white-space: nowrap;
 }
 
-.tool-card-elapsed {
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
+.tool-card-collapse {
+  font-size: 10px;
   color: var(--text-secondary);
-  background: var(--bg-primary);
-  padding: 2px 8px;
-  border-radius: 8px;
   flex-shrink: 0;
-}
-
-.tool-card-spinner {
-  font-size: 14px;
-  flex-shrink: 0;
-  animation: pulse 1s infinite;
 }
 
 .tool-card-content {

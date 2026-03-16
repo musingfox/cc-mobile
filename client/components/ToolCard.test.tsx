@@ -95,8 +95,8 @@ describe("ToolCard", () => {
       />,
     );
 
-    expect(container.querySelector(".tool-card-elapsed")).toBeNull();
-    expect(container.querySelector(".tool-card-spinner")).toBeNull();
+    expect(container.querySelector(".tool-chip-elapsed")).toBeNull();
+    expect(container.querySelector(".tool-chip-spinner")).toBeNull();
   });
 
   it("formats elapsed time correctly (minutes and seconds)", () => {
@@ -113,7 +113,7 @@ describe("ToolCard", () => {
       />,
     );
 
-    expect(screen.getByText("2m 5s")).toBeDefined();
+    expect(screen.getByText("2m5s")).toBeDefined();
   });
 
   it("uses generic icon for unknown tool", () => {
@@ -179,9 +179,9 @@ describe("ToolCard", () => {
     expect(screen.getByText("▼")).toBeDefined();
   });
 
-  it("uses expand icon when collapsed", () => {
+  it("renders as chip when collapsed", () => {
     const onToggle = mock(() => {});
-    render(
+    const { container } = render(
       <ToolCard
         toolName="Read"
         input={{ file_path: "/test/file.txt" }}
@@ -191,7 +191,8 @@ describe("ToolCard", () => {
       />,
     );
 
-    expect(screen.getByText("▶")).toBeDefined();
+    expect(container.querySelector(".tool-chip")).not.toBeNull();
+    expect(container.querySelector(".tool-card")).toBeNull();
   });
 
   it("8. Edit tool with toolInput renders DiffView collapsed", () => {
