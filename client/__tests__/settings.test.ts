@@ -1,18 +1,22 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { loadSettings, saveSettings } from "../services/settings";
 
-// Mock localStorage
+// Mock localStorage (use defineProperty since happy-dom makes it readonly)
 const mockStorage = new Map<string, string>();
-global.localStorage = {
-  getItem: (key: string) => mockStorage.get(key) ?? null,
-  setItem: (key: string, value: string) => mockStorage.set(key, value),
-  removeItem: (key: string) => mockStorage.delete(key),
-  clear: () => mockStorage.clear(),
-  key: (index: number) => Array.from(mockStorage.keys())[index] ?? null,
-  get length() {
-    return mockStorage.size;
+Object.defineProperty(global, "localStorage", {
+  value: {
+    getItem: (key: string) => mockStorage.get(key) ?? null,
+    setItem: (key: string, value: string) => mockStorage.set(key, value),
+    removeItem: (key: string) => mockStorage.delete(key),
+    clear: () => mockStorage.clear(),
+    key: (index: number) => Array.from(mockStorage.keys())[index] ?? null,
+    get length() {
+      return mockStorage.size;
+    },
   },
-};
+  writable: true,
+  configurable: true,
+});
 
 describe("settings service", () => {
   beforeEach(() => {

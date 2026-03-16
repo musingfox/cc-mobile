@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ActiveAgent, ActiveTool, Message } from "../stores/app-store";
 import ActivityPanel from "./ActivityPanel";
+import ToolCard from "./ToolCard";
 
 type ChatViewProps = {
   messages: Message[];
@@ -79,17 +80,13 @@ export default function ChatView({
       {messages.map((msg) => (
         <div key={msg.id} className={`message ${msg.role}`}>
           {msg.role === "tool" ? (
-            <button
-              type="button"
-              className={`message-content ${expandedTools.has(msg.id) ? "tool-expanded" : ""}`}
-              onClick={() => toggleToolExpanded(msg.id)}
-            >
-              <div className="tool-header">
-                <span className="tool-expand-icon">▶</span>
-                <span>Tool: {msg.toolName || "Unknown"}</span>
-              </div>
-              {expandedTools.has(msg.id) && <div className="tool-details">{msg.content}</div>}
-            </button>
+            <ToolCard
+              toolName={msg.toolName || "Unknown"}
+              input={msg.toolInput || {}}
+              content={msg.content}
+              expanded={expandedTools.has(msg.id)}
+              onToggle={() => toggleToolExpanded(msg.id)}
+            />
           ) : (
             <div className="message-content">{msg.content}</div>
           )}

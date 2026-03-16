@@ -498,6 +498,93 @@ button {
   }
 }
 
+/* Tool Card */
+.tool-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-highlight);
+  border-radius: 8px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.tool-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  min-height: 48px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  user-select: none;
+  text-align: left;
+  width: 100%;
+  transition: opacity 0.2s;
+}
+
+.tool-card-header:active {
+  opacity: 0.7;
+}
+
+.tool-card-expand-icon {
+  font-size: 12px;
+  color: var(--text-secondary);
+  transition: transform 0.2s;
+  flex-shrink: 0;
+}
+
+.tool-card-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.tool-card-title {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-card-elapsed {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  background: var(--bg-primary);
+  padding: 2px 8px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.tool-card-spinner {
+  font-size: 14px;
+  flex-shrink: 0;
+  animation: pulse 1s infinite;
+}
+
+.tool-card-content {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border-color);
+}
+
+.tool-card-output {
+  padding: 12px;
+  margin: 0;
+  font-family: "Courier New", monospace;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  overflow-x: auto;
+  max-height: 300px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* Activity Panel */
 .activity-panel {
   display: flex;

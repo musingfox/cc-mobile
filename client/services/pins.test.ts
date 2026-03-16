@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { loadPins, savePins } from "./pins";
 
-// Mock localStorage
+// Mock localStorage (use defineProperty since happy-dom makes it readonly)
 const localStorageMock = (() => {
   let store: Record<string, string> = {};
 
@@ -19,7 +19,11 @@ const localStorageMock = (() => {
   };
 })();
 
-global.localStorage = localStorageMock as unknown as Storage;
+Object.defineProperty(global, "localStorage", {
+  value: localStorageMock,
+  writable: true,
+  configurable: true,
+});
 
 describe("PIN_SERVICE", () => {
   beforeEach(() => {

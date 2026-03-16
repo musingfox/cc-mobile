@@ -7,6 +7,7 @@ export type Message = {
   content: string;
   timestamp: number;
   toolName?: string;
+  toolInput?: Record<string, unknown>;
 };
 
 export type PendingPermission = {
