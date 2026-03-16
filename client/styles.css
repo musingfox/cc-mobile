@@ -114,15 +114,25 @@ button {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
+  padding: 6px 16px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
-  font-size: 14px;
+  font-size: 13px;
   flex-shrink: 0;
 }
 
-.status-bar > span {
+.status-label {
   flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-usage {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
 }
 
 .status-settings-btn {

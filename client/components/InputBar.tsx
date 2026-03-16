@@ -1,8 +1,7 @@
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { clearDraft, loadDraft, saveDraft } from "../services/draft-persistence";
-import { type Capabilities, type UsageData, useAppStore } from "../stores/app-store";
+import { type Capabilities, useAppStore } from "../stores/app-store";
 import FloatingAutocomplete from "./FloatingAutocomplete";
-import InputStatus from "./InputStatus";
 
 type InputBarProps = {
   onSend: (content: string) => void;
@@ -10,8 +9,6 @@ type InputBarProps = {
   capabilities: Capabilities | null;
   onOpenCommandPanel: () => void;
   onOpenAgentPanel: () => void;
-  connected: boolean;
-  usage: UsageData | null;
   activeSessionId: string | null;
 };
 
@@ -21,8 +18,6 @@ export default function InputBar({
   capabilities,
   onOpenCommandPanel,
   onOpenAgentPanel,
-  connected,
-  usage,
   activeSessionId,
 }: InputBarProps) {
   const value = useAppStore((s) => s.inputDraft);
@@ -145,7 +140,6 @@ export default function InputBar({
         onSelect={handleSelect}
         visible={suggestions.length > 0}
       />
-      <InputStatus connected={connected} usage={usage} />
       <div className="input-bar">
         <button
           type="button"

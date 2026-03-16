@@ -47,10 +47,23 @@ export default function App() {
       case "connecting":
         return "Connecting...";
       case "connected":
-        return `Connected${activeSession ? ` — ${activeSession.cwd}` : ""}`;
+        return `Connected${activeSession ? ` — ${activeSession.cwd.split("/").pop()}` : ""}`;
       case "disconnected":
         return "Disconnected";
     }
+  };
+
+  const formatUsage = () => {
+    const usage = activeSession?.usage;
+    if (!usage) return null;
+    const tokens = usage.inputTokens + usage.outputTokens;
+    const t =
+      tokens >= 1_000_000
+        ? `${(tokens / 1_000_000).toFixed(1)}M`
+        : tokens >= 1_000
+          ? `${(tokens / 1_000).toFixed(1)}k`
+          : String(tokens);
+    return `$${usage.totalCost.toFixed(2)} · ${t} · ${usage.turns}t`;
   };
 
   const isDisabled = connectionState !== "connected" || !activeSessionId;
@@ -59,7 +72,8 @@ export default function App() {
     <div className={`app theme-${theme}`}>
       <div className="status-bar">
         <div className={`status-dot ${connectionState}`} />
-        <span>{getStatusLabel()}</span>
+        <span className="status-label">{getStatusLabel()}</span>
+        {formatUsage() && <span className="status-usage">{formatUsage()}</span>}
         <button type="button" className="status-settings-btn" onClick={() => setShowSettings(true)}>
           ⚙
         </button>
@@ -95,8 +109,6 @@ export default function App() {
         capabilities={capabilities}
         onOpenCommandPanel={() => setOpenPanel("command")}
         onOpenAgentPanel={() => setOpenPanel("agent")}
-        connected={connectionState === "connected"}
-        usage={activeSession?.usage ?? null}
         activeSessionId={activeSessionId}
       />
 
