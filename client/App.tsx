@@ -1,3 +1,4 @@
+import { Settings as SettingsIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import ChatView from "./components/ChatView";
 import DebugOverlay from "./components/DebugOverlay";
@@ -8,6 +9,7 @@ import QuickActions from "./components/QuickActions";
 import SessionListModal from "./components/SessionListModal";
 import SessionTabs from "./components/SessionTabs";
 import Settings from "./components/Settings";
+import ToastProvider from "./components/toasts/ToastProvider";
 import { wsService } from "./services/ws-service";
 import { useAppStore } from "./stores/app-store";
 import { useSettingsStore } from "./stores/settings-store";
@@ -71,12 +73,14 @@ export default function App() {
 
   return (
     <div className={`app theme-${theme}`}>
+      <ToastProvider theme={theme} />
+
       <div className="status-bar">
         <div className={`status-dot ${connectionState}`} />
         <span className="status-label">{getStatusLabel()}</span>
         {formatUsage() && <span className="status-usage">{formatUsage()}</span>}
         <button type="button" className="status-settings-btn" onClick={() => setShowSettings(true)}>
-          ⚙
+          <SettingsIcon size={20} />
         </button>
       </div>
 

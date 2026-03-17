@@ -2169,3 +2169,59 @@ button {
   opacity: 0.3;
   cursor: not-allowed;
 }
+
+/* Lucide icon alignment */
+.lucide {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.activity-tool-icon-svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Vaul drawer styles */
+.drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+}
+
+.drawer-content {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  max-height: 85vh;
+  background: var(--bg-primary);
+  border-radius: 16px 16px 0 0;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  outline: none;
+}
+
+.drawer-handle {
+  width: 36px;
+  height: 4px;
+  background: var(--text-secondary);
+  border-radius: 2px;
+  margin: 8px auto;
+  opacity: 0.5;
+}
+
+.drawer-title {
+  font-size: 18px;
+  font-weight: 600;
+  padding: 8px 16px 12px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}

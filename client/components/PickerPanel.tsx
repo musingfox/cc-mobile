@@ -1,7 +1,9 @@
+import { Star } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { loadPins, savePins, togglePin } from "../services/pins";
 import type { Capabilities } from "../stores/app-store";
 import { filterAndSortItems } from "../utils/command-filter";
+import DrawerBase from "./drawers/DrawerBase";
 
 type PickerPanelProps = {
   mode: "command" | "agent";
@@ -50,80 +52,61 @@ export default function PickerPanel({
     onSelect(value);
   };
 
-  const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  };
-
   const placeholder = mode === "command" ? "Search commands..." : "Search agents...";
 
   return (
-    <div
-      className="command-panel-overlay"
-      role="dialog"
-      tabIndex={-1}
-      onClick={handleBackdropClick}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") onClose();
+    <DrawerBase
+      open={true}
+      onOpenChange={(open) => {
+        if (!open) onClose();
       }}
     >
-      <div className="command-panel">
-        <div className="command-panel-header">
-          <input
-            type="text"
-            className="command-panel-search"
-            placeholder={placeholder}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          <button
-            type="button"
-            className="command-panel-close-btn"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            ✕
-          </button>
-        </div>
-
-        <div className="command-panel-list">
-          {!capabilities ? (
-            <div className="command-panel-loading">Loading...</div>
-          ) : filteredItems.length === 0 ? (
-            <div className="command-panel-empty">No results found</div>
-          ) : (
-            filteredItems.map((item) => (
-              <div
-                key={item.value}
-                role="option"
-                tabIndex={0}
-                className={`command-panel-item ${item.pinned ? "pinned" : ""}`}
-                onClick={() => handleSelect(item.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") handleSelect(item.value);
-                }}
-              >
-                <span className={`type-badge ${item.type}`}>
-                  {item.type === "command" ? "CMD" : "AGT"}
-                </span>
-                <span className="command-panel-label">{item.label}</span>
-                <button
-                  type="button"
-                  className="command-panel-pin-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleTogglePin(item.value);
-                  }}
-                  aria-label={item.pinned ? "Unpin" : "Pin"}
-                >
-                  {item.pinned ? "★" : "☆"}
-                </button>
-              </div>
-            ))
-          )}
-        </div>
+      <div className="command-panel-header">
+        <input
+          type="text"
+          className="command-panel-search"
+          placeholder={placeholder}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
       </div>
-    </div>
+
+      <div className="command-panel-list">
+        {!capabilities ? (
+          <div className="command-panel-loading">Loading...</div>
+        ) : filteredItems.length === 0 ? (
+          <div className="command-panel-empty">No results found</div>
+        ) : (
+          filteredItems.map((item) => (
+            <div
+              key={item.value}
+              role="option"
+              tabIndex={0}
+              className={`command-panel-item ${item.pinned ? "pinned" : ""}`}
+              onClick={() => handleSelect(item.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") handleSelect(item.value);
+              }}
+            >
+              <span className={`type-badge ${item.type}`}>
+                {item.type === "command" ? "CMD" : "AGT"}
+              </span>
+              <span className="command-panel-label">{item.label}</span>
+              <button
+                type="button"
+                className="command-panel-pin-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleTogglePin(item.value);
+                }}
+                aria-label={item.pinned ? "Unpin" : "Pin"}
+              >
+                {item.pinned ? <Star size={16} fill="currentColor" /> : <Star size={16} />}
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+    </DrawerBase>
   );
 }

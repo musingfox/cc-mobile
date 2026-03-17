@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ActiveAgent, ActiveTool, Message } from "../stores/app-store";
 import ActivityPanel from "./ActivityPanel";
+import AnimatedMessage from "./animated/AnimatedMessage";
 import MarkdownRenderer from "./MarkdownRenderer";
 import ToolCard from "./ToolCard";
 
@@ -78,23 +79,29 @@ export default function ChatView({
           )}
         </div>
       )}
-      {messages.map((msg) => (
-        <div key={msg.id} className={`message ${msg.role}`}>
-          {msg.role === "tool" ? (
-            <ToolCard
-              toolName={msg.toolName || "Unknown"}
-              input={msg.toolInput || {}}
-              content={msg.content}
-              expanded={expandedTools.has(msg.id)}
-              onToggle={() => toggleToolExpanded(msg.id)}
-            />
-          ) : (
-            <div className="message-content">
-              {msg.role === "assistant" ? <MarkdownRenderer content={msg.content} /> : msg.content}
-            </div>
-          )}
-          <div className="message-timestamp">{formatTimestamp(msg.timestamp)}</div>
-        </div>
+      {messages.map((msg, i) => (
+        <AnimatedMessage key={msg.id} index={i} className={`message ${msg.role}`}>
+          <div>
+            {msg.role === "tool" ? (
+              <ToolCard
+                toolName={msg.toolName || "Unknown"}
+                input={msg.toolInput || {}}
+                content={msg.content}
+                expanded={expandedTools.has(msg.id)}
+                onToggle={() => toggleToolExpanded(msg.id)}
+              />
+            ) : (
+              <div className="message-content">
+                {msg.role === "assistant" ? (
+                  <MarkdownRenderer content={msg.content} />
+                ) : (
+                  msg.content
+                )}
+              </div>
+            )}
+            <div className="message-timestamp">{formatTimestamp(msg.timestamp)}</div>
+          </div>
+        </AnimatedMessage>
       ))}
       {isStreaming && (
         <>

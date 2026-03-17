@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { loadProjects, removeProject } from "../services/projects";
 import { wsService } from "../services/ws-service";
@@ -86,7 +87,7 @@ export default function SessionTabs() {
                 className="session-tab-close"
                 onClick={(e) => handleClose(e, session.id)}
               >
-                ×
+                <X size={20} />
               </button>
             )}
           </div>
@@ -108,7 +109,7 @@ export default function SessionTabs() {
             className="global-error-dismiss"
             onClick={() => setGlobalError(null)}
           >
-            ×
+            <X size={20} />
           </button>
         </div>
       )}
@@ -132,7 +133,7 @@ export default function SessionTabs() {
                     className="saved-project-remove"
                     onClick={(e) => handleRemoveProject(e, project.cwd)}
                   >
-                    ×
+                    <X size={20} />
                   </button>
                 </div>
               ))}

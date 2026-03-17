@@ -1,5 +1,7 @@
+import { Wrench } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ActiveAgent, ActiveTool } from "../stores/app-store";
+import { toolIconMap } from "./icons";
 
 type ActivityPanelProps = {
   activeTools: Map<string, ActiveTool>;
@@ -7,23 +9,9 @@ type ActivityPanelProps = {
   activeHook?: { hookId: string; hookName: string } | null;
 };
 
-const TOOL_ICONS: Record<string, string> = {
-  Read: "eye",
-  Write: "pencil",
-  Edit: "pencil",
-  MultiEdit: "pencil",
-  Bash: "terminal",
-  Grep: "search",
-  Glob: "folder",
-  Agent: "cpu",
-  Skill: "zap",
-  WebFetch: "globe",
-  WebSearch: "globe",
-  NotebookEdit: "file-text",
-};
-
-function getToolIcon(toolName: string): string {
-  return TOOL_ICONS[toolName] ?? "tool";
+function getToolIcon(toolName: string) {
+  const IconComponent = toolIconMap[toolName] || Wrench;
+  return <IconComponent size={16} className="activity-tool-icon-svg" />;
 }
 
 function truncate(str: string, maxLen: number): string {
@@ -93,7 +81,7 @@ function ToolItem({
   return (
     <div className={`activity-tool-card ${nested ? "nested" : ""}`}>
       <div className="activity-tool-card-header">
-        <span className="activity-tool-icon" data-icon={icon} />
+        <span className="activity-tool-icon">{icon}</span>
         <span className="activity-tool-name">{tool.toolName}</span>
         <span className="activity-tool-elapsed">{elapsed}</span>
       </div>

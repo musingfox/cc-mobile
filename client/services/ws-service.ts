@@ -3,6 +3,7 @@ import { useAppStore } from "../stores/app-store";
 import { useSettingsStore } from "../stores/settings-store";
 import { notificationService } from "./notification";
 import { saveProject } from "./projects";
+import { toastService } from "./toast-service";
 import {
   isHookResponse,
   isHookStarted,
@@ -324,8 +325,12 @@ class WsService {
           });
           // Background notification when page is hidden
           const settingsStore = useSettingsStore.getState();
-          if (settingsStore.notificationsEnabled && document.hidden) {
-            notificationService.showPermissionNotification((msg.tool as { name: string }).name);
+          const toolName = (msg.tool as { name: string }).name;
+          if (document.hidden) {
+            toastService.info(`Permission requested: ${toolName}`);
+            if (settingsStore.notificationsEnabled) {
+              notificationService.showPermissionNotification(toolName);
+            }
           }
         }
         break;
@@ -349,6 +354,7 @@ class WsService {
           store.setStreaming(sessionId, false);
         } else {
           store.setGlobalError(msg.message as string);
+          toastService.error(msg.message as string);
         }
         break;
 

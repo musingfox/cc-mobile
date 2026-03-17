@@ -1,3 +1,4 @@
+import { Mic, Send, Square } from "lucide-react";
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { clearDraft, loadDraft, saveDraft } from "../services/draft-persistence";
 import { voiceInputService } from "../services/voice-input";
@@ -200,7 +201,7 @@ export default function InputBar({
             disabled={disabled}
             aria-label={isListening ? "Stop voice input" : "Start voice input"}
           >
-            {isListening ? "⏹" : "🎤"}
+            {isListening ? <Square size={16} /> : <Mic size={20} />}
           </button>
         )}
         <button
@@ -210,7 +211,7 @@ export default function InputBar({
           disabled={disabled || !value.trim()}
           aria-label="Send message"
         >
-          ➤
+          <Send size={20} />
         </button>
       </div>
     </div>
