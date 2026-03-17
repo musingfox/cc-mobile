@@ -1,3 +1,4 @@
+import { debugLog } from "../components/DebugOverlay";
 import { useAppStore } from "../stores/app-store";
 import { useSettingsStore } from "../stores/settings-store";
 import { notificationService } from "./notification";
@@ -49,6 +50,12 @@ class WsService {
   private reconnectTimeout: number | null = null;
   private reconnectDelay = 1000;
 
+  private sendMessage(msg: Record<string, unknown>) {
+    if (!this.ws) return;
+    debugLog.add("send", msg);
+    this.ws.send(JSON.stringify(msg));
+  }
+
   connect() {
     const store = useAppStore.getState();
     store.setConnectionState("connecting");
@@ -60,13 +67,15 @@ class WsService {
       console.log("[ws-service] connected");
       useAppStore.getState().setConnectionState("connected");
       this.reconnectDelay = 1000;
+      this.ws = ws;
       // Request current server config (including permission mode)
-      ws.send(JSON.stringify({ type: "get_server_config" }));
+      this.sendMessage({ type: "get_server_config" });
     };
 
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
+        debugLog.add("recv", msg);
         this.handleMessage(msg);
       } catch (err) {
         console.error("[ws-service] parse error:", err);
@@ -83,8 +92,6 @@ class WsService {
       this.ws = null;
       this.scheduleReconnect();
     };
-
-    this.ws = ws;
   }
 
   private scheduleReconnect() {
@@ -386,7 +393,7 @@ class WsService {
 
   createSession(cwd: string) {
     if (!this.ws) return;
-    this.ws.send(JSON.stringify({ type: "new_session", cwd }));
+    this.sendMessage({ type: "new_session", cwd });
   }
 
   send(sessionId: string, content: string) {
@@ -399,7 +406,7 @@ class WsService {
       timestamp: Date.now(),
     });
 
-    this.ws.send(JSON.stringify({ type: "send", sessionId, content }));
+    this.sendMessage({ type: "send", sessionId, content });
 
     useAppStore.getState().setStreaming(sessionId, true);
   }
@@ -414,7 +421,7 @@ class WsService {
       timestamp: Date.now(),
     });
 
-    this.ws.send(JSON.stringify({ type: "command", sessionId, command }));
+    this.sendMessage({ type: "command", sessionId, command });
 
     useAppStore.getState().setStreaming(sessionId, true);
   }
@@ -423,13 +430,11 @@ class WsService {
     const session = useAppStore.getState().sessions.get(sessionId);
     if (!this.ws || !session?.pendingPermission) return;
 
-    this.ws.send(
-      JSON.stringify({
-        type: "permission",
-        requestId: session.pendingPermission.requestId,
-        allow: true,
-      }),
-    );
+    this.sendMessage({
+      type: "permission",
+      requestId: session.pendingPermission.requestId,
+      allow: true,
+    });
 
     useAppStore.getState().setPermission(sessionId, null);
   }
@@ -438,50 +443,44 @@ class WsService {
     const session = useAppStore.getState().sessions.get(sessionId);
     if (!this.ws || !session?.pendingPermission) return;
 
-    this.ws.send(
-      JSON.stringify({
-        type: "permission",
-        requestId: session.pendingPermission.requestId,
-        allow: false,
-      }),
-    );
+    this.sendMessage({
+      type: "permission",
+      requestId: session.pendingPermission.requestId,
+      allow: false,
+    });
 
     useAppStore.getState().setPermission(sessionId, null);
   }
 
   closeSession(sessionId: string) {
     if (this.ws) {
-      this.ws.send(JSON.stringify({ type: "interrupt", sessionId }));
+      this.sendMessage({ type: "interrupt", sessionId });
     }
     useAppStore.getState().removeSession(sessionId);
   }
 
   listSessions(dir?: string, limit?: number, offset?: number) {
     if (!this.ws) return;
-    this.ws.send(
-      JSON.stringify({
-        type: "list_sessions",
-        ...(dir && { dir }),
-        ...(limit && { limit }),
-        ...(offset && { offset }),
-      }),
-    );
+    this.sendMessage({
+      type: "list_sessions",
+      ...(dir && { dir }),
+      ...(limit && { limit }),
+      ...(offset && { offset }),
+    });
   }
 
   resumeSession(sdkSessionId: string, cwd: string) {
     if (!this.ws) return;
-    this.ws.send(
-      JSON.stringify({
-        type: "resume_session",
-        sdkSessionId,
-        cwd,
-      }),
-    );
+    this.sendMessage({
+      type: "resume_session",
+      sdkSessionId,
+      cwd,
+    });
   }
 
   setPermissionMode(mode: string) {
     if (!this.ws) return;
-    this.ws.send(JSON.stringify({ type: "set_permission_mode", mode }));
+    this.sendMessage({ type: "set_permission_mode", mode });
   }
 
   destroy() {

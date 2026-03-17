@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import ChatView from "./components/ChatView";
+import DebugOverlay from "./components/DebugOverlay";
 import InputBar from "./components/InputBar";
 import PermissionBar from "./components/PermissionBar";
 import PickerPanel from "./components/PickerPanel";
@@ -136,6 +137,8 @@ export default function App() {
           setShowResumeModal(false);
         }}
       />
+
+      <DebugOverlay />
     </div>
   );
 }

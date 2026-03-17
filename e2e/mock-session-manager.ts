@@ -62,6 +62,10 @@ export class MockSessionManager {
     return null;
   }
 
+  getPermissionMode(): "default" | "trusted" | "paranoid" {
+    return "default";
+  }
+
   destroySession(sessionId: string): void {
     this.sessions.delete(sessionId);
   }

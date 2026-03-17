@@ -11,6 +11,7 @@ import { MockSessionManager } from "./mock-session-manager";
 import type { ServerConfig } from "../server/config";
 import toolUseSequence from "./fixtures/tool-use-sequence.json";
 import agentSequence from "./fixtures/agent-sequence.json";
+import chatSequence from "./fixtures/chat-sequence.json";
 
 const PORT = 3099; // Different from dev server (3001)
 
@@ -18,6 +19,7 @@ const mockSessionManager = new MockSessionManager({
   fixtures: {
     tool: toolUseSequence,
     agent: agentSequence,
+    hello: chatSequence,
   },
   defaultFixture: "tool",
   eventDelay: 30,
