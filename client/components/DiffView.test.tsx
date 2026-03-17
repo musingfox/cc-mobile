@@ -1,8 +1,11 @@
-import { describe, expect, it, mock } from "bun:test";
-import { render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, mock } from "bun:test";
+import { cleanup, render, screen } from "@testing-library/react";
 import DiffView from "./DiffView";
 
 describe("DiffView", () => {
+  afterEach(() => {
+    cleanup();
+  });
   it("5. collapsed shows summary with change counts", () => {
     const onToggle = mock(() => {});
     const { container } = render(

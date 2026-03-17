@@ -36,6 +36,24 @@ export default function ChatView({
     }
   }, [autoScroll]);
 
+  // Scroll to bottom when messages change
+  const prevCountRef = useRef(messages.length);
+  const prevContentRef = useRef(messages[messages.length - 1]?.content);
+  if (
+    messages.length !== prevCountRef.current ||
+    messages[messages.length - 1]?.content !== prevContentRef.current
+  ) {
+    prevCountRef.current = messages.length;
+    prevContentRef.current = messages[messages.length - 1]?.content;
+    if (autoScroll && scrollRef.current) {
+      requestAnimationFrame(() => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+      });
+    }
+  }
+
   const handleScroll = () => {
     if (!scrollRef.current) return;
 

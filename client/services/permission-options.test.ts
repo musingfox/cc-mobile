@@ -14,7 +14,7 @@ describe("getPermissionOptions", () => {
     });
     expect(options[1]).toEqual({
       id: "all-edits",
-      label: "Yes, allow all edits",
+      label: "Allow all edits this session",
       color: "blue",
       action: "approve_session",
     });
@@ -32,7 +32,7 @@ describe("getPermissionOptions", () => {
     expect(options).toHaveLength(3);
     expect(options[1]).toEqual({
       id: "allow-cmd",
-      label: "Yes, allow `ls -la` for session",
+      label: "Allow `ls -la` this session",
       color: "blue",
       action: "approve_session",
     });
@@ -52,7 +52,7 @@ describe("getPermissionOptions", () => {
     expect(options).toHaveLength(3);
     expect(options[1]).toEqual({
       id: "allow-tool",
-      label: "Yes, allow WebFetch",
+      label: "Allow WebFetch this session",
       color: "blue",
       action: "approve_session",
     });

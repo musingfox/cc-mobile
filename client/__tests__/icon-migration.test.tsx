@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { render } from "@testing-library/react";
+import { afterEach, describe, expect, test } from "bun:test";
+import { cleanup, render } from "@testing-library/react";
 import {
   Cpu,
   Eye,
@@ -21,6 +21,10 @@ import {
 } from "../components/icons";
 
 describe("Icon Migration", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   test("toolIconMap[Read] returns Eye component", () => {
     const IconComponent = toolIconMap.Read;
     expect(IconComponent).toBe(Eye);

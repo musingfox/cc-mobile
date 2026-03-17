@@ -1,9 +1,12 @@
-import { describe, expect, it, mock } from "bun:test";
-import { render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, mock } from "bun:test";
+import { cleanup, render, screen } from "@testing-library/react";
 import ChatView from "../components/ChatView";
 import type { Message } from "../stores/app-store";
 
 describe("ChatView with ToolCard", () => {
+  afterEach(() => {
+    cleanup();
+  });
   it("10. tool messages use ToolCard component", () => {
     const messages: Message[] = [
       {

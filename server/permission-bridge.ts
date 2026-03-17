@@ -26,9 +26,11 @@ export function createPermissionHandler(
 
   const canUseTool: CanUseTool = async (toolName, input, options) => {
     const requestId = options.toolUseID;
+    console.log(`[permission] request: ${toolName} id=${requestId}`);
 
     return new Promise<PermissionResult>((resolve) => {
       const timeoutId = setTimeout(() => {
+        console.log(`[permission] TIMEOUT: ${requestId}`);
         pendingRequests.delete(requestId);
         resolve({
           behavior: "deny",
@@ -49,7 +51,10 @@ export function createPermissionHandler(
   const resolvePermission = (requestId: string, allow: boolean): void => {
     const pending = pendingRequests.get(requestId);
     if (!pending) {
-      return; // no-op for unknown requestId
+      console.warn(
+        `[permission] UNKNOWN requestId: ${requestId} (pending: ${[...pendingRequests.keys()].join(", ")})`,
+      );
+      return;
     }
 
     clearTimeout(pending.timeoutId);

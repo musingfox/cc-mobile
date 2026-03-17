@@ -1,8 +1,11 @@
-import { describe, expect, test } from "bun:test";
-import { render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, test } from "bun:test";
+import { cleanup, render, screen } from "@testing-library/react";
 import DrawerBase from "../components/drawers/DrawerBase";
 
 describe("DrawerBase", () => {
+  afterEach(() => {
+    cleanup();
+  });
   test("renders children when open=true", () => {
     render(
       <DrawerBase open={true} onOpenChange={() => {}}>

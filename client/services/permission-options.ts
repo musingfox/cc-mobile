@@ -28,7 +28,7 @@ export function getPermissionOptions(
   if (toolName === "Edit") {
     baseOptions.push({
       id: "all-edits",
-      label: "Yes, allow all edits",
+      label: "Allow all edits this session",
       color: "blue",
       action: "approve_session",
     });
@@ -37,14 +37,14 @@ export function getPermissionOptions(
     const truncated = truncateCommand(command);
     baseOptions.push({
       id: "allow-cmd",
-      label: `Yes, allow \`${truncated}\` for session`,
+      label: `Allow \`${truncated}\` this session`,
       color: "blue",
       action: "approve_session",
     });
   } else {
     baseOptions.push({
       id: "allow-tool",
-      label: `Yes, allow ${toolName}`,
+      label: `Allow ${toolName} this session`,
       color: "blue",
       action: "approve_session",
     });

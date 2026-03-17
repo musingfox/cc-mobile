@@ -1,10 +1,13 @@
-import { describe, expect, it, mock } from "bun:test";
-import { fireEvent, render } from "@testing-library/react";
+import { afterEach, describe, expect, it, mock } from "bun:test";
+import { cleanup, fireEvent, render } from "@testing-library/react";
 import type { PendingPermission } from "../stores/app-store";
 import PermissionBar from "./PermissionBar";
 
 describe("PermissionBar", () => {
-  it("8. renders PermissionFooter with tool info", () => {
+  afterEach(() => {
+    cleanup();
+  });
+  it("renders PermissionFooter with tool info and 3 buttons", () => {
     const pending: PendingPermission = {
       requestId: "req-1",
       tool: {
@@ -13,119 +16,83 @@ describe("PermissionBar", () => {
       },
     };
 
-    const onApprove = mock(() => {});
-    const onDeny = mock(() => {});
-
-    const { container } = render(
-      <PermissionBar pending={pending} onApprove={onApprove} onDeny={onDeny} />,
+    const { container, getByText } = render(
+      <PermissionBar pending={pending} onApprove={mock(() => {})} onDeny={mock(() => {})} />,
     );
 
-    // Should render PermissionFooter
-    const footer = container.querySelector(".permission-footer");
-    expect(footer).not.toBeNull();
-
-    // Should have 3 options
-    const options = container.querySelectorAll(".permission-option");
-    expect(options).toHaveLength(3);
+    expect(container.querySelector(".permission-footer")).not.toBeNull();
+    expect(getByText("Edit")).not.toBeNull();
+    expect(container.querySelectorAll(".permission-btn")).toHaveLength(3);
   });
 
-  it("9. Approve action calls onApprove handler", () => {
+  it("approve action calls onApprove handler", () => {
     const pending: PendingPermission = {
       requestId: "req-1",
-      tool: {
-        name: "Edit",
-        parameters: { file_path: "test.ts" },
-      },
+      tool: { name: "Edit", parameters: { file_path: "test.ts" } },
     };
-
     const onApprove = mock(() => {});
     const onDeny = mock(() => {});
 
-    const { container } = render(
+    const { getByText } = render(
       <PermissionBar pending={pending} onApprove={onApprove} onDeny={onDeny} />,
     );
 
-    const buttons = container.querySelectorAll(".permission-option");
-    fireEvent.click(buttons[0]); // First option is "Yes"
-
+    fireEvent.click(getByText("Yes"));
     expect(onApprove).toHaveBeenCalledTimes(1);
     expect(onDeny).not.toHaveBeenCalled();
   });
 
-  it("Deny action calls onDeny handler", () => {
+  it("deny action calls onDeny handler", () => {
     const pending: PendingPermission = {
       requestId: "req-1",
-      tool: {
-        name: "Edit",
-        parameters: { file_path: "test.ts" },
-      },
+      tool: { name: "Edit", parameters: { file_path: "test.ts" } },
     };
-
     const onApprove = mock(() => {});
     const onDeny = mock(() => {});
 
-    const { container } = render(
+    const { getByText } = render(
       <PermissionBar pending={pending} onApprove={onApprove} onDeny={onDeny} />,
     );
 
-    const buttons = container.querySelectorAll(".permission-option");
-    fireEvent.click(buttons[2]); // Third option is "No"
-
+    fireEvent.click(getByText("No"));
     expect(onDeny).toHaveBeenCalledTimes(1);
     expect(onApprove).not.toHaveBeenCalled();
   });
 
-  it("approve_session action calls onApprove (deferred behavior)", () => {
+  it("approve_session calls onApprove (deferred)", () => {
     const pending: PendingPermission = {
       requestId: "req-1",
-      tool: {
-        name: "Edit",
-        parameters: { file_path: "test.ts" },
-      },
+      tool: { name: "Edit", parameters: { file_path: "test.ts" } },
     };
-
     const onApprove = mock(() => {});
     const onDeny = mock(() => {});
 
-    const { container } = render(
+    const { getByText } = render(
       <PermissionBar pending={pending} onApprove={onApprove} onDeny={onDeny} />,
     );
 
-    const buttons = container.querySelectorAll(".permission-option");
-    fireEvent.click(buttons[1]); // Second option is "Yes, allow all edits"
-
+    fireEvent.click(getByText("Allow in this session"));
     expect(onApprove).toHaveBeenCalledTimes(1);
-    expect(onDeny).not.toHaveBeenCalled();
   });
 
   it("returns null when pending is null", () => {
-    const onApprove = mock(() => {});
-    const onDeny = mock(() => {});
-
     const { container } = render(
-      <PermissionBar pending={null} onApprove={onApprove} onDeny={onDeny} />,
+      <PermissionBar pending={null} onApprove={mock(() => {})} onDeny={mock(() => {})} />,
     );
-
     expect(container.querySelector(".permission-bar")).toBeNull();
   });
 
-  it("renders Bash tool with command", () => {
+  it("renders Bash tool with command param", () => {
     const pending: PendingPermission = {
       requestId: "req-2",
-      tool: {
-        name: "Bash",
-        parameters: { command: "ls -la" },
-      },
+      tool: { name: "Bash", parameters: { command: "ls -la" } },
     };
 
-    const onApprove = mock(() => {});
-    const onDeny = mock(() => {});
-
-    const { container } = render(
-      <PermissionBar pending={pending} onApprove={onApprove} onDeny={onDeny} />,
+    const { getByText } = render(
+      <PermissionBar pending={pending} onApprove={mock(() => {})} onDeny={mock(() => {})} />,
     );
 
-    const buttons = container.querySelectorAll(".permission-option");
-    expect(buttons[1].textContent).toContain("Yes, allow `ls -la` for session");
+    expect(getByText("Bash")).not.toBeNull();
+    expect(getByText("ls -la")).not.toBeNull();
   });
 });

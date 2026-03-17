@@ -1,8 +1,11 @@
-import { describe, expect, test } from "bun:test";
-import { render } from "@testing-library/react";
+import { afterEach, describe, expect, test } from "bun:test";
+import { cleanup, render } from "@testing-library/react";
 import AnimatedMessage from "../components/animated/AnimatedMessage";
 
 describe("AnimatedMessage", () => {
+  afterEach(() => {
+    cleanup();
+  });
   test("renders children", () => {
     const { container } = render(
       <AnimatedMessage index={0}>
