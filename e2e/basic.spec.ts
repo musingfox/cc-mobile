@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { createSession } from "./helpers/test-utils";
 
 test.describe("Session Creation", () => {
@@ -18,7 +18,9 @@ test.describe("Tool Status Display", () => {
     await expect(page.getByText("Bash")).toBeVisible({ timeout: 10000 });
 
     // Response text should appear
-    await expect(page.getByText("Here are the files in your directory.")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Here are the files in your directory.")).toBeVisible({
+      timeout: 10000,
+    });
 
     // Tool card should be expandable — click to reveal summary
     await page.getByText("Bash").click();
@@ -37,7 +39,9 @@ test.describe("Cost StatusBar", () => {
     await page.getByRole("button", { name: "Send message" }).click();
 
     // Wait for response to complete
-    await expect(page.getByText("Here are the files in your directory.")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Here are the files in your directory.")).toBeVisible({
+      timeout: 10000,
+    });
 
     // StatusBar should show cost data from fixture (fixture has $0.0342 → rounds to $0.03)
     await expect(page.getByText("$0.03")).toBeVisible({ timeout: 5000 });

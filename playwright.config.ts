@@ -5,6 +5,7 @@ export default defineConfig({
   testMatch: "**/*.spec.ts",
   timeout: 30_000,
   retries: 0,
+  workers: 1, // Serial execution to avoid permission handler state conflicts in mock server
   use: {
     baseURL: "http://localhost:5199",
     headless: true,

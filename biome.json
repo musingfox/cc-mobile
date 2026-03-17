@@ -30,6 +30,11 @@
     }
   },
   "files": {
-    "includes": ["client/**/*.{ts,tsx,js,jsx,css,json}", "server/**/*.{ts,js,json}", "*.json"]
+    "includes": [
+      "client/**/*.{ts,tsx,js,jsx,css,json}",
+      "server/**/*.{ts,js,json}",
+      "e2e/**/*.{ts,js,json}",
+      "*.json"
+    ]
   }
 }

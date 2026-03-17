@@ -1,0 +1,120 @@
+[
+  {
+    "_description": "system/init — triggers capabilities caching",
+    "type": "system",
+    "subtype": "init",
+    "cwd": "/tmp",
+    "session_id": "mock-sdk-session-perm",
+    "tools": ["Bash", "Glob", "Grep", "Read", "Edit", "Write"],
+    "slash_commands": ["/compact", "/clear", "/cost"],
+    "agents": ["Explore", "Plan"],
+    "model": "claude-sonnet-4-6"
+  },
+  {
+    "_description": "message_start",
+    "type": "stream_event",
+    "event": {
+      "type": "message_start",
+      "message": {
+        "model": "claude-sonnet-4-6",
+        "id": "msg_mock_perm_001",
+        "type": "message",
+        "role": "assistant",
+        "content": [],
+        "stop_reason": null
+      }
+    },
+    "session_id": "mock-sdk-session-perm",
+    "parent_tool_use_id": null
+  },
+  {
+    "_description": "content_block_start — tool_use (Bash) that requires permission",
+    "type": "stream_event",
+    "event": {
+      "type": "content_block_start",
+      "index": 0,
+      "content_block": {
+        "type": "tool_use",
+        "id": "toolu_mock_perm_001",
+        "name": "Bash",
+        "input": {}
+      }
+    },
+    "session_id": "mock-sdk-session-perm",
+    "parent_tool_use_id": null
+  },
+  {
+    "_description": "MARKER: trigger permission request for Bash",
+    "_action": "request_permission",
+    "tool_name": "Bash",
+    "tool_use_id": "toolu_mock_perm_001",
+    "input": {
+      "command": "rm -rf /tmp/test-dangerous-operation",
+      "description": "Delete test directory recursively"
+    }
+  },
+  {
+    "_description": "tool_progress for Bash — only sent if permission approved",
+    "type": "tool_progress",
+    "tool_use_id": "toolu_mock_perm_001",
+    "tool_name": "Bash",
+    "parent_tool_use_id": null,
+    "elapsed_time_seconds": 0.3
+  },
+  {
+    "_description": "tool_use_summary — Bash completed after approval",
+    "type": "tool_use_summary",
+    "summary": "Ran: rm -rf /tmp/test-dangerous-operation",
+    "preceding_tool_use_ids": ["toolu_mock_perm_001"]
+  },
+  {
+    "_description": "content_block_start — text response after tool completion",
+    "type": "stream_event",
+    "event": {
+      "type": "content_block_start",
+      "index": 1,
+      "content_block": { "type": "text", "text": "" }
+    },
+    "session_id": "mock-sdk-session-perm",
+    "parent_tool_use_id": null
+  },
+  {
+    "_description": "text_delta — streaming response text",
+    "type": "stream_event",
+    "event": {
+      "type": "content_block_delta",
+      "index": 1,
+      "delta": { "type": "text_delta", "text": "The test directory has been " }
+    },
+    "session_id": "mock-sdk-session-perm",
+    "parent_tool_use_id": null
+  },
+  {
+    "_description": "text_delta — more text",
+    "type": "stream_event",
+    "event": {
+      "type": "content_block_delta",
+      "index": 1,
+      "delta": { "type": "text_delta", "text": "successfully deleted." }
+    },
+    "session_id": "mock-sdk-session-perm",
+    "parent_tool_use_id": null
+  },
+  {
+    "_description": "result — cost and usage data",
+    "type": "result",
+    "subtype": "success",
+    "is_error": false,
+    "duration_ms": 2100,
+    "num_turns": 2,
+    "result": "The test directory has been successfully deleted.",
+    "session_id": "mock-sdk-session-perm",
+    "total_cost_usd": 0.0128,
+    "usage": {
+      "input_tokens": 8500,
+      "output_tokens": 180,
+      "cache_read_input_tokens": 5000,
+      "cache_creation_input_tokens": 800
+    }
+  }
+]

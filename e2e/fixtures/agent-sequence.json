@@ -13,7 +13,14 @@
     "type": "stream_event",
     "event": {
       "type": "message_start",
-      "message": { "model": "claude-sonnet-4-6", "id": "msg_mock_002", "type": "message", "role": "assistant", "content": [], "stop_reason": null }
+      "message": {
+        "model": "claude-sonnet-4-6",
+        "id": "msg_mock_002",
+        "type": "message",
+        "role": "assistant",
+        "content": [],
+        "stop_reason": null
+      }
     },
     "session_id": "mock-sdk-session-002",
     "parent_tool_use_id": null

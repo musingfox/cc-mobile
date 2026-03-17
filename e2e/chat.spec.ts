@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { createSession } from "./helpers/test-utils";
 
 test.describe("Chat Flow", () => {
