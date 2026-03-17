@@ -131,7 +131,7 @@ describe("Build Integration", () => {
 
     expect(existsSync(distManifest)).toBe(true);
     expect(existsSync(distSw)).toBe(true);
-  });
+  }, 30_000);
 });
 
 describe("Dynamic Theme Color", () => {

@@ -843,34 +843,54 @@ button {
   font-size: 13px;
 }
 
-/* Activity Panel */
+/* Activity Panel — visually separated from chat */
 .activity-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px 16px;
-  background: var(--bg-tertiary);
-  border-radius: 12px;
-  max-width: 85%;
+  gap: 6px;
+  padding: 10px 16px;
+  margin: 4px -16px;
+  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
   animation: fadeIn 0.2s ease-in;
 }
 
+.activity-panel-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
+.activity-panel-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .activity-agent {
-  background: var(--bg-accent);
+  display: inline-flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--bg-primary);
   border-radius: 10px;
-  padding: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
   border-left: 3px solid var(--accent-agent);
+  max-width: 100%;
 }
 
 .activity-agent-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
 }
 
 .activity-agent-status {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 10px;
@@ -884,10 +904,9 @@ button {
 }
 
 .activity-agent-description {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--text-primary);
-  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -896,9 +915,8 @@ button {
 .activity-agent-stats {
   display: flex;
   gap: 12px;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-secondary);
-  margin-bottom: 8px;
 }
 
 .activity-stat {
@@ -907,62 +925,116 @@ button {
 
 .activity-nested-tools {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 6px;
-  margin-top: 8px;
-  padding-left: 12px;
-  border-left: 2px solid rgba(168, 197, 224, 0.2);
 }
 
-.activity-tool {
+/* Tool Card — compact inline chips with detail */
+.activity-tool-card {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px 10px;
+  background: var(--bg-primary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  max-width: 340px;
+}
+
+.activity-tool-card.nested {
+  background: var(--bg-secondary);
+  padding: 4px 8px;
+}
+
+.activity-tool-card-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 12px;
-  background: var(--bg-highlight);
-  border-radius: 8px;
-  border-left: 3px solid var(--accent-command);
+  gap: 6px;
 }
 
-.activity-tool.nested {
-  background: var(--bg-secondary);
-  border-left: 2px solid var(--accent-command);
-  padding: 6px 10px;
+.activity-tool-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.activity-tool-icon[data-icon="eye"]::before {
+  content: "👁";
+}
+.activity-tool-icon[data-icon="pencil"]::before {
+  content: "✏️";
+}
+.activity-tool-icon[data-icon="terminal"]::before {
+  content: "$";
+  font-family: monospace;
+  font-weight: 700;
+  color: var(--accent-success);
+}
+.activity-tool-icon[data-icon="search"]::before {
+  content: "🔍";
+}
+.activity-tool-icon[data-icon="folder"]::before {
+  content: "📁";
+}
+.activity-tool-icon[data-icon="cpu"]::before {
+  content: "🤖";
+}
+.activity-tool-icon[data-icon="zap"]::before {
+  content: "⚡";
+}
+.activity-tool-icon[data-icon="globe"]::before {
+  content: "🌐";
+}
+.activity-tool-icon[data-icon="file-text"]::before {
+  content: "📄";
+}
+.activity-tool-icon[data-icon="tool"]::before {
+  content: "🔧";
 }
 
 .activity-tool-name {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 600;
   color: var(--text-primary);
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .activity-tool-elapsed {
-  font-size: 12px;
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
   color: var(--text-secondary);
-  background: var(--bg-primary);
-  padding: 2px 8px;
-  border-radius: 8px;
   flex-shrink: 0;
+  margin-left: auto;
+}
+
+.activity-tool-detail {
+  font-size: 11px;
+  font-family: "Courier New", monospace;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-left: 22px;
 }
 
 .activity-hook {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px;
-  background: var(--bg-accent);
+  padding: 6px 12px;
+  background: var(--bg-primary);
   border-radius: 8px;
+  border: 1px solid var(--border-color);
   border-left: 3px solid var(--accent-warning);
 }
 
 .activity-hook-name {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--text-primary);
 }
@@ -2012,4 +2084,88 @@ button {
 
 .theme-claude .diff-highlight {
   background: rgba(224, 165, 70, 0.25);
+}
+
+/* Voice Input Button */
+.voice-btn {
+  min-height: 48px;
+  width: 48px;
+  border-radius: 50%;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition:
+    opacity 0.2s,
+    background 0.2s;
+  font-size: 20px;
+}
+
+.voice-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.voice-btn:active:not(:disabled) {
+  opacity: 0.7;
+}
+
+.voice-btn.recording {
+  background: var(--accent-error);
+  color: white;
+  animation: pulse 1s infinite;
+}
+
+/* Settings Toggle */
+.settings-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  margin-bottom: 8px;
+}
+
+.settings-toggle-row:last-child {
+  margin-bottom: 0;
+}
+
+.settings-toggle-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.settings-toggle-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.settings-toggle-btn {
+  min-height: 32px;
+  padding: 4px 16px;
+  border-radius: 16px;
+  font-size: 13px;
+  font-weight: 500;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  transition:
+    background 0.2s,
+    color 0.2s;
+}
+
+.settings-toggle-btn.active {
+  background: var(--accent-primary);
+  color: white;
+  border-color: var(--accent-primary);
+}
+
+.settings-toggle-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }

@@ -1,4 +1,6 @@
 import { useAppStore } from "../stores/app-store";
+import { useSettingsStore } from "../stores/settings-store";
+import { notificationService } from "./notification";
 import { saveProject } from "./projects";
 import {
   isHookResponse,
@@ -242,6 +244,20 @@ class WsService {
           break;
         }
 
+        // Extract tool input from assistant messages for ActivityPanel display
+        if (chunk.type === "assistant") {
+          const message = chunk.message as { content?: Array<Record<string, unknown>> } | undefined;
+          if (message?.content) {
+            for (const block of message.content) {
+              if (block.type === "tool_use" && typeof block.id === "string" && block.input) {
+                store.updateActiveTool(sessionId, block.id as string, {
+                  input: block.input as Record<string, unknown>,
+                });
+              }
+            }
+          }
+        }
+
         const text = extractTextFromChunk(chunk);
         if (!text) break;
 
@@ -299,6 +315,11 @@ class WsService {
               parameters: Record<string, unknown>;
             },
           });
+          // Background notification when page is hidden
+          const settingsStore = useSettingsStore.getState();
+          if (settingsStore.notificationsEnabled && document.hidden) {
+            notificationService.showPermissionNotification((msg.tool as { name: string }).name);
+          }
         }
         break;
 

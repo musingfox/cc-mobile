@@ -1,3 +1,6 @@
+import { hapticService } from "../services/haptic";
+import { notificationService } from "../services/notification";
+import { voiceInputService } from "../services/voice-input";
 import { wsService } from "../services/ws-service";
 import { useAppStore } from "../stores/app-store";
 import { useSettingsStore } from "../stores/settings-store";
@@ -29,8 +32,34 @@ export default function Settings({ onClose }: SettingsProps) {
   const setTheme = useSettingsStore((s) => s.setTheme);
   const permissionMode = useAppStore((s) => s.permissionMode);
 
+  const notificationsEnabled = useSettingsStore((s) => s.notificationsEnabled);
+  const setNotificationsEnabled = useSettingsStore((s) => s.setNotificationsEnabled);
+  const voiceInputEnabled = useSettingsStore((s) => s.voiceInputEnabled);
+  const setVoiceInputEnabled = useSettingsStore((s) => s.setVoiceInputEnabled);
+  const hapticsEnabled = useSettingsStore((s) => s.hapticsEnabled);
+  const setHapticsEnabled = useSettingsStore((s) => s.setHapticsEnabled);
+
   const handlePermissionModeChange = (mode: string) => {
     wsService.setPermissionMode(mode);
+  };
+
+  const handleNotificationsToggle = async () => {
+    if (!notificationsEnabled) {
+      const permission = await notificationService.requestPermission();
+      if (permission === "granted") {
+        setNotificationsEnabled(true);
+      }
+    } else {
+      setNotificationsEnabled(false);
+    }
+  };
+
+  const handleVoiceInputToggle = () => {
+    setVoiceInputEnabled(!voiceInputEnabled);
+  };
+
+  const handleHapticsToggle = () => {
+    setHapticsEnabled(!hapticsEnabled);
   };
 
   return (
@@ -98,6 +127,36 @@ export default function Settings({ onClose }: SettingsProps) {
                   <span className="settings-permission-desc">{mode.description}</span>
                 </button>
               ))}
+            </div>
+          </section>
+
+          <section className="settings-section">
+            <h3>PWA Features</h3>
+            <div className="settings-theme-buttons">
+              <button
+                type="button"
+                className={`settings-theme-btn ${notificationsEnabled ? "active" : ""}`}
+                onClick={handleNotificationsToggle}
+                disabled={!notificationService.isSupported()}
+              >
+                Notifications
+              </button>
+              <button
+                type="button"
+                className={`settings-theme-btn ${voiceInputEnabled ? "active" : ""}`}
+                onClick={handleVoiceInputToggle}
+                disabled={!voiceInputService.isSupported()}
+              >
+                Voice Input
+              </button>
+              <button
+                type="button"
+                className={`settings-theme-btn ${hapticsEnabled ? "active" : ""}`}
+                onClick={handleHapticsToggle}
+                disabled={!hapticService.isSupported()}
+              >
+                Haptic Feedback
+              </button>
             </div>
           </section>
         </div>

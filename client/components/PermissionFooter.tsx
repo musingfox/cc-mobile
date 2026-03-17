@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { hapticService } from "../services/haptic";
 import { getPermissionOptions, type PermissionOption } from "../services/permission-options";
+import { useSettingsStore } from "../stores/settings-store";
 
 type PermissionFooterProps = {
   toolName: string;
@@ -16,6 +18,14 @@ export default function PermissionFooter({
   const options = getPermissionOptions(toolName, parameters);
 
   const handleOptionClick = (option: PermissionOption) => {
+    const hapticsEnabled = useSettingsStore.getState().hapticsEnabled;
+    if (hapticsEnabled && hapticService.isSupported()) {
+      if (option.action === "deny") {
+        hapticService.vibrate([30, 20, 30]);
+      } else {
+        hapticService.vibrate(50);
+      }
+    }
     setSelectedOption(option.id);
     onRespond(option.action);
   };

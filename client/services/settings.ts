@@ -3,6 +3,9 @@ export type Theme = "dark" | "light" | "claude";
 export interface Settings {
   defaultCwd: string;
   theme: Theme;
+  notificationsEnabled: boolean;
+  voiceInputEnabled: boolean;
+  hapticsEnabled: boolean;
 }
 
 const SETTINGS_KEY = "cc-mobile-settings";
@@ -10,6 +13,9 @@ const SETTINGS_KEY = "cc-mobile-settings";
 const defaultSettings: Settings = {
   defaultCwd: "",
   theme: "dark",
+  notificationsEnabled: false,
+  voiceInputEnabled: false,
+  hapticsEnabled: false,
 };
 
 export function saveSettings(settings: Settings): void {
@@ -31,6 +37,18 @@ export function loadSettings(): Settings {
       theme: ["dark", "light", "claude"].includes(parsed.theme)
         ? parsed.theme
         : defaultSettings.theme,
+      notificationsEnabled:
+        typeof parsed.notificationsEnabled === "boolean"
+          ? parsed.notificationsEnabled
+          : defaultSettings.notificationsEnabled,
+      voiceInputEnabled:
+        typeof parsed.voiceInputEnabled === "boolean"
+          ? parsed.voiceInputEnabled
+          : defaultSettings.voiceInputEnabled,
+      hapticsEnabled:
+        typeof parsed.hapticsEnabled === "boolean"
+          ? parsed.hapticsEnabled
+          : defaultSettings.hapticsEnabled,
     };
   } catch (error) {
     console.error("[settings] failed to load, using defaults:", error);

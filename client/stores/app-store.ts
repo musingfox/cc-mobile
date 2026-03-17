@@ -29,6 +29,7 @@ export type ActiveTool = {
   startedAt: number;
   elapsedSeconds?: number;
   parentToolUseId?: string | null;
+  input?: Record<string, unknown>;
 };
 
 export type ActiveAgent = {
