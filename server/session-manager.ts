@@ -66,6 +66,13 @@ export class SessionManager {
     });
   }
 
+  /** Update canUseTool callback for all sessions (e.g. after WS reconnect) */
+  updateCanUseTool(canUseTool: CanUseTool): void {
+    for (const config of this.sessions.values()) {
+      config.canUseTool = canUseTool;
+    }
+  }
+
   async *sendMessage(sessionId: string, content: string): AsyncGenerator<SDKMessage> {
     const config = this.sessions.get(sessionId);
     if (!config) {
@@ -73,6 +80,7 @@ export class SessionManager {
     }
 
     const plugins = await this.getPlugins();
+    const isBypass = this.permissionMode === "bypassPermissions";
 
     const q = query({
       prompt: content,
@@ -82,13 +90,12 @@ export class SessionManager {
         systemPrompt: { type: "preset", preset: "claude_code" },
         includePartialMessages: true,
         permissionMode: this.permissionMode,
-        ...(this.permissionMode === "bypassPermissions"
-          ? { allowDangerouslySkipPermissions: true }
-          : {}),
+        ...(isBypass ? { allowDangerouslySkipPermissions: true } : {}),
         allowedTools: ["Skill"],
         plugins,
         cwd: config.cwd,
-        canUseTool: config.canUseTool,
+        // Don't pass canUseTool in bypass mode — SDK auto-approves everything
+        ...(!isBypass ? { canUseTool: config.canUseTool } : {}),
         ...(config.sdkSessionId ? { resume: config.sdkSessionId } : {}),
       },
     });

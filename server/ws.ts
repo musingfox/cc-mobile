@@ -94,6 +94,10 @@ export function createWsPlugin(
       });
       (ws.data as WsData).permissionHandler = handler;
 
+      // Update all existing sessions to use this connection's permission handler
+      // This fixes permission approval after WS reconnect (e.g. mobile app switch)
+      sessionManager.updateCanUseTool(handler.canUseTool);
+
       // Send cached capabilities on reconnect
       if (cachedCapabilities) {
         ws.send({
