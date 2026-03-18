@@ -71,6 +71,8 @@ class WsService {
       this.ws = ws;
       // Request current server config (including permission mode)
       this.sendMessage({ type: "get_server_config" });
+      // Send current env vars
+      this.setEnvVars(useSettingsStore.getState().envVars);
     };
 
     ws.onmessage = (event) => {
@@ -487,6 +489,11 @@ class WsService {
   setPermissionMode(mode: string) {
     if (!this.ws) return;
     this.sendMessage({ type: "set_permission_mode", mode });
+  }
+
+  setEnvVars(envVars: Record<string, string>) {
+    if (!this.ws) return;
+    this.sendMessage({ type: "set_env_vars", envVars });
   }
 
   destroy() {

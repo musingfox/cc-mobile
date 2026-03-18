@@ -233,6 +233,11 @@ export function createWsPlugin(
             break;
           }
 
+          case "set_env_vars": {
+            sessionManager.setEnvVars(message.envVars);
+            break;
+          }
+
           case "list_sessions": {
             const sessions = await listClaudeSessions({
               dir: message.dir,

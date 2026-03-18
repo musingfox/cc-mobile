@@ -29,6 +29,7 @@ export class SessionManager {
   private plugins: SdkPluginConfig[] | null = null;
   private activeQueries = new Map<string, Query>();
   private permissionMode: PermissionMode;
+  private envVars: Record<string, string> = {};
 
   constructor(config: { permissionMode: PermissionMode }) {
     this.permissionMode = config.permissionMode;
@@ -40,6 +41,14 @@ export class SessionManager {
 
   getPermissionMode(): PermissionMode {
     return this.permissionMode;
+  }
+
+  setEnvVars(envVars: Record<string, string>): void {
+    this.envVars = envVars;
+  }
+
+  getEnvVars(): Record<string, string> {
+    return this.envVars;
   }
 
   private async getPlugins(): Promise<SdkPluginConfig[]> {
@@ -94,6 +103,7 @@ export class SessionManager {
         allowedTools: ["Skill"],
         plugins,
         cwd: config.cwd,
+        env: { ...process.env, ...this.envVars },
         // Don't pass canUseTool in bypass mode — SDK auto-approves everything
         ...(!isBypass ? { canUseTool: config.canUseTool } : {}),
         ...(config.sdkSessionId ? { resume: config.sdkSessionId } : {}),

@@ -6,6 +6,7 @@ export interface Settings {
   notificationsEnabled: boolean;
   voiceInputEnabled: boolean;
   hapticsEnabled: boolean;
+  envVars: Record<string, string>;
 }
 
 const SETTINGS_KEY = "cc-mobile-settings";
@@ -16,6 +17,7 @@ const defaultSettings: Settings = {
   notificationsEnabled: false,
   voiceInputEnabled: false,
   hapticsEnabled: false,
+  envVars: {},
 };
 
 export function saveSettings(settings: Settings): void {
@@ -31,6 +33,12 @@ export function loadSettings(): Settings {
     const stored = localStorage.getItem(SETTINGS_KEY);
     if (!stored) return defaultSettings;
     const parsed = JSON.parse(stored);
+
+    let envVars = defaultSettings.envVars;
+    if (parsed.envVars && typeof parsed.envVars === "object" && !Array.isArray(parsed.envVars)) {
+      envVars = parsed.envVars;
+    }
+
     return {
       defaultCwd:
         typeof parsed.defaultCwd === "string" ? parsed.defaultCwd : defaultSettings.defaultCwd,
@@ -49,6 +57,7 @@ export function loadSettings(): Settings {
         typeof parsed.hapticsEnabled === "boolean"
           ? parsed.hapticsEnabled
           : defaultSettings.hapticsEnabled,
+      envVars,
     };
   } catch (error) {
     console.error("[settings] failed to load, using defaults:", error);

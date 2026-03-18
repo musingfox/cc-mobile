@@ -21,4 +21,10 @@ describe("SessionManager", () => {
     const mgr = new SessionManager({ permissionMode: "default" });
     expect(() => mgr.destroySession("unknown")).not.toThrow();
   });
+
+  test("14: setEnvVars stores env vars", () => {
+    const mgr = new SessionManager({ permissionMode: "default" });
+    mgr.setEnvVars({ NODE_ENV: "test" });
+    expect(mgr.getEnvVars()).toEqual({ NODE_ENV: "test" });
+  });
 });

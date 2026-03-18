@@ -30,10 +30,11 @@ describe("settings service", () => {
       notificationsEnabled: false,
       voiceInputEnabled: false,
       hapticsEnabled: false,
+      envVars: {},
     });
     const stored = mockStorage.get("cc-mobile-settings");
     expect(stored).toBe(
-      '{"defaultCwd":"/tmp","theme":"light","notificationsEnabled":false,"voiceInputEnabled":false,"hapticsEnabled":false}',
+      '{"defaultCwd":"/tmp","theme":"light","notificationsEnabled":false,"voiceInputEnabled":false,"hapticsEnabled":false,"envVars":{}}',
     );
   });
 
@@ -46,6 +47,7 @@ describe("settings service", () => {
       notificationsEnabled: false,
       voiceInputEnabled: false,
       hapticsEnabled: false,
+      envVars: {},
     });
   });
 
@@ -58,6 +60,7 @@ describe("settings service", () => {
       notificationsEnabled: false,
       voiceInputEnabled: false,
       hapticsEnabled: false,
+      envVars: {},
     });
   });
 
@@ -70,6 +73,7 @@ describe("settings service", () => {
       notificationsEnabled: false,
       voiceInputEnabled: false,
       hapticsEnabled: false,
+      envVars: {},
     });
   });
 });

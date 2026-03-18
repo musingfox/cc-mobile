@@ -5,6 +5,7 @@ import { wsService } from "../services/ws-service";
 import { useAppStore } from "../stores/app-store";
 import { useSettingsStore } from "../stores/settings-store";
 import DrawerBase from "./drawers/DrawerBase";
+import EnvVarEditor from "./EnvVarEditor";
 
 interface SettingsProps {
   onClose: () => void;
@@ -144,6 +145,11 @@ export default function Settings({ onClose }: SettingsProps) {
               Haptic Feedback
             </button>
           </div>
+        </section>
+
+        <section className="settings-section">
+          <h3>Environment Variables</h3>
+          <EnvVarEditor />
         </section>
       </div>
     </DrawerBase>

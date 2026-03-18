@@ -51,6 +51,11 @@ const SetPermissionModeMessage = z.object({
   mode: z.enum(["default", "acceptEdits", "bypassPermissions"]),
 });
 
+const SetEnvVarsMessage = z.object({
+  type: z.literal("set_env_vars"),
+  envVars: z.record(z.string()),
+});
+
 export const ClientMessage = z.discriminatedUnion("type", [
   NewSessionMessage,
   SendMessage,
@@ -61,6 +66,7 @@ export const ClientMessage = z.discriminatedUnion("type", [
   ListSessionsMessage,
   ResumeSessionMessage,
   SetPermissionModeMessage,
+  SetEnvVarsMessage,
 ]);
 
 export type ClientMessage = z.infer<typeof ClientMessage>;

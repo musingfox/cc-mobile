@@ -79,6 +79,16 @@ describe("ClientMessage schema", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  test("12: set_env_vars valid", () => {
+    const result = ClientMessage.safeParse({ type: "set_env_vars", envVars: { A: "1" } });
+    expect(result.success).toBe(true);
+  });
+
+  test("13: set_env_vars with invalid envVars fails", () => {
+    const result = ClientMessage.safeParse({ type: "set_env_vars", envVars: ["invalid"] });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe("ServerMessage schema", () => {
