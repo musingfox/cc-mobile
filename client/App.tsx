@@ -100,7 +100,7 @@ export default function App() {
     };
   }, [handleOnline, handleOffline]);
 
-  // Update theme-color meta tag dynamically
+  // Update theme-color meta tag and body background dynamically
   useEffect(() => {
     const metaThemeColor = document.querySelector('meta[name="theme-color"]');
     if (metaThemeColor) {
@@ -111,6 +111,9 @@ export default function App() {
       };
       metaThemeColor.setAttribute("content", themeColors[theme]);
     }
+    // Prevent white flash in safe-area / overscroll regions
+    const bgColors = { dark: "#1a1a2e", light: "#ffffff", claude: "#f5f0e8" };
+    document.body.style.backgroundColor = bgColors[theme];
   }, [theme]);
 
   const getStatusLabel = () => {

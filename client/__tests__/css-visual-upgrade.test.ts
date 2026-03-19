@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { readFileSync } from "fs";
-import { join } from "path";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 const stylesPath = join(import.meta.dir, "..", "styles.css");
 const css = readFileSync(stylesPath, "utf-8");
@@ -45,7 +45,7 @@ describe("CSS Visual Upgrade", () => {
     it("should apply glass effect to .status-bar", () => {
       const statusBarMatch = css.match(/\.status-bar\s*\{[^}]+\}/s);
       expect(statusBarMatch).toBeTruthy();
-      const statusBar = statusBarMatch![0];
+      const statusBar = statusBarMatch?.[0];
       expect(statusBar).toContain("backdrop-filter");
       expect(statusBar).toContain("var(--glass-bg)");
     });
@@ -53,7 +53,7 @@ describe("CSS Visual Upgrade", () => {
     it("should apply glass effect to .input-bar", () => {
       const inputBarMatch = css.match(/\.input-bar\s*\{[^}]+\}/s);
       expect(inputBarMatch).toBeTruthy();
-      const inputBar = inputBarMatch![0];
+      const inputBar = inputBarMatch?.[0];
       expect(inputBar).toContain("backdrop-filter");
       expect(inputBar).toContain("var(--glass-bg)");
     });
@@ -61,7 +61,7 @@ describe("CSS Visual Upgrade", () => {
     it("should apply glass effect to .drawer-content", () => {
       const drawerMatch = css.match(/\.drawer-content\s*\{[^}]+\}/s);
       expect(drawerMatch).toBeTruthy();
-      const drawer = drawerMatch![0];
+      const drawer = drawerMatch?.[0];
       expect(drawer).toContain("backdrop-filter");
       expect(drawer).toContain("var(--glass-bg)");
     });
@@ -69,7 +69,7 @@ describe("CSS Visual Upgrade", () => {
     it("should apply glass effect to .activity-tool-card", () => {
       const cardMatch = css.match(/\.activity-tool-card\s*\{[^}]+\}/s);
       expect(cardMatch).toBeTruthy();
-      const card = cardMatch![0];
+      const card = cardMatch?.[0];
       expect(card).toContain("backdrop-filter");
       expect(card).toContain("var(--glass-bg)");
     });
@@ -79,13 +79,13 @@ describe("CSS Visual Upgrade", () => {
     it("should use gradient in .send-btn", () => {
       const sendBtnMatch = css.match(/\.send-btn\s*\{[^}]+\}/s);
       expect(sendBtnMatch).toBeTruthy();
-      expect(sendBtnMatch![0]).toContain("var(--gradient-primary)");
+      expect(sendBtnMatch?.[0]).toContain("var(--gradient-primary)");
     });
 
     it("should use gradient border in .session-tab.active", () => {
       const activeTabMatch = css.match(/\.session-tab\.active\s*\{[^}]+\}/s);
       expect(activeTabMatch).toBeTruthy();
-      expect(activeTabMatch![0]).toContain("var(--gradient-primary)");
+      expect(activeTabMatch?.[0]).toContain("var(--gradient-primary)");
     });
   });
 
@@ -97,7 +97,7 @@ describe("CSS Visual Upgrade", () => {
     it("should add glow to .status-dot.connected", () => {
       const connectedMatch = css.match(/\.status-dot\.connected\s*\{[^}]+\}/s);
       expect(connectedMatch).toBeTruthy();
-      expect(connectedMatch![0]).toMatch(/box-shadow.*rgba/);
+      expect(connectedMatch?.[0]).toMatch(/box-shadow.*rgba/);
     });
   });
 
@@ -123,14 +123,14 @@ describe("CSS Visual Upgrade", () => {
     it("should enhance .message-content typography", () => {
       const messageMatch = css.match(/\.message-content\s*\{[^}]+\}/s);
       expect(messageMatch).toBeTruthy();
-      expect(messageMatch![0]).toContain("line-height: 1.6");
-      expect(messageMatch![0]).toContain("letter-spacing: 0.01em");
+      expect(messageMatch?.[0]).toContain("line-height: 1.6");
+      expect(messageMatch?.[0]).toContain("letter-spacing: 0.01em");
     });
 
     it("should set font-weight for .status-label", () => {
       const statusLabelMatch = css.match(/\.status-label\s*\{[^}]+\}/s);
       expect(statusLabelMatch).toBeTruthy();
-      expect(statusLabelMatch![0]).toContain("font-weight: 600");
+      expect(statusLabelMatch?.[0]).toContain("font-weight: 600");
     });
   });
 
@@ -138,13 +138,13 @@ describe("CSS Visual Upgrade", () => {
     it("should add transitions to .send-btn", () => {
       const sendBtnMatch = css.match(/\.send-btn\s*\{[^}]+\}/s);
       expect(sendBtnMatch).toBeTruthy();
-      expect(sendBtnMatch![0]).toContain("transition");
+      expect(sendBtnMatch?.[0]).toContain("transition");
     });
 
     it("should add transitions to .session-tab", () => {
       const tabMatch = css.match(/\.session-tab\s*\{[^}]+\}/s);
       expect(tabMatch).toBeTruthy();
-      expect(tabMatch![0]).toContain("transition");
+      expect(tabMatch?.[0]).toContain("transition");
     });
 
     it("should add :active state with scale transform", () => {
@@ -168,32 +168,32 @@ describe("CSS Visual Upgrade", () => {
     it("should round .message.user .message-content to 16px", () => {
       const userMsgMatch = css.match(/\.message\.user\s+\.message-content\s*\{[^}]+\}/s);
       expect(userMsgMatch).toBeTruthy();
-      expect(userMsgMatch![0]).toContain("border-radius: 16px");
+      expect(userMsgMatch?.[0]).toContain("border-radius: 16px");
     });
 
     it("should add shadow to .message.user .message-content", () => {
       const userMsgMatch = css.match(/\.message\.user\s+\.message-content\s*\{[^}]+\}/s);
       expect(userMsgMatch).toBeTruthy();
-      expect(userMsgMatch![0]).toContain("box-shadow: var(--shadow-sm)");
+      expect(userMsgMatch?.[0]).toContain("box-shadow: var(--shadow-sm)");
     });
 
     it("should add glass bg and border to .message.assistant .message-content", () => {
       const assistantMsgMatch = css.match(/\.message\.assistant\s+\.message-content\s*\{[^}]+\}/s);
       expect(assistantMsgMatch).toBeTruthy();
-      expect(assistantMsgMatch![0]).toContain("var(--glass-bg)");
-      expect(assistantMsgMatch![0]).toContain("border:");
+      expect(assistantMsgMatch?.[0]).toContain("var(--glass-bg)");
+      expect(assistantMsgMatch?.[0]).toContain("border:");
     });
 
     it("should round .input-textarea to 16px", () => {
       const textareaMatch = css.match(/\.input-textarea\s*\{[^}]+\}/s);
       expect(textareaMatch).toBeTruthy();
-      expect(textareaMatch![0]).toContain("border-radius: 16px");
+      expect(textareaMatch?.[0]).toContain("border-radius: 16px");
     });
 
     it("should round .input-bar to 20px", () => {
       const inputBarMatch = css.match(/\.input-bar\s*\{[^}]+\}/s);
       expect(inputBarMatch).toBeTruthy();
-      expect(inputBarMatch![0]).toContain("border-radius: 20px");
+      expect(inputBarMatch?.[0]).toContain("border-radius: 20px");
     });
 
     it("should add hover lift to .activity-tool-card", () => {
@@ -203,13 +203,13 @@ describe("CSS Visual Upgrade", () => {
     it("should add glass to .tool-chip", () => {
       const chipMatch = css.match(/\.tool-chip\s*\{[^}]+\}/s);
       expect(chipMatch).toBeTruthy();
-      expect(chipMatch![0]).toContain("var(--glass-bg)");
+      expect(chipMatch?.[0]).toContain("var(--glass-bg)");
     });
 
     it("should add glass to .command-panel-search", () => {
       const searchMatch = css.match(/\.command-panel-search\s*\{[^}]+\}/s);
       expect(searchMatch).toBeTruthy();
-      expect(searchMatch![0]).toContain("var(--glass-bg)");
+      expect(searchMatch?.[0]).toContain("var(--glass-bg)");
     });
 
     it("should add hover effect to .command-panel-item", () => {
