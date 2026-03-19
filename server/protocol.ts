@@ -113,12 +113,32 @@ const ErrorMessage = z.object({
   sessionId: z.string().optional(),
 });
 
+const ModelInfoSchema = z.object({
+  value: z.string(),
+  displayName: z.string(),
+  description: z.string(),
+  supportsEffort: z.boolean().optional(),
+  supportedEffortLevels: z.array(z.string()).optional(),
+  supportsFastMode: z.boolean().optional(),
+  supportsAdaptiveThinking: z.boolean().optional(),
+});
+
+const AccountInfoSchema = z.object({
+  email: z.string().optional(),
+  organization: z.string().optional(),
+  subscriptionType: z.string().optional(),
+  tokenSource: z.string().optional(),
+  apiKeySource: z.string().optional(),
+});
+
 const CapabilitiesMessage = z.object({
   type: z.literal("capabilities"),
   sessionId: z.string(),
   commands: z.array(z.string()),
   agents: z.array(z.string()),
   model: z.string(),
+  models: z.array(ModelInfoSchema).optional(),
+  accountInfo: AccountInfoSchema.optional(),
 });
 
 const ServerConfigMessage = z.object({

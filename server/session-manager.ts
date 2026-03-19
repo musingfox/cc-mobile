@@ -1,6 +1,8 @@
 import type {
+  AccountInfo,
   AgentInfo,
   CanUseTool,
+  ModelInfo,
   Query,
   SDKMessage,
   SDKSystemMessage,
@@ -22,6 +24,11 @@ export interface Capabilities {
   commands: SlashCommand[];
   agents: AgentInfo[];
   model: string;
+}
+
+export interface InitData {
+  models: ModelInfo[];
+  account: AccountInfo;
 }
 
 export class SessionManager {
@@ -98,6 +105,7 @@ export class SessionManager {
         settingSources: ["user", "project", "local"],
         systemPrompt: { type: "preset", preset: "claude_code" },
         includePartialMessages: true,
+        promptSuggestions: true,
         permissionMode: this.permissionMode,
         ...(isBypass ? { allowDangerouslySkipPermissions: true } : {}),
         allowedTools: ["Skill"],
@@ -139,6 +147,23 @@ export class SessionManager {
         model: "claude-sonnet-4-6",
       };
     } catch {
+      return null;
+    }
+  }
+
+  /** Fetch models + account info from SDK initializationResult() */
+  async getInitData(sessionId: string): Promise<InitData | null> {
+    const q = this.activeQueries.get(sessionId);
+    if (!q) return null;
+
+    try {
+      const result = await q.initializationResult();
+      return {
+        models: result.models,
+        account: result.account,
+      };
+    } catch (err) {
+      console.warn("[session-manager] getInitData failed:", err);
       return null;
     }
   }

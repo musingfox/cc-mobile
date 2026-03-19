@@ -1,5 +1,5 @@
 import { debugLog } from "../components/DebugOverlay";
-import { useAppStore } from "../stores/app-store";
+import { type Capabilities, useAppStore } from "../stores/app-store";
 import { useSettingsStore } from "../stores/settings-store";
 import { hapticService } from "./haptic";
 import { notificationService } from "./notification";
@@ -8,6 +8,8 @@ import { toastService } from "./toast-service";
 import {
   isHookResponse,
   isHookStarted,
+  isPromptSuggestion,
+  isRateLimitEvent,
   isResultMessage,
   isTaskNotification,
   isTaskProgress,
@@ -144,6 +146,20 @@ class WsService {
         // Handle hook response
         if (isHookResponse(chunk)) {
           store.setActiveHook(sessionId, null);
+          break;
+        }
+
+        // Handle rate limit events
+        if (isRateLimitEvent(chunk)) {
+          store.setRateLimitInfo(chunk.rate_limit_info);
+          break;
+        }
+
+        // Handle prompt suggestions
+        if (isPromptSuggestion(chunk)) {
+          if (sessionId) {
+            store.setPromptSuggestion(sessionId, chunk.suggestion);
+          }
           break;
         }
 
@@ -344,6 +360,10 @@ class WsService {
           commands: (msg.commands as string[]) || [],
           agents: (msg.agents as string[]) || [],
           model: (msg.model as string) || "unknown",
+          ...(msg.models ? { models: msg.models as Capabilities["models"] } : {}),
+          ...(msg.accountInfo
+            ? { accountInfo: msg.accountInfo as Capabilities["accountInfo"] }
+            : {}),
         });
         break;
 

@@ -18,10 +18,30 @@ export type PendingPermission = {
   };
 };
 
+export type ModelInfo = {
+  value: string;
+  displayName: string;
+  description: string;
+  supportsEffort?: boolean;
+  supportedEffortLevels?: string[];
+  supportsFastMode?: boolean;
+  supportsAdaptiveThinking?: boolean;
+};
+
+export type AccountInfo = {
+  email?: string;
+  organization?: string;
+  subscriptionType?: string;
+  tokenSource?: string;
+  apiKeySource?: string;
+};
+
 export type Capabilities = {
   commands: string[];
   agents: string[];
   model: string;
+  models?: ModelInfo[];
+  accountInfo?: AccountInfo;
 };
 
 export type ActiveTool = {
@@ -51,6 +71,16 @@ export type UsageData = {
   durationMs: number;
 };
 
+export type RateLimitInfo = {
+  status: "allowed" | "allowed_warning" | "rejected";
+  resetsAt?: number;
+  rateLimitType?: string;
+  utilization?: number;
+  overageStatus?: string;
+  overageResetsAt?: number;
+  isUsingOverage?: boolean;
+};
+
 export type SessionState = {
   id: string;
   cwd: string;
@@ -63,6 +93,7 @@ export type SessionState = {
   activeAgents: Map<string, ActiveAgent>;
   activeHook: { hookId: string; hookName: string } | null;
   usage: UsageData | null;
+  promptSuggestion: string | null;
 };
 
 type ConnectionState = "connecting" | "connected" | "disconnected";
@@ -126,6 +157,13 @@ interface AppState {
   capabilities: Capabilities | null;
   setCapabilities: (capabilities: Capabilities) => void;
 
+  // Rate limit info (global, not per-session)
+  rateLimitInfo: RateLimitInfo | null;
+  setRateLimitInfo: (info: RateLimitInfo) => void;
+
+  // Prompt suggestion (per-session)
+  setPromptSuggestion: (sessionId: string, suggestion: string | null) => void;
+
   // Permission mode (server-side setting)
   permissionMode: string;
   setPermissionMode: (mode: string) => void;
@@ -181,6 +219,7 @@ export const useAppStore = create<AppState>((set) => ({
         activeAgents: new Map(),
         activeHook: null,
         usage: null,
+        promptSuggestion: null,
       });
       return {
         sessions: next,
@@ -283,6 +322,17 @@ export const useAppStore = create<AppState>((set) => ({
 
   capabilities: null,
   setCapabilities: (capabilities) => set({ capabilities }),
+
+  rateLimitInfo: null,
+  setRateLimitInfo: (rateLimitInfo) => set({ rateLimitInfo }),
+
+  setPromptSuggestion: (sessionId, suggestion) =>
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (s) => ({
+        ...s,
+        promptSuggestion: suggestion,
+      })),
+    })),
 
   permissionMode: "default",
   setPermissionMode: (permissionMode) => set({ permissionMode }),

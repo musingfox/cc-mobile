@@ -180,10 +180,15 @@ export function createWsPlugin(
                   model: (msg.model as string) || "unknown",
                 };
                 saveCachedCapabilities(cachedCapabilities);
+
+                // Fetch models + account info from SDK
+                const initData = await sessionManager.getInitData(message.sessionId);
+
                 ws.send({
                   type: "capabilities",
                   sessionId: message.sessionId,
                   ...cachedCapabilities,
+                  ...(initData ? { models: initData.models, accountInfo: initData.account } : {}),
                 });
               }
 

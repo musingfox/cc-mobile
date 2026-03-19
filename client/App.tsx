@@ -11,14 +11,65 @@ import SessionTabs from "./components/SessionTabs";
 import Settings from "./components/Settings";
 import ToastProvider from "./components/toasts/ToastProvider";
 import { wsService } from "./services/ws-service";
+import type { Capabilities, RateLimitInfo } from "./stores/app-store";
 import { useAppStore } from "./stores/app-store";
 import { useSettingsStore } from "./stores/settings-store";
+
+function formatResetTime(resetsAt: number): string {
+  const diffMs = resetsAt - Date.now();
+  if (diffMs <= 0) return "soon";
+  const mins = Math.ceil(diffMs / 60_000);
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  return hours > 0 ? `${hours}h${mins % 60}m` : `${mins}m`;
+}
+
+function StatusInfoBar({
+  capabilities,
+  rateLimitInfo,
+}: {
+  capabilities: Capabilities | null;
+  rateLimitInfo: RateLimitInfo | null;
+}) {
+  const account = capabilities?.accountInfo;
+  const model = capabilities?.model;
+  const showRateLimit = rateLimitInfo && rateLimitInfo.status !== "allowed";
+
+  if (!account && !model && !showRateLimit) return null;
+
+  // Build info segments
+  const segments: string[] = [];
+  if (model) segments.push(model);
+  if (account?.subscriptionType) segments.push(account.subscriptionType);
+  if (account?.email) segments.push(account.email);
+  if (account?.organization) segments.push(account.organization);
+
+  if (segments.length === 0 && !showRateLimit) return null;
+
+  return (
+    <div className="status-info-bar">
+      {segments.length > 0 && <span className="status-info-segments">{segments.join(" · ")}</span>}
+      {showRateLimit && (
+        <span
+          className={`rate-limit-badge ${rateLimitInfo.status === "rejected" ? "rate-limit-rejected" : "rate-limit-warning"}`}
+        >
+          {rateLimitInfo.status === "rejected"
+            ? `Rate limited${rateLimitInfo.resetsAt ? ` · resets ${formatResetTime(rateLimitInfo.resetsAt)}` : ""}`
+            : rateLimitInfo.utilization !== undefined
+              ? `${Math.round(rateLimitInfo.utilization * 100)}% used`
+              : "Near limit"}
+        </span>
+      )}
+    </div>
+  );
+}
 
 export default function App() {
   const connectionState = useAppStore((s) => s.connectionState);
   const activeSessionId = useAppStore((s) => s.activeSessionId);
   const sessions = useAppStore((s) => s.sessions);
   const capabilities = useAppStore((s) => s.capabilities);
+  const rateLimitInfo = useAppStore((s) => s.rateLimitInfo);
   const theme = useSettingsStore((s) => s.theme);
   const [showSettings, setShowSettings] = useState(false);
   const [showResumeModal, setShowResumeModal] = useState(false);
@@ -88,12 +139,19 @@ export default function App() {
       <ToastProvider theme={theme} />
 
       <div className="status-bar">
-        <div className={`status-dot ${connectionState}`} />
-        <span className="status-label">{getStatusLabel()}</span>
-        {formatUsage() && <span className="status-usage">{formatUsage()}</span>}
-        <button type="button" className="status-settings-btn" onClick={() => setShowSettings(true)}>
-          <SettingsIcon size={20} />
-        </button>
+        <div className="status-bar-row">
+          <div className={`status-dot ${connectionState}`} />
+          <span className="status-label">{getStatusLabel()}</span>
+          {formatUsage() && <span className="status-usage">{formatUsage()}</span>}
+          <button
+            type="button"
+            className="status-settings-btn"
+            onClick={() => setShowSettings(true)}
+          >
+            <SettingsIcon size={20} />
+          </button>
+        </div>
+        <StatusInfoBar capabilities={capabilities} rateLimitInfo={rateLimitInfo} />
       </div>
 
       {connectionState === "disconnected" && (

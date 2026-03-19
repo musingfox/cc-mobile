@@ -33,6 +33,7 @@ export default function Settings({ onClose }: SettingsProps) {
   const theme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
   const permissionMode = useAppStore((s) => s.permissionMode);
+  // Account info now shown in status bar, not here
 
   const notificationsEnabled = useSettingsStore((s) => s.notificationsEnabled);
   const setNotificationsEnabled = useSettingsStore((s) => s.setNotificationsEnabled);

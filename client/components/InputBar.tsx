@@ -155,8 +155,36 @@ export default function InputBar({
     }
   };
 
+  // Prompt suggestion from SDK
+  const promptSuggestion = useAppStore((s) => {
+    if (!activeSessionId) return null;
+    return s.sessions.get(activeSessionId)?.promptSuggestion ?? null;
+  });
+
+  const handleSuggestionClick = () => {
+    if (!promptSuggestion) return;
+    hapticService.tap();
+    onSend(promptSuggestion);
+    if (activeSessionId) {
+      useAppStore.getState().setPromptSuggestion(activeSessionId, null);
+    }
+  };
+
+  // Clear suggestion when user starts typing
+  useEffect(() => {
+    if (value && promptSuggestion && activeSessionId) {
+      useAppStore.getState().setPromptSuggestion(activeSessionId, null);
+    }
+  }, [value, promptSuggestion, activeSessionId]);
+
   return (
     <div className="input-bar-container">
+      {promptSuggestion && !disabled && (
+        <button type="button" className="prompt-suggestion-chip" onClick={handleSuggestionClick}>
+          <span className="prompt-suggestion-label">Suggested:</span>
+          <span className="prompt-suggestion-text">{promptSuggestion}</span>
+        </button>
+      )}
       <FloatingAutocomplete
         suggestions={suggestions}
         selectedIndex={selectedIndex}
