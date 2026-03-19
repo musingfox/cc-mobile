@@ -112,6 +112,41 @@ describe("Icon Files", () => {
   });
 });
 
+describe("Notification Service", () => {
+  test("TC15: notification.ts uses tag for deduplication", () => {
+    const notifPath = join(CLIENT_ROOT, "services", "notification.ts");
+    const notifContent = readFileSync(notifPath, "utf-8");
+
+    expect(notifContent).toContain("tag");
+    expect(notifContent).toContain("renotify");
+  });
+
+  test("TC16: notification accepts sessionId for per-session dedup", () => {
+    const notifPath = join(CLIENT_ROOT, "services", "notification.ts");
+    const notifContent = readFileSync(notifPath, "utf-8");
+
+    expect(notifContent).toContain("sessionId");
+    expect(notifContent).toContain("cc-mobile-permission-");
+  });
+});
+
+describe("SW Notification Click", () => {
+  test("TC17: sw.js contains notificationclick handler", () => {
+    const swPath = join(PUBLIC_DIR, "sw.js");
+    const swContent = readFileSync(swPath, "utf-8");
+
+    expect(swContent).toContain("notificationclick");
+    expect(swContent).toContain("client.focus");
+  });
+
+  test("TC18: sw.js notificationclick opens new window as fallback", () => {
+    const swPath = join(PUBLIC_DIR, "sw.js");
+    const swContent = readFileSync(swPath, "utf-8");
+
+    expect(swContent).toContain("openWindow");
+  });
+});
+
 describe("Build Integration", () => {
   test("TC13: Build succeeds with PWA files", async () => {
     // Run build

@@ -162,6 +162,16 @@ button {
   will-change: backdrop-filter;
 }
 
+.offline-banner {
+  padding: 8px 16px;
+  background: var(--warning, #b8860b);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: center;
+  flex-shrink: 0;
+}
+
 .status-label {
   flex: 1;
   overflow: hidden;

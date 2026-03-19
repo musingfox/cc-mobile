@@ -3,7 +3,7 @@
  * Strategy: Cache static assets, network-first for navigation, skip WebSocket and API
  */
 
-const CACHE_NAME = "cc-mobile-v1";
+const CACHE_NAME = "cc-mobile-__BUILD_VERSION__";
 const STATIC_ASSETS = [
   "/",
   "/index.html",
@@ -49,6 +49,25 @@ self.addEventListener("activate", (event) => {
   );
   // Take control of all clients immediately
   self.clients.claim();
+});
+
+// Notification click: focus existing window or open new one
+self.addEventListener("notificationclick", (event) => {
+  console.log("[SW] Notification clicked");
+  event.notification.close();
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+      // Focus existing window if found
+      for (const client of clientList) {
+        if (client.url.includes(self.location.origin) && "focus" in client) {
+          return client.focus();
+        }
+      }
+      // Otherwise open a new window
+      return self.clients.openWindow("/");
+    }),
+  );
 });
 
 // Fetch event: network-first for navigation, skip /ws and /api

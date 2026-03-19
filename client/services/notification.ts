@@ -16,19 +16,25 @@ class NotificationService {
     }
   }
 
-  showPermissionNotification(toolName: string): void {
+  showPermissionNotification(toolName: string, sessionId?: string): void {
     if (!this.isSupported()) {
       console.warn("[notification] not supported");
       return;
     }
 
-    if (Notification.permission === "granted") {
-      new Notification("CCMobile — Permission Required", {
-        body: `Claude needs permission to run ${toolName}`,
-      });
-    } else {
+    if (Notification.permission !== "granted") {
       console.warn("[notification] permission not granted");
+      return;
     }
+
+    // Use tag to deduplicate — only latest notification per session is shown
+    const tag = sessionId ? `cc-mobile-permission-${sessionId}` : "cc-mobile-permission";
+
+    new Notification("CCMobile — Permission Required", {
+      body: `Claude needs permission to run ${toolName}`,
+      tag,
+      renotify: true,
+    });
   }
 }
 

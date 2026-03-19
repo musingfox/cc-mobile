@@ -1,5 +1,5 @@
 import { Settings as SettingsIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import ChatView from "./components/ChatView";
 import DebugOverlay from "./components/DebugOverlay";
 import InputBar from "./components/InputBar";
@@ -24,13 +24,25 @@ export default function App() {
   const [showResumeModal, setShowResumeModal] = useState(false);
   const [resumeCwd, setResumeCwd] = useState("");
   const [openPanel, setOpenPanel] = useState<"command" | "agent" | null>(null);
+  const [isOnline, setIsOnline] = useState(
+    typeof navigator !== "undefined" ? navigator.onLine : true,
+  );
 
   const activeSession = activeSessionId ? sessions.get(activeSessionId) : undefined;
 
+  const handleOnline = useCallback(() => setIsOnline(true), []);
+  const handleOffline = useCallback(() => setIsOnline(false), []);
+
   useEffect(() => {
     wsService.connect();
-    return () => wsService.destroy();
-  }, []);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      wsService.destroy();
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [handleOnline, handleOffline]);
 
   // Update theme-color meta tag dynamically
   useEffect(() => {
@@ -83,6 +95,14 @@ export default function App() {
           <SettingsIcon size={20} />
         </button>
       </div>
+
+      {connectionState === "disconnected" && (
+        <div className="offline-banner">
+          {isOnline
+            ? "Connection lost — reconnecting..."
+            : "You are offline — cached content available"}
+        </div>
+      )}
 
       <SessionTabs />
 
