@@ -1,6 +1,7 @@
 import { Mic, Send, Square } from "lucide-react";
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { clearDraft, loadDraft, saveDraft } from "../services/draft-persistence";
+import { hapticService } from "../services/haptic";
 import { voiceInputService } from "../services/voice-input";
 import { type Capabilities, useAppStore } from "../stores/app-store";
 import { useSettingsStore } from "../stores/settings-store";
@@ -96,6 +97,7 @@ export default function InputBar({
   const handleSend = () => {
     const trimmed = value.trim();
     if (!trimmed || disabled) return;
+    hapticService.tap();
     onSend(trimmed);
     setValue("");
     if (activeSessionId) {

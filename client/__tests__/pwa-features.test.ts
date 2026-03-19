@@ -89,16 +89,25 @@ describe("HapticService", () => {
     expect(hapticService.isSupported()).toBe(false);
   });
 
-  test("TC11: vibrate calls navigator.vibrate", () => {
+  test("TC11: semantic methods call navigator.vibrate when enabled", () => {
     const mockVibrate = mock(() => true);
     (navigator as any).vibrate = mockVibrate;
-    hapticService.vibrate(50);
+    // Enable haptics in settings store
+    const { useSettingsStore } = require("../stores/settings-store");
+    useSettingsStore.getState().setHapticsEnabled(true);
+    hapticService.tap();
+    expect(mockVibrate).toHaveBeenCalledWith(15);
+    hapticService.confirm();
     expect(mockVibrate).toHaveBeenCalledWith(50);
+    hapticService.warn();
+    expect(mockVibrate).toHaveBeenCalledWith([30, 20, 30]);
+    useSettingsStore.getState().setHapticsEnabled(false);
   });
 
-  test("TC12: vibrate no-op when unsupported", () => {
+  test("TC12: semantic methods no-op when unsupported", () => {
     delete (navigator as any).vibrate;
-    expect(() => hapticService.vibrate(50)).not.toThrow();
+    expect(() => hapticService.tap()).not.toThrow();
+    expect(() => hapticService.error()).not.toThrow();
   });
 });
 

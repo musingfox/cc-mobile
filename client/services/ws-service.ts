@@ -1,6 +1,7 @@
 import { debugLog } from "../components/DebugOverlay";
 import { useAppStore } from "../stores/app-store";
 import { useSettingsStore } from "../stores/settings-store";
+import { hapticService } from "./haptic";
 import { notificationService } from "./notification";
 import { saveProject } from "./projects";
 import { toastService } from "./toast-service";
@@ -313,6 +314,7 @@ class WsService {
           store.clearActiveTools(sessionId);
           store.clearActiveAgents(sessionId);
           store.setActiveHook(sessionId, null);
+          hapticService.complete();
         }
         break;
 
@@ -331,7 +333,7 @@ class WsService {
           if (document.hidden) {
             toastService.info(`Permission requested: ${toolName}`);
             if (settingsStore.notificationsEnabled) {
-              notificationService.showPermissionNotification(toolName);
+              notificationService.showPermissionNotification(toolName, sessionId);
             }
           }
         }
@@ -346,6 +348,7 @@ class WsService {
         break;
 
       case "error":
+        hapticService.error();
         if (sessionId) {
           store.addMessage(sessionId, {
             id: `error-${Date.now()}`,
