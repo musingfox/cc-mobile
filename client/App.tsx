@@ -1,8 +1,9 @@
-import { Settings as SettingsIcon } from "lucide-react";
+import { ChevronRight, Settings as SettingsIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import ChatView from "./components/ChatView";
 import DebugOverlay from "./components/DebugOverlay";
 import InputBar from "./components/InputBar";
+import ModelPicker from "./components/ModelPicker";
 import PermissionBar from "./components/PermissionBar";
 import PickerPanel from "./components/PickerPanel";
 import QuickActions from "./components/QuickActions";
@@ -27,9 +28,11 @@ function formatResetTime(resetsAt: number): string {
 function StatusInfoBar({
   capabilities,
   rateLimitInfo,
+  onModelClick,
 }: {
   capabilities: Capabilities | null;
   rateLimitInfo: RateLimitInfo | null;
+  onModelClick: () => void;
 }) {
   const account = capabilities?.accountInfo;
   const model = capabilities?.model;
@@ -47,7 +50,8 @@ function StatusInfoBar({
   if (segments.length === 0 && !showRateLimit) return null;
 
   return (
-    <div className="status-info-bar">
+    <button type="button" className="status-info-bar" onClick={onModelClick}>
+      <ChevronRight size={12} className="status-info-chevron" />
       {segments.length > 0 && <span className="status-info-segments">{segments.join(" · ")}</span>}
       {showRateLimit && (
         <span
@@ -60,7 +64,7 @@ function StatusInfoBar({
               : "Near limit"}
         </span>
       )}
-    </div>
+    </button>
   );
 }
 
@@ -75,6 +79,7 @@ export default function App() {
   const [showResumeModal, setShowResumeModal] = useState(false);
   const [resumeCwd, setResumeCwd] = useState("");
   const [openPanel, setOpenPanel] = useState<"command" | "agent" | null>(null);
+  const [showModelPicker, setShowModelPicker] = useState(false);
   const [isOnline, setIsOnline] = useState(
     typeof navigator !== "undefined" ? navigator.onLine : true,
   );
@@ -151,7 +156,11 @@ export default function App() {
             <SettingsIcon size={20} />
           </button>
         </div>
-        <StatusInfoBar capabilities={capabilities} rateLimitInfo={rateLimitInfo} />
+        <StatusInfoBar
+          capabilities={capabilities}
+          rateLimitInfo={rateLimitInfo}
+          onModelClick={() => setShowModelPicker(true)}
+        />
       </div>
 
       {connectionState === "disconnected" && (
@@ -196,6 +205,7 @@ export default function App() {
       />
 
       {showSettings && <Settings onClose={() => setShowSettings(false)} />}
+      {showModelPicker && <ModelPicker onClose={() => setShowModelPicker(false)} />}
 
       {openPanel && (
         <PickerPanel

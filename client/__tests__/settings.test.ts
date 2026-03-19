@@ -48,6 +48,9 @@ describe("settings service", () => {
       voiceInputEnabled: false,
       hapticsEnabled: false,
       envVars: {},
+      model: "claude-sonnet-4-6",
+      effort: null,
+      permissionMode: "default",
     });
   });
 
@@ -61,6 +64,9 @@ describe("settings service", () => {
       voiceInputEnabled: false,
       hapticsEnabled: false,
       envVars: {},
+      model: "claude-sonnet-4-6",
+      effort: null,
+      permissionMode: "default",
     });
   });
 
@@ -74,6 +80,9 @@ describe("settings service", () => {
       voiceInputEnabled: false,
       hapticsEnabled: false,
       envVars: {},
+      model: "claude-sonnet-4-6",
+      effort: null,
+      permissionMode: "default",
     });
   });
 });

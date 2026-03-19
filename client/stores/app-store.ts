@@ -164,6 +164,12 @@ interface AppState {
   // Prompt suggestion (per-session)
   setPromptSuggestion: (sessionId: string, suggestion: string | null) => void;
 
+  // Model/Effort selection (server-side)
+  selectedModel: string;
+  setSelectedModel: (model: string) => void;
+  selectedEffort: string | null;
+  setSelectedEffort: (effort: string | null) => void;
+
   // Permission mode (server-side setting)
   permissionMode: string;
   setPermissionMode: (mode: string) => void;
@@ -333,6 +339,11 @@ export const useAppStore = create<AppState>((set) => ({
         promptSuggestion: suggestion,
       })),
     })),
+
+  selectedModel: "claude-sonnet-4-6",
+  setSelectedModel: (selectedModel) => set({ selectedModel }),
+  selectedEffort: null,
+  setSelectedEffort: (selectedEffort) => set({ selectedEffort }),
 
   permissionMode: "default",
   setPermissionMode: (permissionMode) => set({ permissionMode }),

@@ -221,6 +221,8 @@ export function createWsPlugin(
               type: "server_config",
               config: {
                 permissionMode: sessionManager.getPermissionMode(),
+                model: sessionManager.getSelectedModel(),
+                effort: sessionManager.getSelectedEffort(),
               },
             });
             break;
@@ -240,6 +242,29 @@ export function createWsPlugin(
 
           case "set_env_vars": {
             sessionManager.setEnvVars(message.envVars);
+            break;
+          }
+
+          case "set_model": {
+            await sessionManager.setModel(message.model, message.sessionId);
+            ws.send({
+              type: "server_config",
+              config: {
+                model: sessionManager.getSelectedModel(),
+                effort: sessionManager.getSelectedEffort(),
+              },
+            });
+            break;
+          }
+
+          case "set_effort": {
+            sessionManager.setEffort(message.effort);
+            ws.send({
+              type: "server_config",
+              config: {
+                effort: sessionManager.getSelectedEffort(),
+              },
+            });
             break;
           }
 

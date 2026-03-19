@@ -74,8 +74,14 @@ class WsService {
       this.ws = ws;
       // Request current server config (including permission mode)
       this.sendMessage({ type: "get_server_config" });
-      // Send current env vars
-      this.setEnvVars(useSettingsStore.getState().envVars);
+      // Restore persisted preferences to server
+      const settings = useSettingsStore.getState();
+      this.setEnvVars(settings.envVars);
+      this.setModel(settings.model);
+      this.setEffort(settings.effort as "low" | "medium" | "high" | "max" | null);
+      if (settings.permissionMode !== "default") {
+        this.setPermissionMode(settings.permissionMode);
+      }
     };
 
     ws.onmessage = (event) => {
@@ -399,9 +405,23 @@ class WsService {
       }
 
       case "server_config": {
-        const config = msg.config as { permissionMode: string };
+        const config = msg.config as {
+          permissionMode?: string;
+          model?: string;
+          effort?: string | null;
+        };
+        const settingsStore = useSettingsStore.getState();
         if (config?.permissionMode) {
           store.setPermissionMode(config.permissionMode);
+          settingsStore.setPermissionMode(config.permissionMode);
+        }
+        if (config?.model) {
+          store.setSelectedModel(config.model);
+          settingsStore.setModel(config.model);
+        }
+        if (config?.effort !== undefined) {
+          store.setSelectedEffort(config.effort);
+          settingsStore.setEffort(config.effort);
         }
         break;
       }
@@ -512,6 +532,16 @@ class WsService {
   setPermissionMode(mode: string) {
     if (!this.ws) return;
     this.sendMessage({ type: "set_permission_mode", mode });
+  }
+
+  setModel(model: string, sessionId?: string) {
+    if (!this.ws) return;
+    this.sendMessage({ type: "set_model", model, ...(sessionId && { sessionId }) });
+  }
+
+  setEffort(effort: "low" | "medium" | "high" | "max" | null) {
+    if (!this.ws) return;
+    this.sendMessage({ type: "set_effort", effort });
   }
 
   setEnvVars(envVars: Record<string, string>) {

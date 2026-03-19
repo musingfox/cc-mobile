@@ -56,6 +56,17 @@ const SetEnvVarsMessage = z.object({
   envVars: z.record(z.string()),
 });
 
+const SetModelMessage = z.object({
+  type: z.literal("set_model"),
+  model: z.string(),
+  sessionId: z.string().optional(),
+});
+
+const SetEffortMessage = z.object({
+  type: z.literal("set_effort"),
+  effort: z.enum(["low", "medium", "high", "max"]).nullable(),
+});
+
 export const ClientMessage = z.discriminatedUnion("type", [
   NewSessionMessage,
   SendMessage,
@@ -67,6 +78,8 @@ export const ClientMessage = z.discriminatedUnion("type", [
   ResumeSessionMessage,
   SetPermissionModeMessage,
   SetEnvVarsMessage,
+  SetModelMessage,
+  SetEffortMessage,
 ]);
 
 export type ClientMessage = z.infer<typeof ClientMessage>;

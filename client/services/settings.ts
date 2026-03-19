@@ -7,6 +7,9 @@ export interface Settings {
   voiceInputEnabled: boolean;
   hapticsEnabled: boolean;
   envVars: Record<string, string>;
+  model: string;
+  effort: string | null;
+  permissionMode: string;
 }
 
 const SETTINGS_KEY = "cc-mobile-settings";
@@ -18,6 +21,9 @@ const defaultSettings: Settings = {
   voiceInputEnabled: false,
   hapticsEnabled: false,
   envVars: {},
+  model: "claude-sonnet-4-6",
+  effort: null,
+  permissionMode: "default",
 };
 
 export function saveSettings(settings: Settings): void {
@@ -58,6 +64,15 @@ export function loadSettings(): Settings {
           ? parsed.hapticsEnabled
           : defaultSettings.hapticsEnabled,
       envVars,
+      model: typeof parsed.model === "string" ? parsed.model : defaultSettings.model,
+      effort:
+        parsed.effort === null || typeof parsed.effort === "string"
+          ? parsed.effort
+          : defaultSettings.effort,
+      permissionMode:
+        typeof parsed.permissionMode === "string"
+          ? parsed.permissionMode
+          : defaultSettings.permissionMode,
     };
   } catch (error) {
     console.error("[settings] failed to load, using defaults:", error);

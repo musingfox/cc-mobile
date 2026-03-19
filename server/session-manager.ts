@@ -37,6 +37,8 @@ export class SessionManager {
   private activeQueries = new Map<string, Query>();
   private permissionMode: PermissionMode;
   private envVars: Record<string, string> = {};
+  private selectedModel = "claude-sonnet-4-6";
+  private selectedEffort: "low" | "medium" | "high" | "max" | null = null;
 
   constructor(config: { permissionMode: PermissionMode }) {
     this.permissionMode = config.permissionMode;
@@ -56,6 +58,33 @@ export class SessionManager {
 
   getEnvVars(): Record<string, string> {
     return this.envVars;
+  }
+
+  getSelectedModel(): string {
+    return this.selectedModel;
+  }
+
+  /** Set model for next query. If a query is active, also switch mid-turn. */
+  async setModel(model: string, sessionId?: string): Promise<void> {
+    this.selectedModel = model;
+    if (sessionId) {
+      const q = this.activeQueries.get(sessionId);
+      if (q) {
+        try {
+          await q.setModel(model);
+        } catch (err) {
+          console.warn("[session-manager] mid-turn setModel failed:", err);
+        }
+      }
+    }
+  }
+
+  getSelectedEffort(): "low" | "medium" | "high" | "max" | null {
+    return this.selectedEffort;
+  }
+
+  setEffort(effort: "low" | "medium" | "high" | "max" | null): void {
+    this.selectedEffort = effort;
   }
 
   private async getPlugins(): Promise<SdkPluginConfig[]> {
@@ -101,7 +130,8 @@ export class SessionManager {
     const q = query({
       prompt: content,
       options: {
-        model: "claude-sonnet-4-6",
+        model: this.selectedModel,
+        ...(this.selectedEffort ? { effort: this.selectedEffort } : {}),
         settingSources: ["user", "project", "local"],
         systemPrompt: { type: "preset", preset: "claude_code" },
         includePartialMessages: true,
@@ -144,7 +174,7 @@ export class SessionManager {
       return {
         commands,
         agents,
-        model: "claude-sonnet-4-6",
+        model: this.selectedModel,
       };
     } catch {
       return null;
