@@ -7,6 +7,7 @@ import { createPermissionHandler } from "./permission-bridge";
 import { SessionManager } from "./session-manager";
 import { createWsPlugin } from "./ws";
 
+const isProd = process.env.NODE_ENV === "production";
 const serverConfig = parseServerConfig(process.argv);
 const sessionManager = new SessionManager({ permissionMode: serverConfig.permissionMode });
 
@@ -47,4 +48,8 @@ const _app = new Elysia()
   })
   .listen({ port: serverConfig.port, hostname: serverConfig.hostname });
 
-console.log(`cc-mobile server listening on ${serverConfig.hostname}:${serverConfig.port}`);
+const servingStatic = existsSync(DIST_DIR);
+console.log(
+  `cc-mobile server listening on ${serverConfig.hostname}:${serverConfig.port}` +
+    ` [${isProd ? "production" : "development"}${servingStatic ? ", serving static files" : ""}]`,
+);
