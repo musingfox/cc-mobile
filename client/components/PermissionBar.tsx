@@ -5,9 +5,15 @@ type PermissionBarProps = {
   pending: PendingPermission | null;
   onApprove: () => void;
   onDeny: () => void;
+  onAnswer?: (answer: string) => void;
 };
 
-export default function PermissionBar({ pending, onApprove, onDeny }: PermissionBarProps) {
+export default function PermissionBar({
+  pending,
+  onApprove,
+  onDeny,
+  onAnswer,
+}: PermissionBarProps) {
   if (!pending) return null;
 
   const handleRespond = (action: "approve" | "approve_session" | "deny") => {
@@ -26,6 +32,7 @@ export default function PermissionBar({ pending, onApprove, onDeny }: Permission
         toolName={pending.tool.name}
         parameters={pending.tool.parameters}
         onRespond={handleRespond}
+        onAnswer={onAnswer}
       />
     </div>
   );

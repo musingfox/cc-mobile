@@ -18,6 +18,27 @@ describe("ClientMessage schema", () => {
     const result = ClientMessage.safeParse({ type: "permission", requestId: "r1", allow: true });
     expect(result.success).toBe(true);
   });
+  test("PermissionMessage accepts answer field", () => {
+    const result = ClientMessage.safeParse({
+      type: "permission",
+      requestId: "r1",
+      allow: true,
+      answer: "Python",
+    });
+    expect(result.success).toBe(true);
+    if (result.success && result.data.type === "permission") {
+      expect(result.data).toEqual({
+        type: "permission",
+        requestId: "r1",
+        allow: true,
+        answer: "Python",
+      });
+    }
+  });
+  test("PermissionMessage works without answer", () => {
+    const result = ClientMessage.safeParse({ type: "permission", requestId: "r1", allow: true });
+    expect(result.success).toBe(true);
+  });
   test("command valid", () => {
     const result = ClientMessage.safeParse({
       type: "command",

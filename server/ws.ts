@@ -207,7 +207,7 @@ export function createWsPlugin(
           }
 
           case "permission": {
-            handler.resolvePermission(message.requestId, message.allow);
+            handler.resolvePermission(message.requestId, message.allow, message.answer);
             break;
           }
 

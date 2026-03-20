@@ -196,6 +196,9 @@ export default function App() {
         pending={activeSession?.pendingPermission ?? null}
         onApprove={() => activeSessionId && wsService.approvePermission(activeSessionId)}
         onDeny={() => activeSessionId && wsService.denyPermission(activeSessionId)}
+        onAnswer={(answer) =>
+          activeSessionId && wsService.answerPermission(activeSessionId, answer)
+        }
       />
 
       <InputBar

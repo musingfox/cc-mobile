@@ -40,4 +40,63 @@ describe("Permission Bridge", () => {
     );
     expect(result.behavior).toBe("deny");
   }, 5000);
+
+  test("resolvePermission with answer returns updatedInput with answers", async () => {
+    let capturedRequestId = "";
+    const handler = createPermissionHandler((requestId) => {
+      capturedRequestId = requestId;
+    });
+
+    const promise = handler.canUseTool(
+      "AskUserQuestion",
+      {
+        questions: [
+          {
+            question: "Which language?",
+            header: "Language",
+            options: [
+              { label: "Python", description: "Python desc" },
+              { label: "Go", description: "Go desc" },
+            ],
+            multiSelect: false,
+          },
+        ],
+      },
+      { signal, toolUseID: "req_2" },
+    );
+
+    handler.resolvePermission(capturedRequestId, true, "Python");
+
+    const result = await promise;
+    expect(result.behavior).toBe("allow");
+    expect(result.updatedInput).toEqual({
+      questions: [
+        {
+          question: "Which language?",
+          header: "Language",
+          options: [
+            { label: "Python", description: "Python desc" },
+            { label: "Go", description: "Go desc" },
+          ],
+          multiSelect: false,
+        },
+      ],
+      answers: { "Which language?": "Python" },
+    });
+  });
+
+  test("resolvePermission without answer returns no updatedInput", async () => {
+    let capturedRequestId = "";
+    const handler = createPermissionHandler((requestId) => {
+      capturedRequestId = requestId;
+    });
+
+    const promise = handler.canUseTool("Bash", { command: "ls" }, { signal, toolUseID: "req_1" });
+
+    handler.resolvePermission(capturedRequestId, true);
+
+    const result = await promise;
+    expect(result.behavior).toBe("allow");
+    expect(result.updatedInput).toBeUndefined();
+  });
 });

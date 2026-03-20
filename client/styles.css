@@ -1343,6 +1343,62 @@ button {
   opacity: 0.3;
 }
 
+/* AskUserQuestion UI */
+.ask-user-question {
+  font-size: 14px;
+  color: var(--text-primary);
+  padding: 8px 0;
+  line-height: 1.5;
+}
+
+.ask-user-actions {
+  flex-direction: column;
+}
+
+.permission-btn .option-label {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.permission-btn .option-description {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 400;
+  margin-top: 4px;
+}
+
+.custom-answer-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.custom-answer-input {
+  flex: 1;
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+}
+
+.custom-answer-input:focus {
+  border-color: var(--accent-primary);
+}
+
+.custom-answer-row .permission-btn {
+  flex: 0 0 auto;
+  padding: 8px 16px;
+}
+
+.custom-answer-row .permission-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* Usage Status Bar */
 .usage-status-bar {
   display: flex;

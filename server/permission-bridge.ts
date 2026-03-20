@@ -21,6 +21,7 @@ export function createPermissionHandler(
     {
       resolve: (result: PermissionResult) => void;
       timeoutId: ReturnType<typeof setTimeout>;
+      input: Record<string, unknown>;
     }
   >();
 
@@ -39,7 +40,7 @@ export function createPermissionHandler(
         });
       }, timeoutMs);
 
-      pendingRequests.set(requestId, { resolve, timeoutId });
+      pendingRequests.set(requestId, { resolve, timeoutId, input });
 
       sendToClient(requestId, {
         name: toolName,
@@ -48,7 +49,7 @@ export function createPermissionHandler(
     });
   };
 
-  const resolvePermission = (requestId: string, allow: boolean): void => {
+  const resolvePermission = (requestId: string, allow: boolean, answer?: string): void => {
     const pending = pendingRequests.get(requestId);
     if (!pending) {
       console.warn(
@@ -60,11 +61,43 @@ export function createPermissionHandler(
     clearTimeout(pending.timeoutId);
     pendingRequests.delete(requestId);
 
-    pending.resolve(
-      allow
-        ? { behavior: "allow", updatedInput: undefined, toolUseID: requestId }
-        : { behavior: "deny", message: "Denied by user", toolUseID: requestId },
-    );
+    if (!allow) {
+      pending.resolve({
+        behavior: "deny",
+        message: "Denied by user",
+        toolUseID: requestId,
+      });
+      return;
+    }
+
+    if (answer) {
+      // Extract question text from input
+      const questions = pending.input.questions as Array<{ question: string }> | undefined;
+      const questionText = questions?.[0]?.question;
+
+      if (questionText) {
+        pending.resolve({
+          behavior: "allow",
+          updatedInput: {
+            ...pending.input,
+            answers: { [questionText]: answer },
+          },
+          toolUseID: requestId,
+        });
+      } else {
+        pending.resolve({
+          behavior: "allow",
+          updatedInput: undefined,
+          toolUseID: requestId,
+        });
+      }
+    } else {
+      pending.resolve({
+        behavior: "allow",
+        updatedInput: undefined,
+        toolUseID: requestId,
+      });
+    }
   };
 
   return {

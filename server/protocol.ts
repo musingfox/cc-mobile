@@ -16,6 +16,7 @@ const PermissionMessage = z.object({
   type: z.literal("permission"),
   requestId: z.string(),
   allow: z.boolean(),
+  answer: z.string().optional(),
 });
 
 const CommandMessage = z.object({

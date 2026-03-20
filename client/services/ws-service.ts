@@ -53,6 +53,7 @@ class WsService {
   private ws: WebSocket | null = null;
   private reconnectTimeout: number | null = null;
   private reconnectDelay = 1000;
+  private lastToolBatchTime = 0;
 
   private sendMessage(msg: Record<string, unknown>) {
     if (!this.ws) return;
@@ -187,13 +188,42 @@ class WsService {
           break;
         }
 
+        // When the model starts producing text, all tools are done
+        if (
+          chunk.type === "stream_event" &&
+          (chunk.event as Record<string, unknown>)?.type === "content_block_start" &&
+          ((chunk.event as Record<string, unknown>)?.content_block as Record<string, unknown>)
+            ?.type === "text"
+        ) {
+          store.clearActiveTools(sessionId);
+          store.setActiveToolStatus(sessionId, null);
+        }
+
         // Handle tool start (earliest signal)
         if (isToolStart(chunk)) {
           const { event } = chunk;
           const { content_block } = event;
+          const now = Date.now();
+
+          // Detect new tool batch: if >200ms since last tool start,
+          // this is a new sequential tool (not parallel). Clean up
+          // stale root tools from the previous batch, since tool_use_summary
+          // may not reliably fire for every tool.
+          if (now - this.lastToolBatchTime > 200) {
+            const session = store.sessions.get(sessionId);
+            if (session) {
+              for (const [toolId, tool] of session.activeTools) {
+                if (!tool.parentToolUseId) {
+                  store.removeActiveTool(sessionId, toolId);
+                }
+              }
+            }
+          }
+          this.lastToolBatchTime = now;
+
           store.addActiveTool(sessionId, content_block.id, {
             toolName: content_block.name,
-            startedAt: Date.now(),
+            startedAt: now,
           });
           store.setActiveToolStatus(sessionId, {
             toolName: content_block.name,
@@ -277,15 +307,31 @@ class WsService {
           break;
         }
 
-        // Extract tool input from assistant messages for ActivityPanel display
+        // Extract tool input from assistant messages for ActivityPanel display.
+        // Also clean up stale tools from previous turns: an `assistant` chunk
+        // signals a new turn, so any active tools NOT listed in this message's
+        // content are leftovers that the SDK already finished executing.
         if (chunk.type === "assistant") {
           const message = chunk.message as { content?: Array<Record<string, unknown>> } | undefined;
+          const currentTurnToolIds = new Set<string>();
           if (message?.content) {
             for (const block of message.content) {
-              if (block.type === "tool_use" && typeof block.id === "string" && block.input) {
-                store.updateActiveTool(sessionId, block.id as string, {
-                  input: block.input as Record<string, unknown>,
-                });
+              if (block.type === "tool_use" && typeof block.id === "string") {
+                currentTurnToolIds.add(block.id);
+                if (block.input) {
+                  store.updateActiveTool(sessionId, block.id as string, {
+                    input: block.input as Record<string, unknown>,
+                  });
+                }
+              }
+            }
+          }
+          // Remove tools from previous turns
+          const session = store.sessions.get(sessionId);
+          if (session) {
+            for (const [toolId, tool] of session.activeTools) {
+              if (!currentTurnToolIds.has(toolId) && !tool.parentToolUseId) {
+                store.removeActiveTool(sessionId, toolId);
               }
             }
           }
@@ -498,6 +544,20 @@ class WsService {
       type: "permission",
       requestId: session.pendingPermission.requestId,
       allow: false,
+    });
+
+    useAppStore.getState().setPermission(sessionId, null);
+  }
+
+  answerPermission(sessionId: string, answer: string) {
+    const session = useAppStore.getState().sessions.get(sessionId);
+    if (!this.ws || !session?.pendingPermission) return;
+
+    this.sendMessage({
+      type: "permission",
+      requestId: session.pendingPermission.requestId,
+      allow: true,
+      answer,
     });
 
     useAppStore.getState().setPermission(sessionId, null);
