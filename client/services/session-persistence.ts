@@ -1,4 +1,4 @@
-import type { SessionState } from "../stores/app-store";
+import type { ResolvedAction, SessionState } from "../stores/app-store";
 
 // localStorage keys
 const SESSION_KEY_PREFIX = "ccm:session:";
@@ -18,6 +18,7 @@ interface SerializableSessionState {
   activeHook: SessionState["activeHook"];
   usage: SessionState["usage"];
   promptSuggestion: string | null;
+  resolvedActions: ResolvedAction[];
 }
 
 export function saveSessionState(sessionId: string, state: SessionState): void {
@@ -35,6 +36,7 @@ export function saveSessionState(sessionId: string, state: SessionState): void {
       activeHook: state.activeHook,
       usage: state.usage,
       promptSuggestion: state.promptSuggestion,
+      resolvedActions: state.resolvedActions || [],
     };
 
     const key = `${SESSION_KEY_PREFIX}${sessionId}`;
@@ -64,6 +66,7 @@ export function loadSessionState(sessionId: string): SessionState | null {
       ...parsed,
       activeTools: new Map(parsed.activeTools),
       activeAgents: new Map(parsed.activeAgents),
+      resolvedActions: parsed.resolvedActions || [],
     };
   } catch (error) {
     console.error("[session-persistence] Failed to load session:", error);

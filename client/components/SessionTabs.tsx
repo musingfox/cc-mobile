@@ -1,9 +1,11 @@
+import { motion } from "framer-motion";
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { loadProjects, removeProject } from "../services/projects";
 import { wsService } from "../services/ws-service";
 import { useAppStore } from "../stores/app-store";
 import { useSettingsStore } from "../stores/settings-store";
+import { springSnappy } from "../utils/motion-variants";
 
 export default function SessionTabs() {
   const sessions = useAppStore((s) => s.sessions);
@@ -81,6 +83,13 @@ export default function SessionTabs() {
               </span>
               {session.isStreaming && <span className="session-tab-streaming" />}
             </button>
+            {session.id === activeSessionId && (
+              <motion.div
+                className="session-tab-indicator"
+                layoutId="activeTabIndicator"
+                transition={springSnappy}
+              />
+            )}
             {sessionList.length > 1 && (
               <button
                 type="button"

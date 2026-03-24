@@ -200,6 +200,7 @@ export default function App() {
 
       <ChatView
         messages={activeSession?.messages ?? []}
+        resolvedActions={activeSession?.resolvedActions}
         isStreaming={activeSession?.isStreaming}
         activeToolStatus={activeSession?.activeToolStatus}
         activeTools={activeSession?.activeTools}

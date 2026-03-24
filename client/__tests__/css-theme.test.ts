@@ -17,20 +17,15 @@ describe("CSS Theme Variables", () => {
   });
 
   it("user messages use --bg-user-bubble variable", async () => {
-    const cssContent = Bun.file("client/styles.css");
-    const text = await cssContent.text();
-
-    // Should find user message content using the new variable
+    const text = await Bun.file("client/styles.css").text();
     expect(text).toContain(".message.user .message-content");
-    expect(text).toContain("background: var(--bg-user-bubble);");
+    // User bubble uses gradient with bg-user-bubble
+    expect(text).toContain("var(--bg-user-bubble)");
   });
 
-  it("assistant messages use secondary background", async () => {
-    const cssContent = Bun.file("client/styles.css");
-    const text = await cssContent.text();
-
-    // Should find assistant message content with subtle background
+  it("assistant messages use glass background", async () => {
+    const text = await Bun.file("client/styles.css").text();
     expect(text).toContain(".message.assistant .message-content");
-    expect(text).toContain("background: var(--bg-secondary);");
+    expect(text).toContain("var(--glass-bg-heavy)");
   });
 });

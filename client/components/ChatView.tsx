@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import type { ActiveAgent, ActiveTool, Message } from "../stores/app-store";
+import type { ActiveAgent, ActiveTool, Message, ResolvedAction } from "../stores/app-store";
 import ActivityPanel from "./ActivityPanel";
 import AnimatedMessage from "./animated/AnimatedMessage";
 import MarkdownRenderer from "./MarkdownRenderer";
+import ResolvedActionChip from "./ResolvedActionChip";
 import ToolCard from "./ToolCard";
 
 type ChatViewProps = {
   messages: Message[];
+  resolvedActions?: ResolvedAction[];
   isStreaming?: boolean;
   activeToolStatus?: { toolName: string; description: string } | null;
   activeTools?: Map<string, ActiveTool>;
@@ -16,8 +18,26 @@ type ChatViewProps = {
   onResumeSession?: (cwd: string) => void;
 };
 
+type TimelineItem =
+  | { kind: "message"; data: Message; index: number }
+  | { kind: "action"; data: ResolvedAction };
+
+function buildTimeline(messages: Message[], actions: ResolvedAction[]): TimelineItem[] {
+  const items: TimelineItem[] = [
+    ...messages.map((m, i) => ({ kind: "message" as const, data: m, index: i })),
+    ...actions.map((a) => ({ kind: "action" as const, data: a })),
+  ];
+  items.sort((a, b) => {
+    const ta = a.kind === "message" ? a.data.timestamp : a.data.timestamp;
+    const tb = b.kind === "message" ? b.data.timestamp : b.data.timestamp;
+    return ta - tb;
+  });
+  return items;
+}
+
 export default function ChatView({
   messages,
+  resolvedActions = [],
   isStreaming,
   activeToolStatus,
   activeTools = new Map(),
@@ -97,30 +117,47 @@ export default function ChatView({
           )}
         </div>
       )}
-      {messages.map((msg, i) => (
-        <AnimatedMessage key={msg.id} index={i} className={`message ${msg.role}`}>
-          <div>
-            {msg.role === "tool" ? (
-              <ToolCard
-                toolName={msg.toolName || "Unknown"}
-                input={msg.toolInput || {}}
-                content={msg.content}
-                expanded={expandedTools.has(msg.id)}
-                onToggle={() => toggleToolExpanded(msg.id)}
-              />
-            ) : (
-              <div className="message-content">
-                {msg.role === "assistant" ? (
-                  <MarkdownRenderer content={msg.content} />
-                ) : (
-                  msg.content
-                )}
-              </div>
-            )}
-            <div className="message-timestamp">{formatTimestamp(msg.timestamp)}</div>
-          </div>
-        </AnimatedMessage>
-      ))}
+      {buildTimeline(messages, resolvedActions).map((item, timelineIdx) => {
+        const isLastAssistant =
+          isStreaming &&
+          item.kind === "message" &&
+          item.data.role === "assistant" &&
+          item.index === messages.length - 1;
+
+        return item.kind === "action" ? (
+          <AnimatedMessage key={item.data.id} index={0} className="resolved-action-row">
+            <ResolvedActionChip action={item.data} />
+          </AnimatedMessage>
+        ) : (
+          <AnimatedMessage
+            key={item.data.id}
+            index={item.index}
+            className={`message ${item.data.role}`}
+            isStreaming={isLastAssistant}
+          >
+            <div>
+              {item.data.role === "tool" ? (
+                <ToolCard
+                  toolName={item.data.toolName || "Unknown"}
+                  input={item.data.toolInput || {}}
+                  content={item.data.content}
+                  expanded={expandedTools.has(item.data.id)}
+                  onToggle={() => toggleToolExpanded(item.data.id)}
+                />
+              ) : (
+                <div className="message-content">
+                  {item.data.role === "assistant" ? (
+                    <MarkdownRenderer content={item.data.content} />
+                  ) : (
+                    item.data.content
+                  )}
+                </div>
+              )}
+              <div className="message-timestamp">{formatTimestamp(item.data.timestamp)}</div>
+            </div>
+          </AnimatedMessage>
+        );
+      })}
       {isStreaming && (
         <>
           {/* New rich activity panel */}

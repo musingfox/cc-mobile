@@ -69,6 +69,24 @@ export type ActiveAgent = {
   summary?: string;
 };
 
+export type ResolvedAction = {
+  id: string;
+  timestamp: number;
+} & (
+  | {
+      type: "permission";
+      toolName: string;
+      parameters: Record<string, unknown>;
+      resolution: "approved" | "denied" | "answered";
+      answer?: string;
+    }
+  | {
+      type: "activity";
+      tools: Array<{ toolName: string; detail?: string; elapsed?: string }>;
+      agents: Array<{ description: string; toolCount?: number; tokenCount?: number }>;
+    }
+);
+
 export type UsageData = {
   totalCost: number;
   inputTokens: number;
@@ -102,6 +120,7 @@ export type SessionState = {
   activeHook: { hookId: string; hookName: string } | null;
   usage: UsageData | null;
   promptSuggestion: string | null;
+  resolvedActions: ResolvedAction[];
 };
 
 type ConnectionState = "connecting" | "connected" | "disconnected";
@@ -198,6 +217,9 @@ interface AppState {
     messages: Array<{ id: string; role: string; content: string; timestamp: number }>,
   ) => void;
 
+  // Resolved actions
+  addResolvedAction: (sessionId: string, action: ResolvedAction) => void;
+
   // Session persistence
   persistSessionState: (sessionId: string) => void;
   persistAllSessions: () => void;
@@ -239,6 +261,7 @@ export const useAppStore = create<AppState>((set) => ({
         activeHook: null,
         usage: null,
         promptSuggestion: null,
+        resolvedActions: [],
       });
       return {
         sessions: next,
@@ -471,6 +494,14 @@ export const useAppStore = create<AppState>((set) => ({
       sessions: updateSession(state.sessions, sessionId, (s) => ({
         ...s,
         usage,
+      })),
+    })),
+
+  addResolvedAction: (sessionId, action) =>
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (s) => ({
+        ...s,
+        resolvedActions: [...s.resolvedActions, action],
       })),
     })),
 

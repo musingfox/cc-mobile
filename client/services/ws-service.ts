@@ -396,6 +396,31 @@ class WsService {
 
       case "stream_end":
         if (sessionId) {
+          // Snapshot completed activity before clearing
+          const endSession = store.sessions.get(sessionId);
+          if (endSession) {
+            const completedTools = Array.from(endSession.activeTools.values());
+            const completedAgents = Array.from(endSession.activeAgents.values()).filter(
+              (a) => a.status !== "running",
+            );
+            if (completedTools.length > 0 || completedAgents.length > 0) {
+              store.addResolvedAction(sessionId, {
+                id: `action-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                type: "activity",
+                timestamp: Date.now(),
+                tools: completedTools.map((t) => ({
+                  toolName: t.toolName,
+                  elapsed: t.elapsedSeconds ? `${Math.floor(t.elapsedSeconds)}s` : undefined,
+                })),
+                agents: completedAgents.map((a) => ({
+                  description: a.description,
+                  toolCount: a.toolCount,
+                  tokenCount: a.tokenCount,
+                })),
+              });
+            }
+          }
+
           store.setStreaming(sessionId, false);
           store.setActiveToolStatus(sessionId, null);
           store.clearActiveTools(sessionId);
@@ -551,6 +576,25 @@ class WsService {
     useAppStore.getState().setStreaming(sessionId, true);
   }
 
+  private recordPermissionAction(
+    sessionId: string,
+    resolution: "approved" | "denied" | "answered",
+    answer?: string,
+  ) {
+    const session = useAppStore.getState().sessions.get(sessionId);
+    if (!session?.pendingPermission) return;
+    const { tool } = session.pendingPermission;
+    useAppStore.getState().addResolvedAction(sessionId, {
+      id: `action-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      type: "permission",
+      timestamp: Date.now(),
+      toolName: tool.name,
+      parameters: tool.parameters,
+      resolution,
+      ...(answer ? { answer } : {}),
+    });
+  }
+
   approvePermission(sessionId: string) {
     const session = useAppStore.getState().sessions.get(sessionId);
     if (!this.ws || !session?.pendingPermission) return;
@@ -561,6 +605,7 @@ class WsService {
       allow: true,
     });
 
+    this.recordPermissionAction(sessionId, "approved");
     useAppStore.getState().setPermission(sessionId, null);
   }
 
@@ -574,6 +619,7 @@ class WsService {
       allow: false,
     });
 
+    this.recordPermissionAction(sessionId, "denied");
     useAppStore.getState().setPermission(sessionId, null);
   }
 
@@ -588,6 +634,7 @@ class WsService {
       answer,
     });
 
+    this.recordPermissionAction(sessionId, "answered", answer);
     useAppStore.getState().setPermission(sessionId, null);
   }
 

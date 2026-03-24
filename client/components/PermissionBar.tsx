@@ -1,4 +1,6 @@
+import { AnimatePresence, motion } from "framer-motion";
 import type { PendingPermission } from "../stores/app-store";
+import { slideUp, springTransition } from "../utils/motion-variants";
 import PermissionFooter from "./PermissionFooter";
 
 type PermissionBarProps = {
@@ -14,8 +16,6 @@ export default function PermissionBar({
   onDeny,
   onAnswer,
 }: PermissionBarProps) {
-  if (!pending) return null;
-
   const handleRespond = (action: "approve" | "approve_session" | "deny") => {
     if (action === "deny") {
       onDeny();
@@ -27,13 +27,23 @@ export default function PermissionBar({
   };
 
   return (
-    <div className="permission-bar">
-      <PermissionFooter
-        toolName={pending.tool.name}
-        parameters={pending.tool.parameters}
-        onRespond={handleRespond}
-        onAnswer={onAnswer}
-      />
-    </div>
+    <AnimatePresence>
+      {pending && (
+        <motion.div
+          className="permission-bar"
+          initial={slideUp.initial}
+          animate={slideUp.animate}
+          exit={slideUp.exit}
+          transition={springTransition}
+        >
+          <PermissionFooter
+            toolName={pending.tool.name}
+            parameters={pending.tool.parameters}
+            onRespond={handleRespond}
+            onAnswer={onAnswer}
+          />
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

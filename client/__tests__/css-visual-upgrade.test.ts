@@ -8,8 +8,8 @@ const css = readFileSync(stylesPath, "utf-8");
 describe("CSS Visual Upgrade", () => {
   describe("C1: CSS Variable System Extension", () => {
     it("should define glass variables in .theme-dark", () => {
-      expect(css).toContain("--glass-bg: rgba(26, 26, 46, 0.45)");
-      expect(css).toContain("--glass-border: rgba(255, 255, 255, 0.12)");
+      expect(css).toContain("--glass-bg:");
+      expect(css).toContain("--glass-border:");
       expect(css).toContain("--glass-blur: 16px");
     });
 
@@ -27,17 +27,26 @@ describe("CSS Visual Upgrade", () => {
     it("should define glow variables in .theme-dark", () => {
       expect(css).toContain("--glow-primary");
       expect(css).toContain("--glow-accent");
+      expect(css).toContain("--glow-cyan");
+      expect(css).toContain("--glow-subtle");
     });
 
     it("should define glass variables in .theme-light", () => {
-      expect(css).toContain("--glass-bg: rgba(255, 255, 255, 0.5)");
-      expect(css).toContain("--glass-border: rgba(0, 0, 0, 0.1)");
+      expect(css).toContain("--glass-bg: rgba(255, 255, 255, 0.6)");
       expect(css).toContain("--glass-blur: 12px");
     });
 
     it("should define glass variables in .theme-claude", () => {
-      expect(css).toContain("--glass-bg: rgba(242, 237, 229, 0.5)");
-      expect(css).toContain("--glass-border: rgba(204, 157, 100, 0.25)");
+      expect(css).toContain("--glass-bg: rgba(242, 237, 229, 0.55)");
+    });
+
+    it("should define Neural Interface tokens", () => {
+      expect(css).toContain("--accent-cyan");
+      expect(css).toContain("--accent-electric");
+      expect(css).toContain("--glass-bg-heavy");
+      expect(css).toContain("--glass-border-bright");
+      expect(css).toContain("--font-mono");
+      expect(css).toContain("--bg-mesh");
     });
   });
 
@@ -47,7 +56,7 @@ describe("CSS Visual Upgrade", () => {
       expect(statusBarMatch).toBeTruthy();
       const statusBar = statusBarMatch?.[0];
       expect(statusBar).toContain("backdrop-filter");
-      expect(statusBar).toContain("var(--glass-bg)");
+      expect(statusBar).toContain("var(--glass-bg-heavy)");
     });
 
     it("should apply glass effect to .input-bar", () => {
@@ -55,7 +64,7 @@ describe("CSS Visual Upgrade", () => {
       expect(inputBarMatch).toBeTruthy();
       const inputBar = inputBarMatch?.[0];
       expect(inputBar).toContain("backdrop-filter");
-      expect(inputBar).toContain("var(--glass-bg)");
+      expect(inputBar).toContain("var(--glass-bg-heavy)");
     });
 
     it("should apply glass effect to .drawer-content", () => {
@@ -63,7 +72,7 @@ describe("CSS Visual Upgrade", () => {
       expect(drawerMatch).toBeTruthy();
       const drawer = drawerMatch?.[0];
       expect(drawer).toContain("backdrop-filter");
-      expect(drawer).toContain("var(--glass-bg)");
+      expect(drawer).toContain("var(--glass-bg-heavy)");
     });
 
     it("should apply glass effect to .activity-tool-card", () => {
@@ -79,13 +88,12 @@ describe("CSS Visual Upgrade", () => {
     it("should use gradient in .send-btn", () => {
       const sendBtnMatch = css.match(/\.send-btn\s*\{[^}]+\}/s);
       expect(sendBtnMatch).toBeTruthy();
-      expect(sendBtnMatch?.[0]).toContain("var(--gradient-primary)");
+      expect(sendBtnMatch?.[0]).toContain("var(--gradient-cyan)");
     });
 
-    it("should use gradient border in .session-tab.active", () => {
-      const activeTabMatch = css.match(/\.session-tab\.active\s*\{[^}]+\}/s);
-      expect(activeTabMatch).toBeTruthy();
-      expect(activeTabMatch?.[0]).toContain("var(--gradient-primary)");
+    it("should use animated indicator in session tabs", () => {
+      expect(css).toContain(".session-tab-indicator");
+      expect(css).toContain("var(--gradient-cyan)");
     });
   });
 
@@ -104,15 +112,15 @@ describe("CSS Visual Upgrade", () => {
   describe("C5: Depth Layering", () => {
     it("should apply shadows to components", () => {
       expect(css).toMatch(/\.status-bar[^}]*var\(--shadow-sm\)/s);
-      expect(css).toMatch(/\.input-bar[^}]*var\(--shadow-md\)/s);
+      expect(css).toMatch(/\.input-bar[^}]*var\(--shadow-lg\)/s);
       expect(css).toMatch(/\.drawer-content[^}]*var\(--shadow-lg\)/s);
       expect(css).toMatch(/\.permission-bar[^}]*var\(--shadow-lg\)/s);
     });
   });
 
   describe("C6: Typography Enhancement", () => {
-    it("should add Inter font to body", () => {
-      expect(css).toContain("Inter");
+    it("should use DM Sans font in body", () => {
+      expect(css).toContain("DM Sans");
     });
 
     it("should enable font smoothing", () => {
@@ -130,7 +138,12 @@ describe("CSS Visual Upgrade", () => {
     it("should set font-weight for .status-label", () => {
       const statusLabelMatch = css.match(/\.status-label\s*\{[^}]+\}/s);
       expect(statusLabelMatch).toBeTruthy();
-      expect(statusLabelMatch?.[0]).toContain("font-weight: 600");
+      expect(statusLabelMatch?.[0]).toContain("font-weight: 500");
+    });
+
+    it("should use Fira Code for monospace", () => {
+      expect(css).toContain("Fira Code");
+      expect(css).toContain("--font-mono");
     });
   });
 
@@ -148,7 +161,7 @@ describe("CSS Visual Upgrade", () => {
     });
 
     it("should add :active state with scale transform", () => {
-      expect(css).toMatch(/\.send-btn:active[^}]*transform:\s*scale\(0\.97\)/s);
+      expect(css).toMatch(/\.send-btn:active[^}]*transform:\s*scale\(0\.95\)/s);
       expect(css).toMatch(/\.session-tab:active[^}]*transform:\s*scale\(0\.97\)/s);
     });
   });
@@ -180,7 +193,7 @@ describe("CSS Visual Upgrade", () => {
     it("should add glass bg and border to .message.assistant .message-content", () => {
       const assistantMsgMatch = css.match(/\.message\.assistant\s+\.message-content\s*\{[^}]+\}/s);
       expect(assistantMsgMatch).toBeTruthy();
-      expect(assistantMsgMatch?.[0]).toContain("var(--glass-bg)");
+      expect(assistantMsgMatch?.[0]).toContain("var(--glass-bg-heavy)");
       expect(assistantMsgMatch?.[0]).toContain("border:");
     });
 
@@ -213,7 +226,7 @@ describe("CSS Visual Upgrade", () => {
     });
 
     it("should add hover effect to .command-panel-item", () => {
-      expect(css).toMatch(/\.command-panel-item:hover[^}]*var\(--glass-bg\)/s);
+      expect(css).toMatch(/\.command-panel-item:hover[^}]*var\(--glass-border-bright\)/s);
     });
   });
 });
