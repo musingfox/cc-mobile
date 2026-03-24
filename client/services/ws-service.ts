@@ -71,7 +71,8 @@ class WsService {
 
     ws.onopen = () => {
       console.log("[ws-service] connected");
-      useAppStore.getState().setConnectionState("connected");
+      const store = useAppStore.getState();
+      store.setConnectionState("connected");
       this.reconnectDelay = 1000;
       this.ws = ws;
       // Request current server config (including permission mode)
@@ -83,6 +84,13 @@ class WsService {
       this.setEffort(settings.effort as "low" | "medium" | "high" | "max" | null);
       if (settings.permissionMode !== "default") {
         this.setPermissionMode(settings.permissionMode);
+      }
+
+      // If we have restored sessions, don't auto-create a new one
+      // User already has sessions from persistence
+      if (store.sessions.size === 0) {
+        // No restored sessions - this is first load or clean state
+        // Auto-create will happen via other mechanisms if needed
       }
     };
 
@@ -394,6 +402,14 @@ class WsService {
           store.clearActiveAgents(sessionId);
           store.setActiveHook(sessionId, null);
           hapticService.complete();
+          // Notify when response completes while app is in background
+          if (document.hidden) {
+            const settingsStore = useSettingsStore.getState();
+            if (settingsStore.notificationsEnabled) {
+              const cwd = store.sessions.get(sessionId)?.cwd;
+              notificationService.showResponseComplete(sessionId, cwd);
+            }
+          }
         }
         break;
 
@@ -412,7 +428,8 @@ class WsService {
           if (document.hidden) {
             toastService.info(`Permission requested: ${toolName}`);
             if (settingsStore.notificationsEnabled) {
-              notificationService.showPermissionNotification(toolName, sessionId);
+              const cwd = store.sessions.get(sessionId)?.cwd;
+              notificationService.showPermissionNotification(toolName, sessionId, cwd);
             }
           }
         }

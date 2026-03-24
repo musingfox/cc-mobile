@@ -1,5 +1,13 @@
 import { create } from "zustand";
 import type { SessionListItem } from "../../server/protocol";
+import {
+  clearSessionState,
+  getAllSessionIds,
+  loadActiveSessionId,
+  loadSessionState,
+  saveActiveSessionId,
+  saveSessionState,
+} from "../services/session-persistence";
 
 export type Message = {
   id: string;
@@ -189,6 +197,11 @@ interface AppState {
     sessionId: string,
     messages: Array<{ id: string; role: string; content: string; timestamp: number }>,
   ) => void;
+
+  // Session persistence
+  persistSessionState: (sessionId: string) => void;
+  persistAllSessions: () => void;
+  restoreAllSessions: () => void;
 }
 
 function updateSession(
@@ -460,4 +473,47 @@ export const useAppStore = create<AppState>((set) => ({
         usage,
       })),
     })),
+
+  persistSessionState: (sessionId) => {
+    const state = useAppStore.getState();
+    const session = state.sessions.get(sessionId);
+    if (session) {
+      saveSessionState(sessionId, session);
+    }
+  },
+
+  persistAllSessions: () => {
+    const state = useAppStore.getState();
+    // Save all sessions
+    state.sessions.forEach((session, sessionId) => {
+      saveSessionState(sessionId, session);
+    });
+    // Save active session ID
+    saveActiveSessionId(state.activeSessionId);
+  },
+
+  restoreAllSessions: () => {
+    const sessionIds = getAllSessionIds();
+    const restoredSessions = new Map<string, SessionState>();
+
+    for (const sessionId of sessionIds) {
+      const session = loadSessionState(sessionId);
+      if (session) {
+        restoredSessions.set(sessionId, session);
+      } else {
+        // Clean up invalid entries
+        clearSessionState(sessionId);
+      }
+    }
+
+    const activeSessionId = loadActiveSessionId();
+    // Only set active if it exists in restored sessions
+    const validActiveSessionId =
+      activeSessionId && restoredSessions.has(activeSessionId) ? activeSessionId : null;
+
+    set({
+      sessions: restoredSessions,
+      activeSessionId: validActiveSessionId,
+    });
+  },
 }));

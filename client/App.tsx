@@ -11,6 +11,7 @@ import SessionListModal from "./components/SessionListModal";
 import SessionTabs from "./components/SessionTabs";
 import Settings from "./components/Settings";
 import ToastProvider from "./components/toasts/ToastProvider";
+import { LifecycleManager } from "./services/lifecycle-manager";
 import { wsService } from "./services/ws-service";
 import type { Capabilities, RateLimitInfo } from "./stores/app-store";
 import { useAppStore } from "./stores/app-store";
@@ -90,10 +91,31 @@ export default function App() {
   const handleOffline = useCallback(() => setIsOnline(false), []);
 
   useEffect(() => {
+    // 1. Restore persisted sessions before connecting
+    const store = useAppStore.getState();
+    store.restoreAllSessions();
+
+    // 2. Connect to WebSocket
     wsService.connect();
+
+    // 3. Setup lifecycle manager for persistence
+    const lifecycleManager = new LifecycleManager({
+      onBeforeHide: () => {
+        const currentStore = useAppStore.getState();
+        currentStore.persistAllSessions();
+      },
+      onPageShow: () => {
+        // Could restore again if needed, but typically not necessary
+      },
+    });
+    lifecycleManager.start();
+
+    // 4. Setup online/offline listeners
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
+
     return () => {
+      lifecycleManager.destroy();
       wsService.destroy();
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);

@@ -1,10 +1,16 @@
+import { swRegistrationManager } from "./sw-registration";
+
 class NotificationService {
   isSupported(): boolean {
-    return typeof window !== "undefined" && "Notification" in window;
+    return (
+      typeof window !== "undefined" &&
+      "Notification" in window &&
+      swRegistrationManager.getRegistration() !== null
+    );
   }
 
   async requestPermission(): Promise<NotificationPermission> {
-    if (!this.isSupported()) {
+    if (typeof window === "undefined" || !("Notification" in window)) {
       return "denied";
     }
 
@@ -16,8 +22,15 @@ class NotificationService {
     }
   }
 
-  showPermissionNotification(toolName: string, sessionId?: string): void {
-    if (!this.isSupported()) {
+  private async show(title: string, body: string, tag: string): Promise<void> {
+    const registration = swRegistrationManager.getRegistration();
+
+    if (!registration) {
+      console.warn("[notification] no service worker registration available");
+      return;
+    }
+
+    if (typeof window === "undefined" || !("Notification" in window)) {
       console.warn("[notification] not supported");
       return;
     }
@@ -27,14 +40,31 @@ class NotificationService {
       return;
     }
 
-    // Use tag to deduplicate — only latest notification per session is shown
-    const tag = sessionId ? `cc-mobile-permission-${sessionId}` : "cc-mobile-permission";
+    try {
+      await registration.showNotification(title, { body, tag, renotify: true });
+    } catch (error) {
+      console.error("[notification] showNotification failed:", error);
+    }
+  }
 
-    new Notification("CCMobile — Permission Required", {
-      body: `Claude needs permission to run ${toolName}`,
-      tag,
-      renotify: true,
-    });
+  async showPermissionNotification(
+    toolName: string,
+    sessionId?: string,
+    cwd?: string,
+  ): Promise<void> {
+    const tag = sessionId ? `cc-mobile-permission-${sessionId}` : "cc-mobile-permission";
+    const project = cwd ? cwd.split("/").pop() || cwd : null;
+    const body = project
+      ? `${project}: permission needed for ${toolName}`
+      : `Permission needed for ${toolName}`;
+    await this.show("CCMobile", body, tag);
+  }
+
+  async showResponseComplete(sessionId?: string, cwd?: string): Promise<void> {
+    const tag = sessionId ? `cc-mobile-done-${sessionId}` : "cc-mobile-done";
+    const project = cwd ? cwd.split("/").pop() || cwd : null;
+    const body = project ? `${project}: response complete` : "Response complete";
+    await this.show("CCMobile", body, tag);
   }
 }
 

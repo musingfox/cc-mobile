@@ -2,28 +2,36 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { hapticService } from "../services/haptic";
 import { notificationService } from "../services/notification";
 import { loadSettings, saveSettings } from "../services/settings";
+import { swRegistrationManager } from "../services/sw-registration";
 import { voiceInputService } from "../services/voice-input";
 
-// TC1-TC4: NotificationService
+// TC-N1 - TC-N8: NotificationService
 describe("NotificationService", () => {
   beforeEach(() => {
     delete (globalThis as any).Notification;
+    (swRegistrationManager as any).registration = null;
   });
 
-  test("TC1: isSupported returns true when Notification exists", () => {
+  test("TC-N1: isSupported returns true when registration available", () => {
     (globalThis as any).Notification = {
       permission: "default",
       requestPermission: () => Promise.resolve("granted"),
     };
+    const mockRegistration = { scope: "/test" } as ServiceWorkerRegistration;
+    (swRegistrationManager as any).registration = mockRegistration;
     expect(notificationService.isSupported()).toBe(true);
   });
 
-  test("TC2: isSupported returns false when Notification undefined", () => {
-    delete (globalThis as any).Notification;
+  test("TC-N2: isSupported returns false without registration", () => {
+    (globalThis as any).Notification = {
+      permission: "default",
+      requestPermission: () => Promise.resolve("granted"),
+    };
+    (swRegistrationManager as any).registration = null;
     expect(notificationService.isSupported()).toBe(false);
   });
 
-  test("TC3: requestPermission returns granted on success", async () => {
+  test("TC-N3: requestPermission returns granted on success", async () => {
     (globalThis as any).Notification = {
       permission: "default",
       requestPermission: () => Promise.resolve("granted"),
@@ -32,10 +40,72 @@ describe("NotificationService", () => {
     expect(result).toBe("granted");
   });
 
-  test("TC4: requestPermission returns denied when unsupported", async () => {
+  test("TC-N4: requestPermission returns denied when unsupported", async () => {
     delete (globalThis as any).Notification;
     const result = await notificationService.requestPermission();
     expect(result).toBe("denied");
+  });
+
+  test("TC-N5: showPermissionNotification with permission granted calls registration.showNotification", async () => {
+    const mockShowNotification = mock(() => Promise.resolve());
+    const mockRegistration = {
+      scope: "/test",
+      showNotification: mockShowNotification,
+    } as unknown as ServiceWorkerRegistration;
+    (swRegistrationManager as any).registration = mockRegistration;
+    (globalThis as any).Notification = { permission: "granted" };
+
+    await notificationService.showPermissionNotification(
+      "Bash",
+      "sess-123",
+      "/Users/nick/workspace/cc-mobile",
+    );
+
+    expect(mockShowNotification).toHaveBeenCalledWith("CCMobile", {
+      body: "cc-mobile: permission needed for Bash",
+      tag: "cc-mobile-permission-sess-123",
+      renotify: true,
+    });
+  });
+
+  test("TC-N6: showPermissionNotification without sessionId uses default tag", async () => {
+    const mockShowNotification = mock(() => Promise.resolve());
+    const mockRegistration = {
+      scope: "/test",
+      showNotification: mockShowNotification,
+    } as unknown as ServiceWorkerRegistration;
+    (swRegistrationManager as any).registration = mockRegistration;
+    (globalThis as any).Notification = { permission: "granted" };
+
+    await notificationService.showPermissionNotification("Read");
+
+    expect(mockShowNotification).toHaveBeenCalledWith("CCMobile", {
+      body: "Permission needed for Read",
+      tag: "cc-mobile-permission",
+      renotify: true,
+    });
+  });
+
+  test("TC-N7: showPermissionNotification without permission logs warning", async () => {
+    const mockShowNotification = mock(() => Promise.resolve());
+    const mockRegistration = {
+      scope: "/test",
+      showNotification: mockShowNotification,
+    } as unknown as ServiceWorkerRegistration;
+    (swRegistrationManager as any).registration = mockRegistration;
+    (globalThis as any).Notification = { permission: "denied" };
+
+    await notificationService.showPermissionNotification("Bash");
+
+    expect(mockShowNotification).not.toHaveBeenCalled();
+  });
+
+  test("TC-N8: showPermissionNotification without registration logs warning", async () => {
+    (swRegistrationManager as any).registration = null;
+    (globalThis as any).Notification = { permission: "granted" };
+
+    // Should not throw
+    await notificationService.showPermissionNotification("Read");
   });
 });
 

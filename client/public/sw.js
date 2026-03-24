@@ -28,8 +28,15 @@ self.addEventListener("install", (event) => {
         // Continue without SW cache
       }),
   );
-  // Activate immediately
-  self.skipWaiting();
+  // Do NOT auto-skip waiting - let the app control when to activate
+});
+
+// Message handler: allow app to trigger skipWaiting
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") {
+    console.log("[SW] SKIP_WAITING requested");
+    self.skipWaiting();
+  }
 });
 
 // Activate event: clean up old caches
