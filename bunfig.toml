@@ -1,5 +1,4 @@
 [test]
-# Use `bun run test` (not bare `bun test`) to run unit tests.
-# bun test exclude is unreliable — explicit paths in package.json are the source of truth.
 # e2e tests use Playwright: `bun run test:e2e`
 preload = ["./happy-dom.ts"]
+pathIgnorePatterns = ["e2e/**"]

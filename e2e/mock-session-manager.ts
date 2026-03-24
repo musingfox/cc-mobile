@@ -153,9 +153,29 @@ export class MockSessionManager {
     return null;
   }
 
-  getPermissionMode(): "default" | "trusted" | "paranoid" {
+  async getInitData(_sessionId: string) {
+    return null;
+  }
+
+  getPermissionMode(): string {
     return "default";
   }
+
+  getSelectedModel(): string {
+    return "claude-sonnet-4-6";
+  }
+
+  getSelectedEffort(): string | null {
+    return null;
+  }
+
+  setPermissionMode(_mode: string): void {}
+
+  setEnvVars(_envVars: Record<string, string>): void {}
+
+  async setModel(_model: string, _sessionId?: string): Promise<void> {}
+
+  setEffort(_effort: string | null): void {}
 
   destroySession(sessionId: string): void {
     this.sessions.delete(sessionId);

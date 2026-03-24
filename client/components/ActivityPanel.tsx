@@ -151,6 +151,7 @@ export default function ActivityPanel({
                   <span className="activity-agent-status running">Running</span>
                   <span className="activity-agent-description">{agent.description}</span>
                 </div>
+                {agent.summary && <div className="activity-agent-summary">{agent.summary}</div>}
                 {(agent.toolCount !== undefined || agent.tokenCount !== undefined) && (
                   <div className="activity-agent-stats">
                     {agent.toolCount !== undefined && (

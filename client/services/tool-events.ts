@@ -188,3 +188,19 @@ export type PromptSuggestionEvent = {
 export function isPromptSuggestion(chunk: Record<string, unknown>): chunk is PromptSuggestionEvent {
   return chunk.type === "prompt_suggestion" && typeof chunk.suggestion === "string";
 }
+
+// API retry event from SDK (retryable error with delay)
+export type ApiRetryEvent = {
+  type: "system";
+  subtype: "api_retry";
+  attempt: number;
+  max_retries: number;
+  retry_delay_ms: number;
+  error_status: number | null;
+};
+
+export function isApiRetry(chunk: Record<string, unknown>): chunk is ApiRetryEvent {
+  return (
+    chunk.type === "system" && chunk.subtype === "api_retry" && typeof chunk.attempt === "number"
+  );
+}

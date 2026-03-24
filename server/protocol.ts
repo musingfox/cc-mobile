@@ -68,6 +68,12 @@ const SetEffortMessage = z.object({
   effort: z.enum(["low", "medium", "high", "max"]).nullable(),
 });
 
+const GetSessionInfoMessage = z.object({
+  type: z.literal("get_session_info"),
+  sessionId: z.string(),
+  dir: z.string().optional(),
+});
+
 export const ClientMessage = z.discriminatedUnion("type", [
   NewSessionMessage,
   SendMessage,
@@ -81,6 +87,7 @@ export const ClientMessage = z.discriminatedUnion("type", [
   SetEnvVarsMessage,
   SetModelMessage,
   SetEffortMessage,
+  GetSessionInfoMessage,
 ]);
 
 export type ClientMessage = z.infer<typeof ClientMessage>;
@@ -189,6 +196,11 @@ const SessionHistoryMessage = z.object({
   messages: z.array(HistoryMessageSchema),
 });
 
+const SessionInfoMessage = z.object({
+  type: z.literal("session_info"),
+  session: SessionListItemSchema.nullable(),
+});
+
 export const ServerMessage = z.discriminatedUnion("type", [
   SessionCreatedMessage,
   StreamChunkMessage,
@@ -200,6 +212,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
   ServerConfigMessage,
   SessionListMessage,
   SessionHistoryMessage,
+  SessionInfoMessage,
 ]);
 
 export type ServerMessage = z.infer<typeof ServerMessage>;

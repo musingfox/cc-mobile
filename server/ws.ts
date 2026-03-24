@@ -11,7 +11,7 @@ import type { ServerConfig } from "./config";
 import type { createPermissionHandler } from "./permission-bridge";
 import { ClientMessage, ServerMessage } from "./protocol";
 import { loadSessionHistory } from "./session-history";
-import { listClaudeSessions } from "./session-listing";
+import { getClaudeSessionInfo, listClaudeSessions } from "./session-listing";
 import type { SessionManager } from "./session-manager";
 
 function expandPath(p: string): string {
@@ -281,6 +281,12 @@ export function createWsPlugin(
               console.error("[ws] session_list validation failed:", err);
               ws.send({ type: "session_list", sessions });
             }
+            break;
+          }
+
+          case "get_session_info": {
+            const session = await getClaudeSessionInfo(message.sessionId, message.dir);
+            ws.send({ type: "session_info", session });
             break;
           }
 

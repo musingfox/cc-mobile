@@ -6,6 +6,7 @@ import { notificationService } from "./notification";
 import { saveProject } from "./projects";
 import { toastService } from "./toast-service";
 import {
+  isApiRetry,
   isHookResponse,
   isHookStarted,
   isPromptSuggestion,
@@ -162,6 +163,15 @@ class WsService {
           break;
         }
 
+        // Handle API retry notifications
+        if (isApiRetry(chunk)) {
+          const delaySec = Math.round(chunk.retry_delay_ms / 1000);
+          toastService.info(
+            `API retrying (${chunk.attempt}/${chunk.max_retries}) in ${delaySec}s...`,
+          );
+          break;
+        }
+
         // Handle prompt suggestions
         if (isPromptSuggestion(chunk)) {
           if (sessionId) {
@@ -284,6 +294,7 @@ class WsService {
             store.updateActiveAgent(sessionId, chunk.task_id, {
               toolCount: chunk.usage?.tool_uses,
               tokenCount: chunk.usage?.total_tokens,
+              summary: chunk.summary,
             });
           }
           // Update legacy status if tool name present

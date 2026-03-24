@@ -1,4 +1,4 @@
-import { listSessions, type SDKSessionInfo } from "@anthropic-ai/claude-agent-sdk";
+import { getSessionInfo, listSessions, type SDKSessionInfo } from "@anthropic-ai/claude-agent-sdk";
 import type { SessionListItem } from "./protocol";
 
 /**
@@ -19,6 +19,22 @@ export async function listClaudeSessions(options?: {
   });
 
   return sessions.map(transformSessionInfo);
+}
+
+/**
+ * Get info for a single session.
+ *
+ * @param sessionId - SDK session ID
+ * @param dir - Optional working directory
+ * @returns Session info or null if not found
+ */
+export async function getClaudeSessionInfo(
+  sessionId: string,
+  dir?: string,
+): Promise<SessionListItem | null> {
+  const info = await getSessionInfo(sessionId, dir ? { dir } : undefined);
+  if (!info) return null;
+  return transformSessionInfo(info);
 }
 
 /**
