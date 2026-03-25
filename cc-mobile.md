@@ -274,7 +274,6 @@ Add to home screen → launches as standalone app (no browser chrome).
 - PWA manifest + service worker for offline shell
 - Production build: Elysia serves `dist/client/` static files
 - Startup script (`bun run start`) for one-command launch (server + built frontend)
-- Voice input support (Web Speech API)
 - Notification on permission request when app is backgrounded (Notification API)
 
 ## Development Setup

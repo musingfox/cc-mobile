@@ -5,7 +5,6 @@ interface SettingsState {
   defaultCwd: string;
   theme: Theme;
   notificationsEnabled: boolean;
-  voiceInputEnabled: boolean;
   hapticsEnabled: boolean;
   envVars: Record<string, string>;
   model: string;
@@ -14,7 +13,6 @@ interface SettingsState {
   setDefaultCwd: (cwd: string) => void;
   setTheme: (theme: Theme) => void;
   setNotificationsEnabled: (enabled: boolean) => void;
-  setVoiceInputEnabled: (enabled: boolean) => void;
   setHapticsEnabled: (enabled: boolean) => void;
   setEnvVar: (key: string, value: string) => void;
   removeEnvVar: (key: string) => void;
@@ -31,7 +29,6 @@ export const useSettingsStore = create<SettingsState>((set) => {
     defaultCwd: initialSettings.defaultCwd,
     theme: initialSettings.theme,
     notificationsEnabled: initialSettings.notificationsEnabled,
-    voiceInputEnabled: initialSettings.voiceInputEnabled,
     hapticsEnabled: initialSettings.hapticsEnabled,
     envVars: initialSettings.envVars,
     model: initialSettings.model,
@@ -54,12 +51,6 @@ export const useSettingsStore = create<SettingsState>((set) => {
         const newSettings = { ...state, notificationsEnabled: enabled };
         saveSettings(newSettings);
         return { notificationsEnabled: enabled };
-      }),
-    setVoiceInputEnabled: (enabled) =>
-      set((state) => {
-        const newSettings = { ...state, voiceInputEnabled: enabled };
-        saveSettings(newSettings);
-        return { voiceInputEnabled: enabled };
       }),
     setHapticsEnabled: (enabled) =>
       set((state) => {

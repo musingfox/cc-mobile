@@ -30,9 +30,11 @@ describe("Settings persistence", () => {
       defaultCwd: "",
       theme: "dark",
       notificationsEnabled: false,
-      voiceInputEnabled: false,
       hapticsEnabled: false,
       envVars: { A: "1" },
+      model: "claude-sonnet-4-6",
+      effort: null,
+      permissionMode: "default",
     });
     const result = loadSettings();
     expect(result.envVars).toEqual({ A: "1" });
@@ -41,7 +43,7 @@ describe("Settings persistence", () => {
   test("2: loadSettings with missing envVars field returns empty object", () => {
     mockStorage.set(
       "cc-mobile-settings",
-      '{"defaultCwd":"","theme":"dark","notificationsEnabled":false,"voiceInputEnabled":false,"hapticsEnabled":false}',
+      '{"defaultCwd":"","theme":"dark","notificationsEnabled":false,"hapticsEnabled":false}',
     );
     const result = loadSettings();
     expect(result.envVars).toEqual({});
@@ -50,7 +52,7 @@ describe("Settings persistence", () => {
   test("3: loadSettings with corrupted envVars returns empty object", () => {
     mockStorage.set(
       "cc-mobile-settings",
-      '{"defaultCwd":"","theme":"dark","notificationsEnabled":false,"voiceInputEnabled":false,"hapticsEnabled":false,"envVars":["invalid"]}',
+      '{"defaultCwd":"","theme":"dark","notificationsEnabled":false,"hapticsEnabled":false,"envVars":["invalid"]}',
     );
     const result = loadSettings();
     expect(result.envVars).toEqual({});

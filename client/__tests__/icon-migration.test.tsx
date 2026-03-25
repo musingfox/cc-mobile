@@ -6,12 +6,10 @@ import {
   FileText,
   FolderOpen,
   Globe,
-  Mic,
   Pencil,
   Search,
   Send,
   Settings,
-  Square,
   Star,
   Terminal,
   toolIconMap,
@@ -43,8 +41,6 @@ describe("Icon Migration", () => {
   test("all exported icons are defined", () => {
     const icons = [
       Settings,
-      Mic,
-      Square,
       Send,
       X,
       Star,

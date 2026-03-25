@@ -1,6 +1,5 @@
 import { hapticService } from "../services/haptic";
 import { notificationService } from "../services/notification";
-import { voiceInputService } from "../services/voice-input";
 import { wsService } from "../services/ws-service";
 import { useAppStore } from "../stores/app-store";
 import { useSettingsStore } from "../stores/settings-store";
@@ -37,8 +36,6 @@ export default function Settings({ onClose }: SettingsProps) {
 
   const notificationsEnabled = useSettingsStore((s) => s.notificationsEnabled);
   const setNotificationsEnabled = useSettingsStore((s) => s.setNotificationsEnabled);
-  const voiceInputEnabled = useSettingsStore((s) => s.voiceInputEnabled);
-  const setVoiceInputEnabled = useSettingsStore((s) => s.setVoiceInputEnabled);
   const hapticsEnabled = useSettingsStore((s) => s.hapticsEnabled);
   const setHapticsEnabled = useSettingsStore((s) => s.setHapticsEnabled);
 
@@ -55,10 +52,6 @@ export default function Settings({ onClose }: SettingsProps) {
     } else {
       setNotificationsEnabled(false);
     }
-  };
-
-  const handleVoiceInputToggle = () => {
-    setVoiceInputEnabled(!voiceInputEnabled);
   };
 
   const handleHapticsToggle = () => {
@@ -128,14 +121,6 @@ export default function Settings({ onClose }: SettingsProps) {
               disabled={!notificationService.isSupported()}
             >
               Notifications
-            </button>
-            <button
-              type="button"
-              className={`settings-theme-btn ${voiceInputEnabled ? "active" : ""}`}
-              onClick={handleVoiceInputToggle}
-              disabled={!voiceInputService.isSupported()}
-            >
-              Voice Input
             </button>
             <button
               type="button"

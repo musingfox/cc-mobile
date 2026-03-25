@@ -3,7 +3,6 @@ import { hapticService } from "../services/haptic";
 import { notificationService } from "../services/notification";
 import { loadSettings, saveSettings } from "../services/settings";
 import { swRegistrationManager } from "../services/sw-registration";
-import { voiceInputService } from "../services/voice-input";
 
 // TC-N1 - TC-N8: NotificationService
 describe("NotificationService", () => {
@@ -109,40 +108,6 @@ describe("NotificationService", () => {
   });
 });
 
-// TC5-TC8: VoiceInputService
-describe("VoiceInputService", () => {
-  beforeEach(() => {
-    delete (globalThis as any).SpeechRecognition;
-    delete (globalThis as any).webkitSpeechRecognition;
-  });
-
-  test("TC5: isSupported returns true when SpeechRecognition exists", () => {
-    (globalThis as any).SpeechRecognition = class {};
-    expect(voiceInputService.isSupported()).toBe(true);
-  });
-
-  test("TC6: isSupported returns false when neither API exists", () => {
-    delete (globalThis as any).SpeechRecognition;
-    delete (globalThis as any).webkitSpeechRecognition;
-    expect(voiceInputService.isSupported()).toBe(false);
-  });
-
-  test("TC7: isSupported returns true when webkitSpeechRecognition exists", () => {
-    (globalThis as any).webkitSpeechRecognition = class {};
-    expect(voiceInputService.isSupported()).toBe(true);
-  });
-
-  test("TC8: startListening calls onError when unsupported", () => {
-    delete (globalThis as any).SpeechRecognition;
-    delete (globalThis as any).webkitSpeechRecognition;
-    const onResult = mock(() => {});
-    const onError = mock(() => {});
-    voiceInputService.startListening(onResult, onError);
-    expect(onError).toHaveBeenCalledWith("Speech recognition not supported");
-    expect(onResult).not.toHaveBeenCalled();
-  });
-});
-
 // TC9-TC12: HapticService
 describe("HapticService", () => {
   beforeEach(() => {
@@ -190,7 +155,6 @@ describe("Settings schema", () => {
   test("TC13: loadSettings defaults new fields to false", () => {
     const s = loadSettings();
     expect(s.notificationsEnabled).toBe(false);
-    expect(s.voiceInputEnabled).toBe(false);
     expect(s.hapticsEnabled).toBe(false);
   });
 
@@ -199,12 +163,14 @@ describe("Settings schema", () => {
       defaultCwd: "/tmp",
       theme: "light",
       notificationsEnabled: true,
-      voiceInputEnabled: true,
       hapticsEnabled: true,
+      envVars: {},
+      model: "claude-sonnet-4-6",
+      effort: null,
+      permissionMode: "default",
     });
     const s = loadSettings();
     expect(s.notificationsEnabled).toBe(true);
-    expect(s.voiceInputEnabled).toBe(true);
     expect(s.hapticsEnabled).toBe(true);
   });
 
@@ -216,7 +182,6 @@ describe("Settings schema", () => {
     const s = loadSettings();
     expect(s.defaultCwd).toBe("/foo");
     expect(s.notificationsEnabled).toBe(false);
-    expect(s.voiceInputEnabled).toBe(false);
     expect(s.hapticsEnabled).toBe(false);
   });
 });

@@ -28,13 +28,15 @@ describe("settings service", () => {
       defaultCwd: "/tmp",
       theme: "light",
       notificationsEnabled: false,
-      voiceInputEnabled: false,
       hapticsEnabled: false,
       envVars: {},
+      model: "claude-sonnet-4-6",
+      effort: null,
+      permissionMode: "default",
     });
     const stored = mockStorage.get("cc-mobile-settings");
     expect(stored).toBe(
-      '{"defaultCwd":"/tmp","theme":"light","notificationsEnabled":false,"voiceInputEnabled":false,"hapticsEnabled":false,"envVars":{}}',
+      '{"defaultCwd":"/tmp","theme":"light","notificationsEnabled":false,"hapticsEnabled":false,"envVars":{},"model":"claude-sonnet-4-6","effort":null,"permissionMode":"default"}',
     );
   });
 
@@ -45,7 +47,6 @@ describe("settings service", () => {
       defaultCwd: "",
       theme: "dark",
       notificationsEnabled: false,
-      voiceInputEnabled: false,
       hapticsEnabled: false,
       envVars: {},
       model: "claude-sonnet-4-6",
@@ -61,7 +62,6 @@ describe("settings service", () => {
       defaultCwd: "",
       theme: "dark",
       notificationsEnabled: false,
-      voiceInputEnabled: false,
       hapticsEnabled: false,
       envVars: {},
       model: "claude-sonnet-4-6",
@@ -77,7 +77,6 @@ describe("settings service", () => {
       defaultCwd: "/workspace",
       theme: "claude",
       notificationsEnabled: false,
-      voiceInputEnabled: false,
       hapticsEnabled: false,
       envVars: {},
       model: "claude-sonnet-4-6",

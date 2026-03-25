@@ -4,7 +4,6 @@ export interface Settings {
   defaultCwd: string;
   theme: Theme;
   notificationsEnabled: boolean;
-  voiceInputEnabled: boolean;
   hapticsEnabled: boolean;
   envVars: Record<string, string>;
   model: string;
@@ -18,7 +17,6 @@ const defaultSettings: Settings = {
   defaultCwd: "",
   theme: "dark",
   notificationsEnabled: false,
-  voiceInputEnabled: false,
   hapticsEnabled: false,
   envVars: {},
   model: "claude-sonnet-4-6",
@@ -55,10 +53,6 @@ export function loadSettings(): Settings {
         typeof parsed.notificationsEnabled === "boolean"
           ? parsed.notificationsEnabled
           : defaultSettings.notificationsEnabled,
-      voiceInputEnabled:
-        typeof parsed.voiceInputEnabled === "boolean"
-          ? parsed.voiceInputEnabled
-          : defaultSettings.voiceInputEnabled,
       hapticsEnabled:
         typeof parsed.hapticsEnabled === "boolean"
           ? parsed.hapticsEnabled

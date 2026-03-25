@@ -210,7 +210,6 @@ cc-mobile/
 - Haptic feedback on approve/deny (Vibration API)
 - PWA manifest + service worker for offline shell
 - Production build: Elysia serves static files + one-command startup
-- Voice input (Web Speech API)
 - Background notifications for permission requests (Notification API)
 
 ## Architecture Decision Records

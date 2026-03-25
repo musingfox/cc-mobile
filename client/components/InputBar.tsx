@@ -1,10 +1,8 @@
-import { Mic, Send, Square } from "lucide-react";
+import { Send } from "lucide-react";
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { clearDraft, loadDraft, saveDraft } from "../services/draft-persistence";
 import { hapticService } from "../services/haptic";
-import { voiceInputService } from "../services/voice-input";
 import { type Capabilities, useAppStore } from "../stores/app-store";
-import { useSettingsStore } from "../stores/settings-store";
 import FloatingAutocomplete from "./FloatingAutocomplete";
 
 type InputBarProps = {
@@ -29,8 +27,6 @@ export default function InputBar({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const debounceTimerRef = useRef<number | null>(null);
-  const [isListening, setIsListening] = useState(false);
-  const voiceInputEnabled = useSettingsStore((s) => s.voiceInputEnabled);
 
   // Load draft when activeSessionId changes
   useEffect(() => {
@@ -139,22 +135,6 @@ export default function InputBar({
     }
   };
 
-  const handleVoiceToggle = () => {
-    if (isListening) {
-      voiceInputService.stopListening();
-      setIsListening(false);
-    } else {
-      voiceInputService.startListening(
-        (transcript) => {
-          setValue(value + transcript);
-          setIsListening(false);
-        },
-        () => setIsListening(false),
-      );
-      setIsListening(true);
-    }
-  };
-
   // Prompt suggestion from SDK
   const promptSuggestion = useAppStore((s) => {
     if (!activeSessionId) return null;
@@ -223,17 +203,6 @@ export default function InputBar({
           disabled={disabled}
           rows={1}
         />
-        {voiceInputEnabled && voiceInputService.isSupported() && (
-          <button
-            type="button"
-            className={`voice-btn ${isListening ? "recording" : ""}`}
-            onClick={handleVoiceToggle}
-            disabled={disabled}
-            aria-label={isListening ? "Stop voice input" : "Start voice input"}
-          >
-            {isListening ? <Square size={16} /> : <Mic size={20} />}
-          </button>
-        )}
         <button
           type="button"
           className="send-btn"
