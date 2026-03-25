@@ -147,7 +147,7 @@ export default function ChatView({
               ) : (
                 <div className="message-content">
                   {item.data.role === "assistant" ? (
-                    <MarkdownRenderer content={item.data.content} />
+                    <MarkdownRenderer content={item.data.content} isStreaming={!!isLastAssistant} />
                   ) : (
                     item.data.content
                   )}

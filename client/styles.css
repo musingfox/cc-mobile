@@ -665,6 +665,7 @@ button {
   gap: 4px;
   max-width: 85%;
   animation: fadeIn 0.2s ease-in;
+  contain: layout style;
 }
 
 @keyframes fadeIn {

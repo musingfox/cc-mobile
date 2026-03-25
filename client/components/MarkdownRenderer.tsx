@@ -17,47 +17,114 @@ const marked = new Marked({
 
 type MarkdownRendererProps = {
   content: string;
+  isStreaming?: boolean;
 };
 
-export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
+// Minimum interval between renders during streaming (~30fps)
+const STREAM_RENDER_INTERVAL = 32;
+
+export default function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef(content);
+  const lastRenderAt = useRef(0);
+  const trailingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const theme = useSettingsStore((s) => s.theme);
+
+  // Always keep contentRef up to date (read by trailing timer callback)
+  contentRef.current = content;
 
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const raw = marked.parse(content);
-    if (typeof raw !== "string") return;
+    if (isStreaming) {
+      const now = performance.now();
+      const elapsed = now - lastRenderAt.current;
 
-    const html = DOMPurify.sanitize(raw);
+      if (elapsed >= STREAM_RENDER_INTERVAL) {
+        // Leading edge: enough time passed, render immediately
+        renderMarkdownToDOM(containerRef.current, content, theme, true);
+        lastRenderAt.current = now;
+        // Clear any pending trailing render
+        if (trailingTimer.current) {
+          clearTimeout(trailingTimer.current);
+          trailingTimer.current = null;
+        }
+      } else {
+        // Trailing edge: schedule render for remaining interval
+        if (trailingTimer.current) clearTimeout(trailingTimer.current);
+        trailingTimer.current = setTimeout(() => {
+          trailingTimer.current = null;
+          lastRenderAt.current = performance.now();
+          if (containerRef.current) {
+            renderMarkdownToDOM(containerRef.current, contentRef.current, theme, true);
+          }
+        }, STREAM_RENDER_INTERVAL - elapsed);
+      }
+    } else {
+      // Not streaming: cancel pending timer and render immediately with full enhancements
+      if (trailingTimer.current) {
+        clearTimeout(trailingTimer.current);
+        trailingTimer.current = null;
+      }
+      renderMarkdownToDOM(containerRef.current, content, theme, false);
+      lastRenderAt.current = 0;
+    }
+  }, [content, theme, isStreaming]);
 
-    // Create a temporary element with the sanitized HTML
+  // Cleanup on unmount
+  useEffect(
+    () => () => {
+      if (trailingTimer.current) clearTimeout(trailingTimer.current);
+    },
+    [],
+  );
+
+  return <div ref={containerRef} className="md-renderer" />;
+}
+
+function renderMarkdownToDOM(
+  container: HTMLElement,
+  content: string,
+  theme: string,
+  skipEnhancements: boolean,
+) {
+  const raw = marked.parse(content);
+  if (typeof raw !== "string") return;
+
+  // Sanitize HTML to prevent XSS before inserting into DOM
+  const html = DOMPurify.sanitize(raw);
+
+  if (skipEnhancements) {
+    // Streaming fast path: set innerHTML directly, skip morphdom diffing.
+    // No enhanced elements (shiki/mermaid) to preserve during streaming.
+    let target = container.firstElementChild as HTMLElement | null;
+    if (!target) {
+      target = document.createElement("div");
+      target.className = "md-content";
+      container.appendChild(target);
+    }
+    target.innerHTML = html;
+  } else {
+    // Final render: use morphdom to preserve enhanced elements (shiki, mermaid)
     const next = document.createElement("div");
     next.className = "md-content";
     next.innerHTML = html;
 
-    // Use morphdom to diff-patch the DOM (streaming-friendly, no flashing)
-    if (containerRef.current.firstElementChild) {
-      morphdom(containerRef.current.firstElementChild, next, {
+    if (container.firstElementChild) {
+      morphdom(container.firstElementChild, next, {
         onBeforeElUpdated(fromEl, toEl) {
-          // Preserve shiki-highlighted code blocks
           if (fromEl.classList.contains("shiki")) return false;
           if (fromEl.isEqualNode(toEl)) return false;
           return true;
         },
       });
     } else {
-      containerRef.current.appendChild(next);
+      container.appendChild(next);
     }
 
-    // Async-enhance code blocks with shiki (skip mermaid blocks)
-    enhanceCodeBlocks(containerRef.current, theme);
-
-    // Render mermaid diagrams
-    renderMermaidBlocks(containerRef.current);
-  }, [content, theme]);
-
-  return <div ref={containerRef} className="md-renderer" />;
+    enhanceCodeBlocks(container, theme);
+    renderMermaidBlocks(container);
+  }
 }
 
 async function enhanceCodeBlocks(container: HTMLElement, theme: string): Promise<void> {
