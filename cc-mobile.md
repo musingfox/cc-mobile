@@ -136,13 +136,11 @@ cc-mobile/
 │   │   ├── app-store.ts         # Zustand: sessions, messages, permissions
 │   │   └── settings-store.ts    # Zustand: defaultCwd, theme
 │   ├── services/
-│   │   ├── ws-service.ts        # WebSocket singleton
+│   │   ├── ws-service.ts        # WebSocket singleton (ADR-008)
 │   │   ├── settings.ts          # localStorage persistence
 │   │   ├── projects.ts          # Saved projects persistence
 │   │   ├── pins.ts              # Pin management
 │   │   └── tool-events.ts       # Tool event processing
-│   ├── hooks/
-│   │   └── useSocket.ts         # WebSocket state + extractTextFromChunk
 │   └── __tests__/               # Frontend unit tests
 ├── e2e/                         # Playwright e2e tests
 └── public/                      # (Future: PWA manifest, icons)
@@ -180,7 +178,7 @@ Capabilities extracted from SDK system init message (`slash_commands`, `agents` 
 
 ### 5. Frontend State — Zustand + WsService ([ADR-008](docs/adr/008-zustand-multi-session-state.md))
 
-Zustand store with per-session state isolation. `WsService` singleton manages the WebSocket connection. `extractTextFromChunk()` parses SDK message objects into displayable text. (Supersedes ADR-004 centralized useSocket hook from Phase 1.)
+Zustand store with per-session state isolation. `WsService` singleton manages the WebSocket connection and message routing. Components use Zustand selectors for state and call `wsService` methods directly — no intermediate hook layer. `extractTextFromChunk()` in `ws-service.ts` parses SDK message objects into displayable text. (Supersedes ADR-004.)
 
 ### 6. Touch UX Design
 

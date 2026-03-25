@@ -24,9 +24,10 @@ Split into two layers:
 - `connectionState: "connecting" | "connected" | "disconnected"`
 - Actions: `createSession`, `setActiveSession`, `closeSession`, `addMessage`, etc.
 
-### 3. Thin Hooks (optional convenience wrappers)
-- `useActiveSession()` — returns active session's state
-- `useConnection()` — returns connection state
+### 3. Component Integration (direct usage)
+Components use Zustand selectors and wsService directly — no intermediate hook layer needed:
+- `useAppStore((s) => s.sessions.get(activeSessionId))` — read session state
+- `wsService.send(sessionId, content)` — invoke actions
 
 ## Rationale
 - Zustand is minimal (~1KB), no providers/context needed, works outside React (service class can call actions directly)
@@ -34,7 +35,7 @@ Split into two layers:
 - WebSocket service as a singleton avoids the "hook must be in component tree" constraint
 - Components subscribe only to their slice — no unnecessary re-renders
 
-## Migration
-- Remove `useSocket` hook
-- `App.tsx` and components read from Zustand store instead
-- WebSocket service initialized once in `main.tsx`
+## Migration (completed)
+- Removed `useSocket` hook and `client/hooks/` directory
+- Components read from Zustand store via selectors, call `wsService` methods directly
+- WebSocket service initialized in `App.tsx` via `useEffect` on mount
