@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ========================================
+# Hook Guard commit-msg
+# Validates conventional commits format
+# ========================================
+
+COMMIT_MSG_FILE="$1"
+COMMIT_MSG=$(head -1 "$COMMIT_MSG_FILE")
+
+# Skip merge commits
+if echo "$COMMIT_MSG" | grep -qE '^Merge '; then
+  exit 0
+fi
+
+# Skip fixup/squash commits
+if echo "$COMMIT_MSG" | grep -qE '^(fixup|squash)! '; then
+  exit 0
+fi
+
+# Conventional commit pattern
+PATTERN='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-zA-Z0-9._-]+\))?!?:\s.+'
+
+if ! echo "$COMMIT_MSG" | grep -qE "$PATTERN"; then
+  echo ""
+  echo "hook-guard: Invalid commit message format"
+  echo ""
+  echo "  Expected: <type>(<scope>): <description>"
+  echo ""
+  echo "  Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert"
+  echo ""
+  echo "  Examples:"
+  echo "    feat(auth): add OAuth2 login"
+  echo "    fix: resolve null pointer in parser"
+  echo "    docs(readme): update installation guide"
+  echo "    refactor!: drop support for Node 14"
+  echo ""
+  echo "  Your message: $COMMIT_MSG"
+  echo ""
+  exit 1
+fi
+
+# Check subject line length (≤ 72 chars)
+if [ ${#COMMIT_MSG} -gt 72 ]; then
+  echo ""
+  echo "hook-guard: Commit subject too long (${#COMMIT_MSG} > 72 characters)"
+  echo "  $COMMIT_MSG"
+  echo ""
+  exit 1
+fi
+
+exit 0
