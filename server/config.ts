@@ -8,6 +8,31 @@ export interface ServerConfig {
   defaultCwd: string | null;
   permissionMode: PermissionMode;
   allowedRoots: string[] | null;
+  basePath: string;
+}
+
+/**
+ * Parses and validates base path from env var or argv.
+ * @throws Error if path doesn't start with /, contains .., or ends with /
+ */
+export function parseBasePath(basePath: string | undefined): string {
+  if (basePath === undefined || basePath === "") {
+    return "";
+  }
+
+  if (!basePath.startsWith("/")) {
+    throw new Error("BASE_PATH must start with /");
+  }
+
+  if (basePath.includes("..")) {
+    throw new Error("BASE_PATH cannot contain ..");
+  }
+
+  if (basePath.endsWith("/")) {
+    throw new Error("BASE_PATH cannot end with /");
+  }
+
+  return basePath;
 }
 
 export function parseServerConfig(argv: string[]): ServerConfig {
@@ -17,6 +42,7 @@ export function parseServerConfig(argv: string[]): ServerConfig {
     defaultCwd: null,
     permissionMode: "default",
     allowedRoots: parseAllowedRoots(),
+    basePath: parseBasePath(process.env.BASE_PATH),
   };
 
   for (let i = 0; i < argv.length; i++) {

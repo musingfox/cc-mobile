@@ -4,13 +4,14 @@
  */
 
 const CACHE_NAME = "cc-mobile-__BUILD_VERSION__";
+const BASE_PATH = self.__BASE_PATH__ || "";
 const STATIC_ASSETS = [
-  "/",
-  "/index.html",
-  "/manifest.json",
-  "/icons/icon-192.png",
-  "/icons/icon-512.png",
-  "/icons/apple-touch-icon.png",
+  BASE_PATH + "/",
+  BASE_PATH + "/index.html",
+  BASE_PATH + "/manifest.json",
+  BASE_PATH + "/icons/icon-192.png",
+  BASE_PATH + "/icons/icon-512.png",
+  BASE_PATH + "/icons/apple-touch-icon.png",
 ];
 
 // Install event: cache static assets
@@ -72,7 +73,7 @@ self.addEventListener("notificationclick", (event) => {
         }
       }
       // Otherwise open a new window
-      return self.clients.openWindow("/");
+      return self.clients.openWindow(BASE_PATH + "/");
     }),
   );
 });
@@ -83,7 +84,7 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
 
   // Skip WebSocket and API requests
-  if (url.pathname.startsWith("/ws") || url.pathname.startsWith("/api")) {
+  if (url.pathname.startsWith(BASE_PATH + "/ws") || url.pathname.startsWith(BASE_PATH + "/api")) {
     return; // Let the request pass through
   }
 
@@ -92,7 +93,7 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request).catch(() => {
         // Fallback to cached index.html if offline
-        return caches.match("/index.html");
+        return caches.match(BASE_PATH + "/index.html");
       }),
     );
     return;

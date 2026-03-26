@@ -8,6 +8,7 @@ import {
   saveCachedCapabilities,
 } from "./capabilities-cache";
 import type { ServerConfig } from "./config";
+import { buildUrl } from "./path-utils";
 import type { createPermissionHandler } from "./permission-bridge";
 import { ClientMessage, ServerMessage } from "./protocol";
 import { loadSessionHistory } from "./session-history";
@@ -78,8 +79,9 @@ export function createWsPlugin(
   serverConfig: ServerConfig,
 ) {
   let cachedCapabilities: Capabilities | null = loadCachedCapabilities();
+  const wsPath = buildUrl(serverConfig.basePath, "/ws");
 
-  return new Elysia().ws("/ws", {
+  return new Elysia().ws(wsPath, {
     body: t.Any(), // We'll validate with Zod
 
     open(ws) {
@@ -207,7 +209,7 @@ export function createWsPlugin(
           }
 
           case "permission": {
-            handler.resolvePermission(message.requestId, message.allow, message.answer);
+            handler.resolvePermission(message.requestId, message.allow, message.answers);
             break;
           }
 

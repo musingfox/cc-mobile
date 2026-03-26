@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Elysia } from "elysia";
 import { parseServerConfig } from "./config";
+import { stripBasePath } from "./path-utils";
 import { createPermissionHandler } from "./permission-bridge";
 import { SessionManager } from "./session-manager";
 import { createWsPlugin } from "./ws";
@@ -23,7 +24,8 @@ const _app = new Elysia()
     }
 
     const url = new URL(request.url);
-    const pathname = url.pathname === "/" ? "/index.html" : url.pathname;
+    let pathname = stripBasePath(url.pathname, serverConfig.basePath);
+    pathname = pathname === "/" ? "/index.html" : pathname;
     const filePath = join(DIST_DIR, pathname);
 
     // Prevent directory traversal

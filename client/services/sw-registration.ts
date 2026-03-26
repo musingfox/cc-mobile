@@ -8,7 +8,8 @@ class SwRegistrationManager {
     }
 
     try {
-      const registration = await navigator.serviceWorker.register("/sw.js");
+      const basePath = window.__BASE_PATH__ || "";
+      const registration = await navigator.serviceWorker.register(basePath + "/sw.js");
       this.registration = registration;
       console.log("[sw-registration] registered:", registration.scope);
       return registration;

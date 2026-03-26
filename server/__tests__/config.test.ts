@@ -15,6 +15,7 @@ describe("parseServerConfig", () => {
 
   test("defaults", () => {
     delete process.env.CC_MOBILE_ALLOWED_ROOTS;
+    delete process.env.BASE_PATH;
     const result = parseServerConfig(["node", "index.ts"]);
     expect(result).toEqual({
       port: 3001,
@@ -22,12 +23,14 @@ describe("parseServerConfig", () => {
       defaultCwd: null,
       permissionMode: "default",
       allowedRoots: null,
+      basePath: "",
     });
     cleanup();
   });
 
   test("all flags", () => {
     delete process.env.CC_MOBILE_ALLOWED_ROOTS;
+    delete process.env.BASE_PATH;
     const result = parseServerConfig([
       "node",
       "index.ts",
@@ -44,6 +47,7 @@ describe("parseServerConfig", () => {
       defaultCwd: "/workspace",
       permissionMode: "acceptEdits",
       allowedRoots: null,
+      basePath: "",
     });
     cleanup();
   });

@@ -67,7 +67,8 @@ class WsService {
     store.setConnectionState("connecting");
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+    const basePath = (window as typeof window & { __BASE_PATH__?: string }).__BASE_PATH__ || "";
+    const ws = new WebSocket(`${protocol}//${window.location.host}${basePath}/ws`);
 
     ws.onopen = () => {
       console.log("[ws-service] connected");
