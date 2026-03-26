@@ -95,4 +95,65 @@ describe("PermissionBar", () => {
     expect(getByText("Bash")).not.toBeNull();
     expect(getByText("ls -la")).not.toBeNull();
   });
+
+  it("AskUserQuestion pending permission renders AskUserQuestionUI", () => {
+    const pending: PendingPermission = {
+      requestId: "req-3",
+      tool: {
+        name: "AskUserQuestion",
+        parameters: {
+          questions: [
+            {
+              question: "Which language?",
+              header: "Language",
+              options: [{ label: "Python", description: "Python desc" }],
+            },
+          ],
+        },
+      },
+    };
+
+    const { getByText } = render(
+      <PermissionBar
+        pending={pending}
+        onApprove={mock(() => {})}
+        onDeny={mock(() => {})}
+        onAnswer={mock(() => {})}
+      />,
+    );
+
+    expect(getByText("Which language?")).not.toBeNull();
+  });
+
+  it("answer callback propagation when option selected", () => {
+    const pending: PendingPermission = {
+      requestId: "req-4",
+      tool: {
+        name: "AskUserQuestion",
+        parameters: {
+          questions: [
+            {
+              question: "Which language?",
+              header: "Language",
+              options: [{ label: "Python", description: "Python desc" }],
+            },
+          ],
+        },
+      },
+    };
+    const onAnswer = mock(() => {});
+
+    const { getByText } = render(
+      <PermissionBar
+        pending={pending}
+        onApprove={mock(() => {})}
+        onDeny={mock(() => {})}
+        onAnswer={onAnswer}
+      />,
+    );
+
+    fireEvent.click(getByText("Python"));
+    expect(onAnswer).toHaveBeenCalledTimes(1);
+    expect(onAnswer).toHaveBeenCalledWith({ "Which language?": "Python" });
+  });
 });

@@ -49,7 +49,11 @@ export function createPermissionHandler(
     });
   };
 
-  const resolvePermission = (requestId: string, allow: boolean, answer?: string): void => {
+  const resolvePermission = (
+    requestId: string,
+    allow: boolean,
+    answers?: Record<string, string>,
+  ): void => {
     const pending = pendingRequests.get(requestId);
     if (!pending) {
       console.warn(
@@ -70,27 +74,15 @@ export function createPermissionHandler(
       return;
     }
 
-    if (answer) {
-      // Extract question text from input
-      const questions = pending.input.questions as Array<{ question: string }> | undefined;
-      const questionText = questions?.[0]?.question;
-
-      if (questionText) {
-        pending.resolve({
-          behavior: "allow",
-          updatedInput: {
-            ...pending.input,
-            answers: { [questionText]: answer },
-          },
-          toolUseID: requestId,
-        });
-      } else {
-        pending.resolve({
-          behavior: "allow",
-          updatedInput: undefined,
-          toolUseID: requestId,
-        });
-      }
+    if (answers && Object.keys(answers).length > 0) {
+      pending.resolve({
+        behavior: "allow",
+        updatedInput: {
+          ...pending.input,
+          answers,
+        },
+        toolUseID: requestId,
+      });
     } else {
       pending.resolve({
         behavior: "allow",

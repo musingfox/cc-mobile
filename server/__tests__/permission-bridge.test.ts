@@ -41,7 +41,7 @@ describe("Permission Bridge", () => {
     expect(result.behavior).toBe("deny");
   }, 5000);
 
-  test("resolvePermission with answer returns updatedInput with answers", async () => {
+  test("single-question answers map", async () => {
     let capturedRequestId = "";
     const handler = createPermissionHandler((requestId) => {
       capturedRequestId = requestId;
@@ -65,7 +65,7 @@ describe("Permission Bridge", () => {
       { signal, toolUseID: "req_2" },
     );
 
-    handler.resolvePermission(capturedRequestId, true, "Python");
+    handler.resolvePermission(capturedRequestId, true, { "Which language?": "Python" });
 
     const result = await promise;
     expect(result.behavior).toBe("allow");
@@ -83,6 +83,57 @@ describe("Permission Bridge", () => {
       ],
       answers: { "Which language?": "Python" },
     });
+  });
+
+  test("multi-question answers map", async () => {
+    let capturedRequestId = "";
+    const handler = createPermissionHandler((requestId) => {
+      capturedRequestId = requestId;
+    });
+
+    const promise = handler.canUseTool(
+      "AskUserQuestion",
+      {
+        questions: [
+          { question: "Which language?", options: [{ label: "Python" }] },
+          { question: "Which framework?", options: [{ label: "FastAPI" }] },
+        ],
+      },
+      { signal, toolUseID: "req_3" },
+    );
+
+    handler.resolvePermission(capturedRequestId, true, {
+      "Which language?": "Python",
+      "Which framework?": "FastAPI",
+    });
+
+    const result = await promise;
+    expect(result.behavior).toBe("allow");
+    expect(result.updatedInput).toEqual({
+      questions: [
+        { question: "Which language?", options: [{ label: "Python" }] },
+        { question: "Which framework?", options: [{ label: "FastAPI" }] },
+      ],
+      answers: {
+        "Which language?": "Python",
+        "Which framework?": "FastAPI",
+      },
+    });
+  });
+
+  test("empty answers map returns undefined updatedInput", async () => {
+    let capturedRequestId = "";
+    const handler = createPermissionHandler((requestId) => {
+      capturedRequestId = requestId;
+    });
+
+    const promise = handler.canUseTool("Bash", { command: "ls" }, { signal, toolUseID: "req_4" });
+
+    handler.resolvePermission(capturedRequestId, true, {});
+
+    const result = await promise;
+    expect(result.behavior).toBe("allow");
+    expect(result.updatedInput).toBeUndefined();
   });
 
   test("resolvePermission without answer returns no updatedInput", async () => {

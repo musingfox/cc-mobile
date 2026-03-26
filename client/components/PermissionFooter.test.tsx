@@ -108,4 +108,66 @@ describe("PermissionFooter", () => {
     expect(buttons[1].classList.contains("unselected")).toBe(true);
     expect(buttons[2].classList.contains("unselected")).toBe(true);
   });
+
+  it("AskUserQuestion with valid questions renders AskUserQuestionUI", () => {
+    const onAnswer = mock(() => {});
+    const questions = [
+      {
+        question: "Which language?",
+        header: "Language",
+        options: [
+          { label: "Python", description: "Python desc" },
+          { label: "Go", description: "Go desc" },
+        ],
+      },
+    ];
+    const { getByText } = render(
+      <PermissionFooter
+        toolName="AskUserQuestion"
+        parameters={{ questions }}
+        onRespond={mock(() => {})}
+        onAnswer={onAnswer}
+      />,
+    );
+
+    expect(getByText("Which language?")).not.toBeNull();
+  });
+
+  it("AskUserQuestion with empty/missing questions renders fallback", () => {
+    const onAnswer = mock(() => {});
+    const { container } = render(
+      <PermissionFooter
+        toolName="AskUserQuestion"
+        parameters={{}}
+        onRespond={mock(() => {})}
+        onAnswer={onAnswer}
+      />,
+    );
+
+    // Should render default permission UI when no questions
+    expect(container.querySelector(".permission-tool-name")?.textContent).toBe("AskUserQuestion");
+  });
+
+  it("answer submitted calls onAnswer with answers map", () => {
+    const onAnswer = mock(() => {});
+    const questions = [
+      {
+        question: "Which language?",
+        header: "Language",
+        options: [{ label: "Python", description: "Python desc" }],
+      },
+    ];
+    const { getByText } = render(
+      <PermissionFooter
+        toolName="AskUserQuestion"
+        parameters={{ questions }}
+        onRespond={mock(() => {})}
+        onAnswer={onAnswer}
+      />,
+    );
+
+    fireEvent.click(getByText("Python"));
+    expect(onAnswer).toHaveBeenCalledTimes(1);
+    expect(onAnswer).toHaveBeenCalledWith({ "Which language?": "Python" });
+  });
 });

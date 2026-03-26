@@ -7,7 +7,7 @@ type PermissionBarProps = {
   pending: PendingPermission | null;
   onApprove: () => void;
   onDeny: () => void;
-  onAnswer?: (answer: string) => void;
+  onAnswer?: (answers: Record<string, string>) => void;
 };
 
 export default function PermissionBar({

@@ -580,11 +580,16 @@ class WsService {
   private recordPermissionAction(
     sessionId: string,
     resolution: "approved" | "denied" | "answered",
-    answer?: string,
+    answers?: Record<string, string>,
   ) {
     const session = useAppStore.getState().sessions.get(sessionId);
     if (!session?.pendingPermission) return;
     const { tool } = session.pendingPermission;
+    const answerSummary = answers
+      ? Object.entries(answers)
+          .map(([q, a]) => `${q}: ${a}`)
+          .join(", ")
+      : undefined;
     useAppStore.getState().addResolvedAction(sessionId, {
       id: `action-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       type: "permission",
@@ -592,7 +597,7 @@ class WsService {
       toolName: tool.name,
       parameters: tool.parameters,
       resolution,
-      ...(answer ? { answer } : {}),
+      ...(answerSummary ? { answer: answerSummary } : {}),
     });
   }
 
@@ -624,7 +629,7 @@ class WsService {
     useAppStore.getState().setPermission(sessionId, null);
   }
 
-  answerPermission(sessionId: string, answer: string) {
+  answerPermission(sessionId: string, answers: Record<string, string>) {
     const session = useAppStore.getState().sessions.get(sessionId);
     if (!this.ws || !session?.pendingPermission) return;
 
@@ -632,10 +637,10 @@ class WsService {
       type: "permission",
       requestId: session.pendingPermission.requestId,
       allow: true,
-      answer,
+      answers,
     });
 
-    this.recordPermissionAction(sessionId, "answered", answer);
+    this.recordPermissionAction(sessionId, "answered", answers);
     useAppStore.getState().setPermission(sessionId, null);
   }
 
