@@ -3425,6 +3425,134 @@ button {
   border-radius: 10px;
 }
 
+/* Attachment UI */
+.attachment-preview {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 8px 16px;
+  margin: 0 -16px;
+}
+
+.attachment-thumb {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-tertiary);
+}
+
+.attachment-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.attachment-thumb-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  border: none;
+  border-radius: 50%;
+  color: white;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.2s;
+}
+
+.attachment-thumb-remove:hover {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.attachment-file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  max-width: 200px;
+  flex-shrink: 0;
+}
+
+.attachment-file-name {
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+.attachment-file-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.2s;
+}
+
+.attachment-file-remove:hover {
+  color: var(--text-primary);
+}
+
+.attachment-drawer-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.attachment-drawer-option {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  color: var(--text-primary);
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.attachment-drawer-option:hover,
+.attachment-drawer-option:active {
+  background: var(--bg-tertiary);
+  border-color: var(--glass-border-bright);
+}
+
+.message-attachments {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.message-attachment-image {
+  max-width: 200px;
+  max-height: 200px;
+  border-radius: 8px;
+  object-fit: contain;
+  background: var(--bg-tertiary);
+}
+
 /* Accessibility: Reduced Motion */
 @media (prefers-reduced-motion: reduce) {
   *,

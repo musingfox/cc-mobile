@@ -1,5 +1,26 @@
 import { z } from "zod";
 
+// Content blocks for multimodal input
+const TextBlockSchema = z.object({
+  type: z.literal("text"),
+  text: z.string(),
+});
+
+const ImageBlockSchema = z.object({
+  type: z.literal("image"),
+  source: z.object({
+    type: z.literal("base64"),
+    media_type: z.enum(["image/jpeg", "image/png", "image/gif", "image/webp"]),
+    data: z.string(),
+  }),
+});
+
+const ContentBlockSchema = z.discriminatedUnion("type", [TextBlockSchema, ImageBlockSchema]);
+
+export type TextBlock = z.infer<typeof TextBlockSchema>;
+export type ImageBlock = z.infer<typeof ImageBlockSchema>;
+export type ContentBlock = z.infer<typeof ContentBlockSchema>;
+
 // Client → Server messages
 const NewSessionMessage = z.object({
   type: z.literal("new_session"),
@@ -9,7 +30,7 @@ const NewSessionMessage = z.object({
 const SendMessage = z.object({
   type: z.literal("send"),
   sessionId: z.string(),
-  content: z.string(),
+  content: z.union([z.string(), z.array(ContentBlockSchema)]),
 });
 
 const PermissionMessage = z.object({

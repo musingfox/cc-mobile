@@ -168,7 +168,10 @@ export function createWsPlugin(
 
           case "send":
           case "command": {
-            const content = message.type === "send" ? message.content : message.command;
+            const content =
+              message.type === "send"
+                ? message.content // Can be string | ContentBlock[]
+                : message.command; // Always string for commands
             const generator = sessionManager.sendMessage(message.sessionId, content);
 
             for await (const sdkMessage of generator) {

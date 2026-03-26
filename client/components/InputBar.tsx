@@ -1,12 +1,18 @@
 import { Send } from "lucide-react";
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import type { ContentBlock } from "../../server/protocol";
 import { clearDraft, loadDraft, saveDraft } from "../services/draft-persistence";
 import { hapticService } from "../services/haptic";
+import { uploadFile } from "../services/upload-service";
 import { type Capabilities, useAppStore } from "../stores/app-store";
+import { buildContentBlocks } from "../utils/content-block-builder";
+import { resizeImage } from "../utils/image-resize";
+import AttachmentButton from "./AttachmentButton";
+import AttachmentPreview, { type FileAttachment, type ImageAttachment } from "./AttachmentPreview";
 import FloatingAutocomplete from "./FloatingAutocomplete";
 
 type InputBarProps = {
-  onSend: (content: string) => void;
+  onSend: (content: string | ContentBlock[]) => void;
   disabled: boolean;
   capabilities: Capabilities | null;
   onOpenCommandPanel: () => void;
@@ -27,6 +33,9 @@ export default function InputBar({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const debounceTimerRef = useRef<number | null>(null);
+  const [images, setImages] = useState<ImageAttachment[]>([]);
+  const [files, setFiles] = useState<FileAttachment[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Load draft when activeSessionId changes
   useEffect(() => {
@@ -92,10 +101,21 @@ export default function InputBar({
 
   const handleSend = () => {
     const trimmed = value.trim();
-    if (!trimmed || disabled) return;
+    // Allow send if there's text OR attachments
+    if ((!trimmed && images.length === 0 && files.length === 0) || disabled || isUploading) return;
     hapticService.tap();
-    onSend(trimmed);
+
+    // Build content blocks
+    const content = buildContentBlocks(
+      trimmed,
+      images.map((img) => ({ base64: img.base64, mediaType: img.mediaType })),
+      files.map((f) => f.path),
+    );
+
+    onSend(content);
     setValue("");
+    setImages([]);
+    setFiles([]);
     if (activeSessionId) {
       clearDraft(activeSessionId);
     }
@@ -107,6 +127,64 @@ export default function InputBar({
   const handleSelect = (label: string) => {
     setValue(`${label} `);
     textareaRef.current?.focus();
+  };
+
+  const handleAttach = async (fileList: FileList, type: "camera" | "image" | "file") => {
+    if (type === "file") {
+      // Upload file to server
+      if (!activeSessionId) return;
+      setIsUploading(true);
+      try {
+        for (let i = 0; i < fileList.length; i++) {
+          const file = fileList[i];
+          const result = await uploadFile(activeSessionId, file);
+          setFiles((prev) => [
+            ...prev,
+            {
+              id: crypto.randomUUID(),
+              path: result.path,
+              filename: result.filename,
+              sizeKB: result.sizeKB,
+            },
+          ]);
+        }
+      } catch (error) {
+        console.error("File upload failed:", error);
+        // TODO: Show error toast
+      } finally {
+        setIsUploading(false);
+      }
+    } else {
+      // Process images
+      for (let i = 0; i < fileList.length; i++) {
+        const file = fileList[i];
+        try {
+          const result = await resizeImage(file);
+          const preview = `data:${result.mediaType};base64,${result.base64}`;
+          setImages((prev) => [
+            ...prev,
+            {
+              id: crypto.randomUUID(),
+              base64: result.base64,
+              mediaType: result.mediaType,
+              preview,
+              sizeKB: result.sizeKB,
+            },
+          ]);
+        } catch (error) {
+          console.error("Image processing failed:", error);
+          // TODO: Show error toast for unsupported format
+        }
+      }
+    }
+  };
+
+  const handleRemoveImage = (id: string) => {
+    setImages((prev) => prev.filter((img) => img.id !== id));
+  };
+
+  const handleRemoveFile = (id: string) => {
+    setFiles((prev) => prev.filter((f) => f.id !== id));
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -157,6 +235,8 @@ export default function InputBar({
     }
   }, [value, promptSuggestion, activeSessionId]);
 
+  const hasContent = value.trim() || images.length > 0 || files.length > 0;
+
   return (
     <div className="input-bar-container">
       {promptSuggestion && !disabled && (
@@ -165,6 +245,12 @@ export default function InputBar({
           <span className="prompt-suggestion-text">{promptSuggestion}</span>
         </button>
       )}
+      <AttachmentPreview
+        images={images}
+        files={files}
+        onRemoveImage={handleRemoveImage}
+        onRemoveFile={handleRemoveFile}
+      />
       <FloatingAutocomplete
         suggestions={suggestions}
         selectedIndex={selectedIndex}
@@ -172,6 +258,7 @@ export default function InputBar({
         visible={suggestions.length > 0}
       />
       <div className="input-bar">
+        <AttachmentButton onAttach={handleAttach} disabled={disabled || isUploading} />
         <button
           type="button"
           className="input-bar-action-btn"
@@ -207,7 +294,7 @@ export default function InputBar({
           type="button"
           className="send-btn"
           onClick={handleSend}
-          disabled={disabled || !value.trim()}
+          disabled={disabled || !hasContent || isUploading}
           aria-label="Send message"
         >
           <Send size={20} />

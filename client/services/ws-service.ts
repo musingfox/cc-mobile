@@ -1,3 +1,4 @@
+import type { ContentBlock } from "../../server/protocol";
 import { debugLog } from "../components/DebugOverlay";
 import { type Capabilities, useAppStore } from "../stores/app-store";
 import { useSettingsStore } from "../stores/settings-store";
@@ -547,14 +548,28 @@ class WsService {
     this.sendMessage({ type: "new_session", cwd });
   }
 
-  send(sessionId: string, content: string) {
+  send(sessionId: string, content: string | ContentBlock[]) {
     if (!this.ws) return;
+
+    // For display purposes, extract text from content blocks
+    let displayContent: string;
+    let contentBlocks: ContentBlock[] | undefined;
+
+    if (typeof content === "string") {
+      displayContent = content;
+    } else {
+      // Extract text blocks and join them
+      const textBlocks = content.filter((block) => block.type === "text");
+      displayContent = textBlocks.map((block) => block.text).join("\n");
+      contentBlocks = content;
+    }
 
     useAppStore.getState().addMessage(sessionId, {
       id: `user-${Date.now()}`,
       role: "user",
-      content,
+      content: displayContent,
       timestamp: Date.now(),
+      contentBlocks,
     });
 
     this.sendMessage({ type: "send", sessionId, content });

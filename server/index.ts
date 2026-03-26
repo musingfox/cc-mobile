@@ -6,6 +6,7 @@ import { parseServerConfig } from "./config";
 import { stripBasePath } from "./path-utils";
 import { createPermissionHandler } from "./permission-bridge";
 import { SessionManager } from "./session-manager";
+import { createUploadPlugin } from "./upload";
 import { createWsPlugin } from "./ws";
 
 const isProd = process.env.NODE_ENV === "production";
@@ -17,6 +18,7 @@ const DIST_DIR = join(__dirname, "..", "dist", "client");
 
 const _app = new Elysia()
   .use(createWsPlugin(sessionManager, createPermissionHandler, serverConfig))
+  .use(createUploadPlugin(serverConfig))
   .get("*", async ({ request }) => {
     // Skip if dist/ doesn't exist (dev mode)
     if (!existsSync(DIST_DIR)) {

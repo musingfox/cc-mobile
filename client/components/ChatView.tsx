@@ -145,13 +145,32 @@ export default function ChatView({
                   onToggle={() => toggleToolExpanded(item.data.id)}
                 />
               ) : (
-                <div className="message-content">
-                  {item.data.role === "assistant" ? (
-                    <MarkdownRenderer content={item.data.content} isStreaming={!!isLastAssistant} />
-                  ) : (
-                    item.data.content
+                <>
+                  <div className="message-content">
+                    {item.data.role === "assistant" ? (
+                      <MarkdownRenderer
+                        content={item.data.content}
+                        isStreaming={!!isLastAssistant}
+                      />
+                    ) : (
+                      item.data.content
+                    )}
+                  </div>
+                  {item.data.role === "user" && item.data.contentBlocks && (
+                    <div className="message-attachments">
+                      {item.data.contentBlocks
+                        .filter((block) => block.type === "image")
+                        .map((block, idx) => (
+                          <img
+                            key={idx}
+                            src={`data:${block.source.media_type};base64,${block.source.data}`}
+                            alt="Attachment"
+                            className="message-attachment-image"
+                          />
+                        ))}
+                    </div>
                   )}
-                </div>
+                </>
               )}
               <div className="message-timestamp">{formatTimestamp(item.data.timestamp)}</div>
             </div>

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { SessionListItem } from "../../server/protocol";
+import type { ContentBlock, SessionListItem } from "../../server/protocol";
 import {
   clearSessionState,
   getAllSessionIds,
@@ -16,6 +16,7 @@ export type Message = {
   timestamp: number;
   toolName?: string;
   toolInput?: Record<string, unknown>;
+  contentBlocks?: ContentBlock[];
 };
 
 export type PendingPermission = {

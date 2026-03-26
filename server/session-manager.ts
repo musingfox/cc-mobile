@@ -6,11 +6,14 @@ import type {
   Query,
   SDKMessage,
   SDKSystemMessage,
+  SDKUserMessage,
   SlashCommand,
 } from "@anthropic-ai/claude-agent-sdk";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { PermissionMode } from "./config";
+import type { ContentBlock } from "./protocol";
 import { loadUserPlugins } from "./settings-loader";
+import { cleanupUploads } from "./upload-manager";
 
 type SdkPluginConfig = { type: "local"; path: string };
 
@@ -118,7 +121,10 @@ export class SessionManager {
     }
   }
 
-  async *sendMessage(sessionId: string, content: string): AsyncGenerator<SDKMessage> {
+  async *sendMessage(
+    sessionId: string,
+    content: string | ContentBlock[],
+  ): AsyncGenerator<SDKMessage> {
     const config = this.sessions.get(sessionId);
     if (!config) {
       throw new Error(`Session ${sessionId} not found`);
@@ -127,8 +133,39 @@ export class SessionManager {
     const plugins = await this.getPlugins();
     const isBypass = this.permissionMode === "bypassPermissions";
 
+    // Handle both string and content block array formats
+    // When content is string: pass as simple string prompt (SDK converts to MessageParam internally)
+    // When content is ContentBlock[]: use async generator to pass SDKUserMessage with MessageParam
+    const promptValue: string | AsyncIterable<SDKUserMessage> =
+      typeof content === "string"
+        ? content
+        : (async function* (): AsyncGenerator<SDKUserMessage> {
+            yield {
+              type: "user" as const,
+              message: {
+                role: "user" as const,
+                content: content.map((block) => {
+                  if (block.type === "text") {
+                    return { type: "text" as const, text: block.text };
+                  }
+                  // image block
+                  return {
+                    type: "image" as const,
+                    source: {
+                      type: "base64" as const,
+                      media_type: block.source.media_type,
+                      data: block.source.data,
+                    },
+                  };
+                }),
+              },
+              parent_tool_use_id: null,
+              session_id: config.sdkSessionId || sessionId, // Use SDK session_id if available, fallback to WS session_id
+            };
+          })();
+
     const q = query({
-      prompt: content,
+      prompt: promptValue,
       options: {
         model: this.selectedModel,
         ...(this.selectedEffort ? { effort: this.selectedEffort } : {}),
@@ -207,5 +244,10 @@ export class SessionManager {
       this.activeQueries.delete(sessionId);
     }
     this.sessions.delete(sessionId);
+
+    // Cleanup uploaded files for this session
+    cleanupUploads(sessionId).catch((err) => {
+      console.warn(`[session-manager] cleanup failed for session ${sessionId}:`, err);
+    });
   }
 }
