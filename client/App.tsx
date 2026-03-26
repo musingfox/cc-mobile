@@ -170,6 +170,17 @@ export default function App() {
 
       <div className="status-bar">
         <div className="status-bar-row">
+          <img
+            src={
+              theme === "light"
+                ? "/logo-light.svg"
+                : theme === "claude"
+                  ? "/logo-claude.svg"
+                  : "/logo.svg"
+            }
+            alt="CCMobile"
+            className="status-bar-logo"
+          />
           <div className={`status-dot ${connectionState}`} />
           <span className="status-label">{getStatusLabel()}</span>
           {formatUsage() && <span className="status-usage">{formatUsage()}</span>}
@@ -219,8 +230,8 @@ export default function App() {
         pending={activeSession?.pendingPermission ?? null}
         onApprove={() => activeSessionId && wsService.approvePermission(activeSessionId)}
         onDeny={() => activeSessionId && wsService.denyPermission(activeSessionId)}
-        onAnswer={(answer) =>
-          activeSessionId && wsService.answerPermission(activeSessionId, answer)
+        onAnswer={(answers) =>
+          activeSessionId && wsService.answerPermission(activeSessionId, answers)
         }
       />
 

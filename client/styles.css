@@ -282,6 +282,12 @@ button {
   transition: border-color 0.3s ease;
 }
 
+.status-bar-logo {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
 .status-bar-row {
   display: flex;
   align-items: center;
@@ -1578,6 +1584,107 @@ button {
 .custom-answer-row .permission-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* Preview Panel */
+.option-button-container {
+  position: relative;
+  width: 100%;
+}
+
+.option-button {
+  width: 100%;
+  text-align: left;
+}
+
+.preview-toggle {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  padding: 4px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  z-index: 1;
+}
+
+.preview-toggle:active {
+  opacity: 0.6;
+}
+
+.preview-panel {
+  margin-top: 8px;
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.preview-content {
+  overflow-wrap: break-word;
+}
+
+.preview-unavailable {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* Question Stepper */
+.question-stepper {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.stepper-progress {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.stepper-controls {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.stepper-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+}
+
+.stepper-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.question-error {
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--accent-error);
+  border-radius: 8px;
+  color: var(--accent-error);
+  font-size: 14px;
+}
+
+.ask-user-question-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 /* Resolved Action Chips — inline history of past actions */

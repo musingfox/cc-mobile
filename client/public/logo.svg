@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="leftGrad" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#EDA06A"/>
+      <stop offset="100%" stop-color="#A85A35"/>
+    </linearGradient>
+    <linearGradient id="rightGrad" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#6FAA65"/>
+      <stop offset="100%" stop-color="#2B5A3A"/>
+    </linearGradient>
+    <radialGradient id="bgGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#2A1F1A"/>
+      <stop offset="100%" stop-color="#1A1412"/>
+    </radialGradient>
+    <mask id="cutout">
+      <rect width="512" height="512" fill="white"/>
+      <path d="M 303 194 A 100 100 0 1 0 303 318" stroke="black" stroke-width="18" stroke-linecap="round" fill="none"/>
+      <path d="M 291 204 A 85 85 0 1 0 291 308" stroke="black" stroke-width="18" stroke-linecap="round" fill="none"/>
+    </mask>
+  </defs>
+
+  <circle cx="256" cy="256" r="256" fill="url(#bgGlow)"/>
+
+  <g mask="url(#cutout)">
+    <path d="M 383 194 A 100 100 0 1 0 383 318" stroke="url(#rightGrad)" stroke-width="12" stroke-linecap="round" fill="none"/>
+    <path d="M 371 204 A 85 85 0 1 0 371 308" stroke="url(#rightGrad)" stroke-width="12" stroke-linecap="round" fill="none"/>
+  </g>
+
+  <path d="M 303 194 A 100 100 0 1 0 303 318" stroke="url(#leftGrad)" stroke-width="12" stroke-linecap="round" fill="none"/>
+  <path d="M 291 204 A 85 85 0 1 0 291 308" stroke="url(#leftGrad)" stroke-width="12" stroke-linecap="round" fill="none"/>
+</svg>
