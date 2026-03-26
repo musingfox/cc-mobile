@@ -3,6 +3,7 @@ import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
 import type { ContentBlock } from "../../server/protocol";
 import { clearDraft, loadDraft, saveDraft } from "../services/draft-persistence";
 import { hapticService } from "../services/haptic";
+import { toastService } from "../services/toast-service";
 import { uploadFile } from "../services/upload-service";
 import { type Capabilities, useAppStore } from "../stores/app-store";
 import { buildContentBlocks } from "../utils/content-block-builder";
@@ -150,7 +151,7 @@ export default function InputBar({
         }
       } catch (error) {
         console.error("File upload failed:", error);
-        // TODO: Show error toast
+        toastService.error("File upload failed");
       } finally {
         setIsUploading(false);
       }
@@ -173,7 +174,8 @@ export default function InputBar({
           ]);
         } catch (error) {
           console.error("Image processing failed:", error);
-          // TODO: Show error toast for unsupported format
+          const msg = error instanceof Error ? error.message : "Image processing failed";
+          toastService.error(msg);
         }
       }
     }
