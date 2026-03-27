@@ -25,6 +25,7 @@ module.exports = {
       cwd: __dirname,
       env: {
         NODE_ENV: "production",
+        BASE_PATH: "/cc",
       },
     },
   ],
