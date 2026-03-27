@@ -220,24 +220,24 @@ check_syntax_validation() {
             fail "Invalid JSON: $file"
             found=1
           fi
-        elif command -v python3 &>/dev/null; then
-          if ! python3 -c "import json; json.load(open('$file'))" 2>/dev/null; then
+        elif command -v uv &>/dev/null; then
+          if ! uv run python -c "import json; json.load(open('$file'))" 2>/dev/null; then
             fail "Invalid JSON: $file"
             found=1
           fi
         fi
         ;;
       *.yaml|*.yml)
-        if command -v python3 &>/dev/null; then
-          if ! python3 -c "import yaml; yaml.safe_load(open('$file'))" 2>/dev/null; then
+        if command -v uv &>/dev/null; then
+          if ! uv run --with pyyaml python -c "import yaml; yaml.safe_load(open('$file'))" 2>/dev/null; then
             fail "Invalid YAML: $file"
             found=1
           fi
         fi
         ;;
       *.toml)
-        if command -v python3 &>/dev/null; then
-          if ! python3 -c "import tomllib; tomllib.load(open('$file','rb'))" 2>/dev/null; then
+        if command -v uv &>/dev/null; then
+          if ! uv run python -c "import tomllib; tomllib.load(open('$file','rb'))" 2>/dev/null; then
             fail "Invalid TOML: $file"
             found=1
           fi
