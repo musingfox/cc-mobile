@@ -22,10 +22,10 @@ module.exports = {
       name: "cc-mobile-prod",
       script: "server/index.ts",
       interpreter: "bun",
+      args: "--port 7701",
       cwd: __dirname,
       env: {
         NODE_ENV: "production",
-        BASE_PATH: "/cc",
       },
     },
   ],

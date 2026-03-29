@@ -28,10 +28,23 @@ bun run build            # Production build (Vite outputs to dist/client/)
 
 Vite dev server proxies `/ws` and `/api` to Elysia backend on port 3001.
 
+### Port Assignments
+
+| Mode | Service | Port |
+|------|---------|------|
+| Dev  | Elysia backend | 3001 |
+| Dev  | Vite frontend  | 5173 |
+| Prod | Elysia (serves everything) | 7701 |
+
+- **Dev**: two processes — Vite (:5173) proxies `/ws` and `/api` to Elysia (:3001)
+- **Prod**: single Elysia process serves static files + WebSocket + API on :7701
+- Prod port is configured in `ecosystem.config.cjs` via `--port 7701`
+- Access via Tailscale IP: `http://100.88.181.24:7701/`
+
 ## Architecture
 
 ```
-Mobile Browser (PWA) ←──WebSocket──→ Elysia Server (0.0.0.0:3001)
+Mobile Browser (PWA) ←──WebSocket──→ Elysia Server (dev :3001 / prod :7701)
                                        ├─ WS Plugin (ws.ts) — Zod-validated messages
                                        ├─ Session Manager — V1 query() + resume pattern
                                        ├─ Permission Bridge — canUseTool ↔ WebSocket Promise relay
