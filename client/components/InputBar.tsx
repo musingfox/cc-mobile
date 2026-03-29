@@ -288,7 +288,7 @@ export default function InputBar({
             resizeTextarea();
           }}
           onKeyDown={handleKeyDown}
-          placeholder="Type a message, / for commands, @ for agents"
+          placeholder="Message..."
           disabled={disabled}
           rows={1}
         />
