@@ -1,5 +1,6 @@
 import { ChevronRight, Folder } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Drawer } from "vaul";
 import { toastService } from "../services/toast-service";
 import { wsService } from "../services/ws-service";
 import { useAppStore } from "../stores/app-store";
@@ -9,9 +10,15 @@ interface FolderPickerProps {
   open: boolean;
   onSelect: (path: string) => void;
   onClose: () => void;
+  nested?: boolean;
 }
 
-export default function FolderPicker({ open, onSelect, onClose }: FolderPickerProps) {
+export default function FolderPicker({
+  open,
+  onSelect,
+  onClose,
+  nested = false,
+}: FolderPickerProps) {
   const directoryListing = useAppStore((s) => s.directoryListing);
   const isLoading = useAppStore((s) => s.isLoadingDirectories);
   const serverPaths = useAppStore((s) => s.serverPaths);
@@ -39,14 +46,20 @@ export default function FolderPicker({ open, onSelect, onClose }: FolderPickerPr
     wsService.listDirectories(path);
   };
 
+  const resetPath = () => {
+    setCurrentPath(null);
+  };
+
   const handleSelectCurrent = () => {
     if (currentPath) {
       onSelect(currentPath);
+      resetPath();
       onClose();
     }
   };
 
   const handleClose = () => {
+    resetPath();
     onClose();
   };
 
@@ -74,69 +87,97 @@ export default function FolderPicker({ open, onSelect, onClose }: FolderPickerPr
     }
   }, [useAppStore.getState().globalError, open]);
 
-  return (
-    <DrawerBase open={open} onOpenChange={handleClose} title="Choose Folder">
-      <div className="folder-picker">
-        {/* Breadcrumb navigation */}
-        <div className="folder-picker-breadcrumbs">
-          {breadcrumbs.map((crumb, idx) => (
-            <div key={crumb.path} className="folder-picker-breadcrumb">
-              {idx > 0 && <ChevronRight size={16} className="breadcrumb-separator" />}
-              <button
-                type="button"
-                className="breadcrumb-segment"
-                onClick={() => handleNavigate(crumb.path)}
-              >
-                {crumb.name}
-              </button>
-            </div>
-          ))}
-        </div>
-
-        {/* Action buttons */}
-        <div className="folder-picker-actions">
-          {directoryListing?.parent && (
+  // Inner picker content (used for both nested and non-nested modes)
+  const pickerContent = (
+    <div className="folder-picker">
+      {/* Breadcrumb navigation */}
+      <div className="folder-picker-breadcrumbs">
+        {breadcrumbs.map((crumb, idx) => (
+          <div key={crumb.path} className="folder-picker-breadcrumb">
+            {idx > 0 && <ChevronRight size={16} className="breadcrumb-separator" />}
             <button
               type="button"
-              className="folder-picker-action-btn"
-              onClick={() => handleNavigate(directoryListing.parent!)}
-              disabled={isLoading}
+              className="breadcrumb-segment"
+              onClick={() => handleNavigate(crumb.path)}
             >
-              Go Up
+              {crumb.name}
             </button>
-          )}
+          </div>
+        ))}
+      </div>
+
+      {/* Action buttons */}
+      <div className="folder-picker-actions">
+        {directoryListing?.parent && (
           <button
             type="button"
-            className="folder-picker-action-btn primary"
-            onClick={handleSelectCurrent}
-            disabled={!currentPath || isLoading}
+            className="folder-picker-action-btn"
+            onClick={() => handleNavigate(directoryListing.parent!)}
+            disabled={isLoading}
           >
-            Select This Folder
+            Go Up
           </button>
-        </div>
-
-        {/* Directory listing */}
-        {isLoading ? (
-          <div className="folder-picker-loading">Loading...</div>
-        ) : directoryListing && directoryListing.entries.length > 0 ? (
-          <div className="folder-picker-list">
-            {directoryListing.entries.map((entry) => (
-              <button
-                key={entry.path}
-                type="button"
-                className="folder-picker-item"
-                onClick={() => handleNavigate(entry.path)}
-              >
-                <Folder size={20} className="folder-icon" />
-                <span className="folder-name">{entry.name}</span>
-                <ChevronRight size={16} className="folder-chevron" />
-              </button>
-            ))}
-          </div>
-        ) : directoryListing ? (
-          <div className="folder-picker-empty">No subdirectories</div>
-        ) : null}
+        )}
+        <button
+          type="button"
+          className="folder-picker-action-btn primary"
+          onClick={handleSelectCurrent}
+          disabled={!currentPath || isLoading}
+        >
+          Select This Folder
+        </button>
       </div>
+
+      {/* Directory listing */}
+      {isLoading ? (
+        <div className="folder-picker-loading">Loading...</div>
+      ) : directoryListing && directoryListing.entries.length > 0 ? (
+        <div className="folder-picker-list">
+          {directoryListing.entries.map((entry) => (
+            <button
+              key={entry.path}
+              type="button"
+              className="folder-picker-item"
+              onClick={() => handleNavigate(entry.path)}
+            >
+              <Folder size={20} className="folder-icon" />
+              <span className="folder-name">{entry.name}</span>
+              <ChevronRight size={16} className="folder-chevron" />
+            </button>
+          ))}
+        </div>
+      ) : directoryListing ? (
+        <div className="folder-picker-empty">No subdirectories</div>
+      ) : null}
+    </div>
+  );
+
+  // Portal into .app div so CSS theme variables are inherited
+  const container =
+    typeof document !== "undefined"
+      ? (document.querySelector<HTMLElement>(".app") ?? undefined)
+      : undefined;
+
+  // Nested mode: use Drawer.NestedRoot
+  if (nested) {
+    return (
+      <Drawer.NestedRoot open={open} onOpenChange={handleClose}>
+        <Drawer.Portal container={container}>
+          <Drawer.Overlay className="drawer-overlay" />
+          <Drawer.Content className="drawer-content">
+            <Drawer.Handle className="drawer-handle" />
+            <Drawer.Title className="drawer-title">Choose Folder</Drawer.Title>
+            <div className="drawer-body">{pickerContent}</div>
+          </Drawer.Content>
+        </Drawer.Portal>
+      </Drawer.NestedRoot>
+    );
+  }
+
+  // Non-nested mode: use DrawerBase
+  return (
+    <DrawerBase open={open} onOpenChange={handleClose} title="Choose Folder">
+      {pickerContent}
     </DrawerBase>
   );
 }
