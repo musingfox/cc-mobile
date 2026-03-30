@@ -1,11 +1,12 @@
 import { motion } from "framer-motion";
-import { X } from "lucide-react";
+import { FolderOpen, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { loadProjects, removeProject } from "../services/projects";
 import { wsService } from "../services/ws-service";
 import { useAppStore } from "../stores/app-store";
 import { useSettingsStore } from "../stores/settings-store";
 import { springSnappy } from "../utils/motion-variants";
+import FolderPicker from "./FolderPicker";
 
 export default function SessionTabs() {
   const sessions = useAppStore((s) => s.sessions);
@@ -17,6 +18,7 @@ export default function SessionTabs() {
   const [showProjectPicker, setShowProjectPicker] = useState(
     sessions.size === 0 && !activeSessionId,
   );
+  const [showFolderPicker, setShowFolderPicker] = useState(false);
   const [newCwd, setNewCwd] = useState("");
   const [savedProjects, setSavedProjects] = useState(loadProjects);
 
@@ -63,6 +65,11 @@ export default function SessionTabs() {
     e.stopPropagation();
     removeProject(cwd);
     setSavedProjects(loadProjects());
+  };
+
+  const handleFolderSelect = (path: string) => {
+    handleCreate(path);
+    setShowFolderPicker(false);
   };
 
   return (
@@ -149,6 +156,14 @@ export default function SessionTabs() {
             </div>
           )}
           <div className="new-session-bar">
+            <button
+              type="button"
+              className="folder-browse-btn"
+              onClick={() => setShowFolderPicker(true)}
+              title="Browse folders"
+            >
+              <FolderOpen size={20} />
+            </button>
             <input
               className="new-session-input"
               value={newCwd}
@@ -167,6 +182,12 @@ export default function SessionTabs() {
           </div>
         </div>
       )}
+
+      <FolderPicker
+        open={showFolderPicker}
+        onSelect={handleFolderSelect}
+        onClose={() => setShowFolderPicker(false)}
+      />
     </div>
   );
 }

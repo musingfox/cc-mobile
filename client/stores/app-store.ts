@@ -126,6 +126,17 @@ export type SessionState = {
 
 type ConnectionState = "connecting" | "connected" | "disconnected";
 
+export type DirectoryListing = {
+  path: string;
+  entries: Array<{ name: string; path: string }>;
+  parent: string | null;
+};
+
+export type ServerPaths = {
+  allowedRoots: string[] | null;
+  homeDirectory: string;
+};
+
 interface AppState {
   // Connection
   connectionState: ConnectionState;
@@ -225,6 +236,14 @@ interface AppState {
   persistSessionState: (sessionId: string) => void;
   persistAllSessions: () => void;
   restoreAllSessions: () => void;
+
+  // Directory browsing
+  directoryListing: DirectoryListing | null;
+  isLoadingDirectories: boolean;
+  serverPaths: ServerPaths | null;
+  setDirectoryListing: (listing: DirectoryListing | null) => void;
+  setIsLoadingDirectories: (loading: boolean) => void;
+  setServerPaths: (paths: ServerPaths) => void;
 }
 
 function updateSession(
@@ -548,4 +567,11 @@ export const useAppStore = create<AppState>((set) => ({
       activeSessionId: validActiveSessionId,
     });
   },
+
+  directoryListing: null,
+  isLoadingDirectories: false,
+  serverPaths: null,
+  setDirectoryListing: (directoryListing) => set({ directoryListing }),
+  setIsLoadingDirectories: (isLoadingDirectories) => set({ isLoadingDirectories }),
+  setServerPaths: (serverPaths) => set({ serverPaths }),
 }));

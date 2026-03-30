@@ -1,6 +1,6 @@
-import { existsSync, realpathSync, statSync } from "node:fs";
+import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { resolve, sep } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { Elysia, t } from "elysia";
 import {
   type Capabilities,
@@ -63,6 +63,13 @@ function validateAllowedPath(cwd: string, allowedRoots: string[] | null): boolea
   }
 
   return false;
+}
+
+export function getInitialBrowsePath(allowedRoots: string[] | null, homeDirectory: string): string {
+  if (allowedRoots && allowedRoots.length > 0) {
+    return allowedRoots[0];
+  }
+  return homeDirectory;
 }
 
 type PermissionHandlerFactory = typeof createPermissionHandler;
@@ -228,6 +235,8 @@ export function createWsPlugin(
                 permissionMode: sessionManager.getPermissionMode(),
                 model: sessionManager.getSelectedModel(),
                 effort: sessionManager.getSelectedEffort(),
+                allowedRoots: serverConfig.allowedRoots,
+                homeDirectory: homedir(),
               },
             });
             break;
@@ -365,6 +374,83 @@ export function createWsPlugin(
                 type: "capabilities",
                 sessionId,
                 ...cachedCapabilities,
+              });
+            }
+            break;
+          }
+
+          case "list_directories": {
+            const path = expandPath(message.path);
+
+            // Validate path exists and is a directory
+            const cwdError = validateCwd(path);
+            if (cwdError) {
+              ws.send({
+                type: "error",
+                code: "invalid_path",
+                message: cwdError,
+              });
+              break;
+            }
+
+            // Validate path is within allowed roots
+            if (!validateAllowedPath(path, serverConfig.allowedRoots)) {
+              ws.send({
+                type: "error",
+                code: "path_not_allowed",
+                message: "Path is not in the allowed roots",
+              });
+              break;
+            }
+
+            // List directories
+            try {
+              const entries = readdirSync(path, { withFileTypes: true });
+              const directories: Array<{ name: string; path: string }> = [];
+
+              for (const entry of entries) {
+                if (entry.isDirectory()) {
+                  directories.push({
+                    name: entry.name,
+                    path: join(path, entry.name),
+                  });
+                } else if (entry.isSymbolicLink()) {
+                  // Resolve symlink and check if it points to a directory
+                  try {
+                    const entryPath = join(path, entry.name);
+                    const resolvedPath = realpathSync(entryPath);
+                    const stats = statSync(resolvedPath);
+
+                    if (stats.isDirectory()) {
+                      // Check if resolved path is within allowed roots
+                      if (validateAllowedPath(resolvedPath, serverConfig.allowedRoots)) {
+                        directories.push({
+                          name: entry.name,
+                          path: entryPath,
+                        });
+                      }
+                    }
+                  } catch {}
+                }
+              }
+
+              // Sort alphabetically
+              directories.sort((a, b) => a.name.localeCompare(b.name));
+
+              // Calculate parent
+              const parent = path === sep ? null : dirname(path);
+
+              ws.send({
+                type: "directory_listing",
+                path,
+                entries: directories,
+                parent,
+              });
+            } catch (err) {
+              ws.send({
+                type: "error",
+                code: "permission_denied",
+                message: `Cannot read directory: ${path}`,
               });
             }
             break;

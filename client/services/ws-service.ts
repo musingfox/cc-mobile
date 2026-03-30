@@ -476,6 +476,8 @@ class WsService {
 
       case "error":
         hapticService.error();
+        // Clear directory loading state on any error
+        store.setIsLoadingDirectories(false);
         if (sessionId) {
           store.addMessage(sessionId, {
             id: `error-${Date.now()}`,
@@ -510,6 +512,8 @@ class WsService {
           permissionMode?: string;
           model?: string;
           effort?: string | null;
+          allowedRoots?: string[] | null;
+          homeDirectory?: string;
         };
         const settingsStore = useSettingsStore.getState();
         if (config?.permissionMode) {
@@ -523,6 +527,12 @@ class WsService {
         if (config?.effort !== undefined) {
           store.setSelectedEffort(config.effort);
           settingsStore.setEffort(config.effort);
+        }
+        if (config?.allowedRoots !== undefined || config?.homeDirectory) {
+          store.setServerPaths({
+            allowedRoots: config.allowedRoots ?? null,
+            homeDirectory: config.homeDirectory ?? "~",
+          });
         }
         break;
       }
@@ -538,6 +548,16 @@ class WsService {
             }>) || [];
           store.loadSessionHistory(sessionId, messages);
         }
+        break;
+      }
+
+      case "directory_listing": {
+        store.setDirectoryListing({
+          path: msg.path as string,
+          entries: (msg.entries as Array<{ name: string; path: string }>) || [],
+          parent: (msg.parent as string | null) ?? null,
+        });
+        store.setIsLoadingDirectories(false);
         break;
       }
     }
@@ -703,6 +723,12 @@ class WsService {
   setEnvVars(envVars: Record<string, string>) {
     if (!this.ws) return;
     this.sendMessage({ type: "set_env_vars", envVars });
+  }
+
+  listDirectories(path: string) {
+    if (!this.ws) return;
+    useAppStore.getState().setIsLoadingDirectories(true);
+    this.sendMessage({ type: "list_directories", path });
   }
 
   destroy() {

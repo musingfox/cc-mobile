@@ -95,6 +95,11 @@ const GetSessionInfoMessage = z.object({
   dir: z.string().optional(),
 });
 
+const ListDirectoriesMessage = z.object({
+  type: z.literal("list_directories"),
+  path: z.string(),
+});
+
 export const ClientMessage = z.discriminatedUnion("type", [
   NewSessionMessage,
   SendMessage,
@@ -109,6 +114,7 @@ export const ClientMessage = z.discriminatedUnion("type", [
   SetModelMessage,
   SetEffortMessage,
   GetSessionInfoMessage,
+  ListDirectoriesMessage,
 ]);
 
 export type ClientMessage = z.infer<typeof ClientMessage>;
@@ -187,6 +193,8 @@ const ServerConfigMessage = z.object({
   type: z.literal("server_config"),
   config: z.object({
     permissionMode: z.enum(["default", "acceptEdits", "bypassPermissions"]),
+    allowedRoots: z.array(z.string()).nullable().optional(),
+    homeDirectory: z.string().optional(),
   }),
 });
 
@@ -222,6 +230,18 @@ const SessionInfoMessage = z.object({
   session: SessionListItemSchema.nullable(),
 });
 
+const DirectoryListingMessage = z.object({
+  type: z.literal("directory_listing"),
+  path: z.string(),
+  entries: z.array(
+    z.object({
+      name: z.string(),
+      path: z.string(),
+    }),
+  ),
+  parent: z.string().nullable(),
+});
+
 export const ServerMessage = z.discriminatedUnion("type", [
   SessionCreatedMessage,
   StreamChunkMessage,
@@ -234,6 +254,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
   SessionListMessage,
   SessionHistoryMessage,
   SessionInfoMessage,
+  DirectoryListingMessage,
 ]);
 
 export type ServerMessage = z.infer<typeof ServerMessage>;

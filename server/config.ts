@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import { resolve } from "node:path";
 
 export type PermissionMode = "default" | "acceptEdits" | "bypassPermissions";
@@ -83,6 +84,13 @@ export function parseServerConfig(argv: string[]): ServerConfig {
   return config;
 }
 
+function expandPath(p: string): string {
+  if (p.startsWith("~/") || p === "~") {
+    return resolve(homedir(), p.slice(2));
+  }
+  return resolve(p);
+}
+
 function parseAllowedRoots(): string[] | null {
   const envVar = process.env.CC_MOBILE_ALLOWED_ROOTS;
   if (!envVar || envVar.trim() === "") {
@@ -93,5 +101,5 @@ function parseAllowedRoots(): string[] | null {
     .split(",")
     .map((p) => p.trim())
     .filter((p) => p.length > 0)
-    .map((p) => resolve(p));
+    .map((p) => expandPath(p));
 }
