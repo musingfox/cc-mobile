@@ -1,0 +1,26 @@
+{
+  "name": "CCMobile DEV",
+  "short_name": "CCMobile DEV",
+  "description": "Touch-optimized PWA for interacting with Claude Code from phones and tablets",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1a2e",
+  "theme_color": "#DA7756",
+  "icons": [
+    {
+      "src": "/icons/icon-192-dev.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512-dev.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/apple-touch-icon-dev.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

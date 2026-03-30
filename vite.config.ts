@@ -1,14 +1,18 @@
-import { readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { copyFileSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
-import { type Plugin, defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 /**
  * Vite plugin that stamps the service worker with a build-time version and BASE_PATH.
  * Replaces __BUILD_VERSION__ and __BASE_PATH__ placeholders in sw.js and index.html.
- * Also updates manifest.json start_url.
+ * Also updates manifest.json start_url and handles dev/prod icon switching.
  */
-function swVersionPlugin(): Plugin {
+function swVersionPlugin(mode: string): Plugin {
   return {
     name: "sw-version",
     apply: "build",
@@ -16,6 +20,7 @@ function swVersionPlugin(): Plugin {
       const version = Date.now().toString(36);
       const basePath = process.env.BASE_PATH || "";
       const distDir = join(__dirname, "dist", "client");
+      const isDev = mode !== "production";
 
       // Update sw.js
       const swPath = join(distDir, "sw.js");
@@ -23,8 +28,21 @@ function swVersionPlugin(): Plugin {
         let content = readFileSync(swPath, "utf-8");
         content = content.replace("__BUILD_VERSION__", version);
         content = content.replace(/self\.__BASE_PATH__/g, `"${basePath}"`);
+
+        // Replace icon paths with dev variants if dev mode
+        if (isDev) {
+          content = content.replace(/\/icons\/icon-192\.png/g, "/icons/icon-192-dev.png");
+          content = content.replace(/\/icons\/icon-512\.png/g, "/icons/icon-512-dev.png");
+          content = content.replace(
+            /\/icons\/apple-touch-icon\.png/g,
+            "/icons/apple-touch-icon-dev.png",
+          );
+        }
+
         writeFileSync(swPath, content);
-        console.log(`[sw-version] stamped sw.js with version: ${version}, basePath: ${basePath}`);
+        console.log(
+          `[sw-version] stamped sw.js with version: ${version}, basePath: ${basePath}, mode: ${mode}`,
+        );
       } catch {
         // sw.js not in dist — dev mode or build error, skip silently
       }
@@ -48,7 +66,13 @@ function swVersionPlugin(): Plugin {
 
       // Update manifest.json
       const manifestPath = join(distDir, "manifest.json");
+      const sourceManifest = isDev ? "manifest.dev.json" : "manifest.json";
+      const clientDir = join(__dirname, "client", "public");
+
       try {
+        // Copy the appropriate manifest source to dist
+        copyFileSync(join(clientDir, sourceManifest), manifestPath);
+
         const content = readFileSync(manifestPath, "utf-8");
         const manifest = JSON.parse(content);
         manifest.start_url = `${basePath}/`;
@@ -60,7 +84,9 @@ function swVersionPlugin(): Plugin {
           }));
         }
         writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
-        console.log(`[sw-version] updated manifest.json start_url to: ${basePath}/`);
+        console.log(
+          `[sw-version] updated manifest.json from ${sourceManifest}, start_url to: ${basePath}/`,
+        );
       } catch {
         // manifest.json not found, skip
       }
@@ -69,13 +95,15 @@ function swVersionPlugin(): Plugin {
 }
 
 /**
- * Vite plugin for dev mode: replaces __BASE_PATH__ in HTML.
+ * Vite plugin for dev mode: replaces __BASE_PATH__ in HTML and handles dev icon switching.
  */
-function htmlTransformPlugin(): Plugin {
+function htmlTransformPlugin(mode: string): Plugin {
   return {
     name: "html-transform",
     transformIndexHtml(html) {
       const basePath = process.env.BASE_PATH || "";
+      const isDev = mode !== "production";
+
       // Replace the script tag first (more specific pattern)
       let transformed = html.replace(
         /window\.__BASE_PATH__ = "__BASE_PATH__"/g,
@@ -83,6 +111,26 @@ function htmlTransformPlugin(): Plugin {
       );
       // Then replace remaining __BASE_PATH__ placeholders in hrefs/src
       transformed = transformed.replace(/__BASE_PATH__\//g, `${basePath}/`);
+
+      // Dev mode transformations
+      if (isDev) {
+        // Switch to dev manifest
+        transformed = transformed.replace(
+          /href="([^"]*)\/manifest\.json"/,
+          'href="$1/manifest.dev.json"',
+        );
+        // Switch to dev apple-touch-icon
+        transformed = transformed.replace(
+          /href="([^"]*)\/icons\/apple-touch-icon\.png"/,
+          'href="$1/icons/apple-touch-icon-dev.png"',
+        );
+        // Update apple-mobile-web-app-title
+        transformed = transformed.replace(
+          /<meta name="apple-mobile-web-app-title" content="CCMobile" \/>/,
+          '<meta name="apple-mobile-web-app-title" content="CCMobile DEV" />',
+        );
+      }
+
       return transformed;
     },
   };
@@ -97,7 +145,7 @@ export default defineConfig(({ mode }) => {
   const apiPath = basePath ? `${basePath}/api` : "/api";
 
   return {
-    plugins: [react(), swVersionPlugin(), htmlTransformPlugin()],
+    plugins: [react(), swVersionPlugin(mode), htmlTransformPlugin(mode)],
     root: "client",
     base: basePath || "/",
     build: {

@@ -33,8 +33,9 @@
     "includes": [
       "client/**/*.{ts,tsx,js,jsx,css,json}",
       "server/**/*.{ts,js,json}",
+      "scripts/**/*.{ts,js}",
       "e2e/**/*.{ts,js,json}",
-      "*.json"
+      "*.{ts,json}"
     ]
   }
 }

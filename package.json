@@ -7,6 +7,8 @@
     "dev:client": "bunx vite",
     "dev": "bun run dev:server & bun run dev:client",
     "serve": "./dev.sh",
+    "generate:icons": "bun run scripts/generate-dev-icons.ts",
+    "prebuild": "bun run generate:icons",
     "build": "bunx vite build",
     "start": "NODE_ENV=production bun run server/index.ts",
     "start:prod": "bun run build && bun run start",
@@ -47,6 +49,7 @@
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
+    "sharp": "^0.33.5",
     "typescript": "^5.7.2",
     "vite": "^6.0.7"
   }

@@ -196,6 +196,8 @@ check_no_commit_markers() {
   for file in $(staged_files); do
     [ -f "$file" ] || continue
     [ "$file" = "$HOOK_SELF" ] && continue
+    # Skip lockfiles (auto-generated, hashes may contain marker-like strings)
+    [[ "$file" == *.lock || "$file" == *-lock.* ]] && continue
     file --mime "$file" 2>/dev/null | grep -q "binary" && continue
     if grep -nE "$NO_COMMIT_MARKERS" "$file" &>/dev/null; then
       local matches
@@ -255,7 +257,7 @@ check_lock_sync() {
   staged=$(staged_files)
 
   if echo "$staged" | grep -q "package.json"; then
-    if ! echo "$staged" | grep -qE "(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lockb)"; then
+    if ! echo "$staged" | grep -qE "(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lockb|bun\.lock)"; then
       warn "package.json changed but lock file not staged"
       found=1
     fi
