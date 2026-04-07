@@ -26,12 +26,15 @@ describe("HeartbeatManager", () => {
     manager?.stop();
   });
 
-  it("sends ping at interval", async () => {
+  it("sends ping at interval (not immediately)", async () => {
     manager = new HeartbeatManager(sender, { intervalMs: 100, timeoutMs: 50 });
     manager.start();
 
-    await sleep(150);
+    // No immediate ping
+    expect(sender.sent.length).toBe(0);
 
+    // First ping after interval
+    await sleep(120);
     expect(sender.sent.length).toBeGreaterThanOrEqual(1);
     expect(sender.sent[0]).toMatchObject({ type: "ping" });
     expect(sender.sent[0].timestamp).toBeTypeOf("number");
@@ -41,6 +44,7 @@ describe("HeartbeatManager", () => {
     manager = new HeartbeatManager(sender, { intervalMs: 100, timeoutMs: 50 });
     manager.start();
 
+    // Wait for first ping (100ms) + timeout (50ms) + margin
     await sleep(200);
 
     expect(sender.closed).toBe(true);
@@ -50,15 +54,15 @@ describe("HeartbeatManager", () => {
     manager = new HeartbeatManager(sender, { intervalMs: 100, timeoutMs: 50 });
     manager.start();
 
+    // Wait for first ping at 100ms, then respond
+    await sleep(120);
+    manager.recordPong();
+
+    // Wait for second ping at 200ms, then respond
+    await sleep(100);
+    manager.recordPong();
+
     await sleep(30);
-    manager.recordPong();
-
-    await sleep(80);
-    manager.recordPong();
-
-    await sleep(30);
-    manager.recordPong();
-
     expect(sender.closed).toBe(false);
   });
 
@@ -66,7 +70,7 @@ describe("HeartbeatManager", () => {
     manager = new HeartbeatManager(sender, { intervalMs: 100, timeoutMs: 50 });
     manager.start();
 
-    await sleep(50);
+    await sleep(120);
     manager.stop();
 
     const sentCount = sender.sent.length;
@@ -81,7 +85,8 @@ describe("HeartbeatManager", () => {
     expect(manager.isAlive()).toBe(true);
 
     manager.start();
-    await sleep(160); // Wait for timeout to trigger
+    // Wait for ping (100ms) + timeout (50ms) + margin
+    await sleep(200);
 
     expect(manager.isAlive()).toBe(false);
     expect(sender.closed).toBe(true);
@@ -91,7 +96,7 @@ describe("HeartbeatManager", () => {
     manager = new HeartbeatManager(sender, { intervalMs: 100, timeoutMs: 50 });
     manager.start();
 
-    await sleep(30);
+    await sleep(120);
     manager.recordPong();
 
     expect(manager.isAlive()).toBe(true);
@@ -102,9 +107,9 @@ describe("HeartbeatManager", () => {
     manager.start();
     manager.start();
 
-    await sleep(150);
+    await sleep(120);
 
-    // Should have ~1 ping, not ~2 (allowing for timing variance)
+    // Should have ~1 ping, not ~2
     expect(sender.sent.length).toBeLessThanOrEqual(2);
   });
 });

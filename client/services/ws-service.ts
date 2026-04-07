@@ -58,6 +58,7 @@ class WsService {
   private lastToolBatchTime = 0;
   private lastEventId: number | null = null;
   private pendingResumeSdkSessionId: string | null = null;
+  private disconnectBannerTimeout: number | null = null;
 
   private sendMessage(msg: Record<string, unknown>) {
     if (!this.ws) return;
@@ -83,6 +84,11 @@ class WsService {
 
     ws.onopen = () => {
       console.log("[ws-service] connected");
+      // Cancel pending disconnect banner — reconnect was fast enough
+      if (this.disconnectBannerTimeout !== null) {
+        clearTimeout(this.disconnectBannerTimeout);
+        this.disconnectBannerTimeout = null;
+      }
       const store = useAppStore.getState();
       store.setConnectionState("connected");
       this.reconnectDelay = 1000;
@@ -160,8 +166,12 @@ class WsService {
 
     ws.onclose = () => {
       console.log("[ws-service] disconnected");
-      useAppStore.getState().setConnectionState("disconnected");
       this.ws = null;
+      // Delay showing disconnect banner — if reconnect is fast, user won't notice
+      this.disconnectBannerTimeout = window.setTimeout(() => {
+        useAppStore.getState().setConnectionState("disconnected");
+        this.disconnectBannerTimeout = null;
+      }, 3000);
       this.scheduleReconnect();
     };
   }

@@ -19,7 +19,7 @@ export class HeartbeatManager {
   constructor(sender: HeartbeatSender, options?: HeartbeatOptions) {
     this.sender = sender;
     this.intervalMs = options?.intervalMs ?? 30000;
-    this.timeoutMs = options?.timeoutMs ?? 10000;
+    this.timeoutMs = options?.timeoutMs ?? 15000;
   }
 
   start(): void {
@@ -29,7 +29,7 @@ export class HeartbeatManager {
     }
 
     this.alive = true;
-    this.sendPing();
+    // Don't send ping immediately — let client settle after connect
     this.intervalTimer = setInterval(() => {
       this.sendPing();
     }, this.intervalMs);
