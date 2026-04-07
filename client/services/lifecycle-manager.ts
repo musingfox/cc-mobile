@@ -2,19 +2,26 @@ export class LifecycleManager {
   private callbacks: {
     onBeforeHide: () => void;
     onPageShow: () => void;
+    onVisibilityRestore?: () => void;
   };
 
   private visibilityChangeHandler: () => void;
   private pageHideHandler: () => void;
   private pageShowHandler: () => void;
 
-  constructor(callbacks: { onBeforeHide: () => void; onPageShow: () => void }) {
+  constructor(callbacks: {
+    onBeforeHide: () => void;
+    onPageShow: () => void;
+    onVisibilityRestore?: () => void;
+  }) {
     this.callbacks = callbacks;
 
     // Bind handlers
     this.visibilityChangeHandler = () => {
       if (document.hidden) {
         this.callbacks.onBeforeHide();
+      } else if (this.callbacks.onVisibilityRestore) {
+        this.callbacks.onVisibilityRestore();
       }
     };
 

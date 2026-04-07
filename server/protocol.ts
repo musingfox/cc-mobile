@@ -100,6 +100,16 @@ const ListDirectoriesMessage = z.object({
   path: z.string(),
 });
 
+const ReconnectMessage = z.object({
+  type: z.literal("reconnect"),
+  lastEventId: z.number().nullable(),
+  sessionIds: z.array(z.string()),
+});
+
+const PongMessage = z.object({
+  type: z.literal("pong"),
+});
+
 export const ClientMessage = z.discriminatedUnion("type", [
   NewSessionMessage,
   SendMessage,
@@ -115,6 +125,8 @@ export const ClientMessage = z.discriminatedUnion("type", [
   SetEffortMessage,
   GetSessionInfoMessage,
   ListDirectoriesMessage,
+  ReconnectMessage,
+  PongMessage,
 ]);
 
 export type ClientMessage = z.infer<typeof ClientMessage>;
@@ -242,6 +254,25 @@ const DirectoryListingMessage = z.object({
   parent: z.string().nullable(),
 });
 
+const EventWrapperMessage = z.object({
+  type: z.literal("event"),
+  eventId: z.number(),
+  sessionId: z.string(),
+  payload: z.record(z.unknown()), // raw ServerMessage, validated separately
+});
+
+const ReplayCompleteMessage = z.object({
+  type: z.literal("replay_complete"),
+  sessionId: z.string(),
+  eventsReplayed: z.number(),
+  gapDetected: z.boolean(),
+});
+
+const PingMessage = z.object({
+  type: z.literal("ping"),
+  timestamp: z.number(),
+});
+
 export const ServerMessage = z.discriminatedUnion("type", [
   SessionCreatedMessage,
   StreamChunkMessage,
@@ -255,6 +286,9 @@ export const ServerMessage = z.discriminatedUnion("type", [
   SessionHistoryMessage,
   SessionInfoMessage,
   DirectoryListingMessage,
+  EventWrapperMessage,
+  ReplayCompleteMessage,
+  PingMessage,
 ]);
 
 export type ServerMessage = z.infer<typeof ServerMessage>;

@@ -111,6 +111,7 @@ export type RateLimitInfo = {
 export type SessionState = {
   id: string;
   cwd: string;
+  sdkSessionId: string | null;
   messages: Message[];
   pendingPermission: PendingPermission | null;
   isStreaming: boolean;
@@ -147,6 +148,7 @@ interface AppState {
   activeSessionId: string | null;
 
   addSession: (sessionId: string, cwd: string) => void;
+  setSdkSessionId: (sessionId: string, sdkSessionId: string) => void;
   removeSession: (sessionId: string) => void;
   setActiveSession: (sessionId: string) => void;
 
@@ -271,6 +273,7 @@ export const useAppStore = create<AppState>((set) => ({
       next.set(sessionId, {
         id: sessionId,
         cwd,
+        sdkSessionId: null,
         messages: [],
         pendingPermission: null,
         isStreaming: false,
@@ -287,6 +290,15 @@ export const useAppStore = create<AppState>((set) => ({
         sessions: next,
         activeSessionId: sessionId,
       };
+    }),
+
+  setSdkSessionId: (sessionId, sdkSessionId) =>
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+      const next = new Map(state.sessions);
+      next.set(sessionId, { ...session, sdkSessionId });
+      return { sessions: next };
     }),
 
   removeSession: (sessionId) =>

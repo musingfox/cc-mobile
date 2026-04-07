@@ -8,8 +8,10 @@ import {
   saveCachedCapabilities,
 } from "./capabilities-cache";
 import type { ServerConfig } from "./config";
+import { EventBuffer } from "./event-buffer";
+import { HeartbeatManager } from "./heartbeat";
 import { buildUrl } from "./path-utils";
-import type { createPermissionHandler } from "./permission-bridge";
+import type { createPermissionHandler, PendingPermissionSnapshot } from "./permission-bridge";
 import { ClientMessage, ServerMessage } from "./protocol";
 import { loadSessionHistory } from "./session-history";
 import { getClaudeSessionInfo, listClaudeSessions } from "./session-listing";
@@ -76,8 +78,8 @@ type PermissionHandlerFactory = typeof createPermissionHandler;
 type PermissionHandler = ReturnType<PermissionHandlerFactory>;
 
 interface WsData {
-  permissionHandler?: PermissionHandler;
   currentSessionId?: string;
+  heartbeat?: HeartbeatManager;
 }
 
 export function createWsPlugin(
@@ -88,24 +90,63 @@ export function createWsPlugin(
   let cachedCapabilities: Capabilities | null = loadCachedCapabilities();
   const wsPath = buildUrl(serverConfig.basePath, "/ws");
 
+  // Persistent state across reconnects
+  const eventBuffer = new EventBuffer(500);
+  const persistentState = {
+    permissionHandler: null as PermissionHandler | null,
+    pausedPermissions: [] as PendingPermissionSnapshot[],
+  };
+
+  // Helper to send buffered messages
+  function sendBuffered(ws: any, sessionId: string, message: Record<string, unknown>) {
+    const eventId = eventBuffer.append(sessionId, message);
+    ws.send({ type: "event", eventId, sessionId, payload: message });
+  }
+
   return new Elysia().ws(wsPath, {
     body: t.Any(), // We'll validate with Zod
 
     open(ws) {
       console.log("[ws] client connected");
-      const handler = permissionBridgeFactory((requestId, tool) => {
-        ws.send({
-          type: "permission_request",
-          sessionId: (ws.data as WsData).currentSessionId || "",
-          requestId,
-          tool,
+
+      // Create or reuse permission handler
+      if (!persistentState.permissionHandler) {
+        const handler = permissionBridgeFactory((requestId, tool) => {
+          const sid = (ws.data as WsData).currentSessionId || "";
+          sendBuffered(ws, sid, {
+            type: "permission_request",
+            sessionId: sid,
+            requestId,
+            tool,
+          });
         });
-      });
-      (ws.data as WsData).permissionHandler = handler;
+        persistentState.permissionHandler = handler;
+      } else {
+        // Update existing handler to use new connection
+        persistentState.permissionHandler.updateSendToClient((requestId, tool) => {
+          const sid = (ws.data as WsData).currentSessionId || "";
+          sendBuffered(ws, sid, {
+            type: "permission_request",
+            sessionId: sid,
+            requestId,
+            tool,
+          });
+        });
+      }
 
       // Update all existing sessions to use this connection's permission handler
-      // This fixes permission approval after WS reconnect (e.g. mobile app switch)
-      sessionManager.updateCanUseTool(handler.canUseTool);
+      sessionManager.updateCanUseTool(persistentState.permissionHandler.canUseTool);
+
+      // Resume paused permissions if any
+      if (persistentState.pausedPermissions.length > 0) {
+        persistentState.permissionHandler.resumePending(persistentState.pausedPermissions);
+        persistentState.pausedPermissions = [];
+      }
+
+      // Start heartbeat
+      const heartbeat = new HeartbeatManager(ws);
+      (ws.data as WsData).heartbeat = heartbeat;
+      heartbeat.start();
 
       // Send cached capabilities on reconnect
       if (cachedCapabilities) {
@@ -131,11 +172,11 @@ export function createWsPlugin(
 
       const message = parsed.data;
       const wsData = ws.data as WsData;
-      if (!wsData.permissionHandler) {
+      if (!persistentState.permissionHandler) {
         ws.send({ type: "error", code: "internal_error", message: "No permission handler" });
         return;
       }
-      const handler = wsData.permissionHandler;
+      const handler = persistentState.permissionHandler;
 
       try {
         switch (message.type) {
@@ -165,7 +206,7 @@ export function createWsPlugin(
 
             await sessionManager.createSession(sessionId, cwd, handler.canUseTool);
 
-            ws.send({
+            sendBuffered(ws, sessionId, {
               type: "session_created",
               sessionId,
               cwd,
@@ -175,6 +216,8 @@ export function createWsPlugin(
 
           case "send":
           case "command": {
+            // Track active session for permission routing
+            (ws.data as WsData).currentSessionId = message.sessionId;
             const content =
               message.type === "send"
                 ? message.content // Can be string | ContentBlock[]
@@ -196,7 +239,7 @@ export function createWsPlugin(
                 // Fetch models + account info from SDK
                 const initData = await sessionManager.getInitData(message.sessionId);
 
-                ws.send({
+                sendBuffered(ws, message.sessionId, {
                   type: "capabilities",
                   sessionId: message.sessionId,
                   ...cachedCapabilities,
@@ -204,14 +247,14 @@ export function createWsPlugin(
                 });
               }
 
-              ws.send({
+              sendBuffered(ws, message.sessionId, {
                 type: "stream_chunk",
                 sessionId: message.sessionId,
                 chunk: msg,
               });
             }
 
-            ws.send({
+            sendBuffered(ws, message.sessionId, {
               type: "stream_end",
               sessionId: message.sessionId,
             });
@@ -335,7 +378,7 @@ export function createWsPlugin(
               message.sdkSessionId,
             );
 
-            ws.send({
+            sendBuffered(ws, sessionId, {
               type: "session_created",
               sessionId,
               cwd,
@@ -349,7 +392,7 @@ export function createWsPlugin(
                 sessionId,
                 messages,
               });
-              ws.send(validated);
+              sendBuffered(ws, sessionId, validated);
             } catch (_err) {
               // Session created but history load failed - not fatal
               try {
@@ -358,9 +401,9 @@ export function createWsPlugin(
                   sessionId,
                   messages: [],
                 });
-                ws.send(validated);
+                sendBuffered(ws, sessionId, validated);
               } catch {
-                ws.send({
+                sendBuffered(ws, sessionId, {
                   type: "session_history",
                   sessionId,
                   messages: [],
@@ -370,7 +413,7 @@ export function createWsPlugin(
 
             // Send cached capabilities if available
             if (cachedCapabilities) {
-              ws.send({
+              sendBuffered(ws, sessionId, {
                 type: "capabilities",
                 sessionId,
                 ...cachedCapabilities,
@@ -455,6 +498,39 @@ export function createWsPlugin(
             }
             break;
           }
+
+          case "reconnect": {
+            const { lastEventId, sessionIds } = message;
+
+            for (const sessionId of sessionIds) {
+              const events = eventBuffer.replay(sessionId, lastEventId ?? -1);
+              const stats = eventBuffer.getStats(sessionId);
+              const gapDetected =
+                lastEventId !== null && stats.oldest !== null && lastEventId < stats.oldest;
+
+              for (const evt of events) {
+                ws.send({
+                  type: "event",
+                  eventId: evt.eventId,
+                  sessionId: evt.sessionId,
+                  payload: evt.message,
+                });
+              }
+
+              ws.send({
+                type: "replay_complete",
+                sessionId,
+                eventsReplayed: events.length,
+                gapDetected,
+              });
+            }
+            break;
+          }
+
+          case "pong": {
+            wsData.heartbeat?.recordPong();
+            break;
+          }
         }
       } catch (error) {
         console.error("[ws] error handling message:", error);
@@ -470,7 +546,17 @@ export function createWsPlugin(
       }
     },
 
-    close(_ws) {
+    close(ws) {
+      const wsData = ws.data as WsData;
+
+      // Stop heartbeat
+      wsData.heartbeat?.stop();
+
+      // Pause pending permissions for potential reconnect
+      if (persistentState.permissionHandler) {
+        persistentState.pausedPermissions = persistentState.permissionHandler.pausePending();
+      }
+
       console.log("[ws] client disconnected");
     },
   });

@@ -56,6 +56,8 @@ class WsService {
   private reconnectTimeout: number | null = null;
   private reconnectDelay = 1000;
   private lastToolBatchTime = 0;
+  private lastEventId: number | null = null;
+  private pendingResumeSdkSessionId: string | null = null;
 
   private sendMessage(msg: Record<string, unknown>) {
     if (!this.ws) return;
@@ -66,6 +68,14 @@ class WsService {
   connect() {
     const store = useAppStore.getState();
     store.setConnectionState("connecting");
+
+    // Restore lastEventId from localStorage
+    try {
+      const stored = localStorage.getItem("ccm:lastEventId");
+      if (stored && this.lastEventId === null) {
+        this.lastEventId = parseInt(stored, 10);
+      }
+    } catch {}
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const basePath = (window as typeof window & { __BASE_PATH__?: string }).__BASE_PATH__ || "";
@@ -88,6 +98,14 @@ class WsService {
         this.setPermissionMode(settings.permissionMode);
       }
 
+      // Send reconnect message if we have lastEventId
+      if (this.lastEventId !== null) {
+        const sessionIds = Array.from(useAppStore.getState().sessions.keys());
+        if (sessionIds.length > 0) {
+          this.sendMessage({ type: "reconnect", lastEventId: this.lastEventId, sessionIds });
+        }
+      }
+
       // If we have restored sessions, don't auto-create a new one
       // User already has sessions from persistence
       if (store.sessions.size === 0) {
@@ -100,6 +118,36 @@ class WsService {
       try {
         const msg = JSON.parse(event.data);
         debugLog.add("recv", msg);
+
+        // Handle event envelope — unwrap and track eventId
+        if (msg.type === "event") {
+          this.lastEventId = msg.eventId;
+          // Save to localStorage for persistence across page reloads
+          try {
+            localStorage.setItem("ccm:lastEventId", String(msg.eventId));
+          } catch {}
+          this.handleMessage(msg.payload);
+          return;
+        }
+
+        // Handle ping — respond with pong
+        if (msg.type === "ping") {
+          this.sendMessage({ type: "pong" });
+          return;
+        }
+
+        // Handle replay_complete
+        if (msg.type === "replay_complete") {
+          console.log(
+            `[ws-service] replay complete: session=${msg.sessionId}, events=${msg.eventsReplayed}, gap=${msg.gapDetected}`,
+          );
+          if (msg.gapDetected) {
+            toastService.info("Some messages may have been missed during reconnect");
+          }
+          return;
+        }
+
+        // All other messages (non-wrapped) go through handleMessage directly
         this.handleMessage(msg);
       } catch (err) {
         console.error("[ws-service] parse error:", err);
@@ -143,6 +191,11 @@ class WsService {
             }
           }
           store.addSession(sessionId, cwd);
+          // If this was a resume, store the sdkSessionId
+          if (this.pendingResumeSdkSessionId) {
+            store.setSdkSessionId(sessionId, this.pendingResumeSdkSessionId);
+            this.pendingResumeSdkSessionId = null;
+          }
           saveProject(cwd);
         }
         break;
@@ -151,6 +204,11 @@ class WsService {
       case "stream_chunk": {
         if (!sessionId) break;
         const chunk = msg.chunk as Record<string, unknown>;
+
+        // Capture sdkSessionId from system/init message
+        if (chunk.type === "system" && chunk.subtype === "init" && chunk.session_id) {
+          store.setSdkSessionId(sessionId, chunk.session_id as string);
+        }
 
         // Handle hook started — clear stale tools since hooks run after turn completes
         if (isHookStarted(chunk)) {
@@ -478,6 +536,27 @@ class WsService {
         hapticService.error();
         // Clear directory loading state on any error
         store.setIsLoadingDirectories(false);
+
+        // Auto-resume if server lost the session (e.g. after server restart)
+        if (
+          sessionId &&
+          msg.code === "session_error" &&
+          typeof msg.message === "string" &&
+          msg.message.includes("not found")
+        ) {
+          const session = store.sessions.get(sessionId);
+          if (session?.sdkSessionId) {
+            console.log(
+              `[ws-service] session lost on server, auto-resuming: ${session.sdkSessionId}`,
+            );
+            toastService.info("Reconnecting to session...");
+            // Remove stale session, resume will create a new one
+            store.removeSession(sessionId);
+            this.resumeSession(session.sdkSessionId, session.cwd);
+            break;
+          }
+        }
+
         if (sessionId) {
           store.addMessage(sessionId, {
             id: `error-${Date.now()}`,
@@ -698,6 +777,7 @@ class WsService {
 
   resumeSession(sdkSessionId: string, cwd: string) {
     if (!this.ws) return;
+    this.pendingResumeSdkSessionId = sdkSessionId;
     this.sendMessage({
       type: "resume_session",
       sdkSessionId,
@@ -729,6 +809,10 @@ class WsService {
     if (!this.ws) return;
     useAppStore.getState().setIsLoadingDirectories(true);
     this.sendMessage({ type: "list_directories", path });
+  }
+
+  getReadyState(): number {
+    return this.ws?.readyState ?? WebSocket.CLOSED;
   }
 
   destroy() {

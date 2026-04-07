@@ -105,7 +105,16 @@ export default function App() {
         currentStore.persistAllSessions();
       },
       onPageShow: () => {
-        // Could restore again if needed, but typically not necessary
+        // bfcache restore — also check connection
+        if (wsService.getReadyState() !== WebSocket.OPEN) {
+          wsService.connect();
+        }
+      },
+      onVisibilityRestore: () => {
+        // Tab switch / app foreground — check connection
+        if (wsService.getReadyState() !== WebSocket.OPEN) {
+          wsService.connect();
+        }
       },
     });
     lifecycleManager.start();

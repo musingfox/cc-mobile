@@ -4,14 +4,17 @@ import { LifecycleManager } from "../services/lifecycle-manager";
 describe("LifecycleManager", () => {
   let onBeforeHideMock: ReturnType<typeof mock>;
   let onPageShowMock: ReturnType<typeof mock>;
+  let onVisibilityRestoreMock: ReturnType<typeof mock>;
   let manager: LifecycleManager;
 
   beforeEach(() => {
     onBeforeHideMock = mock(() => {});
     onPageShowMock = mock(() => {});
+    onVisibilityRestoreMock = mock(() => {});
     manager = new LifecycleManager({
       onBeforeHide: onBeforeHideMock,
       onPageShow: onPageShowMock,
+      onVisibilityRestore: onVisibilityRestoreMock,
     });
   });
 
@@ -122,5 +125,47 @@ describe("LifecycleManager", () => {
     // Callbacks should not have been called since listeners were removed
     expect(onBeforeHideMock).toHaveBeenCalledTimes(0);
     expect(onPageShowMock).toHaveBeenCalledTimes(0);
+  });
+
+  // TC-LC6: visibilitychange with hidden=false calls onVisibilityRestore
+  test("TC-LC6: visibilitychange with hidden=false calls onVisibilityRestore", () => {
+    manager.start();
+
+    // Mock document.hidden to false
+    Object.defineProperty(document, "hidden", {
+      writable: true,
+      value: false,
+    });
+
+    // Dispatch visibilitychange event
+    const event = new Event("visibilitychange");
+    document.dispatchEvent(event);
+
+    expect(onVisibilityRestoreMock).toHaveBeenCalledTimes(1);
+    expect(onBeforeHideMock).toHaveBeenCalledTimes(0);
+
+    manager.destroy();
+  });
+
+  // TC-LC7: onVisibilityRestore is optional
+  test("TC-LC7: onVisibilityRestore is optional", () => {
+    const managerWithoutRestore = new LifecycleManager({
+      onBeforeHide: onBeforeHideMock,
+      onPageShow: onPageShowMock,
+    });
+
+    managerWithoutRestore.start();
+
+    // Mock document.hidden to false
+    Object.defineProperty(document, "hidden", {
+      writable: true,
+      value: false,
+    });
+
+    // Dispatch visibilitychange event — should not throw
+    const event = new Event("visibilitychange");
+    expect(() => document.dispatchEvent(event)).not.toThrow();
+
+    managerWithoutRestore.destroy();
   });
 });
