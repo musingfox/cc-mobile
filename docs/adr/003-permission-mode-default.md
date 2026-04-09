@@ -4,7 +4,13 @@
 Accepted
 
 ## Context
-cc-mobile operates remotely — users control their dev machine from a phone. The SDK supports multiple permission modes: `"default"`, `"acceptEdits"`, `"bypassPermissions"`.
+cc-mobile operates remotely — users control their dev machine from a phone. The SDK supports multiple permission modes:
+- `"default"` — ask for permission on each tool use
+- `"acceptEdits"` — auto-approve file edits, ask for others
+- `"auto"` — auto-approve common operations, ask for risky ones
+- `"plan"` — require plan approval before implementation
+- `"dontAsk"` — never ask, deny instead of prompting (CI/non-interactive)
+- `"bypassPermissions"` — auto-approve everything
 
 ## Decision
 Phase 1 (MVP) hardcodes `permissionMode: "default"`. In a future phase, make it configurable via UI toggle or server startup flag.

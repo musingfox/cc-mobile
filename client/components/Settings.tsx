@@ -22,6 +22,21 @@ const PERMISSION_MODES = [
     description: "Auto-approve file edits, ask for others",
   },
   {
+    id: "auto",
+    label: "Auto",
+    description: "Auto-approve common operations, ask for risky ones",
+  },
+  {
+    id: "plan",
+    label: "Plan",
+    description: "Require plan approval before implementation",
+  },
+  {
+    id: "dontAsk",
+    label: "Don't Ask",
+    description: "Never ask — deny instead of prompting (CI/non-interactive)",
+  },
+  {
     id: "bypassPermissions",
     label: "Bypass All",
     description: "Auto-approve everything (use with caution)",

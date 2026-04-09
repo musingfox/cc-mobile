@@ -47,7 +47,7 @@ describe("WsService debug logging integration", () => {
       { type: "interrupt", sessionId: "1" },
       { type: "list_sessions" },
       { type: "resume_session", sdkSessionId: "sdk-1", cwd: "/test" },
-      { type: "set_permission_mode", mode: "allow" },
+      { type: "set_permission_mode", mode: "auto" },
     ];
 
     for (const msg of messageTypes) {

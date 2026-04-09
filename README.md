@@ -83,7 +83,7 @@ bun run dev:server -- --port 4000 --default-cwd ~/workspace --permission-mode ac
 |------|---------|-------------|
 | `--port` | `3001` | Server port |
 | `--default-cwd` | none | Default working directory for new sessions |
-| `--permission-mode` | `default` | SDK permission mode: `default`, `acceptEdits`, `bypassPermissions` |
+| `--permission-mode` | `default` | SDK permission mode: `default`, `acceptEdits`, `auto`, `plan`, `dontAsk`, `bypassPermissions` |
 | `--hostname` | `0.0.0.0` | Server bind address |
 
 **Security note**: `--permission-mode` can only be set via CLI flag (server-side opt-in). The client UI can query the current mode but cannot change it.
