@@ -19,7 +19,7 @@
     "test:e2e:ui": "bunx playwright test --ui"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.81",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.97",
     "ansi-to-react": "^6.2.6",
     "dompurify": "^3.3.3",
     "elysia": "^1.2.0",

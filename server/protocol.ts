@@ -70,7 +70,7 @@ const ResumeSessionMessage = z.object({
 
 const SetPermissionModeMessage = z.object({
   type: z.literal("set_permission_mode"),
-  mode: z.enum(["default", "acceptEdits", "bypassPermissions"]),
+  mode: z.enum(["default", "acceptEdits", "auto", "bypassPermissions", "dontAsk", "plan"]),
 });
 
 const SetEnvVarsMessage = z.object({
@@ -204,7 +204,14 @@ const CapabilitiesMessage = z.object({
 const ServerConfigMessage = z.object({
   type: z.literal("server_config"),
   config: z.object({
-    permissionMode: z.enum(["default", "acceptEdits", "bypassPermissions"]),
+    permissionMode: z.enum([
+      "default",
+      "acceptEdits",
+      "auto",
+      "bypassPermissions",
+      "dontAsk",
+      "plan",
+    ]),
     allowedRoots: z.array(z.string()).nullable().optional(),
     homeDirectory: z.string().optional(),
   }),

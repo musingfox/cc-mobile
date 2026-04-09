@@ -23,6 +23,9 @@ Thumbs.db
 .claude/settings.local.json
 .claude/*.local.md
 
+# Obsidian PM config
+.obsidian-pm.yaml
+
 # Test artifacts
 test-results/
 playwright-report/

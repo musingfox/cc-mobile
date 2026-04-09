@@ -1,7 +1,13 @@
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 
-export type PermissionMode = "default" | "acceptEdits" | "bypassPermissions";
+export type PermissionMode =
+  | "default"
+  | "acceptEdits"
+  | "auto"
+  | "bypassPermissions"
+  | "dontAsk"
+  | "plan";
 
 export interface ServerConfig {
   port: number;
@@ -69,12 +75,18 @@ export function parseServerConfig(argv: string[]): ServerConfig {
         break;
       case "--permission-mode": {
         const mode = argv[i + 1];
-        if (mode !== "default" && mode !== "acceptEdits" && mode !== "bypassPermissions") {
-          throw new Error(
-            `Invalid permission-mode: ${mode}. Allowed: default, acceptEdits, bypassPermissions`,
-          );
+        const validModes = [
+          "default",
+          "acceptEdits",
+          "auto",
+          "bypassPermissions",
+          "dontAsk",
+          "plan",
+        ];
+        if (!validModes.includes(mode)) {
+          throw new Error(`Invalid permission-mode: ${mode}. Allowed: ${validModes.join(", ")}`);
         }
-        config.permissionMode = mode;
+        config.permissionMode = mode as PermissionMode;
         i++;
         break;
       }

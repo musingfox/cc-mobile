@@ -56,7 +56,7 @@ describe("parseServerConfig", () => {
     expect(() => {
       parseServerConfig(["node", "index.ts", "--permission-mode", "invalid"]);
     }).toThrow(
-      "Invalid permission-mode: invalid. Allowed: default, acceptEdits, bypassPermissions",
+      "Invalid permission-mode: invalid. Allowed: default, acceptEdits, auto, bypassPermissions, dontAsk, plan",
     );
   });
 

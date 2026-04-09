@@ -24,7 +24,7 @@ describe("InputBar attachment integration", () => {
 
   test("send button is enabled when text is present", () => {
     render(<InputBar {...defaultProps} />);
-    const textarea = screen.getByPlaceholderText(/Type a message/);
+    const textarea = screen.getByPlaceholderText(/Message\.\.\./);
     const sendBtn = screen.getByLabelText("Send message") as HTMLButtonElement;
 
     expect(sendBtn.disabled).toBe(true);

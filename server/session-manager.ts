@@ -193,7 +193,10 @@ export class SessionManager {
       for await (const msg of q) {
         // Capture SDK session ID for future resume
         if (msg.type === "system" && msg.subtype === "init" && !config.sdkSessionId) {
-          config.sdkSessionId = (msg as SDKSystemMessage).session_id;
+          const sessionId = (msg as SDKSystemMessage).session_id;
+          if (sessionId !== undefined) {
+            config.sdkSessionId = sessionId;
+          }
         }
 
         yield msg;

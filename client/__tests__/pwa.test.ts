@@ -25,7 +25,7 @@ describe("PWA Manifest", () => {
     const manifestContent = readFileSync(manifestPath, "utf-8");
     const manifest = JSON.parse(manifestContent);
 
-    expect(manifest.theme_color).toBe("#0066ff");
+    expect(manifest.theme_color).toBe("#DA7756");
   });
 
   test("TC3: manifest.json background_color matches dark theme bg", () => {

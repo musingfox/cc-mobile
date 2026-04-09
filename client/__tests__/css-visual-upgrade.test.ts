@@ -203,10 +203,10 @@ describe("CSS Visual Upgrade", () => {
       expect(textareaMatch?.[0]).toContain("border-radius: 16px");
     });
 
-    it("should round .input-bar to 20px", () => {
+    it("should style .input-bar with glass background", () => {
       const inputBarMatch = css.match(/\.input-bar\s*\{[^}]+\}/s);
       expect(inputBarMatch).toBeTruthy();
-      expect(inputBarMatch?.[0]).toContain("border-radius: 20px");
+      expect(inputBarMatch?.[0]).toContain("var(--glass-bg-heavy)");
     });
 
     it("should add hover lift to .activity-tool-card", () => {
