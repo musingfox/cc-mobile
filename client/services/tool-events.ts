@@ -59,6 +59,20 @@ export type TaskNotificationEvent = {
   };
 };
 
+export type TerminalReason =
+  | "blocking_limit"
+  | "rapid_refill_breaker"
+  | "prompt_too_long"
+  | "image_error"
+  | "model_error"
+  | "aborted_streaming"
+  | "aborted_tools"
+  | "stop_hook_prevented"
+  | "hook_stopped"
+  | "tool_deferred"
+  | "max_turns"
+  | "completed";
+
 export type ResultMessage = {
   type: "result";
   subtype: "success" | "error";
@@ -73,6 +87,7 @@ export type ResultMessage = {
   duration_ms?: number;
   is_error: boolean;
   error?: string;
+  terminal_reason?: TerminalReason;
 };
 
 export function isToolStart(chunk: Record<string, unknown>): chunk is ToolStartEvent {

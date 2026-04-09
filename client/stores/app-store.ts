@@ -96,6 +96,7 @@ export type UsageData = {
   cacheCreationTokens: number;
   turns: number;
   durationMs: number;
+  terminalReason?: import("../services/tool-events").TerminalReason;
 };
 
 export type RateLimitInfo = {

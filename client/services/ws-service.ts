@@ -20,6 +20,7 @@ import {
   isToolProgress,
   isToolStart,
   isToolUseSummary,
+  type TerminalReason,
 } from "./tool-events";
 
 export function extractTextFromChunk(chunk: Record<string, unknown>): string | null {
@@ -50,6 +51,37 @@ export function extractTextFromChunk(chunk: Record<string, unknown>): string | n
   }
 
   return null;
+}
+
+export function getTerminalReasonMessage(reason: TerminalReason | undefined): string | null {
+  if (!reason || reason === "completed") return null;
+
+  switch (reason) {
+    case "max_turns":
+      return "Maximum turns reached. You can continue the conversation to proceed.";
+    case "blocking_limit":
+      return "Rate limit reached. Please try again later.";
+    case "rapid_refill_breaker":
+      return "Too many requests in a short time. Please wait before continuing.";
+    case "prompt_too_long":
+      return "Prompt exceeds maximum length.";
+    case "image_error":
+      return "Image processing error occurred.";
+    case "model_error":
+      return "Model error occurred.";
+    case "aborted_streaming":
+      return "Streaming was aborted.";
+    case "aborted_tools":
+      return "Tool execution was aborted.";
+    case "stop_hook_prevented":
+      return "Stop hook prevented continuation.";
+    case "hook_stopped":
+      return "Hook stopped execution.";
+    case "tool_deferred":
+      return "Tool execution was deferred.";
+    default:
+      return null;
+  }
 }
 
 class WsService {
@@ -278,6 +310,7 @@ class WsService {
         // Handle result messages (cost/token data)
         // Result marks end of turn — clear stale tool/agent state
         if (isResultMessage(chunk)) {
+          const terminalReason = chunk.terminal_reason;
           store.updateUsage(sessionId, {
             totalCost: chunk.total_cost_usd ?? 0,
             inputTokens: chunk.usage?.input_tokens ?? 0,
@@ -286,7 +319,15 @@ class WsService {
             cacheCreationTokens: chunk.usage?.cache_creation_input_tokens ?? 0,
             turns: chunk.num_turns ?? 0,
             durationMs: chunk.duration_ms ?? 0,
+            terminalReason,
           });
+
+          // Show toast for abnormal terminal reasons
+          const errorMessage = getTerminalReasonMessage(terminalReason);
+          if (errorMessage) {
+            toastService.error(errorMessage);
+          }
+
           store.clearActiveTools(sessionId);
           store.clearActiveAgents(sessionId);
           store.setActiveToolStatus(sessionId, null);
