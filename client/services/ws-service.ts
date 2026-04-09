@@ -13,6 +13,7 @@ import {
   isPromptSuggestion,
   isRateLimitEvent,
   isResultMessage,
+  isSessionStateChanged,
   isTaskNotification,
   isTaskProgress,
   isTaskStarted,
@@ -211,6 +212,16 @@ class WsService {
         break;
       }
 
+      case "session_state": {
+        if (!sessionId) break;
+        const { state } = msg as {
+          sessionId: string;
+          state: "idle" | "running" | "requires_action";
+        };
+        store.setAgentState(sessionId, state);
+        break;
+      }
+
       case "stream_chunk": {
         if (!sessionId) break;
         const chunk = msg.chunk as Record<string, unknown>;
@@ -218,6 +229,12 @@ class WsService {
         // Capture sdkSessionId from system/init message
         if (chunk.type === "system" && chunk.subtype === "init" && chunk.session_id) {
           store.setSdkSessionId(sessionId, chunk.session_id as string);
+        }
+
+        // Handle session_state_changed from stream_chunk (redundant detection for backward compat)
+        if (isSessionStateChanged(chunk)) {
+          store.setAgentState(sessionId, chunk.state);
+          break;
         }
 
         // Handle hook started — clear stale tools since hooks run after turn completes
@@ -279,9 +296,12 @@ class WsService {
         // When the model starts producing text, all tools are done
         if (
           chunk.type === "stream_event" &&
-          (chunk.event as Record<string, unknown>)?.type === "content_block_start" &&
-          ((chunk.event as Record<string, unknown>)?.content_block as Record<string, unknown>)
-            ?.type === "text"
+          (chunk.event as Record<string, unknown> | undefined)?.type === "content_block_start" &&
+          (
+            (chunk.event as Record<string, unknown> | undefined)?.content_block as
+              | Record<string, unknown>
+              | undefined
+          )?.type === "text"
         ) {
           store.clearActiveTools(sessionId);
           store.setActiveToolStatus(sessionId, null);
@@ -466,11 +486,12 @@ class WsService {
 
       case "stream_end":
         if (sessionId) {
+          const session = store.sessions.get(sessionId);
+
           // Snapshot completed activity before clearing
-          const endSession = store.sessions.get(sessionId);
-          if (endSession) {
-            const completedTools = Array.from(endSession.activeTools.values());
-            const completedAgents = Array.from(endSession.activeAgents.values()).filter(
+          if (session) {
+            const completedTools = Array.from(session.activeTools.values());
+            const completedAgents = Array.from(session.activeAgents.values()).filter(
               (a) => a.status !== "running",
             );
             if (completedTools.length > 0 || completedAgents.length > 0) {
@@ -491,18 +512,40 @@ class WsService {
             }
           }
 
-          store.setStreaming(sessionId, false);
-          store.setActiveToolStatus(sessionId, null);
-          store.clearActiveTools(sessionId);
-          store.clearActiveAgents(sessionId);
-          store.setActiveHook(sessionId, null);
-          hapticService.complete();
-          // Notify when response completes while app is in background
-          if (document.hidden) {
-            const settingsStore = useSettingsStore.getState();
-            if (settingsStore.notificationsEnabled) {
-              const cwd = store.sessions.get(sessionId)?.cwd;
-              notificationService.showResponseComplete(sessionId, cwd);
+          // If we received authoritative state during this turn, trust it
+          // and skip the legacy stream_end setStreaming(false)
+          if (session?.receivedAuthoritativeState) {
+            // Reset flag for next turn, but don't touch streaming state
+            store.setReceivedAuthoritativeState(sessionId, false);
+            // Still do cleanup
+            store.setActiveToolStatus(sessionId, null);
+            store.clearActiveTools(sessionId);
+            store.clearActiveAgents(sessionId);
+            store.setActiveHook(sessionId, null);
+            hapticService.complete();
+            // Notify when response completes while app is in background
+            if (document.hidden) {
+              const settingsStore = useSettingsStore.getState();
+              if (settingsStore.notificationsEnabled) {
+                const cwd = store.sessions.get(sessionId)?.cwd;
+                notificationService.showResponseComplete(sessionId, cwd);
+              }
+            }
+          } else {
+            // Backward compat: no session_state_changed received, use legacy behavior
+            store.setStreaming(sessionId, false);
+            store.setActiveToolStatus(sessionId, null);
+            store.clearActiveTools(sessionId);
+            store.clearActiveAgents(sessionId);
+            store.setActiveHook(sessionId, null);
+            hapticService.complete();
+            // Notify when response completes while app is in background
+            if (document.hidden) {
+              const settingsStore = useSettingsStore.getState();
+              if (settingsStore.notificationsEnabled) {
+                const cwd = store.sessions.get(sessionId)?.cwd;
+                notificationService.showResponseComplete(sessionId, cwd);
+              }
             }
           }
         }

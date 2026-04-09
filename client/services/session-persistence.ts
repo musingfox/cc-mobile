@@ -8,6 +8,7 @@ const SESSION_IDS_KEY = "ccm:session-ids";
 interface SerializableSessionState {
   id: string;
   cwd: string;
+  sdkSessionId: string | null;
   messages: SessionState["messages"];
   pendingPermission: SessionState["pendingPermission"];
   isStreaming: boolean;
@@ -19,6 +20,8 @@ interface SerializableSessionState {
   usage: SessionState["usage"];
   promptSuggestion: string | null;
   resolvedActions: ResolvedAction[];
+  agentState: "idle" | "running" | "requires_action" | null;
+  receivedAuthoritativeState: boolean;
 }
 
 export function saveSessionState(sessionId: string, state: SessionState): void {
@@ -26,6 +29,7 @@ export function saveSessionState(sessionId: string, state: SessionState): void {
     const serializable: SerializableSessionState = {
       id: state.id,
       cwd: state.cwd,
+      sdkSessionId: state.sdkSessionId,
       messages: state.messages,
       pendingPermission: state.pendingPermission,
       isStreaming: state.isStreaming,
@@ -37,6 +41,8 @@ export function saveSessionState(sessionId: string, state: SessionState): void {
       usage: state.usage,
       promptSuggestion: state.promptSuggestion,
       resolvedActions: state.resolvedActions || [],
+      agentState: state.agentState,
+      receivedAuthoritativeState: state.receivedAuthoritativeState,
     };
 
     const key = `${SESSION_KEY_PREFIX}${sessionId}`;
@@ -61,12 +67,15 @@ export function loadSessionState(sessionId: string): SessionState | null {
 
     const parsed = JSON.parse(json) as SerializableSessionState;
 
-    // Deserialize Maps
+    // Deserialize Maps and provide defaults for new fields
     return {
       ...parsed,
+      sdkSessionId: parsed.sdkSessionId ?? null,
       activeTools: new Map(parsed.activeTools),
       activeAgents: new Map(parsed.activeAgents),
       resolvedActions: parsed.resolvedActions || [],
+      agentState: parsed.agentState ?? null,
+      receivedAuthoritativeState: parsed.receivedAuthoritativeState ?? false,
     };
   } catch (error) {
     console.error("[session-persistence] Failed to load session:", error);

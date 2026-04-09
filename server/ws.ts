@@ -247,6 +247,16 @@ export function createWsPlugin(
                 });
               }
 
+              // Detect and forward session_state_changed as dedicated message
+              if (msg.type === "system" && msg.subtype === "session_state_changed") {
+                const state = msg.state as string;
+                sendBuffered(ws, message.sessionId, {
+                  type: "session_state",
+                  sessionId: message.sessionId,
+                  state,
+                });
+              }
+
               sendBuffered(ws, message.sessionId, {
                 type: "stream_chunk",
                 sessionId: message.sessionId,

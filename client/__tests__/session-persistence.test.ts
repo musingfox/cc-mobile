@@ -19,6 +19,7 @@ describe("session-persistence", () => {
     const mockState: SessionState = {
       id: "sess-1",
       cwd: "/test",
+      sdkSessionId: null,
       messages: [{ id: "m1", role: "user", content: "hello", timestamp: 123 }],
       pendingPermission: null,
       isStreaming: false,
@@ -29,6 +30,9 @@ describe("session-persistence", () => {
       activeHook: null,
       usage: null,
       promptSuggestion: null,
+      resolvedActions: [],
+      agentState: null,
+      receivedAuthoritativeState: false,
     };
 
     saveSessionState("sess-1", mockState);
@@ -47,6 +51,7 @@ describe("session-persistence", () => {
     const mockState: SessionState = {
       id: "sess-1",
       cwd: "/test",
+      sdkSessionId: null,
       messages: [
         { id: "m1", role: "user", content: "hello", timestamp: 123 },
         { id: "m2", role: "assistant", content: "world", timestamp: 456 },
@@ -60,6 +65,9 @@ describe("session-persistence", () => {
       activeHook: null,
       usage: null,
       promptSuggestion: null,
+      resolvedActions: [],
+      agentState: null,
+      receivedAuthoritativeState: false,
     };
 
     saveSessionState("sess-1", mockState);
@@ -84,6 +92,7 @@ describe("session-persistence", () => {
     const mockState: SessionState = {
       id: "sess-1",
       cwd: "/test",
+      sdkSessionId: null,
       messages: [],
       pendingPermission: null,
       isStreaming: false,
@@ -97,6 +106,9 @@ describe("session-persistence", () => {
       activeHook: null,
       usage: null,
       promptSuggestion: null,
+      resolvedActions: [],
+      agentState: null,
+      receivedAuthoritativeState: false,
     };
 
     saveSessionState("sess-1", mockState);
@@ -118,6 +130,7 @@ describe("session-persistence", () => {
     const mock1: SessionState = {
       id: "sess-1",
       cwd: "/test1",
+      sdkSessionId: null,
       messages: [],
       pendingPermission: null,
       isStreaming: false,
@@ -128,11 +141,15 @@ describe("session-persistence", () => {
       activeHook: null,
       usage: null,
       promptSuggestion: null,
+      resolvedActions: [],
+      agentState: null,
+      receivedAuthoritativeState: false,
     };
 
     const mock2: SessionState = {
       id: "sess-2",
       cwd: "/test2",
+      sdkSessionId: null,
       messages: [],
       pendingPermission: null,
       isStreaming: false,
@@ -143,11 +160,15 @@ describe("session-persistence", () => {
       activeHook: null,
       usage: null,
       promptSuggestion: null,
+      resolvedActions: [],
+      agentState: null,
+      receivedAuthoritativeState: false,
     };
 
     const mock3: SessionState = {
       id: "sess-3",
       cwd: "/test3",
+      sdkSessionId: null,
       messages: [],
       pendingPermission: null,
       isStreaming: false,
@@ -158,6 +179,9 @@ describe("session-persistence", () => {
       activeHook: null,
       usage: null,
       promptSuggestion: null,
+      resolvedActions: [],
+      agentState: null,
+      receivedAuthoritativeState: false,
     };
 
     saveSessionState("sess-1", mock1);
@@ -191,6 +215,7 @@ describe("session-persistence", () => {
     const mockState: SessionState = {
       id: "sess-1",
       cwd: "/test",
+      sdkSessionId: null,
       messages: [],
       pendingPermission: null,
       isStreaming: false,
@@ -201,6 +226,9 @@ describe("session-persistence", () => {
       activeHook: null,
       usage: null,
       promptSuggestion: null,
+      resolvedActions: [],
+      agentState: null,
+      receivedAuthoritativeState: false,
     };
 
     saveSessionState("sess-1", mockState);

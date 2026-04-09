@@ -280,6 +280,12 @@ const PingMessage = z.object({
   timestamp: z.number(),
 });
 
+const SessionStateMessage = z.object({
+  type: z.literal("session_state"),
+  sessionId: z.string(),
+  state: z.enum(["idle", "running", "requires_action"]),
+});
+
 export const ServerMessage = z.discriminatedUnion("type", [
   SessionCreatedMessage,
   StreamChunkMessage,
@@ -296,6 +302,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
   EventWrapperMessage,
   ReplayCompleteMessage,
   PingMessage,
+  SessionStateMessage,
 ]);
 
 export type ServerMessage = z.infer<typeof ServerMessage>;

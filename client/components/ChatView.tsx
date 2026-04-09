@@ -50,6 +50,9 @@ export default function ChatView({
   const [autoScroll, setAutoScroll] = useState(true);
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
 
+  // Determine if activity panel should be shown
+  const hasActivity = activeTools.size > 0 || activeAgents.size > 0 || activeHook;
+
   useEffect(() => {
     if (autoScroll && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -177,10 +180,10 @@ export default function ChatView({
           </AnimatedMessage>
         );
       })}
-      {isStreaming && (
+      {(isStreaming || hasActivity) && (
         <>
           {/* New rich activity panel */}
-          {(activeTools.size > 0 || activeAgents.size > 0 || activeHook) && (
+          {hasActivity && (
             <ActivityPanel
               activeTools={activeTools}
               activeAgents={activeAgents}
@@ -188,7 +191,7 @@ export default function ChatView({
             />
           )}
           {/* Fallback to legacy simple indicator if no rich status */}
-          {activeTools.size === 0 && activeAgents.size === 0 && !activeHook && (
+          {!hasActivity && isStreaming && (
             <div className="message assistant">
               <div className="message-content status-indicator">
                 <span className="status-verb">

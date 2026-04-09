@@ -123,6 +123,8 @@ export type SessionState = {
   usage: UsageData | null;
   promptSuggestion: string | null;
   resolvedActions: ResolvedAction[];
+  agentState: "idle" | "running" | "requires_action" | null;
+  receivedAuthoritativeState: boolean;
 };
 
 type ConnectionState = "connecting" | "connected" | "disconnected";
@@ -234,6 +236,10 @@ interface AppState {
   // Resolved actions
   addResolvedAction: (sessionId: string, action: ResolvedAction) => void;
 
+  // Agent state management
+  setAgentState: (sessionId: string, state: "idle" | "running" | "requires_action" | null) => void;
+  setReceivedAuthoritativeState: (sessionId: string, received: boolean) => void;
+
   // Session persistence
   persistSessionState: (sessionId: string) => void;
   persistAllSessions: () => void;
@@ -285,6 +291,8 @@ export const useAppStore = create<AppState>((set) => ({
         usage: null,
         promptSuggestion: null,
         resolvedActions: [],
+        agentState: null,
+        receivedAuthoritativeState: false,
       });
       return {
         sessions: next,
@@ -534,6 +542,31 @@ export const useAppStore = create<AppState>((set) => ({
       sessions: updateSession(state.sessions, sessionId, (s) => ({
         ...s,
         resolvedActions: [...s.resolvedActions, action],
+      })),
+    })),
+
+  setAgentState: (sessionId, state) =>
+    set((appState) => ({
+      sessions: updateSession(appState.sessions, sessionId, (s) => {
+        const updates: Partial<SessionState> = {
+          agentState: state,
+          receivedAuthoritativeState: true,
+        };
+        // Sync isStreaming based on agent state
+        if (state === "idle") {
+          updates.isStreaming = false;
+        } else if (state === "running") {
+          updates.isStreaming = true;
+        }
+        return { ...s, ...updates };
+      }),
+    })),
+
+  setReceivedAuthoritativeState: (sessionId, received) =>
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (s) => ({
+        ...s,
+        receivedAuthoritativeState: received,
       })),
     })),
 

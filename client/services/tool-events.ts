@@ -204,3 +204,23 @@ export function isApiRetry(chunk: Record<string, unknown>): chunk is ApiRetryEve
     chunk.type === "system" && chunk.subtype === "api_retry" && typeof chunk.attempt === "number"
   );
 }
+
+// Session state changed event from SDK
+export type SessionStateChangedEvent = {
+  type: "system";
+  subtype: "session_state_changed";
+  state: "idle" | "running" | "requires_action";
+};
+
+const VALID_SESSION_STATES = new Set(["idle", "running", "requires_action"]);
+
+export function isSessionStateChanged(
+  chunk: Record<string, unknown>,
+): chunk is SessionStateChangedEvent {
+  return (
+    chunk.type === "system" &&
+    chunk.subtype === "session_state_changed" &&
+    typeof chunk.state === "string" &&
+    VALID_SESSION_STATES.has(chunk.state)
+  );
+}
