@@ -310,7 +310,8 @@ export const useAppStore = create<AppState>((set) => ({
       return { sessions: next };
     }),
 
-  removeSession: (sessionId) =>
+  removeSession: (sessionId) => {
+    clearSessionState(sessionId);
     set((state) => {
       const next = new Map(state.sessions);
       next.delete(sessionId);
@@ -320,7 +321,8 @@ export const useAppStore = create<AppState>((set) => ({
         activeSessionId:
           state.activeSessionId === sessionId ? (ids[0] ?? null) : state.activeSessionId,
       };
-    }),
+    });
+  },
 
   setActiveSession: (sessionId) => set({ activeSessionId: sessionId }),
 
