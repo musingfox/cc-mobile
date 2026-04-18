@@ -1,6 +1,7 @@
 import { useAppStore } from "../../stores/app-store";
 import { useSettingsStore } from "../../stores/settings-store";
 import BottomTabBar from "./BottomTabBar";
+import ChatScreen from "./ChatScreen";
 import ScreenHeader from "./ScreenHeader";
 
 function EmberConnectionBanner({ connectionState }: { connectionState: string }) {
@@ -16,20 +17,20 @@ function EmberConnectionBanner({ connectionState }: { connectionState: string })
 
 function ScreenContent({ screenName }: { screenName: string }) {
   // Placeholder content for each screen
-  // T5-T9 will replace these with actual implementations
+  // T6-T9 will replace these with actual implementations
   switch (screenName) {
     case "sessions":
       return <div className="ember-screen-placeholder">Sessions (T6)</div>;
     case "agents":
       return <div className="ember-screen-placeholder">Agents (T7)</div>;
     case "chat":
-      return <div className="ember-screen-placeholder">Chat (T5)</div>;
+      return <ChatScreen />;
     case "commands":
       return <div className="ember-screen-placeholder">Commands (T8)</div>;
     case "settings":
       return <div className="ember-screen-placeholder">Settings (T9)</div>;
     default:
-      return <div className="ember-screen-placeholder">Chat (T5)</div>;
+      return <ChatScreen />;
   }
 }
 
@@ -53,22 +54,19 @@ function getScreenTitle(screenName: string): string {
 export default function MobileShell() {
   const theme = useSettingsStore((s) => s.theme);
   const activeScreen = useAppStore((s) => s.activeScreen ?? "chat");
-  const setActiveScreen = useAppStore((s) => s.setActiveScreen);
   const connectionState = useAppStore((s) => s.connectionState);
 
   // Only render when theme is ember
   if (theme !== "ember") return null;
 
-  const screenTitle = getScreenTitle(activeScreen);
-
   return (
     <div className="ember-shell">
       <EmberConnectionBanner connectionState={connectionState} />
-      <ScreenHeader title={screenTitle} />
+      {activeScreen !== "chat" && <ScreenHeader title={getScreenTitle(activeScreen)} />}
       <main className="ember-shell-content">
         <ScreenContent screenName={activeScreen} />
       </main>
-      <BottomTabBar activeTab={activeScreen} onChange={setActiveScreen} />
+      <BottomTabBar activeTab={activeScreen} onChange={useAppStore.getState().setActiveScreen} />
     </div>
   );
 }

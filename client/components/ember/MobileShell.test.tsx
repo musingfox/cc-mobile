@@ -11,6 +11,8 @@ describe("MobileShell", () => {
     useAppStore.setState({
       activeScreen: "chat",
       connectionState: "connected",
+      activeSessionId: null,
+      sessions: new Map(),
     });
   });
 
@@ -24,8 +26,9 @@ describe("MobileShell", () => {
     const shell = container.querySelector(".ember-shell");
     expect(shell).not.toBeNull();
 
-    // Chat placeholder should be visible
-    expect(container.textContent).toContain("Chat (T5)");
+    // ChatScreen should be rendered (not placeholder)
+    // Since no session, should show empty state
+    expect(container.textContent).toContain("Create or select a session");
 
     // Tab bar should show chat as active
     const buttons = container.querySelectorAll("button");
@@ -70,7 +73,7 @@ describe("MobileShell", () => {
     useAppStore.setState({ activeScreen: undefined as any });
     const { container } = render(<MobileShell />);
 
-    expect(container.textContent).toContain("Chat (T5)");
+    expect(container.textContent).toContain("Create or select a session");
   });
 
   it("renders all screen placeholders correctly", () => {
@@ -80,7 +83,7 @@ describe("MobileShell", () => {
     }> = [
       { id: "sessions", text: "Sessions (T6)" },
       { id: "agents", text: "Agents (T7)" },
-      { id: "chat", text: "Chat (T5)" },
+      { id: "chat", text: "Create or select a session" }, // ChatScreen empty state
       { id: "commands", text: "Commands (T8)" },
       { id: "settings", text: "Settings (T9)" },
     ];
@@ -101,14 +104,13 @@ describe("MobileShell", () => {
     expect(banner).toBeNull();
   });
 
-  it("renders ScreenHeader with correct title for each screen", () => {
+  it("renders ScreenHeader with correct title for non-chat screens", () => {
     const screens: Array<{
-      id: "sessions" | "agents" | "chat" | "commands" | "settings";
+      id: "sessions" | "agents" | "commands" | "settings";
       title: string;
     }> = [
       { id: "sessions", title: "Sessions" },
       { id: "agents", title: "Agents" },
-      { id: "chat", title: "Chat" },
       { id: "commands", title: "Commands" },
       { id: "settings", title: "Settings" },
     ];
@@ -120,5 +122,40 @@ describe("MobileShell", () => {
       expect(headerTitle?.textContent).toBe(title);
       cleanup();
     });
+  });
+
+  it("ChatScreen renders its own header with dynamic title", () => {
+    const sessionId = "test-session";
+    useAppStore.setState({
+      activeScreen: "chat",
+      activeSessionId: sessionId,
+      sessions: new Map([
+        [
+          sessionId,
+          {
+            id: sessionId,
+            cwd: "/test/cc-mobile",
+            sdkSessionId: "sdk-1",
+            messages: [],
+            pendingPermission: null,
+            isStreaming: false,
+            currentStreamMessageId: null,
+            activeTools: new Map(),
+            activeAgents: new Map(),
+            activeHook: null,
+            usage: null,
+            promptSuggestion: null,
+            resolvedActions: [],
+            agentState: null,
+            receivedAuthoritativeState: false,
+          },
+        ],
+      ]),
+    });
+
+    const { container } = render(<MobileShell />);
+    const headerTitle = container.querySelector(".ember-screen-header-title");
+    // Chat screen shows basename of cwd
+    expect(headerTitle?.textContent).toBe("cc-mobile");
   });
 });

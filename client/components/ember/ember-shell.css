@@ -145,3 +145,352 @@
 .ember-tab-button--active .ember-tab-label {
   font-weight: 600;
 }
+
+/* ChatScreen Layout */
+.ember-chat-timeline {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ember-chat-empty,
+.ember-chat-empty-timeline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 14px;
+}
+
+.ember-chat-empty-message {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--text-secondary);
+  letter-spacing: 0.3px;
+}
+
+.ember-chat-empty-button {
+  all: unset;
+  box-sizing: border-box;
+  padding: 11px 18px;
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  border-radius: 8px;
+  cursor: pointer;
+  min-height: 44px;
+  transition: opacity 0.15s ease;
+}
+
+.ember-chat-empty-button:hover {
+  opacity: 0.9;
+}
+
+/* Messages */
+.ember-timeline-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.ember-message {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.ember-message--user {
+  flex-direction: row-reverse;
+  align-items: flex-end;
+}
+
+.ember-message--assistant {
+  flex-direction: row;
+}
+
+.ember-message-avatar {
+  flex-shrink: 0;
+  transition: box-shadow 0.3s ease;
+}
+
+.ember-avatar--streaming {
+  box-shadow: 0 0 0 4px rgba(245, 199, 106, 0.15);
+  border-radius: 50%;
+}
+
+.ember-message-bubble {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ember-message-bubble--user {
+  max-width: 84%;
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+  border-radius: 14px 14px 4px 14px;
+  padding: 10px 14px;
+}
+
+.ember-message-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ember-message-content {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: inherit;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.ember-message-bubble--user .ember-message-content {
+  color: var(--bg-primary);
+}
+
+.ember-message-timestamp {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  letter-spacing: 0.2px;
+}
+
+.ember-message-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.ember-message-attachment-image {
+  max-width: 200px;
+  border-radius: 8px;
+  border: 1px solid var(--ember-hair);
+}
+
+/* Streaming cursor */
+.ember-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 14px;
+  background: var(--accent-primary);
+  vertical-align: middle;
+  margin-left: 2px;
+  animation: ember-blink 1s steps(2) infinite;
+}
+
+@keyframes ember-blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  51%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Tool cards */
+.ember-tool-card {
+  border: 1px solid var(--ember-hair-neutral);
+  border-radius: 12px;
+  background: var(--bg-secondary);
+  overflow: hidden;
+}
+
+.ember-tool-card-header {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 11px 14px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  min-height: 44px;
+}
+
+.ember-tool-card-header:hover {
+  background: var(--ember-hair2);
+}
+
+.ember-tool-card-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--ember-hair2);
+}
+
+.ember-tool-card-title {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.3px;
+}
+
+.ember-tool-card-metadata {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-faint);
+  letter-spacing: 0.2px;
+}
+
+.ember-tool-card-elapsed {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.ember-tool-card-expand-indicator {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.ember-tool-card-body {
+  padding: 0 14px 14px;
+}
+
+.ember-tool-card-output {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  padding: 10px;
+  border-radius: 6px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* Composer */
+.ember-composer {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  border-top: 1px solid var(--ember-hair-neutral);
+  padding: 12px 18px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  gap: 10px;
+}
+
+.ember-composer-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.ember-composer-textarea {
+  all: unset;
+  box-sizing: border-box;
+  flex: 1;
+  min-height: 44px;
+  max-height: 160px;
+  padding: 12px 14px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--ember-hair);
+  border-radius: 8px;
+  resize: none;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ember-composer-textarea:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.ember-composer-textarea:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ember-composer-textarea::placeholder {
+  color: var(--text-faint);
+}
+
+/* Status info compact (in header) */
+.ember-status-info-compact {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+  letter-spacing: 0.2px;
+}
+
+.ember-status-info-sep {
+  color: var(--text-faint);
+}
+
+/* Prompt suggestion chip */
+.ember-prompt-suggestion-chip {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  margin: 0 18px 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--ember-hair);
+  border-radius: 8px;
+  cursor: pointer;
+  min-height: 44px;
+  transition: all 0.15s ease;
+}
+
+.ember-prompt-suggestion-chip:hover {
+  border-color: var(--accent-primary);
+}
+
+.ember-prompt-suggestion-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.ember-prompt-suggestion-text {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+/* Resolved action row */
+.ember-resolved-action-row {
+  display: flex;
+  justify-content: center;
+}
