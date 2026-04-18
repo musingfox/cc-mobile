@@ -191,11 +191,30 @@ const AccountInfoSchema = z.object({
   apiKeySource: z.string().optional(),
 });
 
+const AgentInfoSchema = z.object({
+  name: z.string(),
+  description: z.string().optional(),
+  allowedTools: z.array(z.string()).optional(),
+  icon: z.string().optional(),
+});
+
+const CommandInfoSchema = z.object({
+  name: z.string(),
+  description: z.string().optional(),
+  category: z.string().optional(),
+});
+
 const CapabilitiesMessage = z.object({
   type: z.literal("capabilities"),
   sessionId: z.string(),
-  commands: z.array(z.string()),
-  agents: z.array(z.string()),
+  commands: z.union([z.array(z.string()), z.array(CommandInfoSchema)]).transform((val) => {
+    if (val.length === 0) return [];
+    return typeof val[0] === "string" ? val.map((name) => ({ name })) : val;
+  }),
+  agents: z.union([z.array(z.string()), z.array(AgentInfoSchema)]).transform((val) => {
+    if (val.length === 0) return [];
+    return typeof val[0] === "string" ? val.map((name) => ({ name })) : val;
+  }),
   model: z.string(),
   models: z.array(ModelInfoSchema).optional(),
   accountInfo: AccountInfoSchema.optional(),
@@ -308,3 +327,5 @@ export const ServerMessage = z.discriminatedUnion("type", [
 export type ServerMessage = z.infer<typeof ServerMessage>;
 export type SessionListItem = z.infer<typeof SessionListItemSchema>;
 export type HistoryMessage = z.infer<typeof HistoryMessageSchema>;
+export type AgentInfo = z.infer<typeof AgentInfoSchema>;
+export type CommandInfo = z.infer<typeof CommandInfoSchema>;

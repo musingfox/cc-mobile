@@ -139,11 +139,12 @@ export default function App() {
         dark: "#0066ff",
         light: "#0066ff",
         claude: "#da7756",
+        ember: "#f5c76a",
       };
       metaThemeColor.setAttribute("content", themeColors[theme]);
     }
     // Prevent white flash in safe-area / overscroll regions
-    const bgColors = { dark: "#1a1a2e", light: "#ffffff", claude: "#f5f0e8" };
+    const bgColors = { dark: "#1a1a2e", light: "#ffffff", claude: "#f5f0e8", ember: "#13110d" };
     document.body.style.backgroundColor = bgColors[theme];
   }, [theme]);
 

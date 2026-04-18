@@ -1,4 +1,4 @@
-export type Theme = "dark" | "light" | "claude";
+export type Theme = "dark" | "light" | "claude" | "ember";
 
 export interface Settings {
   defaultCwd: string;
@@ -46,7 +46,7 @@ export function loadSettings(): Settings {
     return {
       defaultCwd:
         typeof parsed.defaultCwd === "string" ? parsed.defaultCwd : defaultSettings.defaultCwd,
-      theme: ["dark", "light", "claude"].includes(parsed.theme)
+      theme: ["dark", "light", "claude", "ember"].includes(parsed.theme)
         ? parsed.theme
         : defaultSettings.theme,
       notificationsEnabled:

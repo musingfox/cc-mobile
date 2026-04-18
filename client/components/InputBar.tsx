@@ -82,14 +82,14 @@ export default function InputBar({
     if (trimmed.startsWith("/")) {
       const query = trimmed.slice(1).toLowerCase();
       return capabilities.commands
-        .filter((c) => c.toLowerCase().includes(query))
-        .map((c) => ({ label: `/${c}`, type: "command" as const }));
+        .filter((c) => c.name.toLowerCase().includes(query))
+        .map((c) => ({ label: `/${c.name}`, type: "command" as const }));
     }
     if (trimmed.startsWith("@")) {
       const query = trimmed.slice(1).toLowerCase();
       return capabilities.agents
-        .filter((a) => a.toLowerCase().includes(query))
-        .map((a) => ({ label: `@${a}`, type: "agent" as const }));
+        .filter((a) => a.name.toLowerCase().includes(query))
+        .map((a) => ({ label: `@${a.name}`, type: "agent" as const }));
     }
     return [];
   }, [value, capabilities]);

@@ -7,8 +7,8 @@ export type FilteredItem = {
 
 export type FilterInput = {
   query: string;
-  commands: string[];
-  agents: string[];
+  commands: Array<{ name: string; description?: string }>;
+  agents: Array<{ name: string; description?: string }>;
   pinnedItems: string[];
 };
 
@@ -17,17 +17,17 @@ export function filterAndSortItems(input: FilterInput): FilteredItem[] {
   const lowerQuery = query.toLowerCase();
 
   const commandItems: FilteredItem[] = commands.map((cmd) => ({
-    label: `/${cmd}`,
-    value: `/${cmd}`,
+    label: `/${cmd.name}`,
+    value: `/${cmd.name}`,
     type: "command" as const,
-    pinned: pinnedItems.includes(`/${cmd}`),
+    pinned: pinnedItems.includes(`/${cmd.name}`),
   }));
 
   const agentItems: FilteredItem[] = agents.map((agent) => ({
-    label: `@${agent}`,
-    value: `@${agent}`,
+    label: `@${agent.name}`,
+    value: `@${agent.name}`,
     type: "agent" as const,
-    pinned: pinnedItems.includes(`@${agent}`),
+    pinned: pinnedItems.includes(`@${agent.name}`),
   }));
 
   const allItems = [...commandItems, ...agentItems];

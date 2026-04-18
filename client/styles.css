@@ -180,6 +180,70 @@ body {
   --font-mono: "Fira Code", "Courier New", monospace;
 }
 
+.theme-ember {
+  /* Foundations */
+  --bg-primary: #13110d;
+  --bg-secondary: #1d1a14;
+  --bg-tertiary: #24201a;
+  --bg-highlight: #2a251e;
+  --bg-accent: #24201a;
+  --bg-user-bubble: #24201a;
+  --bg-gradient: linear-gradient(160deg, #13110d 0%, #1d1a14 40%, #24201a 70%, #2a251e 100%);
+  --text-primary: #efe7d6;
+  --text-secondary: #8e8677;
+  --text-tertiary: #b0a89a;
+  --accent-primary: #f5c76a;
+  --accent-cyan: #b8cfa8;
+  --accent-electric: #d89a3c;
+  --accent-command: #f5c76a;
+  --accent-agent: #b8cfa8;
+  --accent-success: #b8cfa8;
+  --accent-warning: #f5c76a;
+  --accent-error: #e8a496;
+  --border-color: rgba(245, 199, 106, 0.12);
+
+  /* Glass system — 3 tiers */
+  --glass-bg: rgba(29, 26, 20, 0.8);
+  --glass-bg-heavy: rgba(29, 26, 20, 0.9);
+  --glass-border: rgba(245, 199, 106, 0.12);
+  --glass-border-bright: rgba(245, 199, 106, 0.2);
+  --glass-blur: 8px;
+  --glass-blur-heavy: 16px;
+
+  /* Gradients */
+  --gradient-primary: linear-gradient(180deg, #f5c76a, #d89a3c);
+  --gradient-accent: linear-gradient(135deg, #e8a496 0%, #d89a3c 100%);
+  --gradient-cyan: linear-gradient(135deg, #f5c76a 0%, #b8cfa8 50%, #d89a3c 100%);
+  --gradient-animated: linear-gradient(270deg, #f5c76a, #b8cfa8, #d89a3c, #f5c76a);
+
+  /* Mesh background */
+  --bg-mesh:
+    radial-gradient(ellipse at 0% 0%, rgba(245, 199, 106, 0.08) 0%, transparent 55%),
+    radial-gradient(ellipse at 100% 100%, rgba(184, 207, 168, 0.06) 0%, transparent 55%),
+    radial-gradient(ellipse at 40% 70%, rgba(216, 154, 60, 0.05) 0%, transparent 50%);
+
+  /* Shadows & Glows */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --glow-primary: 0 0 0 4px rgba(245, 199, 106, 0.15);
+  --glow-accent: 0 0 30px rgba(232, 164, 150, 0.3);
+  --glow-cyan: 0 0 20px rgba(184, 207, 168, 0.2);
+  --glow-subtle: 0 0 12px rgba(245, 199, 106, 0.12);
+
+  /* Typography */
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --font-sans: "IBM Plex Sans", -apple-system, system-ui, sans-serif;
+
+  /* Ember-specific tokens */
+  --ember-amber-deep: #d89a3c;
+  --ember-sage: #b8cfa8;
+  --ember-rose: #e8a496;
+  --ember-faint: #5a5346;
+  --ember-hair: rgba(245, 199, 106, 0.12);
+  --ember-hair-neutral: rgba(255, 255, 255, 0.06);
+}
+
 .app {
   background: var(--bg-gradient, var(--bg-primary));
   color: var(--text-primary);

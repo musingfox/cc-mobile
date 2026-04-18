@@ -36,8 +36,8 @@ afterEach(() => {
 describe("Capabilities cache", () => {
   test("TC13: saveCachedCapabilities writes valid JSON, loadCachedCapabilities reads it back", () => {
     const input: Capabilities = {
-      commands: ["/commit", "/review"],
-      agents: ["code-reviewer"],
+      commands: [{ name: "/commit" }, { name: "/review" }],
+      agents: [{ name: "code-reviewer" }],
       model: "claude-sonnet-4-6",
     };
 
@@ -75,7 +75,7 @@ describe("Capabilities cache", () => {
     }
 
     const input: Capabilities = {
-      commands: ["/commit"],
+      commands: [{ name: "/commit" }],
       agents: [],
       model: "test",
     };
@@ -88,5 +88,25 @@ describe("Capabilities cache", () => {
 
     const result = loadCachedCapabilities();
     expect(result).toEqual(input);
+  });
+
+  test("T4.6: old format cache file (string arrays) loads and normalizes to object arrays", () => {
+    // Write old format directly to disk
+    if (!existsSync(CACHE_DIR)) {
+      mkdirSync(CACHE_DIR, { recursive: true });
+    }
+    const oldFormat = {
+      commands: ["/help", "/commit"],
+      agents: ["a1"],
+      model: "test-model",
+    };
+    writeFileSync(CACHE_FILE, JSON.stringify(oldFormat, null, 2), "utf-8");
+
+    const result = loadCachedCapabilities();
+    expect(result).toEqual({
+      commands: [{ name: "/help" }, { name: "/commit" }],
+      agents: [{ name: "a1" }],
+      model: "test-model",
+    });
   });
 });

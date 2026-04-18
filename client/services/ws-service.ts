@@ -616,9 +616,9 @@ class WsService {
 
       case "capabilities":
         store.setCapabilities({
-          commands: (msg.commands as string[]) || [],
-          agents: (msg.agents as string[]) || [],
-          model: (msg.model as string) || "unknown",
+          commands: msg.commands ?? [],
+          agents: msg.agents ?? [],
+          model: msg.model ?? "unknown",
           ...(msg.models ? { models: msg.models as Capabilities["models"] } : {}),
           ...(msg.accountInfo
             ? { accountInfo: msg.accountInfo as Capabilities["accountInfo"] }

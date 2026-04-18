@@ -1,10 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import type { AgentInfo, CommandInfo } from "./protocol";
 
 export type Capabilities = {
-  commands: string[];
-  agents: string[];
+  commands: CommandInfo[];
+  agents: AgentInfo[];
   model: string;
 };
 
@@ -31,7 +32,17 @@ export function loadCachedCapabilities(): Capabilities | null {
       Array.isArray(parsed.agents) &&
       typeof parsed.model === "string"
     ) {
-      return parsed as Capabilities;
+      // Normalize old format: string[] → {name: string}[]
+      const normalizeToInfo = <T extends { name: string }>(arr: unknown[]): T[] => {
+        if (arr.length === 0) return [];
+        return typeof arr[0] === "string" ? arr.map((name) => ({ name }) as T) : (arr as T[]);
+      };
+
+      return {
+        commands: normalizeToInfo<CommandInfo>(parsed.commands),
+        agents: normalizeToInfo<AgentInfo>(parsed.agents),
+        model: parsed.model,
+      };
     }
     return null;
   } catch {

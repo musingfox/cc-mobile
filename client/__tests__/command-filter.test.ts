@@ -5,7 +5,7 @@ describe("filterAndSortItems", () => {
   it("returns all commands with correct prefix when query is empty", () => {
     const result = filterAndSortItems({
       query: "",
-      commands: ["commit", "help"],
+      commands: [{ name: "commit" }, { name: "help" }],
       agents: [],
       pinnedItems: [],
     });
@@ -19,7 +19,7 @@ describe("filterAndSortItems", () => {
   it("filters commands by substring match (case-insensitive)", () => {
     const result = filterAndSortItems({
       query: "com",
-      commands: ["commit", "help"],
+      commands: [{ name: "commit" }, { name: "help" }],
       agents: [],
       pinnedItems: [],
     });
@@ -32,8 +32,8 @@ describe("filterAndSortItems", () => {
   it("sorts pinned items first, then alphabetically", () => {
     const result = filterAndSortItems({
       query: "",
-      commands: ["commit"],
-      agents: ["github"],
+      commands: [{ name: "commit" }],
+      agents: [{ name: "github" }],
       pinnedItems: ["/commit"],
     });
 
@@ -46,8 +46,8 @@ describe("filterAndSortItems", () => {
   it("filters agents by substring match", () => {
     const result = filterAndSortItems({
       query: "git",
-      commands: ["commit"],
-      agents: ["github"],
+      commands: [{ name: "commit" }],
+      agents: [{ name: "github" }],
       pinnedItems: [],
     });
 

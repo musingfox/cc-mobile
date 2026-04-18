@@ -28,11 +28,15 @@ export default function QuickActions({ capabilities, disabled }: QuickActionsPro
 
   const allItems = [
     ...capabilities.commands.map((c) => ({
-      label: `/${c}`,
-      value: `/${c}`,
+      label: `/${c.name}`,
+      value: `/${c.name}`,
       type: "command" as const,
     })),
-    ...capabilities.agents.map((a) => ({ label: `@${a}`, value: `@${a}`, type: "agent" as const })),
+    ...capabilities.agents.map((a) => ({
+      label: `@${a.name}`,
+      value: `@${a.name}`,
+      type: "agent" as const,
+    })),
   ];
 
   const pinnedItems = allItems.filter((item) => pins.includes(item.value));

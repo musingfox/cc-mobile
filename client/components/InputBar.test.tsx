@@ -7,8 +7,8 @@ describe("InputBar attachment integration", () => {
     onSend: mock(() => {}),
     disabled: false,
     capabilities: {
-      commands: ["test"],
-      agents: ["agent"],
+      commands: [{ name: "test" }],
+      agents: [{ name: "agent" }],
       model: "test-model",
     },
     onOpenCommandPanel: mock(() => {}),

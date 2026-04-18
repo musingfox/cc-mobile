@@ -45,9 +45,22 @@ export type AccountInfo = {
   apiKeySource?: string;
 };
 
+export type AgentInfo = {
+  name: string;
+  description?: string;
+  allowedTools?: string[];
+  icon?: string;
+};
+
+export type CommandInfo = {
+  name: string;
+  description?: string;
+  category?: string;
+};
+
 export type Capabilities = {
-  commands: string[];
-  agents: string[];
+  commands: CommandInfo[];
+  agents: AgentInfo[];
   model: string;
   models?: ModelInfo[];
   accountInfo?: AccountInfo;

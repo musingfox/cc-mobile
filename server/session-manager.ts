@@ -214,8 +214,8 @@ export class SessionManager {
     try {
       const [commands, agents] = await Promise.all([q.supportedCommands(), q.supportedAgents()]);
       return {
-        commands,
-        agents,
+        commands: commands.map((name) => ({ name })),
+        agents: agents.map((name) => ({ name })),
         model: this.selectedModel,
       };
     } catch {
