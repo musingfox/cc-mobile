@@ -93,7 +93,7 @@ describe("MobileShell", () => {
       { id: "sessions", text: "No active sessions yet" }, // SessionsScreen empty state
       { id: "agents", text: "No agents available" }, // AgentsScreen empty state
       { id: "chat", text: "Create or select a session" }, // ChatScreen empty state
-      { id: "commands", text: "Commands (T8)" },
+      { id: "commands", text: "No commands available" }, // CommandsScreen empty state (T8)
       { id: "settings", text: "Settings (T9)" },
     ];
 
@@ -232,6 +232,76 @@ describe("MobileShell", () => {
 
     // Click the button
     fireEvent.click(agentCard as HTMLElement);
+
+    // Check that navigation happened
+    const state = useAppStore.getState();
+    expect(state.activeScreen).toBe("chat");
+    // Note: inputDraft is managed by MessageComposer's draft-loading logic,
+    // so we don't assert on it here. The handler does call setInputDraft,
+    // but MessageComposer immediately overwrites it with loadDraft().
+  });
+
+  it("T8: renders CommandsScreen when activeScreen is commands", () => {
+    useAppStore.setState({
+      activeScreen: "commands",
+      capabilities: {
+        commands: [{ name: "/help", description: "Show help" }],
+        agents: [],
+        model: "test",
+      },
+    });
+
+    const { container } = render(<MobileShell />);
+
+    // CommandsScreen should be rendered
+    expect(container.textContent).toContain("Commands");
+    expect(container.textContent).toContain("/help");
+    expect(container.textContent).toContain("Show help");
+  });
+
+  it("T8: clicking command in screen mode navigates to chat with inputDraft", () => {
+    const sessionId = "test-session";
+    useAppStore.setState({
+      activeScreen: "commands",
+      activeSessionId: sessionId,
+      capabilities: {
+        commands: [{ name: "/help" }],
+        agents: [],
+        model: "test",
+      },
+      inputDraft: "",
+      sessions: new Map([
+        [
+          sessionId,
+          {
+            id: sessionId,
+            cwd: "/test",
+            sdkSessionId: "sdk-1",
+            messages: [],
+            pendingPermission: null,
+            isStreaming: false,
+            currentStreamMessageId: null,
+            activeTools: new Map(),
+            activeAgents: new Map(),
+            activeHook: null,
+            usage: null,
+            promptSuggestion: null,
+            resolvedActions: [],
+            agentState: null,
+            receivedAuthoritativeState: false,
+          },
+        ],
+      ]),
+    });
+
+    const { container } = render(<MobileShell />);
+
+    // Find and click the command row button
+    const commandRowButton = container.querySelector(".ember-command-row-content");
+    expect(commandRowButton).not.toBeNull();
+
+    // Click the button
+    fireEvent.click(commandRowButton as HTMLElement);
 
     // Check that navigation happened
     const state = useAppStore.getState();

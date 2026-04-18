@@ -8,6 +8,7 @@ import ResolvedActionChip from "../ResolvedActionChip";
 import AgentsScreen from "./AgentsScreen";
 import AssistantMessage from "./AssistantMessage";
 import BottomSheet from "./BottomSheet";
+import CommandsScreen from "./CommandsScreen";
 import MessageComposer from "./MessageComposer";
 import ScreenHeader from "./ScreenHeader";
 import ToolResultCard from "./ToolResultCard";
@@ -154,6 +155,11 @@ export default function ChatScreen() {
     setAgentsSheetOpen(false);
   };
 
+  const handleCommandSelectInSheet = (commandName: string) => {
+    useAppStore.getState().setInputDraft(`${commandName} `);
+    setCommandsSheetOpen(false);
+  };
+
   // Empty state when no active session
   if (!activeSessionId || !session) {
     return (
@@ -286,7 +292,7 @@ export default function ChatScreen() {
         onClose={() => setCommandsSheetOpen(false)}
         title="Commands"
       >
-        <div>Commands (T8)</div>
+        <CommandsScreen variant="sheet" onSelect={handleCommandSelectInSheet} />
       </BottomSheet>
     </>
   );

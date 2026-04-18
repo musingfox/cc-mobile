@@ -3,6 +3,7 @@ import { useSettingsStore } from "../../stores/settings-store";
 import AgentsScreen from "./AgentsScreen";
 import BottomTabBar from "./BottomTabBar";
 import ChatScreen from "./ChatScreen";
+import CommandsScreen from "./CommandsScreen";
 import ScreenHeader from "./ScreenHeader";
 import SessionsScreen from "./SessionsScreen";
 
@@ -26,6 +27,11 @@ function ScreenContent({ screenName }: { screenName: string }) {
     setActiveScreen("chat");
   };
 
+  const handleCommandSelect = (commandName: string) => {
+    setInputDraft(`${commandName} `);
+    setActiveScreen("chat");
+  };
+
   // Placeholder content for each screen
   // T6-T9 will replace these with actual implementations
   switch (screenName) {
@@ -36,7 +42,7 @@ function ScreenContent({ screenName }: { screenName: string }) {
     case "chat":
       return <ChatScreen />;
     case "commands":
-      return <div className="ember-screen-placeholder">Commands (T8)</div>;
+      return <CommandsScreen variant="screen" onSelect={handleCommandSelect} />;
     case "settings":
       return <div className="ember-screen-placeholder">Settings (T9)</div>;
     default:
