@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, mock } from "bun:test";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { wsService } from "../../services/ws-service";
 import type { SessionState } from "../../stores/app-store";
 import { useAppStore } from "../../stores/app-store";
@@ -11,8 +11,20 @@ mock.module("../../services/ws-service", () => ({
     listSessions: mock(() => {}),
     resumeSession: mock(() => {}),
     createSession: mock(() => {}),
+    send: mock(() => {}),
+    sendInterrupt: mock(() => {}),
+    sendCommand: mock(() => {}),
+    respondPermission: mock(() => {}),
   },
 }));
+
+// Capture original store actions so tests that swap them with mocks don't
+// leak into later test files (Zustand store state is global).
+const ORIGINAL_ACTIONS = {
+  setActiveSession: useAppStore.getState().setActiveSession,
+  setActiveScreen: useAppStore.getState().setActiveScreen,
+  setGlobalError: useAppStore.getState().setGlobalError,
+};
 
 describe("SessionsScreen", () => {
   beforeEach(() => {
@@ -23,10 +35,17 @@ describe("SessionsScreen", () => {
       sessionList: [],
       globalError: null,
       connectionState: "connected",
+      ...ORIGINAL_ACTIONS,
     });
 
     // Clear all mocks
     mock.restore();
+  });
+
+  afterEach(() => {
+    cleanup();
+    // Restore original actions in case a test swapped them with mocks.
+    useAppStore.setState({ ...ORIGINAL_ACTIONS });
   });
 
   it("renders with 2 active sessions, one streaming", () => {
