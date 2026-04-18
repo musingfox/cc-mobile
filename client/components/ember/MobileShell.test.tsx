@@ -87,14 +87,13 @@ describe("MobileShell", () => {
 
   it("renders all screen placeholders correctly", () => {
     const screens: Array<{
-      id: "sessions" | "agents" | "chat" | "commands" | "settings";
+      id: "sessions" | "agents" | "chat" | "commands";
       text: string;
     }> = [
       { id: "sessions", text: "No active sessions yet" }, // SessionsScreen empty state
       { id: "agents", text: "No agents available" }, // AgentsScreen empty state
       { id: "chat", text: "Create or select a session" }, // ChatScreen empty state
       { id: "commands", text: "No commands available" }, // CommandsScreen empty state (T8)
-      { id: "settings", text: "Settings (T9)" },
     ];
 
     screens.forEach(({ id, text }) => {
@@ -309,5 +308,23 @@ describe("MobileShell", () => {
     // Note: inputDraft is managed by MessageComposer's draft-loading logic,
     // so we don't assert on it here. The handler does call setInputDraft,
     // but MessageComposer immediately overwrites it with loadDraft().
+  });
+
+  it("T9: renders SettingsScreen when activeScreen is settings", () => {
+    useAppStore.setState({
+      activeScreen: "settings",
+      capabilities: {
+        commands: [],
+        agents: [],
+        model: "test",
+      },
+    });
+
+    const { container } = render(<MobileShell />);
+
+    // SettingsScreen should be rendered (no placeholder)
+    expect(container.querySelector(".ember-screen-header-title")?.textContent).toBe("Settings");
+    expect(container.textContent).toContain("Appearance");
+    expect(container.textContent).toContain("Permissions");
   });
 });

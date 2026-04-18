@@ -1034,3 +1034,376 @@
     background-position: -200% 0;
   }
 }
+
+/* SettingsScreen */
+.ember-settings-screen {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.ember-settings-scroll {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Profile Card */
+.ember-profile-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  background: linear-gradient(180deg, rgba(245, 199, 106, 0.04), var(--bg-secondary));
+  border: 1px solid var(--ember-hair-neutral);
+  border-radius: 14px;
+}
+
+.ember-profile-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ember-profile-name {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ember-profile-sub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  letter-spacing: 0.2px;
+}
+
+/* Settings Section */
+.ember-settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ember-settings-section-title {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  padding: 18px 16px 8px;
+  margin: 0;
+}
+
+.ember-settings-section-content {
+  background: var(--bg-secondary);
+  border: 1px solid var(--ember-hair-neutral);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+/* Settings Row */
+.ember-settings-row {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--ember-hair-neutral);
+  min-height: 44px;
+}
+
+.ember-settings-row:last-child {
+  border-bottom: none;
+}
+
+.ember-settings-row--expandable {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.ember-settings-row--expandable:hover {
+  background: var(--ember-hair2);
+}
+
+.ember-settings-row--disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ember-settings-row-label {
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  color: var(--text-primary);
+}
+
+.ember-settings-row-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* Options List */
+.ember-options-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 16px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--ember-hair-neutral);
+}
+
+.ember-options-list:last-child {
+  border-bottom: none;
+}
+
+.ember-options-list--vertical {
+  flex-direction: column;
+  gap: 0;
+}
+
+/* Option Chips (horizontal) */
+.ember-option-chip {
+  all: unset;
+  box-sizing: border-box;
+  padding: 9px 16px;
+  background: var(--bg-primary);
+  border: 1px solid var(--ember-hair);
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-primary);
+  cursor: pointer;
+  min-height: 44px;
+  transition: all 0.15s ease;
+}
+
+.ember-option-chip:hover {
+  border-color: var(--accent-primary);
+}
+
+.ember-option-chip.active {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+
+/* Option Rows (vertical list with descriptions) */
+.ember-option-row {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--ember-hair-neutral);
+  cursor: pointer;
+  min-height: 44px;
+  transition: background 0.15s ease;
+}
+
+.ember-option-row:last-child {
+  border-bottom: none;
+}
+
+.ember-option-row:hover {
+  background: var(--ember-hair2);
+}
+
+.ember-option-row.active {
+  background: rgba(245, 199, 106, 0.06);
+}
+
+.ember-option-row-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ember-option-row-label {
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ember-option-row.active .ember-option-row-label {
+  color: var(--accent-primary);
+}
+
+.ember-option-row-desc {
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.ember-option-row-check {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--accent-primary);
+}
+
+.ember-option-placeholder {
+  padding: 12px 16px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  letter-spacing: 0.3px;
+}
+
+/* Settings Footer */
+.ember-settings-footer {
+  padding: 16px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  letter-spacing: 0.4px;
+}
+
+/* Ember theme wrapper for EnvVarEditor */
+.theme-ember .env-var-editor {
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.theme-ember .env-var-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.theme-ember .env-var-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--ember-hair);
+  border-radius: 8px;
+  min-height: 44px;
+}
+
+.theme-ember .env-var-item-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.theme-ember .env-var-key {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.2px;
+}
+
+.theme-ember .env-var-value {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.theme-ember .env-var-delete {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  transition: all 0.15s ease;
+}
+
+.theme-ember .env-var-delete:hover {
+  background: var(--accent-error);
+  color: var(--bg-primary);
+}
+
+.theme-ember .env-var-form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.theme-ember .env-var-input {
+  all: unset;
+  box-sizing: border-box;
+  flex: 1;
+  padding: 10px 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--ember-hair);
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-primary);
+  min-height: 44px;
+}
+
+.theme-ember .env-var-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.theme-ember .env-var-input::placeholder {
+  color: var(--text-faint);
+}
+
+.theme-ember .env-var-add {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.theme-ember .env-var-add:hover {
+  opacity: 0.9;
+}
+
+.theme-ember .env-var-error {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: rgba(255, 82, 82, 0.1);
+  border: 1px solid rgba(255, 82, 82, 0.3);
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent-error);
+}

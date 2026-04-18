@@ -6,6 +6,7 @@ import ChatScreen from "./ChatScreen";
 import CommandsScreen from "./CommandsScreen";
 import ScreenHeader from "./ScreenHeader";
 import SessionsScreen from "./SessionsScreen";
+import SettingsScreen from "./SettingsScreen";
 
 function EmberConnectionBanner({ connectionState }: { connectionState: string }) {
   if (connectionState === "connected") return null;
@@ -32,8 +33,6 @@ function ScreenContent({ screenName }: { screenName: string }) {
     setActiveScreen("chat");
   };
 
-  // Placeholder content for each screen
-  // T6-T9 will replace these with actual implementations
   switch (screenName) {
     case "sessions":
       return <SessionsScreen />;
@@ -44,7 +43,7 @@ function ScreenContent({ screenName }: { screenName: string }) {
     case "commands":
       return <CommandsScreen variant="screen" onSelect={handleCommandSelect} />;
     case "settings":
-      return <div className="ember-screen-placeholder">Settings (T9)</div>;
+      return <SettingsScreen />;
     default:
       return <ChatScreen />;
   }
