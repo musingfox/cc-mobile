@@ -34,6 +34,7 @@ interface SessionCardProps {
   messageCount?: number;
   relativeTime?: string;
   onClick: () => void;
+  onClose?: () => void;
 }
 
 function SessionCard({
@@ -46,7 +47,13 @@ function SessionCard({
   messageCount,
   relativeTime,
   onClick,
+  onClose,
 }: SessionCardProps) {
+  const handleClose = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onClose?.();
+  };
+
   return (
     <button
       type="button"
@@ -70,6 +77,16 @@ function SessionCard({
         )}
         {subtitle && <span className="ember-session-meta">{subtitle}</span>}
       </div>
+      {onClose && (
+        <button
+          type="button"
+          className="ember-session-card-close"
+          onClick={handleClose}
+          aria-label="Close session"
+        >
+          <X size={16} />
+        </button>
+      )}
     </button>
   );
 }
@@ -143,6 +160,17 @@ export default function SessionsScreen() {
     setActiveScreen("chat");
   };
 
+  const handleCloseSession = (sessionId: string) => {
+    wsService.closeSession(sessionId);
+    // If closing the active session and there are other sessions, switch to the first one
+    if (sessionId === activeSessionId) {
+      const remainingSessions = Array.from(sessions.keys()).filter((id) => id !== sessionId);
+      if (remainingSessions.length > 0) {
+        setActiveSession(remainingSessions[0]);
+      }
+    }
+  };
+
   // Active sessions array
   const activeSessions = Array.from(sessions.entries()).map(([id, session]) => ({
     id,
@@ -205,6 +233,7 @@ export default function SessionsScreen() {
                       setActiveSession(session.id);
                       setActiveScreen("chat");
                     }}
+                    onClose={() => handleCloseSession(session.id)}
                   />
                 );
               })}
