@@ -1,3 +1,6 @@
+/* Component Imports */
+@import "./components/ember/ember-primitives.css";
+
 /* Reset & Base */
 * {
   margin: 0;

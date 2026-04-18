@@ -1,0 +1,167 @@
+/* ToggleSwitch */
+.ember-toggle-switch {
+  all: unset;
+  cursor: pointer;
+  display: inline-block;
+}
+
+.ember-toggle-switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.ember-toggle-track {
+  position: relative;
+  display: block;
+  width: 38px;
+  height: 22px;
+  border-radius: 12px;
+  background: var(--bg-tertiary);
+  transition: background-color 0.18s ease;
+}
+
+.ember-toggle-switch[data-checked="true"] .ember-toggle-track {
+  background: var(--accent-primary);
+}
+
+.ember-toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--text-primary);
+  transition: left 0.18s ease;
+}
+
+.ember-toggle-switch[data-checked="true"] .ember-toggle-knob {
+  left: 18px;
+}
+
+/* IconButton */
+.ember-icon-button {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 8px;
+  color: var(--text-primary);
+  transition: all 0.15s ease;
+}
+
+.ember-icon-button svg,
+.ember-icon-button > * {
+  width: var(--icon-size, 28px);
+  height: var(--icon-size, 28px);
+}
+
+.ember-icon-button--default {
+  background: transparent;
+  border: 1px solid var(--ember-hair);
+}
+
+.ember-icon-button--default:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+}
+
+.ember-icon-button--ghost {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+}
+
+.ember-icon-button--ghost:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.ember-icon-button--accent {
+  background: var(--accent-primary);
+  border: none;
+  color: var(--bg-primary);
+}
+
+.ember-icon-button--accent:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.ember-icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+/* BottomSheet */
+.ember-bottom-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 30;
+}
+
+.ember-bottom-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  top: 140px;
+  background: var(--bg-secondary);
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 -12px 48px rgba(0, 0, 0, 0.6);
+  z-index: 31;
+  overflow-y: auto;
+}
+
+.ember-bottom-sheet-handle {
+  width: 36px;
+  height: 4px;
+  background: var(--ember-faint);
+  border-radius: 2px;
+  margin: 8px auto 0;
+}
+
+.ember-bottom-sheet-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  padding: 16px 20px 8px;
+}
+
+.ember-bottom-sheet-content {
+  padding: 12px 20px 20px;
+}
+
+/* Avatar */
+.ember-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  user-select: none;
+}
+
+.ember-avatar--circle {
+  border-radius: 50%;
+}
+
+.ember-avatar--square {
+  border-radius: 10px;
+}
+
+.ember-avatar--gradient {
+  background: linear-gradient(180deg, #f5c76a, #d89a3c);
+  color: var(--bg-primary);
+}
+
+.ember-avatar--neutral {
+  background: linear-gradient(180deg, #3a3328, #24201a);
+  border: 1px solid var(--ember-hair);
+  color: var(--accent-primary);
+}
