@@ -1,4 +1,4 @@
-import { ArrowUp, Bot, Terminal } from "lucide-react";
+import { ArrowUp, Bot, Square, Terminal } from "lucide-react";
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { ContentBlock } from "../../../server/protocol";
 import { clearDraft, loadDraft, saveDraft } from "../../services/draft-persistence";
@@ -216,6 +216,17 @@ export default function MessageComposer({
     }
   };
 
+  const handleInterrupt = () => {
+    if (!sessionId) return;
+    hapticService.tap();
+    wsService.sendMessage({ type: "interrupt", sessionId });
+  };
+
+  const isStreaming = useAppStore((s) => {
+    if (!sessionId) return false;
+    return s.sessions.get(sessionId)?.isStreaming ?? false;
+  });
+
   const hasContent = value.trim() || images.length > 0 || files.length > 0;
 
   return (
@@ -265,13 +276,23 @@ export default function MessageComposer({
           disabled={disabled || !sessionId}
           rows={1}
         />
-        <IconButton
-          icon={<ArrowUp size={20} />}
-          onClick={handleSend}
-          label="Send message"
-          variant="accent"
-          disabled={disabled || !hasContent || isUploading || !sessionId}
-        />
+        {isStreaming ? (
+          <IconButton
+            icon={<Square size={20} />}
+            onClick={handleInterrupt}
+            label="Stop generating"
+            variant="accent"
+            disabled={!sessionId}
+          />
+        ) : (
+          <IconButton
+            icon={<ArrowUp size={20} />}
+            onClick={handleSend}
+            label="Send message"
+            variant="accent"
+            disabled={disabled || !hasContent || isUploading || !sessionId}
+          />
+        )}
       </div>
     </div>
   );
