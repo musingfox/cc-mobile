@@ -1,11 +1,18 @@
+import type { ReactNode } from "react";
 import { Toaster } from "sonner";
 
 interface ToastProviderProps {
   theme: "dark" | "light" | "claude" | "ember";
+  children?: ReactNode;
 }
 
-export default function ToastProvider({ theme }: ToastProviderProps) {
+export default function ToastProvider({ theme, children }: ToastProviderProps) {
   const sonnerTheme = theme === "claude" || theme === "ember" ? "dark" : theme;
 
-  return <Toaster theme={sonnerTheme} position="bottom-center" visibleToasts={3} />;
+  return (
+    <>
+      {children}
+      <Toaster theme={sonnerTheme} position="bottom-center" visibleToasts={3} />
+    </>
+  );
 }
