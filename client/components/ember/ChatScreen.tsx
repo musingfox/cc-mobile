@@ -115,37 +115,29 @@ export default function ChatScreen() {
 
   const handleApprove = () => {
     if (!activeSessionId || !pendingPermission) return;
-    useAppStore.getState().setPermission(activeSessionId, null);
-    // Send approval via wsService
     import("../../services/ws-service").then(({ wsService }) => {
-      wsService.respondToPermission(pendingPermission.requestId, "approve");
+      wsService.approvePermission(activeSessionId);
     });
   };
 
   const handleDeny = () => {
     if (!activeSessionId || !pendingPermission) return;
-    useAppStore.getState().setPermission(activeSessionId, null);
     import("../../services/ws-service").then(({ wsService }) => {
-      wsService.respondToPermission(pendingPermission.requestId, "deny");
+      wsService.denyPermission(activeSessionId);
     });
   };
 
   const handleAnswer = (answers: Record<string, string>) => {
     if (!activeSessionId || !pendingPermission) return;
-    useAppStore.getState().setPermission(activeSessionId, null);
     import("../../services/ws-service").then(({ wsService }) => {
-      wsService.respondToPermission(pendingPermission.requestId, "answer", answers);
+      wsService.answerPermission(activeSessionId, answers);
     });
   };
 
   const handleSuggestionClick = () => {
     if (!promptSuggestion || !activeSessionId) return;
     import("../../services/ws-service").then(({ wsService }) => {
-      wsService.send({
-        type: "send",
-        sessionId: activeSessionId,
-        content: promptSuggestion,
-      });
+      wsService.send(activeSessionId, promptSuggestion);
     });
     useAppStore.getState().setPromptSuggestion(activeSessionId, null);
   };

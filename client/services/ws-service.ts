@@ -859,6 +859,11 @@ class WsService {
     useAppStore.getState().removeSession(sessionId);
   }
 
+  interrupt(sessionId: string) {
+    if (!this.ws) return;
+    this.sendMessage({ type: "interrupt", sessionId });
+  }
+
   listSessions(dir?: string, limit?: number, offset?: number) {
     if (!this.ws) return;
     this.sendMessage({

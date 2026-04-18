@@ -1,6 +1,5 @@
 import { ArrowUp, Bot, Square, Terminal } from "lucide-react";
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
-import type { ContentBlock } from "../../../server/protocol";
 import { clearDraft, loadDraft, saveDraft } from "../../services/draft-persistence";
 import { hapticService } from "../../services/haptic";
 import { toastService } from "../../services/toast-service";
@@ -114,11 +113,7 @@ export default function MessageComposer({
       files.map((f) => f.path),
     );
 
-    wsService.send({
-      type: "send",
-      sessionId,
-      content,
-    });
+    wsService.send(sessionId, content);
 
     setValue("");
     setImages([]);
@@ -219,7 +214,7 @@ export default function MessageComposer({
   const handleInterrupt = () => {
     if (!sessionId) return;
     hapticService.tap();
-    wsService.sendMessage({ type: "interrupt", sessionId });
+    wsService.interrupt(sessionId);
   };
 
   const isStreaming = useAppStore((s) => {
