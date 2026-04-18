@@ -81,7 +81,7 @@ describe("MobileShell", () => {
       id: "sessions" | "agents" | "chat" | "commands" | "settings";
       text: string;
     }> = [
-      { id: "sessions", text: "Sessions (T6)" },
+      { id: "sessions", text: "No active sessions yet" }, // SessionsScreen empty state
       { id: "agents", text: "Agents (T7)" },
       { id: "chat", text: "Create or select a session" }, // ChatScreen empty state
       { id: "commands", text: "Commands (T8)" },

@@ -494,3 +494,224 @@
   display: flex;
   justify-content: center;
 }
+
+/* SessionsScreen */
+.ember-sessions-screen {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.ember-error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--accent-error);
+  color: var(--bg-primary);
+  border-radius: 8px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.35;
+  margin-bottom: 8px;
+}
+
+.ember-error-banner-close {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.15s ease;
+}
+
+.ember-error-banner-close:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.ember-sessions-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ember-sessions-heading {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.ember-sessions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ember-sessions-empty,
+.ember-sessions-loading {
+  padding: 24px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  letter-spacing: 0.3px;
+}
+
+.ember-sessions-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 24px;
+}
+
+.ember-sessions-error p {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  letter-spacing: 0.3px;
+}
+
+.ember-sessions-retry {
+  all: unset;
+  box-sizing: border-box;
+  padding: 8px 14px;
+  min-height: 44px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--ember-hair);
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ember-sessions-retry:hover {
+  border-color: var(--accent-primary);
+}
+
+/* Session Card */
+.ember-session-card {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 14px;
+  cursor: pointer;
+  min-height: 44px;
+  transition: all 0.15s ease;
+}
+
+.ember-session-card--active {
+  background: linear-gradient(180deg, rgba(245, 199, 106, 0.06), var(--bg-secondary));
+  border: 1px solid var(--ember-hair);
+}
+
+.ember-session-card--inactive,
+.ember-session-card--recent {
+  background: var(--bg-secondary);
+  border: 1px solid var(--ember-hair-neutral);
+}
+
+.ember-session-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.ember-session-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ember-session-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+.ember-session-badge[data-color="sage"] {
+  color: var(--accent-primary);
+  background: rgba(245, 199, 106, 0.1);
+}
+
+.ember-session-badge[data-color="dim"] {
+  color: var(--text-faint);
+  background: var(--ember-hair2);
+}
+
+.ember-session-time {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+  letter-spacing: 0.2px;
+}
+
+.ember-session-title {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.ember-session-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.ember-branch-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border: 1px solid var(--ember-hair2);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--accent-primary);
+  letter-spacing: 0.2px;
+}
+
+.ember-session-scope {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  letter-spacing: 0.2px;
+}
+
+.ember-session-meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+  letter-spacing: 0.2px;
+}

@@ -3,6 +3,7 @@ import { useSettingsStore } from "../../stores/settings-store";
 import BottomTabBar from "./BottomTabBar";
 import ChatScreen from "./ChatScreen";
 import ScreenHeader from "./ScreenHeader";
+import SessionsScreen from "./SessionsScreen";
 
 function EmberConnectionBanner({ connectionState }: { connectionState: string }) {
   if (connectionState === "connected") return null;
@@ -20,7 +21,7 @@ function ScreenContent({ screenName }: { screenName: string }) {
   // T6-T9 will replace these with actual implementations
   switch (screenName) {
     case "sessions":
-      return <div className="ember-screen-placeholder">Sessions (T6)</div>;
+      return <SessionsScreen />;
     case "agents":
       return <div className="ember-screen-placeholder">Agents (T7)</div>;
     case "chat":
@@ -62,7 +63,9 @@ export default function MobileShell() {
   return (
     <div className="ember-shell">
       <EmberConnectionBanner connectionState={connectionState} />
-      {activeScreen !== "chat" && <ScreenHeader title={getScreenTitle(activeScreen)} />}
+      {activeScreen !== "chat" && activeScreen !== "sessions" && (
+        <ScreenHeader title={getScreenTitle(activeScreen)} />
+      )}
       <main className="ember-shell-content">
         <ScreenContent screenName={activeScreen} />
       </main>
