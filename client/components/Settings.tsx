@@ -106,6 +106,13 @@ export default function Settings({ onClose }: SettingsProps) {
             >
               Claude
             </button>
+            <button
+              type="button"
+              className={`settings-theme-btn ${theme === "ember" ? "active" : ""}`}
+              onClick={() => setTheme("ember")}
+            >
+              Ember
+            </button>
           </div>
         </section>
 
