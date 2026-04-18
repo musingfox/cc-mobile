@@ -715,3 +715,162 @@
   color: var(--text-secondary);
   letter-spacing: 0.2px;
 }
+
+/* AgentsScreen */
+.ember-agents-screen {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.ember-agents-screen-body,
+.ember-agents-sheet-body {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ember-search-input-container {
+  flex-shrink: 0;
+}
+
+.ember-search-input {
+  all: unset;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--ember-hair);
+  border-radius: 12px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.ember-search-input::placeholder {
+  color: var(--text-faint);
+}
+
+.ember-search-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.ember-agents-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ember-agent-card {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--ember-hair-neutral);
+  border-radius: 14px;
+  cursor: pointer;
+  min-height: 44px;
+  transition: all 0.15s ease;
+}
+
+.ember-agent-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.ember-agent-card-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ember-agent-card-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ember-agent-card-name {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ember-agent-card-description {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.ember-agent-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.ember-agent-tool-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  background: rgba(245, 199, 106, 0.1);
+  color: var(--accent-primary);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  border-radius: 4px;
+}
+
+.ember-agents-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.ember-agents-empty p {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  letter-spacing: 0.3px;
+}
+
+/* Skeleton loading states */
+.ember-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-secondary) 25%,
+    var(--ember-hair2) 50%,
+    var(--bg-secondary) 75%
+  );
+  background-size: 200% 100%;
+  animation: ember-shimmer 1.5s infinite;
+  border-radius: 14px;
+}
+
+.ember-agent-card-skeleton {
+  height: 88px;
+}
+
+@keyframes ember-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}

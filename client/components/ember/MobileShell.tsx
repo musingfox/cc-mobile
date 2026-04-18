@@ -1,5 +1,6 @@
 import { useAppStore } from "../../stores/app-store";
 import { useSettingsStore } from "../../stores/settings-store";
+import AgentsScreen from "./AgentsScreen";
 import BottomTabBar from "./BottomTabBar";
 import ChatScreen from "./ChatScreen";
 import ScreenHeader from "./ScreenHeader";
@@ -17,13 +18,21 @@ function EmberConnectionBanner({ connectionState }: { connectionState: string })
 }
 
 function ScreenContent({ screenName }: { screenName: string }) {
+  const setActiveScreen = useAppStore((s) => s.setActiveScreen);
+  const setInputDraft = useAppStore((s) => s.setInputDraft);
+
+  const handleAgentSelect = (agentName: string) => {
+    setInputDraft(`@${agentName} `);
+    setActiveScreen("chat");
+  };
+
   // Placeholder content for each screen
   // T6-T9 will replace these with actual implementations
   switch (screenName) {
     case "sessions":
       return <SessionsScreen />;
     case "agents":
-      return <div className="ember-screen-placeholder">Agents (T7)</div>;
+      return <AgentsScreen variant="screen" onSelect={handleAgentSelect} />;
     case "chat":
       return <ChatScreen />;
     case "commands":

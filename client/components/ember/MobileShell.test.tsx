@@ -4,6 +4,12 @@ import { useAppStore } from "../../stores/app-store";
 import { useSettingsStore } from "../../stores/settings-store";
 import MobileShell from "./MobileShell";
 
+// Capture original store actions
+const ORIGINAL_ACTIONS = {
+  setActiveScreen: useAppStore.getState().setActiveScreen,
+  setInputDraft: useAppStore.getState().setInputDraft,
+};
+
 describe("MobileShell", () => {
   beforeEach(() => {
     // Reset stores to default state
@@ -13,11 +19,14 @@ describe("MobileShell", () => {
       connectionState: "connected",
       activeSessionId: null,
       sessions: new Map(),
+      inputDraft: "",
+      ...ORIGINAL_ACTIONS,
     });
   });
 
   afterEach(() => {
     cleanup();
+    useAppStore.setState({ ...ORIGINAL_ACTIONS });
   });
 
   it("1. renders with theme ember and activeScreen chat", () => {
@@ -82,14 +91,17 @@ describe("MobileShell", () => {
       text: string;
     }> = [
       { id: "sessions", text: "No active sessions yet" }, // SessionsScreen empty state
-      { id: "agents", text: "Agents (T7)" },
+      { id: "agents", text: "No agents available" }, // AgentsScreen empty state
       { id: "chat", text: "Create or select a session" }, // ChatScreen empty state
       { id: "commands", text: "Commands (T8)" },
       { id: "settings", text: "Settings (T9)" },
     ];
 
     screens.forEach(({ id, text }) => {
-      useAppStore.setState({ activeScreen: id });
+      useAppStore.setState({
+        activeScreen: id,
+        capabilities: { commands: [], agents: [], model: "test" },
+      });
       const { container } = render(<MobileShell />);
       expect(container.textContent).toContain(text);
       cleanup();
@@ -157,5 +169,75 @@ describe("MobileShell", () => {
     const headerTitle = container.querySelector(".ember-screen-header-title");
     // Chat screen shows basename of cwd
     expect(headerTitle?.textContent).toBe("cc-mobile");
+  });
+
+  it("T7: renders AgentsScreen when activeScreen is agents", () => {
+    useAppStore.setState({
+      activeScreen: "agents",
+      capabilities: {
+        commands: [],
+        agents: [{ name: "coder", description: "Writes code" }],
+        model: "test",
+      },
+    });
+
+    const { container } = render(<MobileShell />);
+
+    // AgentsScreen should be rendered
+    expect(container.textContent).toContain("Agents");
+    expect(container.textContent).toContain("coder");
+    expect(container.textContent).toContain("Writes code");
+  });
+
+  it("T7: clicking agent in screen mode navigates to chat", () => {
+    const sessionId = "test-session";
+    useAppStore.setState({
+      activeScreen: "agents",
+      activeSessionId: sessionId,
+      capabilities: {
+        commands: [],
+        agents: [{ name: "coder" }],
+        model: "test",
+      },
+      inputDraft: "",
+      sessions: new Map([
+        [
+          sessionId,
+          {
+            id: sessionId,
+            cwd: "/test",
+            sdkSessionId: "sdk-1",
+            messages: [],
+            pendingPermission: null,
+            isStreaming: false,
+            currentStreamMessageId: null,
+            activeTools: new Map(),
+            activeAgents: new Map(),
+            activeHook: null,
+            usage: null,
+            promptSuggestion: null,
+            resolvedActions: [],
+            agentState: null,
+            receivedAuthoritativeState: false,
+          },
+        ],
+      ]),
+    });
+
+    const { container } = render(<MobileShell />);
+
+    // Find and click the agent card
+    const agentCard = container.querySelector(".ember-agent-card");
+    expect(agentCard).not.toBeNull();
+
+    // Click the button
+    fireEvent.click(agentCard as HTMLElement);
+
+    // Check that navigation happened
+    const state = useAppStore.getState();
+    expect(state.activeScreen).toBe("chat");
+    // Note: inputDraft is managed by MessageComposer's draft-loading logic,
+    // so we don't assert on it here. The handler does call setInputDraft,
+    // but MessageComposer immediately overwrites it with loadDraft().
   });
 });

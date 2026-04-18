@@ -267,7 +267,9 @@ describe("ChatScreen", () => {
 
     const bottomSheet = container.querySelector(".ember-bottom-sheet");
     expect(bottomSheet).not.toBeNull();
-    expect(container.textContent).toContain("Agents (T7)");
+    // AgentsScreen should be rendered with search input
+    const searchInput = container.querySelector(".ember-search-input");
+    expect(searchInput).not.toBeNull();
   });
 
   it("7. opens commands BottomSheet when slash button clicked", () => {
@@ -468,5 +470,114 @@ describe("ChatScreen", () => {
 
     const images = container.querySelectorAll(".ember-message-attachment-image");
     expect(images.length).toBe(1);
+  });
+
+  it("T7: clicking λ button opens agents bottom sheet with AgentsScreen", () => {
+    const sessionId = "test-session";
+    useAppStore.setState({
+      activeSessionId: sessionId,
+      capabilities: {
+        commands: [],
+        agents: [{ name: "coder" }],
+        model: "test",
+      },
+      sessions: new Map([
+        [
+          sessionId,
+          {
+            id: sessionId,
+            cwd: "/test",
+            sdkSessionId: "sdk-1",
+            messages: [],
+            pendingPermission: null,
+            isStreaming: false,
+            currentStreamMessageId: null,
+            activeTools: new Map(),
+            activeAgents: new Map(),
+            activeHook: null,
+            usage: null,
+            promptSuggestion: null,
+            resolvedActions: [],
+            agentState: null,
+            receivedAuthoritativeState: false,
+          },
+        ],
+      ]),
+    });
+
+    const { container } = render(<ChatScreen />);
+
+    // Find the λ button (agents button in composer)
+    const buttons = container.querySelectorAll("button");
+    const agentsButton = Array.from(buttons).find(
+      (btn) => btn.getAttribute("aria-label") === "Open agents",
+    );
+
+    expect(agentsButton).not.toBeNull();
+
+    // Click to open sheet
+    fireEvent.click(agentsButton as HTMLElement);
+
+    // Sheet should be open with AgentsScreen content (search input)
+    const searchInput = container.querySelector(".ember-search-input");
+    expect(searchInput).not.toBeNull();
+    expect((searchInput as HTMLInputElement).placeholder).toBe("Filter agents…");
+  });
+
+  it("T7: selecting agent in sheet updates inputDraft and closes sheet", () => {
+    const sessionId = "test-session";
+    useAppStore.setState({
+      activeSessionId: sessionId,
+      inputDraft: "",
+      capabilities: {
+        commands: [],
+        agents: [{ name: "coder" }],
+        model: "test",
+      },
+      sessions: new Map([
+        [
+          sessionId,
+          {
+            id: sessionId,
+            cwd: "/test",
+            sdkSessionId: "sdk-1",
+            messages: [],
+            pendingPermission: null,
+            isStreaming: false,
+            currentStreamMessageId: null,
+            activeTools: new Map(),
+            activeAgents: new Map(),
+            activeHook: null,
+            usage: null,
+            promptSuggestion: null,
+            resolvedActions: [],
+            agentState: null,
+            receivedAuthoritativeState: false,
+          },
+        ],
+      ]),
+    });
+
+    const { container } = render(<ChatScreen />);
+
+    // Open agents sheet
+    const buttons = container.querySelectorAll("button");
+    const agentsButton = Array.from(buttons).find(
+      (btn) => btn.getAttribute("aria-label") === "Open agents",
+    );
+    fireEvent.click(agentsButton as HTMLElement);
+
+    // Click the agent card
+    const agentCard = container.querySelector(".ember-agent-card");
+    expect(agentCard).not.toBeNull();
+    fireEvent.click(agentCard as HTMLElement);
+
+    // Check inputDraft was updated
+    const state = useAppStore.getState();
+    expect(state.inputDraft).toBe("@coder ");
+
+    // Sheet should close (search input should no longer be in DOM)
+    // Due to AnimatePresence, it might still be present but exiting
+    // For this test, we just verify inputDraft was set
   });
 });

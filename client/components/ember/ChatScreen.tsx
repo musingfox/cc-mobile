@@ -5,6 +5,7 @@ import ActivityPanel from "../ActivityPanel";
 import AnimatedMessage from "../animated/AnimatedMessage";
 import PermissionBar from "../PermissionBar";
 import ResolvedActionChip from "../ResolvedActionChip";
+import AgentsScreen from "./AgentsScreen";
 import AssistantMessage from "./AssistantMessage";
 import BottomSheet from "./BottomSheet";
 import MessageComposer from "./MessageComposer";
@@ -148,6 +149,11 @@ export default function ChatScreen() {
     useAppStore.getState().setPromptSuggestion(activeSessionId, null);
   };
 
+  const handleAgentSelectInSheet = (agentName: string) => {
+    useAppStore.getState().setInputDraft(`@${agentName} `);
+    setAgentsSheetOpen(false);
+  };
+
   // Empty state when no active session
   if (!activeSessionId || !session) {
     return (
@@ -273,7 +279,7 @@ export default function ChatScreen() {
         capabilities={capabilities}
       />
       <BottomSheet open={agentsSheetOpen} onClose={() => setAgentsSheetOpen(false)} title="Agents">
-        <div>Agents (T7)</div>
+        <AgentsScreen variant="sheet" onSelect={handleAgentSelectInSheet} />
       </BottomSheet>
       <BottomSheet
         open={commandsSheetOpen}
