@@ -21,8 +21,10 @@
 
 .ember-shell-content {
   flex: 1;
-  overflow: auto;
-  -webkit-overflow-scrolling: touch;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .ember-screen-placeholder {
@@ -149,6 +151,7 @@
 /* ChatScreen Layout */
 .ember-chat-timeline {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
@@ -156,6 +159,11 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.ember-composer,
+.ember-composer-wrap {
+  flex-shrink: 0;
 }
 
 .ember-chat-empty,
@@ -497,6 +505,10 @@
 
 /* SessionsScreen */
 .ember-sessions-screen {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   padding: 18px;
   display: flex;
   flex-direction: column;
@@ -720,7 +732,8 @@
 .ember-agents-screen {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
 }
 
 .ember-agents-screen-body,
@@ -870,7 +883,8 @@
 .ember-commands-screen {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
 }
 
 .ember-commands-screen-body,
@@ -1039,7 +1053,8 @@
 .ember-settings-screen {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
