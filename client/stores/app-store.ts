@@ -154,6 +154,8 @@ export type ServerPaths = {
   homeDirectory: string;
 };
 
+export type ScreenName = "sessions" | "agents" | "chat" | "commands" | "settings";
+
 interface AppState {
   // Connection
   connectionState: ConnectionState;
@@ -266,6 +268,10 @@ interface AppState {
   setDirectoryListing: (listing: DirectoryListing | null) => void;
   setIsLoadingDirectories: (loading: boolean) => void;
   setServerPaths: (paths: ServerPaths) => void;
+
+  // Ember UI screen state
+  activeScreen: ScreenName;
+  setActiveScreen: (screen: ScreenName) => void;
 }
 
 function updateSession(
@@ -635,4 +641,7 @@ export const useAppStore = create<AppState>((set) => ({
   setDirectoryListing: (directoryListing) => set({ directoryListing }),
   setIsLoadingDirectories: (isLoadingDirectories) => set({ isLoadingDirectories }),
   setServerPaths: (serverPaths) => set({ serverPaths }),
+
+  activeScreen: "chat",
+  setActiveScreen: (activeScreen) => set({ activeScreen }),
 }));

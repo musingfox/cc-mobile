@@ -2,6 +2,7 @@ import { ChevronRight, Settings as SettingsIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import ChatView from "./components/ChatView";
 import DebugOverlay from "./components/DebugOverlay";
+import MobileShell from "./components/ember/MobileShell";
 import InputBar from "./components/InputBar";
 import ModelPicker from "./components/ModelPicker";
 import PermissionBar from "./components/PermissionBar";
@@ -175,112 +176,117 @@ export default function App() {
   const isDisabled = connectionState !== "connected" || !activeSessionId;
 
   return (
-    <div className={`app theme-${theme}`}>
-      <ToastProvider theme={theme} />
+    <ToastProvider theme={theme}>
+      <div className={`app theme-${theme}`}>
+        {theme === "ember" ? (
+          <MobileShell />
+        ) : (
+          <>
+            <div className="status-bar">
+              <div className="status-bar-row">
+                <img
+                  src={
+                    theme === "light"
+                      ? "/logo-light.svg"
+                      : theme === "claude"
+                        ? "/logo-claude.svg"
+                        : "/logo.svg"
+                  }
+                  alt="CCMobile"
+                  className="status-bar-logo"
+                />
+                <div className={`status-dot ${connectionState}`} />
+                <span className="status-label">{getStatusLabel()}</span>
+                {formatUsage() && <span className="status-usage">{formatUsage()}</span>}
+                <button
+                  type="button"
+                  className="status-settings-btn"
+                  onClick={() => setShowSettings(true)}
+                >
+                  <SettingsIcon size={20} />
+                </button>
+              </div>
+              <StatusInfoBar
+                capabilities={capabilities}
+                rateLimitInfo={rateLimitInfo}
+                onModelClick={() => setShowModelPicker(true)}
+              />
+            </div>
 
-      <div className="status-bar">
-        <div className="status-bar-row">
-          <img
-            src={
-              theme === "light"
-                ? "/logo-light.svg"
-                : theme === "claude"
-                  ? "/logo-claude.svg"
-                  : "/logo.svg"
-            }
-            alt="CCMobile"
-            className="status-bar-logo"
-          />
-          <div className={`status-dot ${connectionState}`} />
-          <span className="status-label">{getStatusLabel()}</span>
-          {formatUsage() && <span className="status-usage">{formatUsage()}</span>}
-          <button
-            type="button"
-            className="status-settings-btn"
-            onClick={() => setShowSettings(true)}
-          >
-            <SettingsIcon size={20} />
-          </button>
-        </div>
-        <StatusInfoBar
-          capabilities={capabilities}
-          rateLimitInfo={rateLimitInfo}
-          onModelClick={() => setShowModelPicker(true)}
-        />
+            {connectionState === "disconnected" && (
+              <div className="offline-banner">
+                {isOnline
+                  ? "Connection lost — reconnecting..."
+                  : "You are offline — cached content available"}
+              </div>
+            )}
+
+            <SessionTabs />
+
+            <ChatView
+              messages={activeSession?.messages ?? []}
+              resolvedActions={activeSession?.resolvedActions}
+              isStreaming={activeSession?.isStreaming}
+              activeToolStatus={activeSession?.activeToolStatus}
+              activeTools={activeSession?.activeTools}
+              activeAgents={activeSession?.activeAgents}
+              activeHook={activeSession?.activeHook}
+              cwd={activeSession?.cwd}
+              onResumeSession={(cwd) => {
+                setResumeCwd(cwd);
+                setShowResumeModal(true);
+              }}
+            />
+
+            <QuickActions capabilities={capabilities} disabled={isDisabled} />
+
+            <PermissionBar
+              pending={activeSession?.pendingPermission ?? null}
+              onApprove={() => activeSessionId && wsService.approvePermission(activeSessionId)}
+              onDeny={() => activeSessionId && wsService.denyPermission(activeSessionId)}
+              onAnswer={(answers) =>
+                activeSessionId && wsService.answerPermission(activeSessionId, answers)
+              }
+            />
+
+            <InputBar
+              onSend={(content) => activeSessionId && wsService.send(activeSessionId, content)}
+              disabled={isDisabled}
+              capabilities={capabilities}
+              onOpenCommandPanel={() => setOpenPanel("command")}
+              onOpenAgentPanel={() => setOpenPanel("agent")}
+              activeSessionId={activeSessionId}
+            />
+
+            {showSettings && <Settings onClose={() => setShowSettings(false)} />}
+            {showModelPicker && <ModelPicker onClose={() => setShowModelPicker(false)} />}
+
+            {openPanel && (
+              <PickerPanel
+                mode={openPanel}
+                capabilities={capabilities}
+                disabled={isDisabled}
+                onSelect={(value) => {
+                  useAppStore.getState().setInputDraft(`${value} `);
+                  setOpenPanel(null);
+                }}
+                onClose={() => setOpenPanel(null)}
+              />
+            )}
+
+            <SessionListModal
+              isOpen={showResumeModal}
+              dir={resumeCwd}
+              onClose={() => setShowResumeModal(false)}
+              onSelectSession={(sdkSessionId, cwd) => {
+                wsService.resumeSession(sdkSessionId, cwd);
+                setShowResumeModal(false);
+              }}
+            />
+          </>
+        )}
+        <DebugOverlay />
       </div>
-
-      {connectionState === "disconnected" && (
-        <div className="offline-banner">
-          {isOnline
-            ? "Connection lost — reconnecting..."
-            : "You are offline — cached content available"}
-        </div>
-      )}
-
-      <SessionTabs />
-
-      <ChatView
-        messages={activeSession?.messages ?? []}
-        resolvedActions={activeSession?.resolvedActions}
-        isStreaming={activeSession?.isStreaming}
-        activeToolStatus={activeSession?.activeToolStatus}
-        activeTools={activeSession?.activeTools}
-        activeAgents={activeSession?.activeAgents}
-        activeHook={activeSession?.activeHook}
-        cwd={activeSession?.cwd}
-        onResumeSession={(cwd) => {
-          setResumeCwd(cwd);
-          setShowResumeModal(true);
-        }}
-      />
-
-      <QuickActions capabilities={capabilities} disabled={isDisabled} />
-
-      <PermissionBar
-        pending={activeSession?.pendingPermission ?? null}
-        onApprove={() => activeSessionId && wsService.approvePermission(activeSessionId)}
-        onDeny={() => activeSessionId && wsService.denyPermission(activeSessionId)}
-        onAnswer={(answers) =>
-          activeSessionId && wsService.answerPermission(activeSessionId, answers)
-        }
-      />
-
-      <InputBar
-        onSend={(content) => activeSessionId && wsService.send(activeSessionId, content)}
-        disabled={isDisabled}
-        capabilities={capabilities}
-        onOpenCommandPanel={() => setOpenPanel("command")}
-        onOpenAgentPanel={() => setOpenPanel("agent")}
-        activeSessionId={activeSessionId}
-      />
-
-      {showSettings && <Settings onClose={() => setShowSettings(false)} />}
-      {showModelPicker && <ModelPicker onClose={() => setShowModelPicker(false)} />}
-
-      {openPanel && (
-        <PickerPanel
-          mode={openPanel}
-          capabilities={capabilities}
-          disabled={isDisabled}
-          onSelect={(value) => {
-            useAppStore.getState().setInputDraft(`${value} `);
-            setOpenPanel(null);
-          }}
-          onClose={() => setOpenPanel(null)}
-        />
-      )}
-
-      <SessionListModal
-        isOpen={showResumeModal}
-        dir={resumeCwd}
-        onClose={() => setShowResumeModal(false)}
-        onSelectSession={(sdkSessionId, cwd) => {
-          wsService.resumeSession(sdkSessionId, cwd);
-          setShowResumeModal(false);
-        }}
-      />
-
-      <DebugOverlay />
-    </div>
+    </ToastProvider>
   );
 }

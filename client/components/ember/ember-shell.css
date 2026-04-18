@@ -1,0 +1,147 @@
+/* MobileShell Layout */
+.ember-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+.ember-connection-banner {
+  flex-shrink: 0;
+  background: var(--accent-error);
+  color: var(--bg-primary);
+  padding: 8px 18px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  text-align: center;
+  letter-spacing: 0.3px;
+}
+
+.ember-shell-content {
+  flex: 1;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ember-screen-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--text-secondary);
+  letter-spacing: 0.5px;
+}
+
+/* ScreenHeader */
+.ember-screen-header {
+  flex-shrink: 0;
+  background: var(--glass-bg);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--ember-hair-neutral);
+}
+
+.ember-screen-header-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+}
+
+.ember-screen-header-left,
+.ember-screen-header-right {
+  display: flex;
+  align-items: center;
+}
+
+.ember-screen-header-right {
+  margin-left: auto;
+}
+
+.ember-screen-header-pill {
+  display: inline-block;
+  padding: 2px 6px;
+  border: 1px solid var(--ember-hair-neutral);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  color: var(--accent-primary);
+  text-transform: lowercase;
+}
+
+.ember-screen-header-title {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.3px;
+  margin: 0;
+}
+
+.ember-screen-header-subtitle {
+  padding: 0 18px 4px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  letter-spacing: 0.3px;
+}
+
+/* BottomTabBar */
+.ember-tab-bar {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-around;
+  align-items: stretch;
+  background: var(--bg-primary);
+  border-top: 1px solid var(--ember-hair-neutral);
+  padding-bottom: max(22px, env(safe-area-inset-bottom));
+}
+
+.ember-tab-button {
+  all: unset;
+  box-sizing: border-box;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  color: var(--text-secondary);
+}
+
+.ember-tab-button--active {
+  color: var(--accent-primary);
+}
+
+.ember-tab-accent {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 44px;
+  height: 2px;
+  background: var(--accent-primary);
+  border-radius: 0 0 2px 2px;
+}
+
+.ember-tab-label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+}
+
+.ember-tab-button--active .ember-tab-label {
+  font-weight: 600;
+}
