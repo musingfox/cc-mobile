@@ -54,11 +54,20 @@ function SessionCard({
     onClose?.();
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onClick();
+    }
+  };
+
   return (
-    <button
-      type="button"
+    <div
       className={`ember-session-card ember-session-card--${variant}`}
       onClick={onClick}
+      onKeyDown={handleKeyDown}
+      role="button"
+      tabIndex={0}
     >
       <div className="ember-session-card-header">
         {badge && (
@@ -87,7 +96,7 @@ function SessionCard({
           <X size={16} />
         </button>
       )}
-    </button>
+    </div>
   );
 }
 

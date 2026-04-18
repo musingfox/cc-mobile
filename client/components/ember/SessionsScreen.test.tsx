@@ -222,7 +222,7 @@ describe("SessionsScreen", () => {
       </div>,
     );
 
-    const card = screen.getByText("project").closest("button");
+    const card = screen.getByText("project").closest('[role="button"]');
     expect(card).toBeDefined();
     fireEvent.click(card!);
 
@@ -257,7 +257,7 @@ describe("SessionsScreen", () => {
       </div>,
     );
 
-    const card = screen.getByText("Recent session").closest("button");
+    const card = screen.getByText("Recent session").closest('[role="button"]');
     expect(card).toBeDefined();
     fireEvent.click(card!);
 
@@ -368,7 +368,7 @@ describe("SessionsScreen", () => {
       </div>,
     );
 
-    const card = screen.getByText("project").closest("button");
+    const card = screen.getByText("project").closest('[role="button"]');
     expect(card).toBeDefined();
 
     // Check via CSS class that should enforce min-height: 44px
