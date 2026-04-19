@@ -12,9 +12,10 @@ export default function Avatar({
   shape = "circle",
 }: AvatarProps) {
   // Extract 1-2 characters for avatar text
-  const chars = label
+  const chars = (label ?? "")
     .split(" ")
     .map((word) => word[0])
+    .filter(Boolean)
     .join("")
     .slice(0, 2)
     .toUpperCase();

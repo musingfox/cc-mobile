@@ -229,9 +229,25 @@ export function createWsPlugin(
 
               // Extract and cache capabilities from system init message
               if (msg.type === "system" && msg.subtype === "init") {
+                const toNamed = <T extends { name: string }>(arr: unknown): T[] => {
+                  if (!Array.isArray(arr)) return [];
+                  return arr
+                    .map((item) => {
+                      if (typeof item === "string") return { name: item } as T;
+                      if (
+                        item &&
+                        typeof item === "object" &&
+                        typeof (item as { name?: unknown }).name === "string"
+                      ) {
+                        return item as T;
+                      }
+                      return null;
+                    })
+                    .filter((x): x is T => x !== null);
+                };
                 cachedCapabilities = {
-                  commands: (msg.slash_commands as string[]) || [],
-                  agents: (msg.agents as string[]) || [],
+                  commands: toNamed(msg.slash_commands),
+                  agents: toNamed(msg.agents),
                   model: (msg.model as string) || "unknown",
                 };
                 saveCachedCapabilities(cachedCapabilities);
