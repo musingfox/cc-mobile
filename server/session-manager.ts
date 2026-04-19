@@ -213,9 +213,30 @@ export class SessionManager {
 
     try {
       const [commands, agents] = await Promise.all([q.supportedCommands(), q.supportedAgents()]);
+      const toCommand = (c: unknown): { name: string; description?: string } => {
+        if (typeof c === "string") return { name: c };
+        const obj = c as { name?: unknown; description?: unknown };
+        return {
+          name: typeof obj.name === "string" ? obj.name : String(obj.name ?? ""),
+          ...(typeof obj.description === "string" ? { description: obj.description } : {}),
+        };
+      };
+      const toAgent = (
+        a: unknown,
+      ): { name: string; description?: string; allowedTools?: string[] } => {
+        if (typeof a === "string") return { name: a };
+        const obj = a as { name?: unknown; description?: unknown; allowedTools?: unknown };
+        return {
+          name: typeof obj.name === "string" ? obj.name : String(obj.name ?? ""),
+          ...(typeof obj.description === "string" ? { description: obj.description } : {}),
+          ...(Array.isArray(obj.allowedTools)
+            ? { allowedTools: obj.allowedTools.filter((t): t is string => typeof t === "string") }
+            : {}),
+        };
+      };
       return {
-        commands: commands.map((name) => ({ name })),
-        agents: agents.map((name) => ({ name })),
+        commands: commands.map(toCommand),
+        agents: agents.map(toAgent),
         model: this.selectedModel,
       };
     } catch {
