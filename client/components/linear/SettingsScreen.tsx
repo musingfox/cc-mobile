@@ -65,6 +65,7 @@ export default function SettingsScreen({ onNavigate }: Props) {
   const setStorePermMode = useAppStore((s) => s.setPermissionMode);
 
   const model = useSettingsStore((s) => s.model);
+  const setModel = useSettingsStore((s) => s.setModel);
   const capabilities = useAppStore((s) => s.capabilities);
 
   const notificationsEnabled = useSettingsStore((s) => s.notificationsEnabled);
@@ -76,12 +77,19 @@ export default function SettingsScreen({ onNavigate }: Props) {
   const envVars = useSettingsStore((s) => s.envVars);
 
   const account = capabilities?.accountInfo;
+  const models = capabilities?.models ?? [];
 
   const handleSelectMode = (id: string) => {
     hapticService.tap();
     setPermissionMode(id);
     setStorePermMode(id);
     wsService.setPermissionMode(id);
+  };
+
+  const handleSelectModel = (value: string) => {
+    hapticService.tap();
+    setModel(value);
+    wsService.setModel(value);
   };
 
   return (
@@ -143,12 +151,43 @@ export default function SettingsScreen({ onNavigate }: Props) {
               </div>
               <div className="lin-settings-row-value">Linear</div>
             </div>
-            <div className="lin-settings-row is-static">
-              <div className="lin-settings-row-main">
-                <div className="lin-settings-row-title">Model</div>
+            {capabilities === null ? (
+              <div className="lin-settings-row is-static">
+                <div className="lin-settings-row-main">
+                  <div className="lin-settings-row-title">Model</div>
+                  <div className="lin-settings-row-desc">Loading models…</div>
+                </div>
+                <div className="lin-settings-row-value is-mono">{model || "—"}</div>
               </div>
-              <div className="lin-settings-row-value is-mono">{model || "—"}</div>
-            </div>
+            ) : models.length === 0 ? (
+              <div className="lin-settings-row is-static">
+                <div className="lin-settings-row-main">
+                  <div className="lin-settings-row-title">Model</div>
+                </div>
+                <div className="lin-settings-row-value is-mono">{model || "—"}</div>
+              </div>
+            ) : (
+              models.map((m) => {
+                const selected = m.value === model;
+                return (
+                  <button
+                    key={m.value}
+                    type="button"
+                    className="lin-settings-row"
+                    onClick={() => handleSelectModel(m.value)}
+                  >
+                    <span className={`lin-radio ${selected ? "is-selected" : ""}`} aria-hidden>
+                      {selected && <span className="lin-radio-dot" />}
+                    </span>
+                    <div className="lin-settings-row-main">
+                      <div className="lin-settings-row-title">{m.displayName}</div>
+                      {m.description && <div className="lin-settings-row-desc">{m.description}</div>}
+                    </div>
+                    <div className="lin-settings-row-value is-mono">{m.value}</div>
+                  </button>
+                );
+              })
+            )}
           </div>
         </section>
 
