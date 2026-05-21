@@ -1,0 +1,72 @@
+.lin-ask-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lin-ask-header-label {
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  color: #6a6a6a;
+  text-transform: uppercase;
+}
+
+.lin-ask-question {
+  font-size: 14px;
+  line-height: 1.55;
+  color: #ececec;
+}
+
+.lin-ask-actions {
+  flex-direction: column;
+}
+
+.option-button.lin-settings-row {
+  width: 100%;
+  background: #17171a;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  border-top-color: rgba(255, 255, 255, 0.07);
+}
+
+.option-button.lin-settings-row + .option-button.lin-settings-row {
+  margin-top: 6px;
+}
+
+.custom-answer-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.custom-answer-input {
+  flex: 1;
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #0e0e10;
+  color: #ececec;
+  font-size: 14px;
+  outline: none;
+}
+
+.custom-answer-input:focus {
+  border-color: rgba(236, 236, 236, 0.6);
+}
+
+.custom-answer-row .permission-btn {
+  flex: 0 0 auto;
+  padding: 8px 16px;
+}
+
+.question-error {
+  padding: 12px;
+  border: 1px solid rgba(196, 138, 138, 0.55);
+  border-radius: 8px;
+  background: rgba(196, 138, 138, 0.08);
+  color: #d49898;
+  font-size: 14px;
+}

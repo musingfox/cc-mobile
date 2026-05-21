@@ -1,4 +1,5 @@
 import { useState } from "react";
+import "./linear/ask-question.css";
 import OptionButton from "./OptionButton";
 import QuestionStepper from "./QuestionStepper";
 
@@ -21,13 +22,16 @@ type AskUserQuestionUIProps = {
 export default function AskUserQuestionUI({ questions, onAnswer }: AskUserQuestionUIProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [expandedOptionIndex, setExpandedOptionIndex] = useState<number | null>(null);
   const [customAnswer, setCustomAnswer] = useState("");
 
   const currentQuestion = questions[currentIndex];
   const isLastQuestion = currentIndex === questions.length - 1;
 
-  if (currentQuestion?.multiSelect) {
+  if (!currentQuestion) {
+    return null;
+  }
+
+  if (currentQuestion.multiSelect) {
     return <div className="question-error">Multi-select questions are not yet supported</div>;
   }
 
@@ -42,7 +46,6 @@ export default function AskUserQuestionUI({ questions, onAnswer }: AskUserQuesti
         onAnswer(newAnswers);
       } else {
         setCurrentIndex(currentIndex + 1);
-        setExpandedOptionIndex(null);
         setCustomAnswer("");
       }
     }
@@ -62,7 +65,6 @@ export default function AskUserQuestionUI({ questions, onAnswer }: AskUserQuesti
         onAnswer(newAnswers);
       } else {
         setCurrentIndex(currentIndex + 1);
-        setExpandedOptionIndex(null);
         setCustomAnswer("");
       }
     }
@@ -71,7 +73,6 @@ export default function AskUserQuestionUI({ questions, onAnswer }: AskUserQuesti
   const handleNext = () => {
     if (currentIndex < questions.length - 1) {
       setCurrentIndex(currentIndex + 1);
-      setExpandedOptionIndex(null);
       setCustomAnswer("");
     }
   };
@@ -79,24 +80,23 @@ export default function AskUserQuestionUI({ questions, onAnswer }: AskUserQuesti
   const handlePrevious = () => {
     if (currentIndex > 0) {
       setCurrentIndex(currentIndex - 1);
-      setExpandedOptionIndex(null);
       setCustomAnswer("");
     }
   };
 
   const questionContent = (
-    <div className="ask-user-question-content">
-      <div className="permission-tool-info">
-        <span className="permission-tool-name">{currentQuestion.header || "Question"}</span>
-        <div className="ask-user-question">{currentQuestion.question}</div>
+    <div className="ask-user-question-content lin-ask-content">
+      <div className="permission-tool-info lin-ask-header">
+        <span className="permission-tool-name lin-ask-header-label">
+          {currentQuestion.header || "Question"}
+        </span>
+        <div className="ask-user-question lin-ask-question">{currentQuestion.question}</div>
       </div>
-      <div className="permission-actions ask-user-actions">
-        {currentQuestion.options?.map((option, idx) => (
+      <div className="permission-actions ask-user-actions lin-ask-actions">
+        {currentQuestion.options?.map((option) => (
           <OptionButton
             key={option.label}
             option={option}
-            expanded={expandedOptionIndex === idx}
-            onTogglePreview={() => setExpandedOptionIndex(expandedOptionIndex === idx ? null : idx)}
             onSelect={() => handleSelectOption(option.label)}
           />
         ))}
