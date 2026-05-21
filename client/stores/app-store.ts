@@ -140,6 +140,7 @@ export type SessionState = {
   agentState: "idle" | "running" | "requires_action" | null;
   receivedAuthoritativeState: boolean;
   historyUnknownRoleWarned?: boolean;
+  permissionMode?: string;
 };
 
 type ConnectionState = "connecting" | "connected" | "disconnected";
@@ -233,6 +234,7 @@ interface AppState {
   // Permission mode (server-side setting)
   permissionMode: string;
   setPermissionMode: (mode: string) => void;
+  setSessionPermissionMode: (sessionId: string, mode: string | undefined) => void;
 
   // Global error (e.g., invalid cwd)
   globalError: string | null;
@@ -315,6 +317,7 @@ export const useAppStore = create<AppState>((set) => ({
         agentState: null,
         receivedAuthoritativeState: false,
         historyUnknownRoleWarned: false,
+        permissionMode: undefined,
       });
       return {
         sessions: next,
@@ -447,6 +450,13 @@ export const useAppStore = create<AppState>((set) => ({
 
   permissionMode: "default",
   setPermissionMode: (permissionMode) => set({ permissionMode }),
+  setSessionPermissionMode: (sessionId, mode) =>
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (s) => ({
+        ...s,
+        permissionMode: mode,
+      })),
+    })),
 
   globalError: null,
   setGlobalError: (globalError) => set({ globalError }),

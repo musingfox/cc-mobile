@@ -687,11 +687,17 @@ class WsService {
           effort?: string | null;
           allowedRoots?: string[] | null;
           homeDirectory?: string;
+          sessionId?: string;
         };
         const settingsStore = useSettingsStore.getState();
         if (config?.permissionMode) {
-          store.setPermissionMode(config.permissionMode);
-          settingsStore.setPermissionMode(config.permissionMode);
+          if (config.sessionId) {
+            // Per-session override echo — do NOT touch global default
+            store.setSessionPermissionMode(config.sessionId, config.permissionMode);
+          } else {
+            store.setPermissionMode(config.permissionMode);
+            settingsStore.setPermissionMode(config.permissionMode);
+          }
         }
         if (config?.model) {
           store.setSelectedModel(config.model);
@@ -884,9 +890,9 @@ class WsService {
     });
   }
 
-  setPermissionMode(mode: string) {
+  setPermissionMode(mode: string, sessionId?: string) {
     if (!this.ws) return;
-    this.sendMessage({ type: "set_permission_mode", mode });
+    this.sendMessage({ type: "set_permission_mode", mode, ...(sessionId && { sessionId }) });
   }
 
   setModel(model: string, sessionId?: string) {
