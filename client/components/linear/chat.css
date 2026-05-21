@@ -60,6 +60,29 @@
   flex-shrink: 0;
 }
 
+.lin-chat-mode-chip {
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: #6a6a6a;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  padding: 3px 9px;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.lin-chat-mode-chip:hover {
+  color: #ececec;
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.lin-chat-mode-chip.is-override {
+  color: #d6b35a;
+  border-color: rgba(214, 179, 90, 0.4);
+}
+
 /* Empty state ---------------------------------------------- */
 
 .lin-chat-empty,
