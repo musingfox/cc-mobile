@@ -615,10 +615,11 @@ class WsService {
         break;
 
       case "capabilities":
+        // Zod's union+transform pipeline confuses TS inference; cast to the store shape.
         store.setCapabilities({
-          commands: msg.commands ?? [],
-          agents: msg.agents ?? [],
-          model: msg.model ?? "unknown",
+          commands: (msg.commands as Capabilities["commands"]) ?? [],
+          agents: (msg.agents as Capabilities["agents"]) ?? [],
+          model: (msg.model as string) ?? "unknown",
           ...(msg.models ? { models: msg.models as Capabilities["models"] } : {}),
           ...(msg.accountInfo
             ? { accountInfo: msg.accountInfo as Capabilities["accountInfo"] }

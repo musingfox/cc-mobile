@@ -41,7 +41,12 @@ class NotificationService {
     }
 
     try {
-      await registration.showNotification(title, { body, tag, renotify: true });
+      // `renotify` is a valid showNotification option but not yet in lib.dom NotificationOptions.
+      await registration.showNotification(title, {
+        body,
+        tag,
+        renotify: true,
+      } as NotificationOptions & { renotify?: boolean });
     } catch (error) {
       console.error("[notification] showNotification failed:", error);
     }

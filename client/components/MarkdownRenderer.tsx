@@ -128,14 +128,15 @@ function renderMarkdownToDOM(
 }
 
 async function enhanceCodeBlocks(container: HTMLElement, theme: string): Promise<void> {
-  const codeBlocks = container.querySelectorAll("pre code");
+  const codeBlocks = Array.from(container.querySelectorAll("pre code"));
 
   for (const codeEl of codeBlocks) {
     const pre = codeEl.parentElement;
-    if (!pre || pre.dataset.highlighted === "true") continue;
+    if (!(pre instanceof HTMLElement) || pre.dataset.highlighted === "true") continue;
 
     // Extract language from class="language-xxx"
-    const langClass = Array.from(codeEl.classList).find((c) => c.startsWith("language-"));
+    const classes = Array.from(codeEl.classList) as string[];
+    const langClass = classes.find((c) => c.startsWith("language-"));
     const lang = langClass?.replace("language-", "") || "";
 
     // Skip mermaid blocks (handled separately)
@@ -156,11 +157,11 @@ async function enhanceCodeBlocks(container: HTMLElement, theme: string): Promise
 }
 
 function renderMermaidBlocks(container: HTMLElement): void {
-  const mermaidCodes = container.querySelectorAll("code.language-mermaid");
+  const mermaidCodes = Array.from(container.querySelectorAll("code.language-mermaid"));
 
   for (const codeEl of mermaidCodes) {
     const pre = codeEl.parentElement;
-    if (!pre || pre.dataset.mermaid === "true") continue;
+    if (!(pre instanceof HTMLElement) || pre.dataset.mermaid === "true") continue;
 
     const code = codeEl.textContent || "";
     pre.dataset.mermaid = "true";
