@@ -139,6 +139,7 @@ export type SessionState = {
   resolvedActions: ResolvedAction[];
   agentState: "idle" | "running" | "requires_action" | null;
   receivedAuthoritativeState: boolean;
+  historyUnknownRoleWarned?: boolean;
 };
 
 type ConnectionState = "connecting" | "connected" | "disconnected";
@@ -313,6 +314,7 @@ export const useAppStore = create<AppState>((set) => ({
         resolvedActions: [],
         agentState: null,
         receivedAuthoritativeState: false,
+        historyUnknownRoleWarned: false,
       });
       return {
         sessions: next,
@@ -455,17 +457,35 @@ export const useAppStore = create<AppState>((set) => ({
   sessionList: [],
   setSessionList: (sessions) => set({ sessionList: sessions }),
   loadSessionHistory: (sessionId, messages) =>
-    set((state) => ({
-      sessions: updateSession(state.sessions, sessionId, (s) => ({
-        ...s,
-        messages: messages.map((m) => ({
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+
+      let warnedUnknownRole = false;
+      const normalizedMessages: Message[] = messages.map((m) => {
+        const role: "user" | "assistant" =
+          m.role === "user" || m.role === "assistant" ? m.role : "assistant";
+        if (m.role !== "user" && m.role !== "assistant") warnedUnknownRole = true;
+        return {
           id: m.id,
-          role: m.role as "user" | "assistant",
+          role,
           content: m.content,
           timestamp: m.timestamp,
-        })),
-      })),
-    })),
+        };
+      });
+
+      if (warnedUnknownRole && !session.historyUnknownRoleWarned) {
+        console.warn("[app-store] unknown history role coerced to assistant", { sessionId });
+      }
+
+      const next = new Map(state.sessions);
+      next.set(sessionId, {
+        ...session,
+        messages: normalizedMessages,
+        historyUnknownRoleWarned: session.historyUnknownRoleWarned || warnedUnknownRole,
+      });
+      return { sessions: next };
+    }),
 
   addActiveTool: (sessionId, toolUseId, tool) =>
     set((state) => ({
