@@ -6,7 +6,7 @@ import { useAppStore } from "../../stores/app-store";
 import { useSettingsStore } from "../../stores/settings-store";
 import SettingsScreen from "./SettingsScreen";
 
-describe("SettingsScreen model picker", () => {
+describe("SettingsScreen", () => {
   const originalTap = hapticService.tap;
   const originalSetModel = wsService.setModel;
 
@@ -111,4 +111,14 @@ describe("SettingsScreen model picker", () => {
     expect(getByText("Model")).not.toBeNull();
     expect(queryByText("Loading models…")).toBeNull();
   });
+
+  test("opens env var sheet from workspace environment row", () => {
+    const { getByText, getByPlaceholderText } = render(<SettingsScreen onNavigate={() => {}} />);
+
+    fireEvent.click(getByText("Environment"));
+
+    expect(getByPlaceholderText("Key")).not.toBeNull();
+    expect(getByPlaceholderText("Value")).not.toBeNull();
+  });
+
 });

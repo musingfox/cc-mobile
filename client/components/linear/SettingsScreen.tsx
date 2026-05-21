@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Icon } from "../../design/icons";
 import { tokens as T } from "../../design/tokens";
 import { hapticService } from "../../services/haptic";
@@ -5,6 +6,7 @@ import { wsService } from "../../services/ws-service";
 import { useAppStore } from "../../stores/app-store";
 import { useSettingsStore } from "../../stores/settings-store";
 import type { LinearScreen } from "./AppShell";
+import EnvVarSheet from "./EnvVarSheet";
 import "./settings.css";
 
 interface Props {
@@ -78,6 +80,7 @@ export default function SettingsScreen({ onNavigate }: Props) {
 
   const account = capabilities?.accountInfo;
   const models = capabilities?.models ?? [];
+  const [envOpen, setEnvOpen] = useState(false);
 
   const handleSelectMode = (id: string) => {
     hapticService.tap();
@@ -222,12 +225,16 @@ export default function SettingsScreen({ onNavigate }: Props) {
               </div>
               <div className="lin-settings-row-value is-mono">{defaultCwd || "—"}</div>
             </div>
-            <div className="lin-settings-row is-static">
+            <button
+              type="button"
+              className="lin-settings-row"
+              onClick={() => setEnvOpen(true)}
+            >
               <div className="lin-settings-row-main">
                 <div className="lin-settings-row-title">Environment</div>
               </div>
               <div className="lin-settings-row-value">{Object.keys(envVars).length} vars</div>
-            </div>
+            </button>
             {account?.email && (
               <div className="lin-settings-row is-static">
                 <div className="lin-settings-row-main">
@@ -239,6 +246,7 @@ export default function SettingsScreen({ onNavigate }: Props) {
           </div>
         </section>
       </div>
+      <EnvVarSheet open={envOpen} onClose={() => setEnvOpen(false)} />
     </div>
   );
 }

@@ -1,0 +1,42 @@
+.lin-envvar-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lin-envvar-list {
+  background: #17171a;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.lin-envvar-value {
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  word-break: break-all;
+}
+
+.lin-envvar-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 8px;
+}
+
+.lin-envvar-input {
+  min-height: 40px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #0e0e10;
+  color: #ececec;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.lin-envvar-input::placeholder {
+  color: #6a6a6a;
+}
+
+.lin-envvar-error {
+  font-size: 12px;
+  color: #d49898;
+}
