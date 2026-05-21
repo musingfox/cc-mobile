@@ -1,10 +1,13 @@
+import { useMemo } from "react";
 import { loadPins } from "../../services/pins";
 import { useAppStore } from "../../stores/app-store";
 import "./quick-actions.css";
 
 export default function QuickActions() {
   const setInputDraft = useAppStore((s) => s.setInputDraft);
-  const pins = loadPins();
+  // Pins live in localStorage; long-press-to-pin is not wired yet, so the
+  // list is effectively constant per session — read once per mount.
+  const pins = useMemo(() => loadPins(), []);
 
   const handlePinClick = (pin: string) => {
     setInputDraft(`/${pin} `);

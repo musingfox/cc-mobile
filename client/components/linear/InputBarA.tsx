@@ -59,15 +59,18 @@ const InputBarA = forwardRef<InputBarAHandle, Props>(function InputBarA(
     ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
   }, [inputDraft]);
 
+  // Reads latest draft via store getter so the handle doesn't need
+  // re-creating on every keystroke.
   const insertAtCursor = (text: string) => {
     const ta = textareaRef.current;
+    const current = useAppStore.getState().inputDraft;
     if (!ta) {
-      setInputDraft(inputDraft + text);
+      setInputDraft(current + text);
       return;
     }
-    const start = ta.selectionStart ?? inputDraft.length;
-    const end = ta.selectionEnd ?? inputDraft.length;
-    const next = inputDraft.slice(0, start) + text + inputDraft.slice(end);
+    const start = ta.selectionStart ?? current.length;
+    const end = ta.selectionEnd ?? current.length;
+    const next = current.slice(0, start) + text + current.slice(end);
     setInputDraft(next);
     requestAnimationFrame(() => {
       ta.focus();
@@ -81,7 +84,7 @@ const InputBarA = forwardRef<InputBarAHandle, Props>(function InputBarA(
       insertAtCursor,
       focus: () => textareaRef.current?.focus(),
     }),
-    [inputDraft],
+    [setInputDraft],
   );
 
   const handleSend = () => {

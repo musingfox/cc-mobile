@@ -103,16 +103,20 @@ export default function FolderPicker({
       </div>
 
       <div className="lin-folder-actions">
-        {directoryListing?.parent && (
-          <button
-            type="button"
-            className="lin-folder-action"
-            onClick={() => handleNavigate(directoryListing.parent!)}
-            disabled={isLoading}
-          >
-            Go Up
-          </button>
-        )}
+        {(() => {
+          const parent = directoryListing?.parent;
+          if (!parent) return null;
+          return (
+            <button
+              type="button"
+              className="lin-folder-action"
+              onClick={() => handleNavigate(parent)}
+              disabled={isLoading}
+            >
+              Go Up
+            </button>
+          );
+        })()}
         <button
           type="button"
           className="lin-folder-action is-primary"
