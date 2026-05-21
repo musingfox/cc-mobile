@@ -1,0 +1,43 @@
+.lin-activity {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lin-activity-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.lin-activity-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.lin-activity-name {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.25px;
+  text-transform: uppercase;
+  color: #a0a0a0;
+}
+
+.lin-activity-target {
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: #ececec;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.lin-activity-elapsed {
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  color: #6a6a6a;
+}
