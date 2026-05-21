@@ -1,0 +1,27 @@
+.lin-picker {
+  display: flex;
+  flex-direction: column;
+  background: #17171a;
+  margin: -16px;
+}
+
+.lin-picker-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.lin-picker-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.lin-picker-state {
+  min-height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 20px;
+  color: #6a6a6a;
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
