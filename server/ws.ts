@@ -9,7 +9,6 @@ import {
 } from "./capabilities-cache";
 import type { ServerConfig } from "./config";
 import { EventBuffer } from "./event-buffer";
-import { HeartbeatManager } from "./heartbeat";
 import { buildUrl } from "./path-utils";
 import type { createPermissionHandler, PendingPermissionSnapshot } from "./permission-bridge";
 import { ClientMessage, ServerMessage } from "./protocol";
@@ -79,7 +78,6 @@ type PermissionHandler = ReturnType<PermissionHandlerFactory>;
 
 interface WsData {
   currentSessionId?: string;
-  heartbeat?: HeartbeatManager;
 }
 
 export function createWsPlugin(
@@ -142,11 +140,6 @@ export function createWsPlugin(
         persistentState.permissionHandler.resumePending(persistentState.pausedPermissions);
         persistentState.pausedPermissions = [];
       }
-
-      // Start heartbeat
-      const heartbeat = new HeartbeatManager(ws);
-      (ws.data as WsData).heartbeat = heartbeat;
-      heartbeat.start();
 
       // Send cached capabilities on reconnect
       if (cachedCapabilities) {
@@ -553,10 +546,6 @@ export function createWsPlugin(
             break;
           }
 
-          case "pong": {
-            wsData.heartbeat?.recordPong();
-            break;
-          }
         }
       } catch (error) {
         console.error("[ws] error handling message:", error);
@@ -574,9 +563,6 @@ export function createWsPlugin(
 
     close(ws) {
       const wsData = ws.data as WsData;
-
-      // Stop heartbeat
-      wsData.heartbeat?.stop();
 
       // Pause pending permissions for potential reconnect
       if (persistentState.permissionHandler) {
