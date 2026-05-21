@@ -1,0 +1,11 @@
+.lin-attach-trigger:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.lin-attachment-sheet {
+  display: flex;
+  flex-direction: column;
+  background: #17171a;
+  margin: -16px;
+}
