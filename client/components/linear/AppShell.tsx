@@ -10,7 +10,7 @@ import "./shell.css";
 export type LinearScreen = "projects" | "projectDetail" | "addProject" | "chat" | "settings";
 
 function ConnectionBanner({ state }: { state: string }) {
-  if (state === "connected") return null;
+  if (state !== "disconnected") return null;
   const isOnline = typeof navigator !== "undefined" ? navigator.onLine : true;
   const msg = isOnline ? "Connection lost — reconnecting…" : "Offline — cached content";
   return <div className="lin-connection-banner">{msg}</div>;
