@@ -1,0 +1,203 @@
+/* InputBarA — shared composer for Chat / Quick Actions / Attach screens. */
+
+.lin-input-bar {
+  padding: 10px 12px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  background: #17171a;
+}
+
+/* Attachment chips ----------------------------------------- */
+
+.lin-input-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  margin-bottom: 8px;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+.lin-input-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.lin-chip {
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #0e0e10;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 6px 8px 6px 6px;
+  max-width: 220px;
+}
+
+.lin-chip-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 5px;
+  background: #1f1f23;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-size: cover;
+  background-position: center;
+}
+
+.lin-chip-thumb--image {
+  background: linear-gradient(135deg, #3a3a42, #1f1f23);
+}
+
+.lin-chip-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.lin-chip-name {
+  font-size: 11.5px;
+  color: #ececec;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 130px;
+}
+
+.lin-chip-meta {
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9.5px;
+  color: #6a6a6a;
+}
+
+.lin-chip-close {
+  width: 18px;
+  height: 18px;
+  border-radius: 99px;
+  background: transparent;
+  border: none;
+  color: #a0a0a0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.lin-chip-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: #c2b89a;
+  transition: width 80ms linear;
+}
+
+/* Composer row --------------------------------------------- */
+
+.lin-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  background: #0e0e10;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 4px 4px 4px 12px;
+  min-height: 44px;
+}
+
+.lin-composer-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #ececec;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+  resize: none;
+  padding: 9px 0;
+  max-height: 160px;
+}
+
+.lin-composer-input::placeholder {
+  color: #6a6a6a;
+}
+
+.lin-composer-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.lin-icon-btn {
+  width: 36px;
+  height: 36px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  color: #6a6a6a;
+}
+
+.lin-icon-btn:hover {
+  color: #ececec;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* The legacy AttachmentButton renders its own paperclip via class
+   `input-bar-action-btn`. Constrain it to the Linear sizing. */
+.lin-composer-attach .input-bar-action-btn {
+  width: 36px;
+  height: 36px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: #6a6a6a;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.lin-composer-attach .input-bar-action-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.lin-composer-attach .input-bar-action-btn:hover {
+  color: #ececec;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.lin-send-btn {
+  width: 36px;
+  height: 36px;
+  background: #ececec;
+  border: none;
+  border-radius: 8px;
+  margin-left: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: opacity 120ms ease;
+}
+
+.lin-send-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.lin-send-btn.is-stop {
+  background: #c48a8a;
+}

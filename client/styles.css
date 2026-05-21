@@ -1,7 +1,3 @@
-/* Component Imports */
-@import "./components/ember/ember-primitives.css";
-@import "./components/ember/ember-shell.css";
-
 /* Reset & Base */
 * {
   margin: 0;

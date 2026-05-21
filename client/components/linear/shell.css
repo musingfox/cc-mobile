@@ -1,0 +1,69 @@
+/* Linear AppShell — full-bleed neutral greyscale frame.
+   Variant A uses A_BG (#0e0e10) canvas, fg #ececec, with sans body + mono accents. */
+
+.lin-shell {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #0e0e10;
+  color: #ececec;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+  overflow: hidden;
+  /* Respect iOS safe areas (status bar / home indicator) */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.lin-shell-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.lin-connection-banner {
+  background: rgba(196, 138, 138, 0.12);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  color: #d49898;
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  padding: 6px 16px;
+  text-align: center;
+}
+
+/* Reusable bare-button reset for tappable elements */
+.lin-btn {
+  background: transparent;
+  border: none;
+  color: inherit;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lin-btn:focus {
+  outline: none;
+}
+
+.lin-btn:focus-visible {
+  outline: 1.5px solid rgba(194, 184, 154, 0.8);
+  outline-offset: 1px;
+}
+
+/* Hide scrollbar but keep scrollable */
+.lin-scroll {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.lin-scroll::-webkit-scrollbar {
+  display: none;
+}

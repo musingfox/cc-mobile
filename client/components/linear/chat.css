@@ -1,0 +1,513 @@
+/* A1 ChatScreen — Linear neutral, flat messages with role labels. */
+
+.lin-chat {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #0e0e10;
+  color: #ececec;
+}
+
+/* App bar -------------------------------------------------- */
+
+.lin-chat-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.lin-chat-project {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.lin-chat-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  background: #6ca36c;
+  flex-shrink: 0;
+}
+
+.lin-chat-title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lin-chat-path {
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: #6a6a6a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.lin-chat-model {
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: #6a6a6a;
+  flex-shrink: 0;
+}
+
+/* Empty state ---------------------------------------------- */
+
+.lin-chat-empty,
+.lin-chat-empty-inline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #6a6a6a;
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  padding: 40px 16px;
+}
+
+.lin-chat-empty-inline {
+  flex: 1;
+  padding: 24px 16px;
+  text-align: center;
+}
+
+.lin-chat-empty-btn {
+  background: #ececec;
+  color: #0e0e10;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Scroll body ---------------------------------------------- */
+
+.lin-chat-scroll {
+  flex: 1;
+  min-height: 0;
+  padding: 16px 16px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* Messages ------------------------------------------------- */
+
+.lin-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lin-msg-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.lin-msg--user .lin-msg-label {
+  color: #a0a0a0;
+}
+
+.lin-msg--claude .lin-msg-label {
+  color: #c2b89a;
+}
+
+.lin-msg-body {
+  font-size: 14px;
+  line-height: 1.55;
+  color: #ececec;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.lin-msg--claude .lin-msg-body {
+  line-height: 1.6;
+}
+
+/* Markdown overrides: keep prose readable on dark canvas */
+.lin-md {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #ececec;
+}
+.lin-md p {
+  margin: 0 0 0.6em;
+}
+.lin-md p:last-child {
+  margin-bottom: 0;
+}
+.lin-md code {
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  background: #1f1f23;
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: #ececec;
+}
+.lin-md pre {
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: #17171a;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+.lin-md pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+.lin-md a {
+  color: #c2b89a;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.lin-md ul,
+.lin-md ol {
+  padding-left: 1.4em;
+  margin: 0.4em 0;
+}
+.lin-md li {
+  margin: 0.2em 0;
+}
+.lin-md h1,
+.lin-md h2,
+.lin-md h3 {
+  font-weight: 600;
+  margin: 0.6em 0 0.3em;
+}
+.lin-md h1 {
+  font-size: 18px;
+}
+.lin-md h2 {
+  font-size: 16px;
+}
+.lin-md h3 {
+  font-size: 14px;
+}
+.lin-md blockquote {
+  border-left: 2px solid rgba(255, 255, 255, 0.12);
+  padding-left: 12px;
+  margin: 0.5em 0;
+  color: #a0a0a0;
+}
+
+/* Streaming caret ------------------------------------------ */
+
+.lin-caret {
+  display: inline-block;
+  width: 7px;
+  height: 15px;
+  background: #c2b89a;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: ccd-caret 1s infinite;
+}
+
+/* Thinking card -------------------------------------------- */
+
+.lin-thinking {
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.015);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lin-thinking-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lin-thinking-label {
+  font-size: 12px;
+  color: #c2b89a;
+  font-weight: 500;
+}
+
+.lin-ring {
+  width: 16px;
+  height: 16px;
+  border-radius: 99px;
+  border: 1.5px solid rgba(194, 184, 154, 0.25);
+  border-top-color: #c2b89a;
+  display: inline-block;
+  animation: ccd-spin 1.2s linear infinite;
+}
+
+.lin-mini-ring {
+  width: 12px;
+  height: 12px;
+  border-radius: 99px;
+  border: 1.5px solid rgba(194, 184, 154, 0.25);
+  border-top-color: #c2b89a;
+  display: inline-block;
+  animation: ccd-spin 0.9s linear infinite;
+}
+
+.lin-thinking-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lin-shimmer-bar {
+  display: block;
+  height: 8px;
+  border-radius: 99px;
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    rgba(194, 184, 154, 0.18) 50%,
+    rgba(255, 255, 255, 0.04) 100%
+  );
+  background-size: 200% 100%;
+  animation: ccd-shimmer 1.8s infinite;
+}
+
+/* Live tool activity row ----------------------------------- */
+
+.lin-live-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  color: #a0a0a0;
+}
+
+.lin-live-name {
+  font-weight: 500;
+}
+
+.lin-live-elapsed {
+  color: #6a6a6a;
+  font-size: 10px;
+  margin-left: auto;
+}
+
+/* Tool card ------------------------------------------------ */
+
+.lin-tool-card {
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.lin-tool-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.lin-tool-card-header:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.lin-tool-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+  color: #a0a0a0;
+}
+
+.lin-tool-target {
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  color: #ececec;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lin-tool-body {
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  padding: 8px 10px;
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.lin-tool-result {
+  font-size: 11.5px;
+  color: #a0a0a0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 0;
+}
+
+.lin-tool-diff {
+  font-size: 11.5px;
+  line-height: 1.6;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.lin-tool-diff > div {
+  display: flex;
+  gap: 6px;
+  padding: 0 4px;
+  border-left: 2px solid transparent;
+}
+
+.lin-diff-prefix {
+  color: #6a6a6a;
+  flex-shrink: 0;
+  width: 8px;
+  text-align: center;
+}
+
+.lin-diff-add {
+  background: rgba(138, 168, 138, 0.1);
+  border-left-color: #8aa88a;
+  color: #9ec09e;
+}
+
+.lin-diff-remove {
+  background: rgba(196, 138, 138, 0.1);
+  border-left-color: #c48a8a;
+  color: #d49898;
+}
+
+.lin-diff-context {
+  color: #a0a0a0;
+}
+
+/* Status bar (bottom of scroll, above input) ---------------- */
+
+.lin-status-bar {
+  padding: 6px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  color: #6a6a6a;
+  display: flex;
+  justify-content: space-between;
+}
+
+/* Permission sheet (A2) ------------------------------------ */
+
+.lin-permission {
+  background: #17171a;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 14px 16px 18px;
+  box-shadow: 0 -20px 40px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lin-permission-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lin-permission-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #c4a66a;
+  flex: 1;
+}
+
+.lin-permission-timer {
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  color: #6a6a6a;
+}
+
+.lin-permission-tool {
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ececec;
+}
+
+.lin-permission-target {
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  background: #0e0e10;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: #a0a0a0;
+  word-break: break-all;
+}
+
+.lin-permission-line {
+  color: #6a6a6a;
+}
+
+.lin-permission-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: #6a6a6a;
+}
+
+.lin-permission-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.lin-permission-deny,
+.lin-permission-approve {
+  border-radius: 8px;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.lin-permission-deny {
+  flex: 1;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #ececec;
+  padding: 12px 8px;
+  font-weight: 500;
+}
+
+.lin-permission-approve {
+  flex: 2;
+  background: #ececec;
+  border: none;
+  color: #0e0e10;
+  padding: 12px;
+  font-weight: 600;
+}

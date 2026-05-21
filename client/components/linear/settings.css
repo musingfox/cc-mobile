@@ -1,0 +1,172 @@
+/* A5 SettingsScreen — grouped lists, radios, toggles. */
+
+.lin-settings {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #0e0e10;
+  color: #ececec;
+}
+
+/* Header --------------------------------------------------- */
+
+.lin-settings-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.lin-settings-title {
+  font-size: 16px;
+  font-weight: 600;
+  flex: 1;
+}
+
+/* Body / groups -------------------------------------------- */
+
+.lin-settings-body {
+  flex: 1;
+  min-height: 0;
+  padding: 8px 0 20px;
+}
+
+.lin-settings-group {
+  margin-bottom: 20px;
+}
+
+.lin-settings-group-label {
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  color: #6a6a6a;
+  padding: 0 16px 6px;
+}
+
+.lin-settings-card {
+  background: #17171a;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+/* Row ------------------------------------------------------ */
+
+.lin-settings-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 16px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  cursor: pointer;
+}
+
+.lin-settings-row:first-child {
+  border-top: none;
+}
+
+.lin-settings-row.is-static {
+  cursor: default;
+}
+
+.lin-settings-row:not(.is-static):hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.lin-settings-row-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.lin-settings-row-title {
+  font-size: 13.5px;
+  color: #ececec;
+}
+
+.lin-settings-row-desc {
+  font-size: 11.5px;
+  color: #6a6a6a;
+  line-height: 1.4;
+}
+
+.lin-settings-row-value {
+  font-size: 12px;
+  color: #a0a0a0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 50%;
+}
+
+.lin-settings-row-value.is-mono {
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* Radio ---------------------------------------------------- */
+
+.lin-radio {
+  width: 14px;
+  height: 14px;
+  border-radius: 99px;
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.lin-radio.is-selected {
+  border-color: #ececec;
+}
+
+.lin-radio-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 99px;
+  background: #ececec;
+}
+
+/* Toggle --------------------------------------------------- */
+
+.lin-toggle {
+  width: 34px;
+  height: 20px;
+  border-radius: 99px;
+  border: none;
+  background: rgba(255, 255, 255, 0.12);
+  padding: 2px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  transition: background 150ms ease;
+  flex-shrink: 0;
+}
+
+.lin-toggle.is-on {
+  background: #ececec;
+}
+
+.lin-toggle-knob {
+  width: 16px;
+  height: 16px;
+  border-radius: 99px;
+  background: #a0a0a0;
+  transition:
+    transform 150ms ease,
+    background 150ms ease;
+}
+
+.lin-toggle.is-on .lin-toggle-knob {
+  background: #0e0e10;
+  transform: translateX(14px);
+}
