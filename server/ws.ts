@@ -164,7 +164,6 @@ export function createWsPlugin(
       }
 
       const message = parsed.data;
-      const wsData = ws.data as WsData;
       if (!persistentState.permissionHandler) {
         ws.send({ type: "error", code: "internal_error", message: "No permission handler" });
         return;
@@ -562,8 +561,6 @@ export function createWsPlugin(
     },
 
     close(ws) {
-      const wsData = ws.data as WsData;
-
       // Pause pending permissions for potential reconnect
       if (persistentState.permissionHandler) {
         persistentState.pausedPermissions = persistentState.permissionHandler.pausePending();
