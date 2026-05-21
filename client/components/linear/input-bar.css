@@ -152,30 +152,9 @@
   background: rgba(255, 255, 255, 0.04);
 }
 
-/* The legacy AttachmentButton renders its own paperclip via class
-   `input-bar-action-btn`. Constrain it to the Linear sizing. */
-.lin-composer-attach .input-bar-action-btn {
+.lin-composer-attach .lin-attach-trigger {
   width: 36px;
   height: 36px;
-  background: transparent;
-  border: none;
-  border-radius: 6px;
-  color: #6a6a6a;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  padding: 0;
-}
-
-.lin-composer-attach .input-bar-action-btn svg {
-  width: 15px;
-  height: 15px;
-}
-
-.lin-composer-attach .input-bar-action-btn:hover {
-  color: #ececec;
-  background: rgba(255, 255, 255, 0.04);
 }
 
 .lin-send-btn {

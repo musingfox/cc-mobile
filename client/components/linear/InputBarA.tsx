@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Icon } from "../../design/icons";
 import { tokens as T } from "../../design/tokens";
 import { hapticService } from "../../services/haptic";
@@ -8,7 +8,7 @@ import { wsService } from "../../services/ws-service";
 import { useAppStore } from "../../stores/app-store";
 import { buildContentBlocks } from "../../utils/content-block-builder";
 import { resizeImage } from "../../utils/image-resize";
-import AttachmentButton from "../AttachmentButton";
+import AttachmentSheet from "./AttachmentSheet";
 import "./input-bar.css";
 
 interface Props {
@@ -17,6 +17,11 @@ interface Props {
   isStreaming?: boolean;
   onSlashClick?: () => void;
   onAtClick?: () => void;
+}
+
+export interface InputBarAHandle {
+  insertAtCursor: (text: string) => void;
+  focus: () => void;
 }
 
 interface ImageAttachment {
@@ -32,17 +37,13 @@ interface FileAttachment {
   path: string;
   filename: string;
   sizeKB: number;
-  /** 0..1 progress while uploading; absent when complete */
   progress?: number;
 }
 
-export default function InputBarA({
-  sessionId,
-  disabled,
-  isStreaming,
-  onSlashClick,
-  onAtClick,
-}: Props) {
+const InputBarA = forwardRef<InputBarAHandle, Props>(function InputBarA(
+  { sessionId, disabled, isStreaming, onSlashClick, onAtClick }: Props,
+  ref,
+) {
   const inputDraft = useAppStore((s) => s.inputDraft);
   const setInputDraft = useAppStore((s) => s.setInputDraft);
 
@@ -51,13 +52,37 @@ export default function InputBarA({
   const [isUploading, setIsUploading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-grow textarea
   useEffect(() => {
     const ta = textareaRef.current;
     if (!ta) return;
     ta.style.height = "auto";
     ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
   }, [inputDraft]);
+
+  const insertAtCursor = (text: string) => {
+    const ta = textareaRef.current;
+    if (!ta) {
+      setInputDraft(inputDraft + text);
+      return;
+    }
+    const start = ta.selectionStart ?? inputDraft.length;
+    const end = ta.selectionEnd ?? inputDraft.length;
+    const next = inputDraft.slice(0, start) + text + inputDraft.slice(end);
+    setInputDraft(next);
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.setSelectionRange(start + text.length, start + text.length);
+    });
+  };
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      insertAtCursor,
+      focus: () => textareaRef.current?.focus(),
+    }),
+    [inputDraft],
+  );
 
   const handleSend = () => {
     const trimmed = inputDraft.trim();
@@ -138,22 +163,6 @@ export default function InputBarA({
     }
   };
 
-  const insertAtCursor = (text: string) => {
-    const ta = textareaRef.current;
-    if (!ta) {
-      setInputDraft(inputDraft + text);
-      return;
-    }
-    const start = ta.selectionStart ?? inputDraft.length;
-    const end = ta.selectionEnd ?? inputDraft.length;
-    const next = inputDraft.slice(0, start) + text + inputDraft.slice(end);
-    setInputDraft(next);
-    requestAnimationFrame(() => {
-      ta.focus();
-      ta.setSelectionRange(start + text.length, start + text.length);
-    });
-  };
-
   const hasAttachments = images.length > 0 || files.length > 0;
   const canSend = !disabled && !isUploading && (inputDraft.trim() || hasAttachments);
 
@@ -226,7 +235,7 @@ export default function InputBarA({
         />
         <div className="lin-composer-actions">
           <div className="lin-composer-attach">
-            <AttachmentButton onAttach={handleAttach} disabled={disabled} />
+            <AttachmentSheet onAttach={handleAttach} disabled={disabled} />
           </div>
           <button
             type="button"
@@ -268,4 +277,6 @@ export default function InputBarA({
       </div>
     </div>
   );
-}
+});
+
+export default InputBarA;

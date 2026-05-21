@@ -1,12 +1,15 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon } from "../../design/icons";
 import { tokens as T } from "../../design/tokens";
 import { wsService } from "../../services/ws-service";
 import { useAppStore } from "../../stores/app-store";
 import MarkdownRenderer from "../MarkdownRenderer";
+import ActivityStrip from "./ActivityStrip";
 import type { LinearScreen } from "./AppShell";
-import InputBarA from "./InputBarA";
+import InputBarA, { type InputBarAHandle } from "./InputBarA";
 import PermissionSheetA from "./PermissionSheetA";
+import PickerSheet from "./PickerSheet";
+import QuickActions from "./QuickActions";
 import ToolCardA from "./ToolCardA";
 import "./chat.css";
 
@@ -21,14 +24,16 @@ function basename(path: string): string {
 
 export default function ChatScreen({ onNavigate }: Props) {
   const activeSessionId = useAppStore((s) => s.activeSessionId);
+  const setInputDraft = useAppStore((s) => s.setInputDraft);
   const session = useAppStore((s) =>
     activeSessionId ? s.sessions.get(activeSessionId) : undefined,
   );
   const capabilities = useAppStore((s) => s.capabilities);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<InputBarAHandle>(null);
+  const [pickerKind, setPickerKind] = useState<"slash" | "agent" | null>(null);
 
-  // Auto-scroll on new message / content change
   const messages = session?.messages ?? [];
   const lastContent = messages[messages.length - 1]?.content ?? "";
   useEffect(() => {
@@ -38,6 +43,15 @@ export default function ChatScreen({ onNavigate }: Props) {
       el.scrollTop = el.scrollHeight;
     });
   }, [messages.length, lastContent]);
+
+  const handlePickerSelect = (literal: string) => {
+    if (!activeSessionId) return;
+    if (inputRef.current) {
+      inputRef.current.insertAtCursor(literal);
+      return;
+    }
+    setInputDraft((useAppStore.getState().inputDraft || "") + literal);
+  };
 
   if (!activeSessionId || !session) {
     return (
@@ -76,7 +90,6 @@ export default function ChatScreen({ onNavigate }: Props) {
   const usage = session.usage;
   const model = capabilities?.model ?? "claude";
   const projectName = basename(session.cwd);
-  // tilde-friendly path for display
   const displayPath = session.cwd.replace(/^\/Users\/[^/]+/, "~");
 
   const handleApprove = () => {
@@ -85,6 +98,13 @@ export default function ChatScreen({ onNavigate }: Props) {
   const handleDeny = () => {
     if (activeSessionId) wsService.denyPermission(activeSessionId);
   };
+
+  const pickerItems =
+    pickerKind === "slash"
+      ? (capabilities?.commands ?? [])
+      : pickerKind === "agent"
+        ? (capabilities?.agents ?? [])
+        : [];
 
   return (
     <div className="lin-chat">
@@ -129,7 +149,6 @@ export default function ChatScreen({ onNavigate }: Props) {
               />
             );
           }
-          // assistant
           const showCaret = isStreaming && m.id === currentStreamMessageId && m.content.length > 0;
           return (
             <div key={m.id} className="lin-msg lin-msg--claude">
@@ -142,21 +161,11 @@ export default function ChatScreen({ onNavigate }: Props) {
           );
         })}
 
-        {/* Thinking card when streaming but no content yet */}
         {isStreaming &&
           (!currentStreamMessageId ||
             !messages.find((m) => m.id === currentStreamMessageId)?.content) && <ThinkingCard />}
 
-        {/* Live tool activity rows */}
-        {Array.from(activeTools.values()).map((t) => (
-          <div key={`${t.toolName}-${t.startedAt}`} className="lin-live-row">
-            <span className="lin-mini-ring" />
-            <span className="lin-live-name">{t.toolName}</span>
-            {t.elapsedSeconds !== undefined && (
-              <span className="lin-live-elapsed">{t.elapsedSeconds}s</span>
-            )}
-          </div>
-        ))}
+        <ActivityStrip tools={activeTools} />
       </div>
 
       {usage && (
@@ -168,13 +177,32 @@ export default function ChatScreen({ onNavigate }: Props) {
         </div>
       )}
 
+      {messages.length === 0 && <QuickActions />}
+
       <PermissionSheetA pending={pendingPermission} onApprove={handleApprove} onDeny={handleDeny} />
 
       <InputBarA
+        ref={inputRef}
         sessionId={activeSessionId}
         disabled={!activeSessionId}
         isStreaming={isStreaming}
+        onSlashClick={() => setPickerKind("slash")}
+        onAtClick={() => setPickerKind("agent")}
       />
+
+      {pickerKind && (
+        <PickerSheet
+          kind={pickerKind}
+          open={pickerKind !== null}
+          onClose={() => setPickerKind(null)}
+          onSelect={handlePickerSelect}
+          loading={capabilities === null}
+          items={pickerItems.map((item) => ({
+            name: item.name,
+            ...(item.description ? { description: item.description } : {}),
+          }))}
+        />
+      )}
     </div>
   );
 }
