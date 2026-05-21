@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { useAppStore } from "../../stores/app-store";
@@ -30,6 +31,23 @@ describe("ChatScreen", () => {
     expect(getByText("YOU")).not.toBeNull();
     expect(getByText("CLAUDE")).not.toBeNull();
     expect(container.querySelector(".lin-msg--user .lin-msg-label")?.textContent).toBe("YOU");
+  });
+
+  test("renders user messages as right-aligned bubbles", () => {
+    const store = useAppStore.getState();
+    store.addSession("s1", "/tmp/project");
+    store.setActiveSession("s1");
+    store.loadSessionHistory("s1", [{ id: "m1", role: "user", content: "hi", timestamp: 0 }]);
+
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    const userBubble = container.querySelector(".lin-msg--user");
+    expect(userBubble).not.toBeNull();
+
+    const css = readFileSync("client/components/linear/chat.css", "utf-8");
+    expect(css.includes(".lin-msg--user {")).toBe(true);
+    expect(css.includes("align-self: flex-end;")).toBe(true);
+    expect(css.includes("background: #1f1f23;")).toBe(true);
+    expect(css.includes("border-radius: 14px;")).toBe(true);
   });
 
   test("slash button opens picker with commands", () => {

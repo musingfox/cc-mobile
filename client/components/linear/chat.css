@@ -119,8 +119,17 @@
   text-transform: uppercase;
 }
 
+.lin-msg--user {
+  align-self: flex-end;
+  max-width: 80%;
+  background: #1f1f23;
+  padding: 10px 14px;
+  border-radius: 14px;
+}
+
 .lin-msg--user .lin-msg-label {
   color: #a0a0a0;
+  text-align: right;
 }
 
 .lin-msg--claude .lin-msg-label {
