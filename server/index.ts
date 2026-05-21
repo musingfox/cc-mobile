@@ -9,6 +9,8 @@ import { SessionManager } from "./session-manager";
 import { createUploadPlugin } from "./upload";
 import { createWsPlugin } from "./ws";
 
+export const WS_IDLE_TIMEOUT_SECONDS = 240;
+
 const isProd = process.env.NODE_ENV === "production";
 const serverConfig = parseServerConfig(process.argv);
 const sessionManager = new SessionManager({ permissionMode: serverConfig.permissionMode });
@@ -16,7 +18,12 @@ const sessionManager = new SessionManager({ permissionMode: serverConfig.permiss
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = join(__dirname, "..", "dist", "client");
 
-const _app = new Elysia()
+const _app = new Elysia({
+  websocket: {
+    idleTimeout: WS_IDLE_TIMEOUT_SECONDS,
+    sendPings: true,
+  },
+})
   .use(createWsPlugin(sessionManager, createPermissionHandler, serverConfig))
   .use(createUploadPlugin(serverConfig))
   .get("*", async ({ request }) => {
