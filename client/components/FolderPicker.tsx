@@ -1,10 +1,12 @@
-import { ChevronRight, Folder } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Drawer } from "vaul";
+import { Icon } from "../design/icons";
+import { tokens as T } from "../design/tokens";
 import { toastService } from "../services/toast-service";
 import { wsService } from "../services/ws-service";
 import { useAppStore } from "../stores/app-store";
 import DrawerBase from "./drawers/DrawerBase";
+import "./linear/folder-picker.css";
 
 interface FolderPickerProps {
   open: boolean;
@@ -24,7 +26,6 @@ export default function FolderPicker({
   const serverPaths = useAppStore((s) => s.serverPaths);
   const [currentPath, setCurrentPath] = useState<string | null>(null);
 
-  // Get initial path from server config on first open
   useEffect(() => {
     if (open && !currentPath) {
       const initialPath =
@@ -35,7 +36,6 @@ export default function FolderPicker({
     }
   }, [open, currentPath, serverPaths]);
 
-  // Update current path when listing changes
   useEffect(() => {
     if (directoryListing) {
       setCurrentPath(directoryListing.path);
@@ -63,7 +63,6 @@ export default function FolderPicker({
     onClose();
   };
 
-  // Parse path into breadcrumb segments
   const getBreadcrumbs = () => {
     if (!currentPath) return [];
     const parts = currentPath.split("/").filter(Boolean);
@@ -78,7 +77,6 @@ export default function FolderPicker({
 
   const breadcrumbs = getBreadcrumbs();
 
-  // Handle errors from server
   useEffect(() => {
     const globalError = useAppStore.getState().globalError;
     if (globalError && open) {
@@ -87,17 +85,15 @@ export default function FolderPicker({
     }
   }, [useAppStore.getState().globalError, open]);
 
-  // Inner picker content (used for both nested and non-nested modes)
   const pickerContent = (
-    <div className="folder-picker">
-      {/* Breadcrumb navigation */}
-      <div className="folder-picker-breadcrumbs">
+    <div className="lin-folder">
+      <div className="lin-folder-breadcrumbs">
         {breadcrumbs.map((crumb, idx) => (
-          <div key={crumb.path} className="folder-picker-breadcrumb">
-            {idx > 0 && <ChevronRight size={16} className="breadcrumb-separator" />}
+          <div key={crumb.path} className="lin-folder-breadcrumb">
+            {idx > 0 && <Icon name="chevronR" size={12} color={T.fg3} style={{ opacity: 0.8 }} />}
             <button
               type="button"
-              className="breadcrumb-segment"
+              className="lin-folder-breadcrumb-btn"
               onClick={() => handleNavigate(crumb.path)}
             >
               {crumb.name}
@@ -106,12 +102,11 @@ export default function FolderPicker({
         ))}
       </div>
 
-      {/* Action buttons */}
-      <div className="folder-picker-actions">
+      <div className="lin-folder-actions">
         {directoryListing?.parent && (
           <button
             type="button"
-            className="folder-picker-action-btn"
+            className="lin-folder-action"
             onClick={() => handleNavigate(directoryListing.parent!)}
             disabled={isLoading}
           >
@@ -120,7 +115,7 @@ export default function FolderPicker({
         )}
         <button
           type="button"
-          className="folder-picker-action-btn primary"
+          className="lin-folder-action is-primary"
           onClick={handleSelectCurrent}
           disabled={!currentPath || isLoading}
         >
@@ -128,40 +123,39 @@ export default function FolderPicker({
         </button>
       </div>
 
-      {/* Directory listing */}
       {isLoading ? (
-        <div className="folder-picker-loading">Loading...</div>
+        <div className="lin-folder-loading">Loading…</div>
       ) : directoryListing && directoryListing.entries.length > 0 ? (
-        <div className="folder-picker-list">
+        <div className="lin-folder-list">
           {directoryListing.entries.map((entry) => (
             <button
               key={entry.path}
               type="button"
-              className="folder-picker-item"
+              className="lin-settings-row lin-folder-item"
               onClick={() => handleNavigate(entry.path)}
             >
-              <Folder size={20} className="folder-icon" />
-              <span className="folder-name">{entry.name}</span>
-              <ChevronRight size={16} className="folder-chevron" />
+              <Icon name="folder" size={16} color={T.fg2} />
+              <div className="lin-settings-row-main">
+                <div className="lin-settings-row-title">{entry.name}</div>
+              </div>
+              <Icon name="chevronR" size={14} color={T.fg3} />
             </button>
           ))}
         </div>
       ) : directoryListing ? (
-        <div className="folder-picker-empty">No subdirectories</div>
+        <div className="lin-folder-empty">No subdirectories</div>
       ) : null}
     </div>
   );
 
-  // Portal into .app div so CSS theme variables are inherited
   const container =
     typeof document !== "undefined"
       ? (document.querySelector<HTMLElement>(".app") ?? undefined)
       : undefined;
 
-  // Nested mode: use Drawer.NestedRoot
   if (nested) {
     return (
-      <Drawer.NestedRoot open={open} onOpenChange={handleClose}>
+      <Drawer.NestedRoot open={open} onOpenChange={(next) => !next && handleClose()}>
         <Drawer.Portal container={container}>
           <Drawer.Overlay className="drawer-overlay" />
           <Drawer.Content className="drawer-content">
@@ -174,9 +168,8 @@ export default function FolderPicker({
     );
   }
 
-  // Non-nested mode: use DrawerBase
   return (
-    <DrawerBase open={open} onOpenChange={handleClose} title="Choose Folder">
+    <DrawerBase open={open} onOpenChange={(next) => !next && handleClose()} title="Choose Folder">
       {pickerContent}
     </DrawerBase>
   );

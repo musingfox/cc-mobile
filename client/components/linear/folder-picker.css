@@ -1,0 +1,98 @@
+.lin-folder {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 60vh;
+  overflow: hidden;
+}
+
+.lin-folder-breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 0 0 4px;
+}
+
+.lin-folder-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.lin-folder-breadcrumb-sep {
+  color: #6a6a6a;
+}
+
+.lin-folder-breadcrumb-btn {
+  border: none;
+  background: transparent;
+  color: #a0a0a0;
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  border-radius: 6px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.lin-folder-breadcrumb-btn:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: #ececec;
+}
+
+.lin-folder-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.lin-folder-action {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #0e0e10;
+  color: #ececec;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.lin-folder-action:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.lin-folder-action.is-primary {
+  background: #ececec;
+  color: #0e0e10;
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.lin-folder-list {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  background: #17171a;
+}
+
+.lin-folder-item {
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.lin-folder-item:first-child {
+  border-top: none;
+}
+
+.lin-folder-loading,
+.lin-folder-empty {
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6a6a6a;
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  text-align: center;
+}
