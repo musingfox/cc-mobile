@@ -15,4 +15,8 @@ describe("WsData shape", () => {
   it("does not import the removed ping manager", () => {
     expect(wsSource).not.toContain("HeartbeatManager");
   });
+
+  it("does not emit app-level ping messages", () => {
+    expect(wsSource).not.toContain('type: "ping"');
+  });
 });
