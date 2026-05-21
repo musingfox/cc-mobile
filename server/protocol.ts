@@ -106,10 +106,6 @@ const ReconnectMessage = z.object({
   sessionIds: z.array(z.string()),
 });
 
-const PongMessage = z.object({
-  type: z.literal("pong"),
-});
-
 export const ClientMessage = z.discriminatedUnion("type", [
   NewSessionMessage,
   SendMessage,
@@ -126,7 +122,6 @@ export const ClientMessage = z.discriminatedUnion("type", [
   GetSessionInfoMessage,
   ListDirectoriesMessage,
   ReconnectMessage,
-  PongMessage,
 ]);
 
 export type ClientMessage = z.infer<typeof ClientMessage>;
@@ -294,11 +289,6 @@ const ReplayCompleteMessage = z.object({
   gapDetected: z.boolean(),
 });
 
-const PingMessage = z.object({
-  type: z.literal("ping"),
-  timestamp: z.number(),
-});
-
 const SessionStateMessage = z.object({
   type: z.literal("session_state"),
   sessionId: z.string(),
@@ -320,7 +310,6 @@ export const ServerMessage = z.discriminatedUnion("type", [
   DirectoryListingMessage,
   EventWrapperMessage,
   ReplayCompleteMessage,
-  PingMessage,
   SessionStateMessage,
 ]);
 

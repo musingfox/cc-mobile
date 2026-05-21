@@ -32,9 +32,9 @@ describe("Reconnect Protocol - Client Messages", () => {
     expect(result.success).toBe(false);
   });
 
-  it("accepts valid pong", () => {
-    const result = ClientMessage.parse({ type: "pong" });
-    expect(result.type).toBe("pong");
+  it("rejects pong", () => {
+    const result = ClientMessage.safeParse({ type: "pong" });
+    expect(result.success).toBe(false);
   });
 });
 
@@ -65,25 +65,30 @@ describe("Reconnect Protocol - Server Messages", () => {
     expect(result.gapDetected).toBe(false);
   });
 
-  it("accepts valid ping", () => {
-    const result = ServerMessage.parse({
+  it("rejects ping", () => {
+    const result = ServerMessage.safeParse({
       type: "ping",
       timestamp: 1234567890,
     });
-    expect(result.type).toBe("ping");
-    expect(result.timestamp).toBe(1234567890);
+    expect(result.success).toBe(false);
   });
 });
 
 describe("Reconnect Protocol - Backward Compatibility", () => {
-  it("existing messages still work", () => {
-    const result = ClientMessage.parse({
+  it("existing client messages still work", () => {
+    const result = ClientMessage.safeParse({
       type: "send",
       sessionId: "s1",
       content: "hello",
     });
-    expect(result.type).toBe("send");
-    expect(result.sessionId).toBe("s1");
-    expect(result.content).toBe("hello");
+    expect(result.success).toBe(true);
+  });
+
+  it("existing server messages still work", () => {
+    const result = ServerMessage.safeParse({
+      type: "stream_end",
+      sessionId: "s1",
+    });
+    expect(result.success).toBe(true);
   });
 });
