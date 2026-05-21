@@ -14,7 +14,7 @@ import type { createPermissionHandler, PendingPermissionSnapshot } from "./permi
 import { ClientMessage, ServerMessage } from "./protocol";
 import { loadSessionHistory } from "./session-history";
 import { getClaudeSessionInfo, listClaudeSessions } from "./session-listing";
-import type { SessionManager } from "./session-manager";
+import type { InitData, SessionManager } from "./session-manager";
 
 function expandPath(p: string): string {
   if (p.startsWith("~/") || p === "~") {
@@ -78,6 +78,31 @@ type PermissionHandler = ReturnType<PermissionHandlerFactory>;
 
 interface WsData {
   currentSessionId?: string;
+}
+
+export function buildCachedCapabilities(
+  msg: Record<string, unknown>,
+  initData: InitData | null,
+): Capabilities {
+  const toNamed = <T extends { name: string }>(arr: unknown): T[] => {
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .map((item) => {
+        if (typeof item === "string") return { name: item } as T;
+        if (item && typeof item === "object" && typeof (item as { name?: unknown }).name === "string") {
+          return item as T;
+        }
+        return null;
+      })
+      .filter((x): x is T => x !== null);
+  };
+
+  return {
+    commands: toNamed(msg.slash_commands),
+    agents: toNamed(msg.agents),
+    model: (msg.model as string) || "unknown",
+    ...(initData ? { models: initData.models, accountInfo: initData.account } : {}),
+  };
 }
 
 export function createWsPlugin(
@@ -221,37 +246,15 @@ export function createWsPlugin(
 
               // Extract and cache capabilities from system init message
               if (msg.type === "system" && msg.subtype === "init") {
-                const toNamed = <T extends { name: string }>(arr: unknown): T[] => {
-                  if (!Array.isArray(arr)) return [];
-                  return arr
-                    .map((item) => {
-                      if (typeof item === "string") return { name: item } as T;
-                      if (
-                        item &&
-                        typeof item === "object" &&
-                        typeof (item as { name?: unknown }).name === "string"
-                      ) {
-                        return item as T;
-                      }
-                      return null;
-                    })
-                    .filter((x): x is T => x !== null);
-                };
-                cachedCapabilities = {
-                  commands: toNamed(msg.slash_commands),
-                  agents: toNamed(msg.agents),
-                  model: (msg.model as string) || "unknown",
-                };
-                saveCachedCapabilities(cachedCapabilities);
-
                 // Fetch models + account info from SDK
                 const initData = await sessionManager.getInitData(message.sessionId);
+                cachedCapabilities = buildCachedCapabilities(msg, initData);
+                saveCachedCapabilities(cachedCapabilities);
 
                 sendBuffered(ws, message.sessionId, {
                   type: "capabilities",
                   sessionId: message.sessionId,
                   ...cachedCapabilities,
-                  ...(initData ? { models: initData.models, accountInfo: initData.account } : {}),
                 });
               }
 
