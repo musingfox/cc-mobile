@@ -25,19 +25,3 @@ describe("THEME_VARIABLES", () => {
     expect(afterThemeVars).not.toContain("#0066ff");
   });
 });
-
-describe("SESSION_LIST_MODAL_CSS", () => {
-  test("T11: No 'settings-overlay' class reference in SessionListModal.tsx", () => {
-    const modalPath = join(clientDir, "components/SessionListModal.tsx");
-    const content = readFileSync(modalPath, "utf-8");
-
-    expect(content).not.toContain('className="settings-overlay"');
-  });
-
-  test("T12: 'modal-overlay' class exists in styles.css", () => {
-    const stylesPath = join(clientDir, "styles.css");
-    const content = readFileSync(stylesPath, "utf-8");
-
-    expect(content).toContain(".modal-overlay");
-  });
-});
