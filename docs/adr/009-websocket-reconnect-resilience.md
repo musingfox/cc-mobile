@@ -28,6 +28,8 @@ Implement a three-layer reconnect resilience mechanism:
 
 ### 2. Client Auto-Reconnect with Heartbeat
 
+> Superseded: ping/pong application heartbeat was removed and replaced by Bun protocol-level keep-alive (`sendPings: true`, `idleTimeout: 240`).
+
 - Existing exponential backoff reconnect (1s → 30s) is retained
 - Server sends `{ type: "ping" }` every 30s; client responds with `{ type: "pong" }`
 - If no pong within 10s, server closes the connection (triggers client reconnect)
