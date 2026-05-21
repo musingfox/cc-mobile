@@ -46,8 +46,8 @@ export default function ChatScreen({ onNavigate }: Props) {
           <button
             type="button"
             className="lin-icon-btn"
-            onClick={() => onNavigate("sessions")}
-            aria-label="Back to sessions"
+            onClick={() => onNavigate("projects")}
+            aria-label="Back to projects"
           >
             <Icon name="menu" size={18} color={T.fg2} />
           </button>
@@ -60,9 +60,9 @@ export default function ChatScreen({ onNavigate }: Props) {
           <button
             type="button"
             className="lin-chat-empty-btn"
-            onClick={() => onNavigate("sessions")}
+            onClick={() => onNavigate("projects")}
           >
-            Choose a session
+            Choose a project
           </button>
         </div>
       </div>
@@ -92,8 +92,8 @@ export default function ChatScreen({ onNavigate }: Props) {
         <button
           type="button"
           className="lin-icon-btn"
-          onClick={() => onNavigate("sessions")}
-          aria-label="Back to sessions"
+          onClick={() => onNavigate("projects")}
+          aria-label="Back to projects"
         >
           <Icon name="menu" size={18} color={T.fg2} />
         </button>

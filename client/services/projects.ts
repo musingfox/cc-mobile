@@ -17,13 +17,14 @@ export function loadProjects(): SavedProject[] {
   }
 }
 
-export function saveProject(cwd: string) {
+export function saveProject(cwd: string, customLabel?: string) {
   try {
     let projects = loadProjects();
     // Remove existing entry if present
+    const existing = projects.find((p) => p.cwd === cwd);
     projects = projects.filter((p) => p.cwd !== cwd);
     // Add to front (most recent)
-    const label = cwd.split("/").pop() || cwd;
+    const label = customLabel?.trim() || existing?.label || cwd.split("/").pop() || cwd;
     projects.unshift({ cwd, label });
     // Keep only MAX_RECENT_FOLDERS
     projects = projects.slice(0, MAX_RECENT_FOLDERS);

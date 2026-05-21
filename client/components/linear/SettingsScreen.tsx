@@ -11,7 +11,14 @@ interface Props {
   onNavigate: (screen: LinearScreen) => void;
 }
 
-const PERMISSION_MODES = [
+interface PermissionMode {
+  id: string;
+  title: string;
+  desc: string;
+  warn?: boolean;
+}
+
+const PERMISSION_MODES: PermissionMode[] = [
   { id: "default", title: "Default", desc: "Ask for permission on each tool use" },
   {
     id: "acceptEdits",
@@ -29,7 +36,7 @@ const PERMISSION_MODES = [
     desc: "Auto-approve everything (use with caution)",
     warn: true,
   },
-] as const;
+];
 
 interface ToggleProps {
   on: boolean;
@@ -83,7 +90,7 @@ export default function SettingsScreen({ onNavigate }: Props) {
         <button
           type="button"
           className="lin-icon-btn"
-          onClick={() => onNavigate("sessions")}
+          onClick={() => onNavigate("projects")}
           aria-label="Back"
         >
           <Icon name="chevronL" size={18} color={T.fg2} />
