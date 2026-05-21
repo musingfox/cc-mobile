@@ -169,9 +169,8 @@ class WsService {
           return;
         }
 
-        // Handle ping — respond with pong
+        // Backward tolerance: stale servers may still send ping; ignore silently.
         if (msg.type === "ping") {
-          this.sendMessage({ type: "pong" });
           return;
         }
 

@@ -100,7 +100,7 @@ describe("WebSocket message routing", () => {
     expect(localStorageMock.getItem("ccm:lastEventId")).toBe("42");
   });
 
-  test("TC-WSR5: ping triggers pong", () => {
+  test("TC-WSR5: ping does not trigger outbound messages", () => {
     const pingMessage = {
       type: "ping",
       timestamp: Date.now(),
@@ -108,14 +108,21 @@ describe("WebSocket message routing", () => {
 
     const sentMessages: unknown[] = [];
     const mockSend = (msg: unknown) => sentMessages.push(msg);
+    let storeMutationCount = 0;
+    const mockMutateStore = () => {
+      storeMutationCount += 1;
+    };
 
     // Simulate onmessage logic
     if (pingMessage.type === "ping") {
-      mockSend({ type: "pong" });
+      // stale-server ping is ignored
+    } else {
+      mockSend(pingMessage);
+      mockMutateStore();
     }
 
-    expect(sentMessages).toHaveLength(1);
-    expect(sentMessages[0]).toEqual({ type: "pong" });
+    expect(sentMessages).toHaveLength(0);
+    expect(storeMutationCount).toBe(0);
   });
 
   test("TC-WSR6: reconnect message includes lastEventId", () => {
@@ -175,14 +182,15 @@ describe("WebSocket message routing", () => {
     };
 
     // Simulate onmessage logic
-    if (
-      directMessage.type !== "event" &&
-      directMessage.type !== "ping" &&
-      directMessage.type !== "replay_complete"
-    ) {
+    if (directMessage.type !== "event" && directMessage.type !== "replay_complete") {
       mockHandleMessage(directMessage);
     }
 
     expect(handledMessage).toEqual(directMessage);
+  });
+
+  test("TC-WSR9: ws-service does not send pong messages", async () => {
+    const source = await Bun.file("client/services/ws-service.ts").text();
+    expect(source).not.toContain("sendMessage({ type: \"pong\" })");
   });
 });
