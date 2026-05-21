@@ -21,6 +21,7 @@ interface SessionConfig {
   cwd: string;
   canUseTool: CanUseTool;
   sdkSessionId: string | null;
+  permissionMode?: PermissionMode;
 }
 
 export interface Capabilities {
@@ -53,6 +54,30 @@ export class SessionManager {
 
   getPermissionMode(): PermissionMode {
     return this.permissionMode;
+  }
+
+  hasSession(sessionId: string): boolean {
+    return this.sessions.has(sessionId);
+  }
+
+  setSessionPermissionMode(sessionId: string, mode: PermissionMode): void {
+    const config = this.sessions.get(sessionId);
+    if (!config) {
+      throw new Error(`Session ${sessionId} not found`);
+    }
+
+    config.permissionMode = mode;
+
+    const q = this.activeQueries.get(sessionId);
+    if (q) {
+      q
+        .setPermissionMode(mode)
+        .catch((err) => console.warn("[session-manager] mid-turn setPermissionMode failed:", err));
+    }
+  }
+
+  getSessionPermissionMode(sessionId: string): PermissionMode | undefined {
+    return this.sessions.get(sessionId)?.permissionMode;
   }
 
   setEnvVars(envVars: Record<string, string>): void {
@@ -111,6 +136,7 @@ export class SessionManager {
       cwd,
       canUseTool,
       sdkSessionId: sdkSessionId ?? null,
+      permissionMode: undefined,
     });
   }
 
@@ -131,7 +157,8 @@ export class SessionManager {
     }
 
     const plugins = await this.getPlugins();
-    const isBypass = this.permissionMode === "bypassPermissions";
+    const effectivePermissionMode = config.permissionMode ?? this.permissionMode;
+    const isBypass = effectivePermissionMode === "bypassPermissions";
 
     // Handle both string and content block array formats
     // When content is string: pass as simple string prompt (SDK converts to MessageParam internally)
@@ -174,7 +201,7 @@ export class SessionManager {
         includePartialMessages: true,
         promptSuggestions: true,
         agentProgressSummaries: true,
-        permissionMode: this.permissionMode,
+        permissionMode: effectivePermissionMode,
         ...(isBypass ? { allowDangerouslySkipPermissions: true } : {}),
         allowedTools: ["Skill"],
         toolConfig: { askUserQuestion: { previewFormat: "html" } },

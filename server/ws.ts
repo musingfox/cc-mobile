@@ -307,6 +307,28 @@ export function createWsPlugin(
           }
 
           case "set_permission_mode": {
+            if (message.sessionId) {
+              if (!sessionManager.hasSession(message.sessionId)) {
+                ws.send({
+                  type: "error",
+                  code: "session_not_found",
+                  message: `Session ${message.sessionId} not found`,
+                  sessionId: message.sessionId,
+                });
+                break;
+              }
+
+              sessionManager.setSessionPermissionMode(message.sessionId, message.mode);
+              ws.send({
+                type: "server_config",
+                config: {
+                  permissionMode: message.mode,
+                  sessionId: message.sessionId,
+                },
+              });
+              break;
+            }
+
             sessionManager.setPermissionMode(message.mode);
             // Echo back updated config
             ws.send({
