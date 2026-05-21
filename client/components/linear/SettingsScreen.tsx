@@ -20,8 +20,13 @@ interface PermissionMode {
   warn?: boolean;
 }
 
-const PERMISSION_MODES: PermissionMode[] = [
+export const PERMISSION_MODES: PermissionMode[] = [
   { id: "default", title: "Default", desc: "Ask for permission on each tool use" },
+  {
+    id: "auto",
+    title: "Auto",
+    desc: "Let the agent decide when to ask for permission",
+  },
   {
     id: "acceptEdits",
     title: "Accept Edits",
