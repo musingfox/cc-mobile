@@ -68,6 +68,36 @@ describe("Capabilities cache", () => {
     expect(result).toBeNull();
   });
 
+  test("C1-TC1: persists and reloads models and accountInfo", () => {
+    const input: Capabilities = {
+      commands: [{ name: "a" }],
+      agents: [],
+      model: "claude-sonnet-4-6",
+      models: [{ value: "x", displayName: "X", description: "" }],
+      accountInfo: { email: "e@x" },
+    };
+
+    saveCachedCapabilities(input);
+    const output = loadCachedCapabilities();
+
+    expect(output).toEqual(input);
+  });
+
+  test("C1-TC2: loads old cache shape without models/accountInfo", () => {
+    if (!existsSync(CACHE_DIR)) {
+      mkdirSync(CACHE_DIR, { recursive: true });
+    }
+
+    writeFileSync(
+      CACHE_FILE,
+      JSON.stringify({ commands: [], agents: [], model: "m" }, null, 2),
+      "utf-8",
+    );
+
+    const result = loadCachedCapabilities();
+    expect(result).toEqual({ commands: [], agents: [], model: "m" });
+  });
+
   test("TC16: saveCachedCapabilities creates directory if it doesn't exist", () => {
     // Delete cache directory if exists
     if (existsSync(CACHE_DIR)) {

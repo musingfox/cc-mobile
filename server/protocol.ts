@@ -318,3 +318,5 @@ export type SessionListItem = z.infer<typeof SessionListItemSchema>;
 export type HistoryMessage = z.infer<typeof HistoryMessageSchema>;
 export type AgentInfo = z.infer<typeof AgentInfoSchema>;
 export type CommandInfo = z.infer<typeof CommandInfoSchema>;
+export type ModelInfo = z.infer<typeof ModelInfoSchema>;
+export type AccountInfo = z.infer<typeof AccountInfoSchema>;

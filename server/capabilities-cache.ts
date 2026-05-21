@@ -1,12 +1,14 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { AgentInfo, CommandInfo } from "./protocol";
+import type { AccountInfo, AgentInfo, CommandInfo, ModelInfo } from "./protocol";
 
 export type Capabilities = {
   commands: CommandInfo[];
   agents: AgentInfo[];
   model: string;
+  models?: ModelInfo[];
+  accountInfo?: AccountInfo;
 };
 
 const CACHE_DIR = join(homedir(), ".claude-mobile");
@@ -38,11 +40,20 @@ export function loadCachedCapabilities(): Capabilities | null {
         return typeof arr[0] === "string" ? arr.map((name) => ({ name }) as T) : (arr as T[]);
       };
 
-      return {
+      const normalized: Capabilities = {
         commands: normalizeToInfo<CommandInfo>(parsed.commands),
         agents: normalizeToInfo<AgentInfo>(parsed.agents),
         model: parsed.model,
       };
+
+      if (Array.isArray(parsed.models)) {
+        normalized.models = parsed.models as ModelInfo[];
+      }
+      if (parsed.accountInfo && typeof parsed.accountInfo === "object") {
+        normalized.accountInfo = parsed.accountInfo as AccountInfo;
+      }
+
+      return normalized;
     }
     return null;
   } catch {
