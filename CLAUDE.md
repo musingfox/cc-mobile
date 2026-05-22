@@ -59,7 +59,7 @@ Mobile Browser (PWA) ←──WebSocket──→ Elysia Server (dev :3001 / prod
 All recorded in `docs/adr/`. Key decisions:
 
 - **V1 SDK** (ADR-007): V2 does not support plugins. V1 `query()` with resume pattern for multi-turn.
-- **Plugin loading** (ADR-006): Reads `~/.claude/settings.json` + `installed_plugins.json` to pass plugin paths to SDK. `allowedTools: ["Skill"]` required.
+- **Plugin loading** (ADR-006): Reads `~/.claude/settings.json` + `installed_plugins.json` to pass plugin paths to SDK. `skills: "all"` enables every discovered skill (replaces deprecated `allowedTools: ["Skill"]`).
 - **Permission Bridge** (ADR-002): Promise + 60s timeout pattern. Timeout interrupts conversation.
 - **Zod validation** (ADR-001): Runtime validation on WS messages, single source of truth for types.
 - **Zustand + WsService** (ADR-008): Per-session state isolation via Zustand store + WebSocket singleton service.

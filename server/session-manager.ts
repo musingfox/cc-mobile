@@ -204,7 +204,7 @@ export class SessionManager {
         agentProgressSummaries: true,
         permissionMode: effectivePermissionMode,
         ...(isBypass ? { allowDangerouslySkipPermissions: true } : {}),
-        allowedTools: ["Skill"],
+        skills: "all",
         toolConfig: { askUserQuestion: { previewFormat: "html" } },
         plugins,
         cwd: config.cwd,

@@ -160,11 +160,11 @@ class SessionManager {
 }
 ```
 
-SDK options: `settingSources: ["user", "project", "local"]`, `systemPrompt: { type: "preset", preset: "claude_code" }`, `includePartialMessages: true`, `permissionMode: "default"`, `allowedTools: ["Skill"]`, `plugins` loaded from user settings.
+SDK options: `settingSources: ["user", "project", "local"]`, `systemPrompt: { type: "preset", preset: "claude_code" }`, `includePartialMessages: true`, `permissionMode: "default"`, `skills: "all"`, `plugins` loaded from user settings.
 
 ### 2. Plugin Loading ([ADR-006](docs/adr/006-plugin-loading-from-user-settings.md))
 
-`settings-loader.ts` reads `~/.claude/settings.json` (`enabledPlugins`) and `~/.claude/plugins/installed_plugins.json` (`installPath`), cross-references to produce `SdkPluginConfig[]` passed to each `query()` call. `allowedTools: ["Skill"]` is required for skills to activate.
+`settings-loader.ts` reads `~/.claude/settings.json` (`enabledPlugins`) and `~/.claude/plugins/installed_plugins.json` (`installPath`), cross-references to produce `SdkPluginConfig[]` passed to each `query()` call. `skills: "all"` enables every discovered skill from plugins and user settings (replaces the deprecated `allowedTools: ["Skill"]` form).
 
 ### 3. Permission Bridge — Promise + Timeout ([ADR-002](docs/adr/002-permission-bridge-promise-pattern.md))
 
@@ -332,7 +332,7 @@ const q = query({
     settingSources: ["user", "project", "local"],
     systemPrompt: { type: "preset", preset: "claude_code" },
     includePartialMessages: true,
-    allowedTools: ["Skill"],  // Required for plugin skills
+    skills: "all",  // Enable every discovered skill (replaces allowedTools: ["Skill"])
     plugins: [{ type: "local", path: "/path/to/plugin" }],
     resume: "sdk-session-id",  // For multi-turn
   },
