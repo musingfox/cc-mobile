@@ -13,6 +13,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { PermissionMode } from "./config";
 import type { ContentBlock } from "./protocol";
 import { loadUserPlugins } from "./settings-loader";
+import { truncateToolResponse } from "./tool-output-truncator";
 import { cleanupUploads } from "./upload-manager";
 
 type SdkPluginConfig = { type: "local"; path: string };
@@ -206,6 +207,25 @@ export class SessionManager {
         ...(isBypass ? { allowDangerouslySkipPermissions: true } : {}),
         skills: "all",
         toolConfig: { askUserQuestion: { previewFormat: "html" } },
+        hooks: {
+          PostToolUse: [
+            {
+              hooks: [
+                async (input) => {
+                  if (input.hook_event_name !== "PostToolUse") return {};
+                  const replacement = truncateToolResponse(input.tool_response);
+                  if (replacement === null) return {};
+                  return {
+                    hookSpecificOutput: {
+                      hookEventName: "PostToolUse",
+                      updatedToolOutput: replacement,
+                    },
+                  };
+                },
+              ],
+            },
+          ],
+        },
         plugins,
         cwd: config.cwd,
         env: { ...process.env, ...this.envVars },
