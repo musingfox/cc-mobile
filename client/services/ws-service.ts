@@ -23,6 +23,16 @@ import {
   type TerminalReason,
 } from "./tool-events";
 
+export function handleModelNotFoundError(chunk: Record<string, unknown>): boolean {
+  if (chunk.type !== "assistant") return false;
+  if (chunk.error !== "model_not_found") return false;
+  const currentModel = useSettingsStore.getState().model;
+  if (!currentModel) return false;
+  toastService.error(`Model ${currentModel} unavailable, falling back to device default`);
+  useSettingsStore.getState().setModel("");
+  return true;
+}
+
 export function extractTextFromChunk(chunk: Record<string, unknown>): string | null {
   if (chunk.type === "assistant") {
     const message = chunk.message as
@@ -462,6 +472,7 @@ class WsService {
         // signals a new turn, so any active tools NOT listed in this message's
         // content are leftovers that the SDK already finished executing.
         if (chunk.type === "assistant") {
+          handleModelNotFoundError(chunk);
           const message = chunk.message as { content?: Array<Record<string, unknown>> } | undefined;
           const currentTurnToolIds = new Set<string>();
           if (message?.content) {
