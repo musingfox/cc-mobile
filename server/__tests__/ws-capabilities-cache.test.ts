@@ -1,6 +1,6 @@
+import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, test } from "bun:test";
 import { buildCachedCapabilities } from "../ws";
 
 describe("WebSocket capabilities cache wiring", () => {
@@ -42,6 +42,8 @@ describe("WebSocket capabilities cache wiring", () => {
   test("C2 wiring: reconnect/resume sends spread cached capabilities", () => {
     const wsSource = readFileSync(join(import.meta.dir, "..", "ws.ts"), "utf8");
     expect(wsSource).toContain('type: "capabilities",\n          ...cachedCapabilities,');
-    expect(wsSource).toContain('type: "capabilities",\n                sessionId,\n                ...cachedCapabilities,');
+    expect(wsSource).toContain(
+      'type: "capabilities",\n                sessionId,\n                ...cachedCapabilities,',
+    );
   });
 });

@@ -31,9 +31,7 @@ describe("PermissionModeSheet", () => {
     store.addSession("s1", "/tmp/project");
 
     const onClose = mock(() => {});
-    const { getByText } = render(
-      <PermissionModeSheet open onClose={onClose} sessionId="s1" />,
-    );
+    const { getByText } = render(<PermissionModeSheet open onClose={onClose} sessionId="s1" />);
 
     fireEvent.click(getByText("Accept Edits"));
 
@@ -50,9 +48,7 @@ describe("PermissionModeSheet", () => {
     const store = useAppStore.getState();
     store.addSession("s1", "/tmp/project");
 
-    const { getByText } = render(
-      <PermissionModeSheet open onClose={() => {}} sessionId="s1" />,
-    );
+    const { getByText } = render(<PermissionModeSheet open onClose={() => {}} sessionId="s1" />);
     fireEvent.click(getByText("Plan"));
 
     expect(useSettingsStore.getState().permissionMode).toBe("default");
@@ -65,9 +61,7 @@ describe("PermissionModeSheet", () => {
     store.setSessionPermissionMode("s1", "plan");
     useSettingsStore.setState({ permissionMode: "acceptEdits" });
 
-    const { getByText } = render(
-      <PermissionModeSheet open onClose={() => {}} sessionId="s1" />,
-    );
+    const { getByText } = render(<PermissionModeSheet open onClose={() => {}} sessionId="s1" />);
 
     const planRow = getByText("Plan").closest(".lin-settings-row");
     const acceptRow = getByText("Accept Edits").closest(".lin-settings-row");

@@ -70,9 +70,9 @@ export class SessionManager {
 
     const q = this.activeQueries.get(sessionId);
     if (q) {
-      q
-        .setPermissionMode(mode)
-        .catch((err) => console.warn("[session-manager] mid-turn setPermissionMode failed:", err));
+      q.setPermissionMode(mode).catch((err) =>
+        console.warn("[session-manager] mid-turn setPermissionMode failed:", err),
+      );
     }
   }
 

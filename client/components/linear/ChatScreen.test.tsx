@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { useAppStore } from "../../stores/app-store";
 import { useSettingsStore } from "../../stores/settings-store";

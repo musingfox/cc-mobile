@@ -39,7 +39,9 @@ describe("EnvVarSheet", () => {
     const setEnvVarsMock = mock(() => {});
     wsService.setEnvVars = setEnvVarsMock as typeof wsService.setEnvVars;
 
-    const { getByPlaceholderText, getByLabelText } = render(<EnvVarSheet open onClose={() => {}} />);
+    const { getByPlaceholderText, getByLabelText } = render(
+      <EnvVarSheet open onClose={() => {}} />,
+    );
 
     fireEvent.change(getByPlaceholderText("Key"), { target: { value: "MY_VAR" } });
     fireEvent.change(getByPlaceholderText("Value"), { target: { value: "42" } });

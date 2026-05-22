@@ -70,7 +70,9 @@ describe("set_permission_mode semantics (C3b)", () => {
 
   test("setSessionPermissionMode on unknown session throws (defense in depth)", async () => {
     const mgr = await makeManagerWithSession("s1");
-    expect(() => mgr.setSessionPermissionMode("missing", "plan")).toThrow("Session missing not found");
+    expect(() => mgr.setSessionPermissionMode("missing", "plan")).toThrow(
+      "Session missing not found",
+    );
     // No global mutation either
     expect(mgr.getPermissionMode()).toBe("default");
   });

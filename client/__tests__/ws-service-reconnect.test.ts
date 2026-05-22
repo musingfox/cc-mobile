@@ -191,6 +191,6 @@ describe("WebSocket message routing", () => {
 
   test("TC-WSR9: ws-service does not send pong messages", async () => {
     const source = await Bun.file("client/services/ws-service.ts").text();
-    expect(source).not.toContain("sendMessage({ type: \"pong\" })");
+    expect(source).not.toContain('sendMessage({ type: "pong" })');
   });
 });

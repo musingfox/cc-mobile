@@ -1,6 +1,6 @@
+import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "bun:test";
 
 const wsSource = readFileSync(join(import.meta.dir, "..", "ws.ts"), "utf8");
 

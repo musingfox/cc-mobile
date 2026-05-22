@@ -89,7 +89,11 @@ export function buildCachedCapabilities(
     return arr
       .map((item) => {
         if (typeof item === "string") return { name: item } as T;
-        if (item && typeof item === "object" && typeof (item as { name?: unknown }).name === "string") {
+        if (
+          item &&
+          typeof item === "object" &&
+          typeof (item as { name?: unknown }).name === "string"
+        ) {
           return item as T;
         }
         return null;
@@ -569,7 +573,6 @@ export function createWsPlugin(
             }
             break;
           }
-
         }
       } catch (error) {
         console.error("[ws] error handling message:", error);

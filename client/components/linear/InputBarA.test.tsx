@@ -8,7 +8,12 @@ describe("InputBarA", () => {
   const originalSend = wsService.send;
 
   beforeEach(() => {
-    useAppStore.setState({ inputDraft: "", capabilities: null, sessions: new Map(), activeSessionId: null });
+    useAppStore.setState({
+      inputDraft: "",
+      capabilities: null,
+      sessions: new Map(),
+      activeSessionId: null,
+    });
   });
 
   afterEach(() => {
