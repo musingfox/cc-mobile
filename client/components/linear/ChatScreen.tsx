@@ -73,10 +73,10 @@ export default function ChatScreen({ onNavigate }: Props) {
           <button
             type="button"
             className="lin-icon-btn"
-            onClick={() => onNavigate("projects")}
-            aria-label="Back to projects"
+            onClick={() => onNavigate("projectDetail")}
+            aria-label="Back"
           >
-            <Icon name="menu" size={18} color={T.fg2} />
+            <Icon name="chevronL" size={18} color={T.fg2} />
           </button>
           <div className="lin-chat-project">
             <span className="lin-chat-title">No session</span>
@@ -129,10 +129,10 @@ export default function ChatScreen({ onNavigate }: Props) {
         <button
           type="button"
           className="lin-icon-btn"
-          onClick={() => onNavigate("projects")}
-          aria-label="Back to projects"
+          onClick={() => onNavigate("projectDetail")}
+          aria-label="Back"
         >
-          <Icon name="menu" size={18} color={T.fg2} />
+          <Icon name="chevronL" size={18} color={T.fg2} />
         </button>
         <div className="lin-chat-project">
           <span className="lin-chat-status-dot" />
