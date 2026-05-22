@@ -261,25 +261,22 @@ export class SessionManager {
 
     try {
       const [commands, agents] = await Promise.all([q.supportedCommands(), q.supportedAgents()]);
-      const toCommand = (c: unknown): { name: string; description?: string } => {
-        if (typeof c === "string") return { name: c };
-        const obj = c as { name?: unknown; description?: unknown };
+      const toCommand = (c: unknown): SlashCommand => {
+        if (typeof c === "string") return { name: c, description: "", argumentHint: "" };
+        const obj = c as { name?: unknown; description?: unknown; argumentHint?: unknown };
         return {
           name: typeof obj.name === "string" ? obj.name : String(obj.name ?? ""),
-          ...(typeof obj.description === "string" ? { description: obj.description } : {}),
+          description: typeof obj.description === "string" ? obj.description : "",
+          argumentHint: typeof obj.argumentHint === "string" ? obj.argumentHint : "",
         };
       };
-      const toAgent = (
-        a: unknown,
-      ): { name: string; description?: string; allowedTools?: string[] } => {
-        if (typeof a === "string") return { name: a };
-        const obj = a as { name?: unknown; description?: unknown; allowedTools?: unknown };
+      const toAgent = (a: unknown): AgentInfo => {
+        if (typeof a === "string") return { name: a, description: "" };
+        const obj = a as { name?: unknown; description?: unknown; model?: unknown };
         return {
           name: typeof obj.name === "string" ? obj.name : String(obj.name ?? ""),
-          ...(typeof obj.description === "string" ? { description: obj.description } : {}),
-          ...(Array.isArray(obj.allowedTools)
-            ? { allowedTools: obj.allowedTools.filter((t): t is string => typeof t === "string") }
-            : {}),
+          description: typeof obj.description === "string" ? obj.description : "",
+          ...(typeof obj.model === "string" ? { model: obj.model } : {}),
         };
       };
       return {
