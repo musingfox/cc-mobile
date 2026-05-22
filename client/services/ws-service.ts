@@ -1,6 +1,11 @@
 import type { ContentBlock } from "../../server/protocol";
 import { debugLog } from "../components/DebugOverlay";
-import { type Capabilities, useAppStore } from "../stores/app-store";
+import {
+  type ActiveAgent,
+  type ActiveTool,
+  type Capabilities,
+  useAppStore,
+} from "../stores/app-store";
 import { useSettingsStore } from "../stores/settings-store";
 import { hapticService } from "./haptic";
 import { notificationService } from "./notification";
@@ -22,6 +27,37 @@ import {
   isToolUseSummary,
   type TerminalReason,
 } from "./tool-events";
+
+/**
+ * Resolve the subagent attribution for a completed tool by walking
+ * `precedingToolUseIds` → `activeTools[id].parentToolUseId` → `activeAgents`
+ * (matched by `toolUseId`). Returns the first non-null match across the batch
+ * so a summary covering multiple tool ids still attributes correctly.
+ */
+export function resolveAgentAttribution(
+  session: { activeTools: Map<string, ActiveTool>; activeAgents: Map<string, ActiveAgent> },
+  precedingToolUseIds: string[],
+): { label: string; description: string } | null {
+  if (!precedingToolUseIds || precedingToolUseIds.length === 0) return null;
+
+  for (const toolUseId of precedingToolUseIds) {
+    const tool = session.activeTools.get(toolUseId);
+    if (!tool) continue;
+    const parentId = tool.parentToolUseId;
+    if (!parentId) continue;
+
+    for (const agent of session.activeAgents.values()) {
+      if (agent.toolUseId === parentId) {
+        return {
+          label: agent.taskType ?? "Agent",
+          description: agent.description,
+        };
+      }
+    }
+  }
+
+  return null;
+}
 
 export function handleModelNotFoundError(chunk: Record<string, unknown>): boolean {
   if (chunk.type !== "assistant") return false;
@@ -414,13 +450,25 @@ class WsService {
         if (isToolUseSummary(chunk)) {
           const session = store.sessions.get(sessionId);
           const toolName = session?.activeToolStatus?.toolName ?? "Tool";
-          store.addToolMessage(sessionId, toolName, chunk.summary);
+          const precedingIds = Array.isArray(chunk.preceding_tool_use_ids)
+            ? chunk.preceding_tool_use_ids
+            : [];
+          // Resolve attribution BEFORE removeActiveTool clears entries.
+          const attribution = session
+            ? resolveAgentAttribution(session, precedingIds)
+            : null;
+          store.addToolMessage(
+            sessionId,
+            toolName,
+            chunk.summary,
+            attribution
+              ? { agentLabel: attribution.label, agentDescription: attribution.description }
+              : undefined,
+          );
           // Remove all completed tools
-          if (Array.isArray(chunk.preceding_tool_use_ids)) {
-            chunk.preceding_tool_use_ids.forEach((id) => {
-              store.removeActiveTool(sessionId, id);
-            });
-          }
+          precedingIds.forEach((id) => {
+            store.removeActiveTool(sessionId, id);
+          });
           // Clear legacy status
           store.setActiveToolStatus(sessionId, null);
           break;

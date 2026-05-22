@@ -17,6 +17,8 @@ export type Message = {
   toolName?: string;
   toolInput?: Record<string, unknown>;
   contentBlocks?: ContentBlock[];
+  agentLabel?: string;
+  agentDescription?: string;
 };
 
 export type PendingPermission = {
@@ -194,7 +196,12 @@ interface AppState {
     sessionId: string,
     status: { toolName: string; description: string } | null,
   ) => void;
-  addToolMessage: (sessionId: string, toolName: string, summary: string) => void;
+  addToolMessage: (
+    sessionId: string,
+    toolName: string,
+    summary: string,
+    attribution?: { agentLabel: string; agentDescription: string },
+  ) => void;
 
   // Active Tool Management
   addActiveTool: (sessionId: string, toolUseId: string, tool: ActiveTool) => void;
@@ -418,7 +425,7 @@ export const useAppStore = create<AppState>((set) => ({
       })),
     })),
 
-  addToolMessage: (sessionId, toolName, summary) =>
+  addToolMessage: (sessionId, toolName, summary, attribution) =>
     set((state) => ({
       sessions: updateSession(state.sessions, sessionId, (s) => ({
         ...s,
@@ -430,6 +437,12 @@ export const useAppStore = create<AppState>((set) => ({
             toolName,
             content: summary,
             timestamp: Date.now(),
+            ...(attribution
+              ? {
+                  agentLabel: attribution.agentLabel,
+                  agentDescription: attribution.agentDescription,
+                }
+              : {}),
           },
         ],
       })),
