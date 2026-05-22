@@ -6,6 +6,7 @@ import { toastService } from "../../services/toast-service";
 import { wsService } from "../../services/ws-service";
 import { useAppStore } from "../../stores/app-store";
 import type { LinearScreen } from "./AppShell";
+import RenameSessionSheet from "./RenameSessionSheet";
 import "./projects.css";
 import "./sessions.css";
 
@@ -42,6 +43,17 @@ interface SessionRowItem {
   age: string;
   liveness: "live" | "idle" | "recent";
   onClick: () => void;
+  rename?: {
+    sdkSessionId: string;
+    cwd: string;
+    initialTitle: string;
+  };
+}
+
+interface RenameTarget {
+  sdkSessionId: string;
+  cwd: string;
+  initialTitle: string;
 }
 
 export default function ProjectDetailScreen({ cwd, onNavigate, onBack }: Props) {
@@ -52,6 +64,7 @@ export default function ProjectDetailScreen({ cwd, onNavigate, onBack }: Props) 
   const connectionState = useAppStore((s) => s.connectionState);
 
   const [menuOpen, setMenuOpen] = useState(false);
+  const [renameTarget, setRenameTarget] = useState<RenameTarget | null>(null);
 
   useEffect(() => {
     if (connectionState === "connected" && sessionList.length === 0) {
@@ -81,6 +94,7 @@ export default function ProjectDetailScreen({ cwd, onNavigate, onBack }: Props) 
     for (const s of sessionList) {
       if (s.cwd !== cwd) continue;
       if (seenSdkIds.has(s.sdkSessionId)) continue;
+      const initialTitle = s.customTitle ?? s.displayTitle ?? "";
       items.push({
         key: `srv-${s.sdkSessionId}`,
         title: s.displayTitle || basename(s.cwd),
@@ -94,6 +108,11 @@ export default function ProjectDetailScreen({ cwd, onNavigate, onBack }: Props) 
           } catch {
             toastService.error("Could not resume session");
           }
+        },
+        rename: {
+          sdkSessionId: s.sdkSessionId,
+          cwd: s.cwd,
+          initialTitle,
         },
       });
     }
@@ -173,31 +192,47 @@ export default function ProjectDetailScreen({ cwd, onNavigate, onBack }: Props) 
             <div className="lin-projects-section-empty">No sessions for this project yet.</div>
           ) : (
             rows.map((r) => (
-              <button key={r.key} type="button" className="lin-session-row" onClick={r.onClick}>
-                {r.liveness !== "recent" && <span className="lin-session-rail" />}
-                <div className="lin-session-title">{r.title}</div>
-                <div className="lin-session-meta">
-                  <span className="lin-session-meta-left">
-                    {r.branch ? (
-                      <>
-                        <Icon name="branch" size={10} color={T.fg3} />
-                        <span>{r.branch}</span>
-                        <span className="lin-dot-sep">·</span>
-                      </>
-                    ) : null}
-                    <span>{r.age}</span>
-                  </span>
-                  {r.liveness !== "recent" && (
-                    <span
-                      className={`lin-session-live ${
-                        r.liveness === "live" ? "is-live" : "is-idle"
-                      }`}
-                    >
-                      ● {r.liveness === "live" ? "Live" : "Active"}
+              <div key={r.key} className="lin-session-row-wrap">
+                <button type="button" className="lin-session-row" onClick={r.onClick}>
+                  {r.liveness !== "recent" && <span className="lin-session-rail" />}
+                  <div className="lin-session-title">{r.title}</div>
+                  <div className="lin-session-meta">
+                    <span className="lin-session-meta-left">
+                      {r.branch ? (
+                        <>
+                          <Icon name="branch" size={10} color={T.fg3} />
+                          <span>{r.branch}</span>
+                          <span className="lin-dot-sep">·</span>
+                        </>
+                      ) : null}
+                      <span>{r.age}</span>
                     </span>
-                  )}
-                </div>
-              </button>
+                    {r.liveness !== "recent" && (
+                      <span
+                        className={`lin-session-live ${
+                          r.liveness === "live" ? "is-live" : "is-idle"
+                        }`}
+                      >
+                        ● {r.liveness === "live" ? "Live" : "Active"}
+                      </span>
+                    )}
+                  </div>
+                </button>
+                {r.rename && (
+                  <button
+                    type="button"
+                    className="lin-session-rename"
+                    aria-label="Rename session"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // biome-ignore lint/style/noNonNullAssertion: guarded by `r.rename` above
+                      setRenameTarget(r.rename!);
+                    }}
+                  >
+                    <Icon name="dots" size={14} color={T.fg3} />
+                  </button>
+                )}
+              </div>
             ))
           )}
         </section>
@@ -209,6 +244,14 @@ export default function ProjectDetailScreen({ cwd, onNavigate, onBack }: Props) 
           <span>New session in this project</span>
         </button>
       </footer>
+
+      <RenameSessionSheet
+        open={renameTarget !== null}
+        onClose={() => setRenameTarget(null)}
+        sdkSessionId={renameTarget?.sdkSessionId ?? ""}
+        cwd={renameTarget?.cwd ?? ""}
+        initialTitle={renameTarget?.initialTitle ?? ""}
+      />
     </div>
   );
 }

@@ -687,6 +687,7 @@ class WsService {
             gitBranch?: string;
             lastModified: number;
             createdAt?: number;
+            customTitle?: string;
           }>) || [],
         );
         break;
@@ -880,6 +881,16 @@ class WsService {
   interrupt(sessionId: string) {
     if (!this.ws) return;
     this.sendMessage({ type: "interrupt", sessionId });
+  }
+
+  setSessionTitle(sdkSessionId: string, title: string, dir?: string) {
+    if (!this.ws) return;
+    this.sendMessage({
+      type: "set_session_title",
+      sdkSessionId,
+      title,
+      ...(dir ? { dir } : {}),
+    });
   }
 
   listSessions(dir?: string, limit?: number, offset?: number) {

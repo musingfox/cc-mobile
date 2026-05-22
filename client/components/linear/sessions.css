@@ -110,6 +110,38 @@
   padding: 10px 16px 6px;
 }
 
+.lin-session-row-wrap {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.lin-session-row-wrap > .lin-session-row {
+  border-top: none;
+  flex: 1;
+}
+
+.lin-session-rename {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  align-self: center;
+  margin-right: 8px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: inherit;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.lin-session-rename:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
 .lin-session-row {
   position: relative;
   display: flex;
