@@ -422,6 +422,7 @@ class WsService {
             description: chunk.description,
             taskType: chunk.task_type,
             status: "running",
+            ...(chunk.tool_use_id ? { toolUseId: chunk.tool_use_id } : {}),
           });
           break;
         }

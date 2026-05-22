@@ -4,7 +4,7 @@
   gap: 8px;
 }
 
-.lin-activity-card {
+.lin-activity-tool {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -12,6 +12,15 @@
   border-radius: 8px;
   padding: 8px 10px;
   background: rgba(255, 255, 255, 0.015);
+}
+
+.lin-activity-tool.is-nested {
+  border: none;
+  background: transparent;
+  padding: 4px 4px 4px 10px;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  margin-left: 8px;
+  border-radius: 0;
 }
 
 .lin-activity-main {
@@ -40,4 +49,64 @@
   font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 10px;
   color: #6a6a6a;
+}
+
+/* Subagent grouping ---------------------------------------- */
+
+.lin-activity-agent {
+  border: 1px solid rgba(140, 120, 220, 0.22);
+  border-radius: 10px;
+  background: rgba(140, 120, 220, 0.04);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lin-activity-agent-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lin-activity-agent-spark {
+  color: #b8a5ff;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.lin-activity-agent-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.lin-activity-agent-name {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.25px;
+  text-transform: uppercase;
+  color: #b8a5ff;
+}
+
+.lin-activity-agent-desc {
+  font-size: 12px;
+  color: #d8d8e0;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.lin-activity-agent-stats {
+  display: flex;
+  gap: 8px;
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  color: #8a8aa0;
+  flex-shrink: 0;
+}
+
+.lin-activity-agent-children {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }

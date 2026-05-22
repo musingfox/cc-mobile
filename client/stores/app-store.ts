@@ -81,6 +81,12 @@ export type ActiveAgent = {
   toolCount?: number;
   tokenCount?: number;
   summary?: string;
+  /**
+   * `tool_use_id` of the Task tool that spawned this subagent. Sub-tools
+   * fired by the agent carry this value as their `parent_tool_use_id`, so we
+   * group on it in the UI.
+   */
+  toolUseId?: string;
 };
 
 export type ResolvedAction = {

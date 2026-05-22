@@ -100,6 +100,7 @@ export default function ChatScreen({ onNavigate }: Props) {
   const isStreaming = session.isStreaming;
   const currentStreamMessageId = session.currentStreamMessageId;
   const activeTools = session.activeTools;
+  const activeAgents = session.activeAgents;
   const usage = session.usage;
   const model = capabilities?.model ?? "claude";
   const projectName = basename(session.cwd);
@@ -190,7 +191,7 @@ export default function ChatScreen({ onNavigate }: Props) {
           (!currentStreamMessageId ||
             !messages.find((m) => m.id === currentStreamMessageId)?.content) && <ThinkingCard />}
 
-        <ActivityStrip tools={activeTools} />
+        <ActivityStrip tools={activeTools} agents={activeAgents} />
       </div>
 
       {usage && (
