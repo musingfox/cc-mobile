@@ -30,7 +30,7 @@ describe("SettingsScreen", () => {
     cleanup();
   });
 
-  test("renders model rows and selected radio from capabilities", () => {
+  test("renders model row showing current model displayName when capabilities loaded", () => {
     useAppStore.setState({
       capabilities: {
         commands: [],
@@ -44,24 +44,11 @@ describe("SettingsScreen", () => {
     });
 
     const { getByText } = render(<SettingsScreen onNavigate={() => {}} />);
-
-    const sonnetTitle = getByText("Sonnet 4");
-    const opusTitle = getByText("Opus 4");
-    expect(sonnetTitle).not.toBeNull();
-    expect(opusTitle).not.toBeNull();
-
-    const sonnetRow = sonnetTitle.closest(".lin-settings-row");
-    const opusRow = opusTitle.closest(".lin-settings-row");
-    expect(sonnetRow?.querySelector(".lin-radio.is-selected")).not.toBeNull();
-    expect(opusRow?.querySelector(".lin-radio.is-selected")).toBeNull();
+    expect(getByText("Model")).not.toBeNull();
+    expect(getByText("Sonnet 4")).not.toBeNull();
   });
 
-  test("clicking a model updates store and notifies server with model value", () => {
-    const tapMock = mock(() => {});
-    const setModelMock = mock(() => {});
-    hapticService.tap = tapMock;
-    wsService.setModel = setModelMock as typeof wsService.setModel;
-
+  test("clicking the model row opens ModelSheet with all options", () => {
     useAppStore.setState({
       capabilities: {
         commands: [],
@@ -74,12 +61,11 @@ describe("SettingsScreen", () => {
       },
     });
 
-    const { getByText } = render(<SettingsScreen onNavigate={() => {}} />);
-    fireEvent.click(getByText("Opus 4"));
+    const { getByText, queryByText } = render(<SettingsScreen onNavigate={() => {}} />);
+    expect(queryByText("Opus 4")).toBeNull();
 
-    expect(tapMock).toHaveBeenCalledTimes(1);
-    expect(useSettingsStore.getState().model).toBe("claude-opus-4");
-    expect(setModelMock).toHaveBeenCalledWith("claude-opus-4");
+    fireEvent.click(getByText("Model").closest(".lin-settings-row") as HTMLElement);
+    expect(getByText("Opus 4")).not.toBeNull();
   });
 
   test("shows loading model row when capabilities are null", () => {
