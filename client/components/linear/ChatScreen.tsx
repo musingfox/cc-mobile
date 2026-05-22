@@ -184,6 +184,8 @@ export default function ChatScreen({ onNavigate }: Props) {
                 toolName={m.toolName || "Unknown"}
                 input={m.toolInput || {}}
                 result={m.content}
+                agentLabel={m.agentLabel}
+                agentDescription={m.agentDescription}
               />
             );
           }
