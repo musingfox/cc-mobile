@@ -19,7 +19,7 @@ const defaultSettings: Settings = {
   notificationsEnabled: false,
   hapticsEnabled: false,
   envVars: {},
-  model: "claude-sonnet-4-6",
+  model: "",
   effort: null,
   permissionMode: "default",
 };

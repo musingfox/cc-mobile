@@ -41,7 +41,8 @@ export class SessionManager {
   private activeQueries = new Map<string, Query>();
   private permissionMode: PermissionMode;
   private envVars: Record<string, string> = {};
-  private selectedModel = "claude-sonnet-4-6";
+  /** Empty string means "follow the CLI / SDK default model" (no override). */
+  private selectedModel = "";
   private selectedEffort: "low" | "medium" | "high" | "max" | null = null;
 
   constructor(config: { permissionMode: PermissionMode }) {
@@ -194,7 +195,7 @@ export class SessionManager {
     const q = query({
       prompt: promptValue,
       options: {
-        model: this.selectedModel,
+        ...(this.selectedModel ? { model: this.selectedModel } : {}),
         ...(this.selectedEffort ? { effort: this.selectedEffort } : {}),
         settingSources: ["user", "project", "local"],
         systemPrompt: { type: "preset", preset: "claude_code" },

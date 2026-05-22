@@ -443,7 +443,7 @@ export const useAppStore = create<AppState>((set) => ({
       })),
     })),
 
-  selectedModel: "claude-sonnet-4-6",
+  selectedModel: "",
   setSelectedModel: (selectedModel) => set({ selectedModel }),
   selectedEffort: null,
   setSelectedEffort: (selectedEffort) => set({ selectedEffort }),

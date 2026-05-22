@@ -174,10 +174,14 @@ export default function SettingsScreen({ onNavigate }: Props) {
                 <div className="lin-settings-row-main">
                   <div className="lin-settings-row-title">Model</div>
                   <div className="lin-settings-row-desc">
-                    {models.find((m) => m.value === model)?.displayName ?? model}
+                    {model === ""
+                      ? "Device default"
+                      : (models.find((m) => m.value === model)?.displayName ?? model)}
                   </div>
                 </div>
-                <div className="lin-settings-row-value is-mono">{model || "—"}</div>
+                <div className="lin-settings-row-value is-mono">
+                  {model || capabilities?.model || "—"}
+                </div>
                 <Icon name="chevronR" size={16} color={T.fg3} />
               </button>
             )}
