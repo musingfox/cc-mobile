@@ -23,6 +23,7 @@ export default function AskUserQuestionUI({ questions, onAnswer }: AskUserQuesti
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [customAnswer, setCustomAnswer] = useState("");
+  const [multiSelected, setMultiSelected] = useState<Record<string, string[]>>({});
 
   const currentQuestion = questions[currentIndex];
   const isLastQuestion = currentIndex === questions.length - 1;
@@ -31,43 +32,39 @@ export default function AskUserQuestionUI({ questions, onAnswer }: AskUserQuesti
     return null;
   }
 
-  if (currentQuestion.multiSelect) {
-    return <div className="question-error">Multi-select questions are not yet supported</div>;
-  }
+  const isMulti = !!currentQuestion.multiSelect;
+  const selectedForCurrent = multiSelected[currentQuestion.question] ?? [];
 
-  const handleSelectOption = (label: string) => {
-    const newAnswers = { ...answers, [currentQuestion.question]: label };
-
-    if (questions.length === 1) {
+  const commitAnswer = (value: string) => {
+    const newAnswers = { ...answers, [currentQuestion.question]: value };
+    if (isLastQuestion) {
       onAnswer(newAnswers);
     } else {
       setAnswers(newAnswers);
-      if (isLastQuestion) {
-        onAnswer(newAnswers);
-      } else {
-        setCurrentIndex(currentIndex + 1);
-        setCustomAnswer("");
-      }
+      setCurrentIndex(currentIndex + 1);
+      setCustomAnswer("");
     }
+  };
+
+  const handleSelectOption = (label: string) => {
+    if (isMulti) {
+      const prev = multiSelected[currentQuestion.question] ?? [];
+      const next = prev.includes(label) ? prev.filter((l) => l !== label) : [...prev, label];
+      setMultiSelected({ ...multiSelected, [currentQuestion.question]: next });
+      return;
+    }
+    commitAnswer(label);
+  };
+
+  const handleMultiSubmit = () => {
+    if (selectedForCurrent.length === 0) return;
+    commitAnswer(selectedForCurrent.join(", "));
   };
 
   const handleCustomAnswer = () => {
     const trimmed = customAnswer.trim();
     if (!trimmed) return;
-
-    const newAnswers = { ...answers, [currentQuestion.question]: trimmed };
-
-    if (questions.length === 1) {
-      onAnswer(newAnswers);
-    } else {
-      setAnswers(newAnswers);
-      if (isLastQuestion) {
-        onAnswer(newAnswers);
-      } else {
-        setCurrentIndex(currentIndex + 1);
-        setCustomAnswer("");
-      }
-    }
+    commitAnswer(trimmed);
   };
 
   const handleNext = () => {
@@ -91,12 +88,19 @@ export default function AskUserQuestionUI({ questions, onAnswer }: AskUserQuesti
           {currentQuestion.header || "Question"}
         </span>
         <div className="ask-user-question lin-ask-question">{currentQuestion.question}</div>
+        {isMulti && (
+          <div className="lin-ask-multi-hint">
+            Select one or more · {selectedForCurrent.length} selected
+          </div>
+        )}
       </div>
       <div className="permission-actions ask-user-actions lin-ask-actions">
         {currentQuestion.options?.map((option) => (
           <OptionButton
             key={option.label}
             option={option}
+            multiSelect={isMulti}
+            selected={isMulti && selectedForCurrent.includes(option.label)}
             onSelect={() => handleSelectOption(option.label)}
           />
         ))}
@@ -122,6 +126,16 @@ export default function AskUserQuestionUI({ questions, onAnswer }: AskUserQuesti
             Submit
           </button>
         </div>
+        {isMulti && (
+          <button
+            type="button"
+            className="permission-btn green lin-ask-multi-submit"
+            onClick={handleMultiSubmit}
+            disabled={selectedForCurrent.length === 0}
+          >
+            Confirm ({selectedForCurrent.length})
+          </button>
+        )}
       </div>
     </div>
   );

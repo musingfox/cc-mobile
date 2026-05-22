@@ -70,3 +70,109 @@
   color: #d49898;
   font-size: 14px;
 }
+
+/* Multi-select hint + sticky confirm ------------------------ */
+
+.lin-ask-multi-hint {
+  font-size: 11px;
+  color: #8a8a8a;
+  margin-top: 4px;
+  letter-spacing: 0.2px;
+}
+
+.lin-ask-multi-submit {
+  margin-top: 8px;
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.lin-ask-multi-submit:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Option container + checkbox + preview ---------------------- */
+
+.option-button-container {
+  position: relative;
+  width: 100%;
+}
+
+.option-button-container + .option-button-container {
+  margin-top: 6px;
+}
+
+.option-button-container.is-selected .option-button {
+  border-color: rgba(140, 200, 255, 0.55);
+  background: rgba(140, 200, 255, 0.08);
+}
+
+.option-checkbox {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  border: 1.5px solid rgba(255, 255, 255, 0.24);
+  background: transparent;
+  margin-right: 10px;
+  position: relative;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
+}
+
+.option-checkbox.is-checked {
+  border-color: #88c4ff;
+  background: #88c4ff;
+}
+
+.option-checkbox.is-checked::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 5px;
+  height: 9px;
+  border: solid #0e0e10;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.preview-toggle {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: #8a8a8a;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.preview-toggle:active {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.preview-panel {
+  margin-top: 6px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #d8d8d8;
+}
+
+.preview-panel .lin-md,
+.preview-panel pre,
+.preview-panel code {
+  font-size: 12px;
+}

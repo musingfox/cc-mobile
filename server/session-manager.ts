@@ -206,7 +206,7 @@ export class SessionManager {
         permissionMode: effectivePermissionMode,
         ...(isBypass ? { allowDangerouslySkipPermissions: true } : {}),
         skills: "all",
-        toolConfig: { askUserQuestion: { previewFormat: "html" } },
+        toolConfig: { askUserQuestion: { previewFormat: "markdown" } },
         hooks: {
           PostToolUse: [
             {

@@ -108,20 +108,69 @@ describe("AskUserQuestionUI", () => {
     expect(onAnswer).toHaveBeenCalledWith({ "Which language?": "Rust" });
   });
 
-  it("question with multiSelect: true renders error message", () => {
+  it("multiSelect: toggles options, confirm sends comma-joined labels", () => {
     const questions = [
       {
         question: "Which languages?",
         header: "Languages",
-        options: [{ label: "Python", description: "" }],
+        options: [
+          { label: "Python", description: "" },
+          { label: "Go", description: "" },
+          { label: "Rust", description: "" },
+        ],
         multiSelect: true,
       },
     ];
-    const { getByText } = render(
-      <AskUserQuestionUI questions={questions} onAnswer={mock(() => {})} />,
+    const onAnswer = mock(() => {});
+    const { getByText, container } = render(
+      <AskUserQuestionUI questions={questions} onAnswer={onAnswer} />,
     );
 
-    expect(getByText("Multi-select questions are not yet supported")).not.toBeNull();
+    // No options selected → confirm disabled
+    const confirm = container.querySelector(".lin-ask-multi-submit") as HTMLButtonElement;
+    expect(confirm).not.toBeNull();
+    expect(confirm.disabled).toBe(true);
+    expect(getByText("Select one or more · 0 selected")).not.toBeNull();
+
+    // Toggle two options
+    fireEvent.click(getByText("Python"));
+    fireEvent.click(getByText("Rust"));
+    expect(getByText("Select one or more · 2 selected")).not.toBeNull();
+    expect(confirm.disabled).toBe(false);
+
+    // Toggle Python off
+    fireEvent.click(getByText("Python"));
+    expect(getByText("Select one or more · 1 selected")).not.toBeNull();
+
+    // Confirm
+    fireEvent.click(confirm);
+    expect(onAnswer).toHaveBeenCalledTimes(1);
+    expect(onAnswer).toHaveBeenCalledWith({ "Which languages?": "Rust" });
+  });
+
+  it("multiSelect with multiple selections joined by comma", () => {
+    const questions = [
+      {
+        question: "Which features?",
+        header: "Features",
+        options: [
+          { label: "Auth", description: "" },
+          { label: "Logs", description: "" },
+        ],
+        multiSelect: true,
+      },
+    ];
+    const onAnswer = mock(() => {});
+    const { getByText, container } = render(
+      <AskUserQuestionUI questions={questions} onAnswer={onAnswer} />,
+    );
+
+    fireEvent.click(getByText("Auth"));
+    fireEvent.click(getByText("Logs"));
+    const confirm = container.querySelector(".lin-ask-multi-submit") as HTMLButtonElement;
+    fireEvent.click(confirm);
+
+    expect(onAnswer).toHaveBeenCalledWith({ "Which features?": "Auth, Logs" });
   });
 
   it("multi-question: select option on Q1, click Next, select option on Q2, click Submit calls onAnswer with both", () => {
@@ -138,9 +187,7 @@ describe("AskUserQuestionUI", () => {
       },
     ];
     const onAnswer = mock(() => {});
-    const { getByText, container } = render(
-      <AskUserQuestionUI questions={questions} onAnswer={onAnswer} />,
-    );
+    const { getByText } = render(<AskUserQuestionUI questions={questions} onAnswer={onAnswer} />);
 
     // Selecting option on Q1 auto-advances to Q2
     fireEvent.click(getByText("Python"));
