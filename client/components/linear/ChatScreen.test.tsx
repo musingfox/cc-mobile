@@ -116,4 +116,78 @@ describe("ChatScreen", () => {
       expect(queryByText("Clear chat")).toBeNull();
     });
   });
+
+  test("shows thinking card when streaming starts before streamed content exists", () => {
+    const store = useAppStore.getState();
+    store.addSession("s1", "/tmp/project");
+    store.setActiveSession("s1");
+    store.setStreaming("s1", true);
+
+    const { container, getByText } = render(<ChatScreen onNavigate={() => {}} />);
+    const card = container.querySelector(".lin-thinking");
+
+    expect(card).not.toBeNull();
+    expect(card?.classList.contains("lin-thinking--streaming")).toBe(false);
+    expect(card?.classList.contains("lin-thinking--waiting")).toBe(false);
+    expect(getByText("Thinking")).not.toBeNull();
+  });
+
+  test("shows streaming card when streamed assistant content is present", () => {
+    const store = useAppStore.getState();
+    store.addSession("s1", "/tmp/project");
+    store.setActiveSession("s1");
+    store.setStreaming("s1", true);
+    store.startStreamMessage("s1", "m1", "Hello");
+
+    const { container, getByText } = render(<ChatScreen onNavigate={() => {}} />);
+    const card = container.querySelector(".lin-thinking");
+
+    expect(card?.classList.contains("lin-thinking--streaming")).toBe(true);
+    expect(getByText("Streaming")).not.toBeNull();
+  });
+
+  test("shows waiting card when pending permission exists", () => {
+    const store = useAppStore.getState();
+    store.addSession("s1", "/tmp/project");
+    store.setActiveSession("s1");
+    store.setPermission("s1", {
+      requestId: "p1",
+      tool: { name: "Bash", parameters: {} },
+    });
+
+    const { container, getByText } = render(<ChatScreen onNavigate={() => {}} />);
+    const card = container.querySelector(".lin-thinking");
+
+    expect(card?.classList.contains("lin-thinking--waiting")).toBe(true);
+    expect(getByText("Waiting for permission")).not.toBeNull();
+  });
+
+  test("waiting permission state overrides streaming state", () => {
+    const store = useAppStore.getState();
+    store.addSession("s1", "/tmp/project");
+    store.setActiveSession("s1");
+    store.setStreaming("s1", true);
+    store.startStreamMessage("s1", "m1", "Hello");
+    store.setPermission("s1", {
+      requestId: "p1",
+      tool: { name: "Bash", parameters: {} },
+    });
+
+    const { container, getByText } = render(<ChatScreen onNavigate={() => {}} />);
+    const cards = container.querySelectorAll(".lin-thinking");
+
+    expect(cards.length).toBe(1);
+    expect(cards[0]?.classList.contains("lin-thinking--waiting")).toBe(true);
+    expect(getByText("Waiting for permission")).not.toBeNull();
+  });
+
+  test("hides thinking card when not streaming and no permission is pending", () => {
+    const store = useAppStore.getState();
+    store.addSession("s1", "/tmp/project");
+    store.setActiveSession("s1");
+    store.loadSessionHistory("s1", [{ id: "m1", role: "assistant", content: "done", timestamp: 1 }]);
+
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    expect(container.querySelector(".lin-thinking")).toBeNull();
+  });
 });
