@@ -319,6 +319,33 @@
   animation: ccd-shimmer 1.8s infinite;
 }
 
+.lin-thinking--streaming .lin-thinking-label {
+  color: #e6dfc8;
+}
+
+.lin-thinking--streaming .lin-shimmer-bar {
+  animation-duration: 1.2s;
+}
+
+.lin-thinking--waiting {
+  border-color: rgba(230, 180, 80, 0.35);
+  background: rgba(230, 180, 80, 0.06);
+}
+
+.lin-thinking--waiting .lin-thinking-label {
+  color: #e6b450;
+}
+
+.lin-thinking--waiting .lin-ring {
+  animation: none;
+  border-top-color: #e6b450;
+}
+
+.lin-thinking--waiting .lin-shimmer-bar {
+  animation: none;
+  background-image: linear-gradient(90deg, rgba(230, 180, 80, 0.18), rgba(230, 180, 80, 0.1));
+}
+
 /* Live tool activity row ----------------------------------- */
 
 .lin-live-row {

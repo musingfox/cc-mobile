@@ -124,6 +124,18 @@ export default function ChatScreen({ onNavigate }: Props) {
         ? (capabilities?.agents ?? [])
         : [];
 
+  const streamMessage = currentStreamMessageId
+    ? messages.find((m) => m.id === currentStreamMessageId)
+    : undefined;
+  const hasStreamContent = Boolean(streamMessage?.content);
+  const thinkingKind: ThinkingCardKind | null = pendingPermission
+    ? "waiting-permission"
+    : isStreaming && hasStreamContent
+      ? "streaming"
+      : isStreaming
+        ? "thinking"
+        : null;
+
   return (
     <div className="lin-chat">
       <header className="lin-chat-bar">
@@ -187,9 +199,7 @@ export default function ChatScreen({ onNavigate }: Props) {
           );
         })}
 
-        {isStreaming &&
-          (!currentStreamMessageId ||
-            !messages.find((m) => m.id === currentStreamMessageId)?.content) && <ThinkingCard />}
+        {thinkingKind && <ThinkingCard kind={thinkingKind} />}
 
         <ActivityStrip tools={activeTools} agents={activeAgents} />
       </div>
@@ -245,12 +255,31 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
-function ThinkingCard() {
+type ThinkingCardKind = "thinking" | "streaming" | "waiting-permission";
+
+const THINKING_LABELS: Record<ThinkingCardKind, string> = {
+  thinking: "Thinking",
+  streaming: "Streaming",
+  "waiting-permission": "Waiting for permission",
+};
+
+const THINKING_MODIFIERS: Record<ThinkingCardKind, string> = {
+  thinking: "",
+  streaming: "lin-thinking--streaming",
+  "waiting-permission": "lin-thinking--waiting",
+};
+
+export function ThinkingCard({ kind = "thinking" }: { kind?: ThinkingCardKind }) {
+  const safeKind: ThinkingCardKind =
+    kind === "streaming" || kind === "waiting-permission" ? kind : "thinking";
+  const modifier = THINKING_MODIFIERS[safeKind];
+  const classes = modifier ? `lin-thinking ${modifier}` : "lin-thinking";
+
   return (
-    <div className="lin-thinking">
+    <div className={classes}>
       <div className="lin-thinking-head">
         <span className="lin-ring" />
-        <span className="lin-thinking-label">Thinking</span>
+        <span className="lin-thinking-label">{THINKING_LABELS[safeKind]}</span>
       </div>
       <div className="lin-thinking-bars">
         <span className="lin-shimmer-bar" style={{ width: "92%" }} />
