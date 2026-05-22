@@ -1,4 +1,9 @@
-import { getSessionInfo, listSessions, type SDKSessionInfo } from "@anthropic-ai/claude-agent-sdk";
+import {
+  getSessionInfo,
+  listSessions,
+  renameSession,
+  type SDKSessionInfo,
+} from "@anthropic-ai/claude-agent-sdk";
 import type { SessionListItem } from "./protocol";
 
 /**
@@ -38,6 +43,18 @@ export async function getClaudeSessionInfo(
 }
 
 /**
+ * Rename a Claude Code session via the SDK module-level helper.
+ * Errors propagate so the caller (WS handler) can surface them.
+ */
+export async function renameClaudeSession(
+  sdkSessionId: string,
+  title: string,
+  dir?: string,
+): Promise<void> {
+  await renameSession(sdkSessionId, title, dir ? { dir } : undefined);
+}
+
+/**
  * Transform SDK session info to SessionListItem.
  * Display title priority: customTitle > firstPrompt > summary > "Untitled"
  */
@@ -51,5 +68,6 @@ function transformSessionInfo(info: SDKSessionInfo): SessionListItem {
     gitBranch: info.gitBranch,
     lastModified: info.lastModified,
     createdAt: info.createdAt,
+    ...(info.customTitle ? { customTitle: info.customTitle } : {}),
   };
 }

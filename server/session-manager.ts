@@ -23,6 +23,7 @@ interface SessionConfig {
   canUseTool: CanUseTool;
   sdkSessionId: string | null;
   permissionMode?: PermissionMode;
+  pendingTitle?: string;
 }
 
 export interface Capabilities {
@@ -129,16 +130,22 @@ export class SessionManager {
     cwd: string,
     canUseTool: CanUseTool,
     sdkSessionId?: string,
+    title?: string,
   ): Promise<void> {
     if (this.sessions.has(sessionId)) {
       throw new Error(`Session ${sessionId} already exists`);
     }
+
+    // `title` only applies to new (non-resumed) sessions; the SDK ignores it
+    // when resuming. Trimmed empty strings are treated as absent.
+    const pendingTitle = !sdkSessionId && title?.trim() ? title.trim() : undefined;
 
     this.sessions.set(sessionId, {
       cwd,
       canUseTool,
       sdkSessionId: sdkSessionId ?? null,
       permissionMode: undefined,
+      ...(pendingTitle ? { pendingTitle } : {}),
     });
   }
 
@@ -196,6 +203,7 @@ export class SessionManager {
     const q = query({
       prompt: promptValue,
       options: {
+        ...(config.pendingTitle ? { title: config.pendingTitle } : {}),
         ...(this.selectedModel ? { model: this.selectedModel } : {}),
         ...(this.selectedEffort ? { effort: this.selectedEffort } : {}),
         settingSources: ["user", "project", "local"],
@@ -245,6 +253,9 @@ export class SessionManager {
           if (sessionId !== undefined) {
             config.sdkSessionId = sessionId;
           }
+          // Title only applies to the first turn — drop it once the SDK has
+          // accepted it and emitted system/init.
+          config.pendingTitle = undefined;
         }
 
         yield msg;

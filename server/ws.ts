@@ -13,7 +13,11 @@ import { buildUrl } from "./path-utils";
 import type { createPermissionHandler, PendingPermissionSnapshot } from "./permission-bridge";
 import { ClientMessage, ServerMessage } from "./protocol";
 import { loadSessionHistory } from "./session-history";
-import { getClaudeSessionInfo, listClaudeSessions } from "./session-listing";
+import {
+  getClaudeSessionInfo,
+  listClaudeSessions,
+  renameClaudeSession,
+} from "./session-listing";
 import type { InitData, SessionManager } from "./session-manager";
 
 function expandPath(p: string): string {
@@ -225,13 +229,32 @@ export function createWsPlugin(
             const sessionId = crypto.randomUUID();
             (ws.data as WsData).currentSessionId = sessionId;
 
-            await sessionManager.createSession(sessionId, cwd, handler.canUseTool);
+            await sessionManager.createSession(
+              sessionId,
+              cwd,
+              handler.canUseTool,
+              undefined,
+              message.title,
+            );
 
             sendBuffered(ws, sessionId, {
               type: "session_created",
               sessionId,
               cwd,
             });
+            break;
+          }
+
+          case "set_session_title": {
+            try {
+              await renameClaudeSession(message.sdkSessionId, message.title, message.dir);
+            } catch (err) {
+              ws.send({
+                type: "error",
+                code: "rename_failed",
+                message: err instanceof Error ? err.message : String(err),
+              });
+            }
             break;
           }
 

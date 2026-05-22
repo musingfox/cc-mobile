@@ -6,6 +6,49 @@ describe("ClientMessage schema", () => {
     const result = ClientMessage.safeParse({ type: "new_session", cwd: "/tmp" });
     expect(result.success).toBe(true);
   });
+  test("new_session accepts optional title", () => {
+    const result = ClientMessage.safeParse({
+      type: "new_session",
+      cwd: "/tmp",
+      title: "Hello",
+    });
+    expect(result.success).toBe(true);
+    if (result.success && result.data.type === "new_session") {
+      expect(result.data.title).toBe("Hello");
+    }
+  });
+  test("set_session_title valid with dir", () => {
+    const result = ClientMessage.safeParse({
+      type: "set_session_title",
+      sdkSessionId: "uuid-1",
+      title: "New title",
+      dir: "/p",
+    });
+    expect(result.success).toBe(true);
+    if (result.success && result.data.type === "set_session_title") {
+      expect(result.data).toEqual({
+        type: "set_session_title",
+        sdkSessionId: "uuid-1",
+        title: "New title",
+        dir: "/p",
+      });
+    }
+  });
+  test("set_session_title valid without dir", () => {
+    const result = ClientMessage.safeParse({
+      type: "set_session_title",
+      sdkSessionId: "uuid-1",
+      title: "New title",
+    });
+    expect(result.success).toBe(true);
+  });
+  test("set_session_title rejects when sdkSessionId missing", () => {
+    const result = ClientMessage.safeParse({
+      type: "set_session_title",
+      title: "New title",
+    });
+    expect(result.success).toBe(false);
+  });
   test("send valid", () => {
     const result = ClientMessage.safeParse({ type: "send", sessionId: "s1", content: "hello" });
     expect(result.success).toBe(true);

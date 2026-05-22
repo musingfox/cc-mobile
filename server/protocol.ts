@@ -25,6 +25,14 @@ export type ContentBlock = z.infer<typeof ContentBlockSchema>;
 const NewSessionMessage = z.object({
   type: z.literal("new_session"),
   cwd: z.string(),
+  title: z.string().optional(),
+});
+
+const SetSessionTitleMessage = z.object({
+  type: z.literal("set_session_title"),
+  sdkSessionId: z.string(),
+  title: z.string(),
+  dir: z.string().optional(),
 });
 
 const SendMessage = z.object({
@@ -123,6 +131,7 @@ export const ClientMessage = z.discriminatedUnion("type", [
   GetSessionInfoMessage,
   ListDirectoriesMessage,
   ReconnectMessage,
+  SetSessionTitleMessage,
 ]);
 
 export type ClientMessage = z.infer<typeof ClientMessage>;
@@ -235,6 +244,7 @@ export const SessionListItemSchema = z.object({
   gitBranch: z.string().optional(),
   lastModified: z.number(),
   createdAt: z.number().optional(),
+  customTitle: z.string().optional(),
 });
 
 export const HistoryMessageSchema = z.object({

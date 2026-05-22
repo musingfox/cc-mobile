@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { SDKSessionInfo } from "@anthropic-ai/claude-agent-sdk";
-import { listClaudeSessions } from "../session-listing";
+import { SessionListItemSchema } from "../protocol";
+import { listClaudeSessions, renameClaudeSession } from "../session-listing";
 
 interface ListSessionsOptions {
   dir?: string;
@@ -8,19 +9,39 @@ interface ListSessionsOptions {
   offset?: number;
 }
 
+interface RenameCall {
+  sessionId: string;
+  title: string;
+  options: { dir?: string } | undefined;
+}
+
 // Mock the SDK
 mock.module("@anthropic-ai/claude-agent-sdk", () => ({
   listSessions: mock(async (options?: ListSessionsOptions) => {
     return mockListSessionsImpl(options);
   }),
+  renameSession: mock(
+    async (sessionId: string, title: string, options?: { dir?: string }) => {
+      renameCalls.push({ sessionId, title, options });
+      return mockRenameSessionImpl(sessionId, title, options);
+    },
+  ),
 }));
 
 let mockListSessionsImpl: (options?: ListSessionsOptions) => Promise<SDKSessionInfo[]>;
+let mockRenameSessionImpl: (
+  sessionId: string,
+  title: string,
+  options?: { dir?: string },
+) => Promise<void>;
+const renameCalls: RenameCall[] = [];
 
 describe("session-listing", () => {
   beforeEach(() => {
     // Reset mock implementation
     mockListSessionsImpl = async () => [];
+    mockRenameSessionImpl = async () => {};
+    renameCalls.length = 0;
   });
 
   test("T1: transforms SDKSessionInfo to SessionListItem", async () => {
@@ -55,6 +76,7 @@ describe("session-listing", () => {
       gitBranch: "main",
       lastModified: 1000,
       createdAt: 500,
+      customTitle: "My Custom Title",
     });
     expect(result[1]).toEqual({
       sdkSessionId: "session-2",
@@ -120,6 +142,86 @@ describe("session-listing", () => {
     const result = await listClaudeSessions();
 
     expect(result).toEqual([]);
+  });
+
+  test("transformSessionInfo propagates customTitle when present", async () => {
+    mockListSessionsImpl = async () => [
+      {
+        sessionId: "session-1",
+        summary: "auto",
+        lastModified: 1000,
+        customTitle: "Friendly Title",
+        cwd: "/p",
+      } as SDKSessionInfo,
+    ];
+
+    const [item] = await listClaudeSessions();
+    expect(item.customTitle).toBe("Friendly Title");
+  });
+
+  test("transformSessionInfo omits customTitle field when absent", async () => {
+    mockListSessionsImpl = async () => [
+      {
+        sessionId: "session-2",
+        summary: "auto",
+        lastModified: 1000,
+        cwd: "/p",
+      } as SDKSessionInfo,
+    ];
+
+    const [item] = await listClaudeSessions();
+    expect("customTitle" in item).toBe(false);
+  });
+
+  test("renameClaudeSession passes { dir } when dir provided", async () => {
+    await renameClaudeSession("uuid-1", "My title", "/some/dir");
+    expect(renameCalls).toHaveLength(1);
+    expect(renameCalls[0]).toEqual({
+      sessionId: "uuid-1",
+      title: "My title",
+      options: { dir: "/some/dir" },
+    });
+  });
+
+  test("renameClaudeSession passes undefined options when dir omitted", async () => {
+    await renameClaudeSession("uuid-2", "Other title");
+    expect(renameCalls).toHaveLength(1);
+    expect(renameCalls[0]).toEqual({
+      sessionId: "uuid-2",
+      title: "Other title",
+      options: undefined,
+    });
+  });
+
+  test("renameClaudeSession propagates SDK errors", async () => {
+    mockRenameSessionImpl = async () => {
+      throw new Error("disk write failed");
+    };
+    await expect(renameClaudeSession("uuid-3", "x")).rejects.toThrow("disk write failed");
+  });
+
+  test("SessionListItemSchema accepts items without customTitle", () => {
+    const ok = SessionListItemSchema.safeParse({
+      sdkSessionId: "u",
+      displayTitle: "t",
+      cwd: "/p",
+      lastModified: 1,
+    });
+    expect(ok.success).toBe(true);
+  });
+
+  test("SessionListItemSchema accepts items with customTitle", () => {
+    const ok = SessionListItemSchema.safeParse({
+      sdkSessionId: "u",
+      displayTitle: "t",
+      cwd: "/p",
+      lastModified: 1,
+      customTitle: "Renamed",
+    });
+    expect(ok.success).toBe(true);
+    if (ok.success) {
+      expect(ok.data.customTitle).toBe("Renamed");
+    }
   });
 
   test("passes options to SDK listSessions", async () => {
