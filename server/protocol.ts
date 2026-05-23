@@ -41,6 +41,12 @@ const SendMessage = z.object({
   content: z.union([z.string(), z.array(ContentBlockSchema)]),
 });
 
+const AppendUserMessageSchema = z.object({
+  type: z.literal("append_user_message"),
+  sessionId: z.string(),
+  content: z.union([z.string(), z.array(ContentBlockSchema)]),
+});
+
 const PermissionMessage = z.object({
   type: z.literal("permission"),
   requestId: z.string(),
@@ -132,6 +138,7 @@ export const ClientMessage = z.discriminatedUnion("type", [
   ListDirectoriesMessage,
   ReconnectMessage,
   SetSessionTitleMessage,
+  AppendUserMessageSchema,
 ]);
 
 export type ClientMessage = z.infer<typeof ClientMessage>;

@@ -309,6 +309,26 @@ export function createWsPlugin(
             break;
           }
 
+          case "append_user_message": {
+            try {
+              sessionManager.appendUserMessage(message.sessionId, message.content);
+            } catch (err) {
+              const errMsg = err instanceof Error ? err.message : String(err);
+              const code = errMsg.includes("not found")
+                ? "session_not_found"
+                : errMsg === "append_buffer_full"
+                  ? "append_buffer_full"
+                  : "append_failed";
+              ws.send({
+                type: "error",
+                code,
+                message: errMsg,
+                sessionId: message.sessionId,
+              });
+            }
+            break;
+          }
+
           case "permission": {
             handler.resolvePermission(message.requestId, message.allow, message.answers);
             break;

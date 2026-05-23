@@ -24,6 +24,29 @@ interface SessionConfig {
   sdkSessionId: string | null;
   permissionMode?: PermissionMode;
   pendingTitle?: string;
+  pendingAppendBlocks: ContentBlock[];
+}
+
+const APPEND_BUFFER_MAX_COUNT = 50;
+const APPEND_BUFFER_MAX_BYTES = 1024 * 1024; // 1MB
+
+function contentToBlocks(content: string | ContentBlock[]): ContentBlock[] {
+  if (typeof content === "string") {
+    return [{ type: "text", text: content }];
+  }
+  return content;
+}
+
+function blocksByteSize(blocks: ContentBlock[]): number {
+  let total = 0;
+  for (const b of blocks) {
+    if (b.type === "text") {
+      total += b.text.length;
+    } else if (b.type === "image") {
+      total += b.source.data.length;
+    }
+  }
+  return total;
 }
 
 export interface Capabilities {
@@ -145,8 +168,35 @@ export class SessionManager {
       canUseTool,
       sdkSessionId: sdkSessionId ?? null,
       permissionMode: undefined,
+      pendingAppendBlocks: [],
       ...(pendingTitle ? { pendingTitle } : {}),
     });
+  }
+
+  /**
+   * Buffer a user message to be prepended to the next `sendMessage` turn.
+   * Enforces a cap of 50 entries OR 1MB total bytes; rejects atomically when
+   * adding the new content would breach either limit.
+   */
+  appendUserMessage(sessionId: string, content: string | ContentBlock[]): void {
+    const config = this.sessions.get(sessionId);
+    if (!config) {
+      throw new Error(`Session ${sessionId} not found`);
+    }
+
+    const newBlocks = contentToBlocks(content);
+    const existingCount = config.pendingAppendBlocks.length;
+    const existingBytes = blocksByteSize(config.pendingAppendBlocks);
+    const newBytes = blocksByteSize(newBlocks);
+
+    if (
+      existingCount + newBlocks.length > APPEND_BUFFER_MAX_COUNT ||
+      existingBytes + newBytes > APPEND_BUFFER_MAX_BYTES
+    ) {
+      throw new Error("append_buffer_full");
+    }
+
+    config.pendingAppendBlocks.push(...newBlocks);
   }
 
   /** Update canUseTool callback for all sessions (e.g. after WS reconnect) */
@@ -170,35 +220,45 @@ export class SessionManager {
     const isBypass = effectivePermissionMode === "bypassPermissions";
 
     // Handle both string and content block array formats
-    // When content is string: pass as simple string prompt (SDK converts to MessageParam internally)
-    // When content is ContentBlock[]: use async generator to pass SDKUserMessage with MessageParam
-    const promptValue: string | AsyncIterable<SDKUserMessage> =
-      typeof content === "string"
-        ? content
-        : (async function* (): AsyncGenerator<SDKUserMessage> {
-            yield {
-              type: "user" as const,
-              message: {
-                role: "user" as const,
-                content: content.map((block) => {
-                  if (block.type === "text") {
-                    return { type: "text" as const, text: block.text };
-                  }
-                  // image block
-                  return {
-                    type: "image" as const,
-                    source: {
-                      type: "base64" as const,
-                      media_type: block.source.media_type,
-                      data: block.source.data,
-                    },
-                  };
-                }),
-              },
-              parent_tool_use_id: null,
-              session_id: config.sdkSessionId || sessionId, // Use SDK session_id if available, fallback to WS session_id
-            };
-          })();
+    // When content is string AND no pending appends: pass as simple string prompt
+    //   (SDK converts to MessageParam internally)
+    // When content is ContentBlock[] OR pending appends exist: use async generator
+    //   to pass SDKUserMessage with prepended buffered blocks.
+    const hasPendingAppends = config.pendingAppendBlocks.length > 0;
+    const newContentBlocks: ContentBlock[] = contentToBlocks(content);
+    const outgoingBlocks: ContentBlock[] = hasPendingAppends
+      ? [...config.pendingAppendBlocks, ...newContentBlocks]
+      : newContentBlocks;
+    // Atomically clear the buffer after building the outgoing content.
+    config.pendingAppendBlocks = [];
+
+    const useGenerator = hasPendingAppends || typeof content !== "string";
+    const promptValue: string | AsyncIterable<SDKUserMessage> = !useGenerator
+      ? (content as string)
+      : (async function* (): AsyncGenerator<SDKUserMessage> {
+          yield {
+            type: "user" as const,
+            message: {
+              role: "user" as const,
+              content: outgoingBlocks.map((block) => {
+                if (block.type === "text") {
+                  return { type: "text" as const, text: block.text };
+                }
+                // image block
+                return {
+                  type: "image" as const,
+                  source: {
+                    type: "base64" as const,
+                    media_type: block.source.media_type,
+                    data: block.source.data,
+                  },
+                };
+              }),
+            },
+            parent_tool_use_id: null,
+            session_id: config.sdkSessionId || sessionId, // Use SDK session_id if available, fallback to WS session_id
+          };
+        })();
 
     const q = query({
       prompt: promptValue,

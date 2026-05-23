@@ -153,6 +153,55 @@ describe("ClientMessage schema", () => {
     const result = ClientMessage.safeParse({ type: "set_env_vars", envVars: ["invalid"] });
     expect(result.success).toBe(false);
   });
+
+  test("append_user_message valid with string content", () => {
+    const result = ClientMessage.safeParse({
+      type: "append_user_message",
+      sessionId: "s1",
+      content: "later note",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  test("append_user_message valid with ContentBlock[]", () => {
+    const result = ClientMessage.safeParse({
+      type: "append_user_message",
+      sessionId: "s1",
+      content: [
+        { type: "text", text: "note 1" },
+        {
+          type: "image",
+          source: { type: "base64", media_type: "image/png", data: "abc" },
+        },
+      ],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  test("append_user_message rejects missing content", () => {
+    const result = ClientMessage.safeParse({
+      type: "append_user_message",
+      sessionId: "s1",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("append_user_message rejects missing sessionId", () => {
+    const result = ClientMessage.safeParse({
+      type: "append_user_message",
+      content: "hi",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("send still parses after append_user_message added (regression)", () => {
+    const result = ClientMessage.safeParse({
+      type: "send",
+      sessionId: "s1",
+      content: "hello",
+    });
+    expect(result.success).toBe(true);
+  });
 });
 
 describe("ServerMessage schema", () => {
