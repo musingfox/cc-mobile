@@ -110,3 +110,22 @@
   flex-direction: column;
   gap: 2px;
 }
+
+/* Memory recall rows -------------------------------------- */
+
+.lin-activity-tool-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: #b8a5ff;
+  flex-shrink: 0;
+}
+
+.lin-activity-tool-memory .lin-activity-name {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+  color: #d8d8e0;
+}

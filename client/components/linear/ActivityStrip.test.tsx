@@ -90,6 +90,74 @@ describe("ActivityStrip", () => {
     expect(container.querySelectorAll(".lin-activity-tool").length).toBe(1);
   });
 
+  describe("Memory recall rows", () => {
+    it("renders single-path memory with basename target and book icon", () => {
+      const tools = new Map<string, ActiveTool>([
+        [
+          "memory-1",
+          mkTool({
+            toolName: "Memory",
+            input: { paths: ["/Users/x/memory.md"], count: 1, mode: "select" },
+          }),
+        ],
+      ]);
+      const { container, getByText } = render(<ActivityStrip tools={tools} />);
+      const row = container.querySelector(".lin-activity-tool-memory");
+      expect(row).not.toBeNull();
+      expect(row?.querySelector(".lin-mini-ring")).toBeNull();
+      expect(row?.querySelector('[aria-label="book"]')).not.toBeNull();
+      expect(getByText("Recalled memory")).toBeTruthy();
+      expect(getByText("memory.md")).toBeTruthy();
+    });
+
+    it("renders count > 1 with 'Recalled N memories' and no target", () => {
+      const tools = new Map<string, ActiveTool>([
+        [
+          "memory-2",
+          mkTool({
+            toolName: "Memory",
+            input: {
+              paths: ["/a.md", "/b.md"],
+              count: 2,
+              mode: "select",
+            },
+          }),
+        ],
+      ]);
+      const { container, getByText } = render(<ActivityStrip tools={tools} />);
+      expect(getByText("Recalled 2 memories")).toBeTruthy();
+      expect(container.querySelector(".lin-activity-target")).toBeNull();
+    });
+
+    it("renders synthesis path with 'Recalled memory synthesis' and DIR target", () => {
+      const tools = new Map<string, ActiveTool>([
+        [
+          "memory-3",
+          mkTool({
+            toolName: "Memory",
+            input: {
+              paths: ["<synthesis:projects/foo>"],
+              count: 1,
+              mode: "synthesize",
+            },
+          }),
+        ],
+      ]);
+      const { getByText } = render(<ActivityStrip tools={tools} />);
+      expect(getByText("Recalled memory synthesis")).toBeTruthy();
+      expect(getByText("projects/foo")).toBeTruthy();
+    });
+
+    it("non-Memory tools still render the spinning ring (no regression)", () => {
+      const tools = new Map<string, ActiveTool>([
+        ["t1", mkTool({ toolName: "Read", input: { file_path: "src/App.tsx" } })],
+      ]);
+      const { container } = render(<ActivityStrip tools={tools} />);
+      expect(container.querySelector(".lin-mini-ring")).not.toBeNull();
+      expect(container.querySelector(".lin-activity-tool-memory")).toBeNull();
+    });
+  });
+
   it("shows agent stats when provided", () => {
     const agents = new Map<string, ActiveAgent>([
       ["task-id-A", mkAgent({ toolUseId: "task-1", toolCount: 7, tokenCount: 2400 })],

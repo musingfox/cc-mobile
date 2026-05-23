@@ -51,7 +51,8 @@ export type IconName =
   | "camera"
   | "mic"
   | "circle"
-  | "dot";
+  | "dot"
+  | "book";
 
 interface IconProps {
   name: IconName;
@@ -392,6 +393,13 @@ export function Icon({
       return (
         <svg {...svgProps}>
           <circle cx="10" cy="10" r="7" />
+        </svg>
+      );
+    case "book":
+      return (
+        <svg {...svgProps}>
+          <path d="M4 4h5a2 2 0 012 2v11a1.5 1.5 0 00-1.5-1.5H4V4z" />
+          <path d="M16 4h-5a2 2 0 00-2 2v11a1.5 1.5 0 011.5-1.5H16V4z" />
         </svg>
       );
     default:
