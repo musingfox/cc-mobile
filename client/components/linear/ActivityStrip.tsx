@@ -7,12 +7,12 @@ function basename(path: string): string {
   return idx >= 0 ? path.slice(idx + 1) : path;
 }
 
-function deriveMemoryLabel(
-  input: Record<string, unknown> | undefined,
-): { label: string; target: string | null } {
+function deriveMemoryLabel(input: Record<string, unknown> | undefined): {
+  label: string;
+  target: string | null;
+} {
   const paths = Array.isArray(input?.paths) ? (input?.paths as unknown[]) : [];
-  const count =
-    typeof input?.count === "number" ? (input.count as number) : paths.length;
+  const count = typeof input?.count === "number" ? (input.count as number) : paths.length;
 
   if (count > 1) {
     return { label: `Recalled ${count} memories`, target: null };
@@ -46,9 +46,7 @@ function ToolRow({ tool, nested }: { tool: ActiveTool; nested?: boolean }) {
   if (tool.toolName === "Memory") {
     const { label, target } = deriveMemoryLabel(tool.input);
     return (
-      <div
-        className={`lin-activity-tool lin-activity-tool-memory${nested ? " is-nested" : ""}`}
-      >
+      <div className={`lin-activity-tool lin-activity-tool-memory${nested ? " is-nested" : ""}`}>
         <span className="lin-activity-tool-icon" aria-label="book">
           <Icon name="book" size={14} />
         </span>

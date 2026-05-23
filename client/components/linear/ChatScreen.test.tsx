@@ -185,7 +185,9 @@ describe("ChatScreen", () => {
     const store = useAppStore.getState();
     store.addSession("s1", "/tmp/project");
     store.setActiveSession("s1");
-    store.loadSessionHistory("s1", [{ id: "m1", role: "assistant", content: "done", timestamp: 1 }]);
+    store.loadSessionHistory("s1", [
+      { id: "m1", role: "assistant", content: "done", timestamp: 1 },
+    ]);
 
     const { container } = render(<ChatScreen onNavigate={() => {}} />);
     expect(container.querySelector(".lin-thinking")).toBeNull();

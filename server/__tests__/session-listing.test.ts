@@ -20,12 +20,10 @@ mock.module("@anthropic-ai/claude-agent-sdk", () => ({
   listSessions: mock(async (options?: ListSessionsOptions) => {
     return mockListSessionsImpl(options);
   }),
-  renameSession: mock(
-    async (sessionId: string, title: string, options?: { dir?: string }) => {
-      renameCalls.push({ sessionId, title, options });
-      return mockRenameSessionImpl(sessionId, title, options);
-    },
-  ),
+  renameSession: mock(async (sessionId: string, title: string, options?: { dir?: string }) => {
+    renameCalls.push({ sessionId, title, options });
+    return mockRenameSessionImpl(sessionId, title, options);
+  }),
 }));
 
 let mockListSessionsImpl: (options?: ListSessionsOptions) => Promise<SDKSessionInfo[]>;

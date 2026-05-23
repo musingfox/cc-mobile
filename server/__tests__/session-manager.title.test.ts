@@ -62,9 +62,7 @@ describe("SessionManager pending title option", () => {
     const mgr = new SessionManager({ permissionMode: "default" });
     await mgr.createSession("ws-1", "/cwd", noopCanUseTool, undefined, "MyTitle");
 
-    nextMessages = [
-      { type: "system", subtype: "init", session_id: "sdk-1" },
-    ];
+    nextMessages = [{ type: "system", subtype: "init", session_id: "sdk-1" }];
     await drain(mgr.sendMessage("ws-1", "hi"));
 
     expect(queryCalls).toHaveLength(1);

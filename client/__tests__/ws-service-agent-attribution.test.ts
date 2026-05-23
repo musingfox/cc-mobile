@@ -38,12 +38,7 @@ describe("resolveAgentAttribution", () => {
   test("preceding t1 → parent task-tu-7 matches agent → returns label+description", () => {
     const session = buildSession(
       [["t1", { parentToolUseId: "task-tu-7" }]],
-      [
-        [
-          "task-1",
-          { toolUseId: "task-tu-7", taskType: "explore", description: "investigate bug" },
-        ],
-      ],
+      [["task-1", { toolUseId: "task-tu-7", taskType: "explore", description: "investigate bug" }]],
     );
     expect(resolveAgentAttribution(session, ["t1"])).toEqual({
       label: "explore",
@@ -57,12 +52,7 @@ describe("resolveAgentAttribution", () => {
         ["t1", { parentToolUseId: null }],
         ["t2", { parentToolUseId: "task-tu-9" }],
       ],
-      [
-        [
-          "task-2",
-          { toolUseId: "task-tu-9", taskType: "research", description: "look up docs" },
-        ],
-      ],
+      [["task-2", { toolUseId: "task-tu-9", taskType: "research", description: "look up docs" }]],
     );
     expect(resolveAgentAttribution(session, ["t1", "t2"])).toEqual({
       label: "research",

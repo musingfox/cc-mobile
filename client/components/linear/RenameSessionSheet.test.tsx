@@ -52,13 +52,7 @@ describe("RenameSessionSheet", () => {
 
   test("Save button is disabled when input is empty", () => {
     const { getByLabelText, getByText } = render(
-      <RenameSessionSheet
-        open
-        onClose={() => {}}
-        sdkSessionId="u-1"
-        cwd="/p"
-        initialTitle="Was"
-      />,
+      <RenameSessionSheet open onClose={() => {}} sdkSessionId="u-1" cwd="/p" initialTitle="Was" />,
     );
     fireEvent.change(getByLabelText("Session title"), { target: { value: "   " } });
     const btn = getByText("Save").closest("button") as HTMLButtonElement;
@@ -68,13 +62,7 @@ describe("RenameSessionSheet", () => {
   test("Save dispatches rename + refresh + toast and closes the sheet", async () => {
     const onClose = mock(() => {});
     const { getByLabelText, getByText } = render(
-      <RenameSessionSheet
-        open
-        onClose={onClose}
-        sdkSessionId="u-1"
-        cwd="/p"
-        initialTitle="Old"
-      />,
+      <RenameSessionSheet open onClose={onClose} sdkSessionId="u-1" cwd="/p" initialTitle="Old" />,
     );
     fireEvent.change(getByLabelText("Session title"), { target: { value: "  New title  " } });
     fireEvent.click(getByText("Save"));

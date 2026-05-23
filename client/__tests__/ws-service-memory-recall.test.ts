@@ -20,10 +20,7 @@ describe("handleMemoryRecallChunk", () => {
       subtype: "memory_recall",
       uuid: "mem-1",
       mode: "select",
-      memories: [
-        { path: "/Users/x/notes.md" },
-        { path: "/Users/x/log.md" },
-      ],
+      memories: [{ path: "/Users/x/notes.md" }, { path: "/Users/x/log.md" }],
     };
 
     const matched = handleMemoryRecallChunk("sess-A", chunk, store, () => 1234);

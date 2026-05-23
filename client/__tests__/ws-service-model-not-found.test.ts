@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { toastService } from "../services/toast-service";
 import { handleModelNotFoundError } from "../services/ws-service";
 import { useSettingsStore } from "../stores/settings-store";
-import { toastService } from "../services/toast-service";
 
 describe("handleModelNotFoundError", () => {
   let errorSpy: ReturnType<typeof spyOn>;
