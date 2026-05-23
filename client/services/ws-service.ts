@@ -485,9 +485,7 @@ class WsService {
             ? chunk.preceding_tool_use_ids
             : [];
           // Resolve attribution BEFORE removeActiveTool clears entries.
-          const attribution = session
-            ? resolveAgentAttribution(session, precedingIds)
-            : null;
+          const attribution = session ? resolveAgentAttribution(session, precedingIds) : null;
           store.addToolMessage(
             sessionId,
             toolName,
@@ -873,6 +871,34 @@ class WsService {
     this.sendMessage({ type: "send", sessionId, content });
 
     useAppStore.getState().setStreaming(sessionId, true);
+  }
+
+  appendUserMessage(sessionId: string, content: string | ContentBlock[]) {
+    if (!this.ws) return;
+
+    // Mirror `send`'s display-text derivation so the optimistic chat bubble
+    // shows the same content the user sees while typing.
+    let displayContent: string;
+    let contentBlocks: ContentBlock[] | undefined;
+
+    if (typeof content === "string") {
+      displayContent = content;
+    } else {
+      const textBlocks = content.filter((block) => block.type === "text");
+      displayContent = textBlocks.map((block) => block.text).join("\n");
+      contentBlocks = content;
+    }
+
+    useAppStore.getState().addMessage(sessionId, {
+      id: `user-${Date.now()}`,
+      role: "user",
+      content: displayContent,
+      timestamp: Date.now(),
+      ...(contentBlocks ? { contentBlocks } : {}),
+    });
+
+    this.sendMessage({ type: "append_user_message", sessionId, content });
+    // Do NOT set streaming — the SDK turn is not driven by this frame.
   }
 
   sendCommand(sessionId: string, command: string) {

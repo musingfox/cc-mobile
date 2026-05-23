@@ -13,11 +13,7 @@ import { buildUrl } from "./path-utils";
 import type { createPermissionHandler, PendingPermissionSnapshot } from "./permission-bridge";
 import { ClientMessage, ServerMessage } from "./protocol";
 import { loadSessionHistory } from "./session-history";
-import {
-  getClaudeSessionInfo,
-  listClaudeSessions,
-  renameClaudeSession,
-} from "./session-listing";
+import { getClaudeSessionInfo, listClaudeSessions, renameClaudeSession } from "./session-listing";
 import type { InitData, SessionManager } from "./session-manager";
 
 function expandPath(p: string): string {
