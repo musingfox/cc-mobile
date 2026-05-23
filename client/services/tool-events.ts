@@ -239,3 +239,19 @@ export function isSessionStateChanged(
     VALID_SESSION_STATES.has(chunk.state)
   );
 }
+
+// Memory recall event from SDK — emitted when the assistant retrieves
+// stored memory entries from the user's memory store.
+export type MemoryRecallEvent = {
+  type: "system";
+  subtype: "memory_recall";
+  uuid: string;
+  mode?: string;
+  memories: Array<{ path: string; content?: string }>;
+};
+
+export function isMemoryRecall(chunk: unknown): chunk is MemoryRecallEvent {
+  if (!chunk || typeof chunk !== "object") return false;
+  const c = chunk as Record<string, unknown>;
+  return c.type === "system" && c.subtype === "memory_recall";
+}

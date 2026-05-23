@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
   isHookResponse,
   isHookStarted,
+  isMemoryRecall,
   isTaskProgress,
   isToolProgress,
   isToolUseSummary,
@@ -114,6 +115,23 @@ describe("Tool Event Type Guards", () => {
           description: "test",
         }),
       ).toBe(false);
+    });
+  });
+
+  describe("isMemoryRecall", () => {
+    it("returns true for valid memory_recall event", () => {
+      expect(isMemoryRecall({ type: "system", subtype: "memory_recall" })).toBe(true);
+    });
+    it("returns false for other system subtypes", () => {
+      expect(isMemoryRecall({ type: "system", subtype: "other" })).toBe(false);
+    });
+    it("returns false for non-system message types", () => {
+      expect(isMemoryRecall({ type: "assistant" })).toBe(false);
+    });
+    it("returns false for null/undefined/non-object inputs", () => {
+      expect(isMemoryRecall(null as unknown as Record<string, unknown>)).toBe(false);
+      expect(isMemoryRecall(undefined as unknown as Record<string, unknown>)).toBe(false);
+      expect(isMemoryRecall(42 as unknown as Record<string, unknown>)).toBe(false);
     });
   });
 

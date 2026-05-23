@@ -15,6 +15,7 @@ import {
   isApiRetry,
   isHookResponse,
   isHookStarted,
+  isMemoryRecall,
   isPromptSuggestion,
   isRateLimitEvent,
   isResultMessage,
@@ -25,6 +26,7 @@ import {
   isToolProgress,
   isToolStart,
   isToolUseSummary,
+  type MemoryRecallEvent,
   type TerminalReason,
 } from "./tool-events";
 
@@ -57,6 +59,35 @@ export function resolveAgentAttribution(
   }
 
   return null;
+}
+
+/**
+ * Synthesize an `ActiveTool` entry for an SDK `memory_recall` system message
+ * so it surfaces in `ActivityStrip` like any other tool. Existing sweepers
+ * (e.g. text content_block_start, assistant turn cleanup) drop the entry
+ * once the model starts replying — no dedicated removal path is required.
+ */
+export function handleMemoryRecallChunk(
+  sessionId: string,
+  chunk: unknown,
+  store: { addActiveTool: (sessionId: string, toolUseId: string, tool: ActiveTool) => void },
+  now: () => number = Date.now,
+): boolean {
+  if (!isMemoryRecall(chunk)) return false;
+  const c = chunk as MemoryRecallEvent;
+  const memories = Array.isArray(c.memories) ? c.memories : [];
+  const paths = memories.map((m) => m?.path).filter((p): p is string => typeof p === "string");
+  const key = `memory-${c.uuid ?? "unknown"}`;
+  store.addActiveTool(sessionId, key, {
+    toolName: "Memory",
+    startedAt: now(),
+    input: {
+      paths,
+      count: paths.length,
+      ...(c.mode !== undefined ? { mode: c.mode } : {}),
+    },
+  });
+  return true;
 }
 
 export function handleModelNotFoundError(chunk: Record<string, unknown>): boolean {
@@ -512,6 +543,13 @@ class WsService {
             toolCount: chunk.usage?.tool_uses,
             tokenCount: chunk.usage?.total_tokens,
           });
+          break;
+        }
+
+        // Surface memory_recall as a synthetic `Memory` ActiveTool entry.
+        // Existing sweepers (text content_block_start, assistant turn cleanup)
+        // remove it once the model starts replying.
+        if (handleMemoryRecallChunk(sessionId, chunk, store)) {
           break;
         }
 
