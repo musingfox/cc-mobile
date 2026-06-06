@@ -14,9 +14,11 @@ Proposed
 
 用盡 credit 後，若未另外開啟 usage credits 則硬止（hard stop）。Credits 屬個人帳號，**不可共享**。
 
-來源：
+來源（查證日期：2026-06-07，來源已查證可訪問且內容相符）：
 - https://code.claude.com/docs/en/agent-sdk/overview
 - https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan
+
+查證內容摘要：support.claude.com 現行頁面明載 monthly Agent SDK credit / starting June 15 2026 / Pro $20、Max5x $100、Max20x $200 / 用盡且未啟用 usage credits 則 requests stop。所有事實與 ADR 記錄相符。
 
 ### 未確認事項（needs confirmation / 未確認）
 
@@ -31,12 +33,13 @@ Proposed
 
 ## 應對方向
 
-| 機制|mechanism|Mechanism | credit|Credit 影響 | 工程|effort|Effort 量 | 可逆|reversib|Reversib 性 |
-|------|------------|--------|--------|
+| 機制 (Mechanism) | Credit 影響 | 工程量 (Effort) | 可逆性 (Reversibility) |
+|---|---|---|---|
 | 沿用訂閱 credit，監控用量（觀察模式） | 消耗個人 Agent SDK credit，用盡則硬止 | 極低（加 credit 警示 UI） | two-way door |
+| 開啟 usage credits 作為 overflow（帳號設定） | credit 用盡後自動以 usage credits 計費，不硬止 | 零（帳號設定，無需改碼） | two-way door |
 | 引入 `ANTHROPIC_API_KEY`，改走 API key 計費 | 不消耗訂閱 credit，按 token 計費 | 低（env var + SessionManager 調整） | one-way door |
 | 多使用者各自帶 key（per-user API key） | 各用戶自擔 API key token 費用 | 中（WS 協議增加 key 傳遞、server 隔離） | one-way door |
-| 拋棄 SDK/CLI 層，改純直接 API（HTTP Anthropic API） | 按 token 計費，無訂閱 credit 消耗 | 高（失去 ADR-007 的 plugin 載入能力） | one-way door |
+| 拋棄 SDK/CLI 層，改純直接 API（HTTP Anthropic API） | 按 token 計費，無訂閱 credit 消耗 | 高（失去 ADR-007 的 plugin 載入能力）（假設：純 API 路徑確實無法保留 plugin，待驗證） | one-way door |
 
 ### 各方向說明
 
@@ -45,6 +48,12 @@ Proposed
 **沿用訂閱 credit + 監控用量**
 
 不改動架構，僅在前端加入 credit 用量警示或倒計時提示。適合個人單機使用、用量可預期的場景。若 credit 用盡可立即關閉以恢復互動式用量，轉向其他方案均可。工程量極低，決策完全可逆。
+
+**開啟 usage credits 作為 overflow**
+
+在 Claude.ai 帳號設定開啟 usage credits，讓 Agent SDK credit 用盡後自動以 usage credits（按量計費）接續，不產生硬止。對 cc-mobile 來說零代碼改動，屬帳號層級設定，可隨時關閉，是訂閱用戶最低阻力的 bridge 方案。適合用量偶發性超標但不需架構改動的場景。
+
+---
 
 #### one-way door 方向（需人工決策）
 
@@ -57,7 +66,7 @@ Proposed
 在伺服器端讀取 `ANTHROPIC_API_KEY` 環境變數，傳入 SDK 讓其以 API key 計費而非訂閱 credit。
 
 - 翻轉 `CLAUDE.md:16` 「No additional API keys needed」定位，使用者需申請並管理 API key。
-- ADR-007 的 V1 `query()` + plugin 載入能力**得以保留**（SDK 支援 API key 路徑）。
+- ADR-007 的 V1 `query()` + plugin 載入能力**是否得以保留**：**待驗證假設（needs spike）**。V1 `query()` 透過包裝本地 `claude` CLI binary 運作（CLAUDE.md:16、ADR-007），API key 路徑下 CLI binary 是否仍被呼叫並載入 plugin，目前無文件依據，不得斷言為已知。
 - 開啟的門：個人或私有部署場景下可完全控制費用；往後多租戶擴展亦以此為基礎。
 - 關閉的門：「零設定啟動」的易用性承諾消失；文件與 onboarding 需隨之更新。
 
@@ -82,8 +91,8 @@ WS 連線建立時由前端傳入 per-user API key，server 以此 key 發起 SD
 
 移除 `@anthropic-ai/claude-agent-sdk` 依賴，直接呼叫 Anthropic REST API。
 
-- ADR-007 明確記錄 V1 SDK 是為了保留 plugin 載入（16 個 plugin、52 個 slash command、26 個 skill）；純 API 路徑**無法載入 plugin**，等同放棄 cc-mobile 的 full Claude Code parity 目標。
+- ADR-007 明確記錄 V1 SDK 是為了保留 plugin 載入（16 個 plugin、52 個 slash command、26 個 skill）；純 API 路徑**無法載入 plugin**，等同放棄 cc-mobile 的 full Claude Code parity 目標。（待驗證：未來 Anthropic REST API 是否提供對等 plugin 能力尚無文件依據）
 - 開啟的門：完全控制請求格式、計費透明、無 SDK 版本鎖定。
-- 關閉的門：plugin / skill / slash command 支援永久失去，除非 Anthropic 於 REST API 層提供對等能力。
+- 關閉的門：plugin / skill / slash command 支援永久失去，除非 Anthropic 於 REST API 層提供對等能力（待驗證：目前無此路線圖文件）。
 
 **需人工決策**：是否接受放棄 plugin 能力換取架構簡化與費用控制。
