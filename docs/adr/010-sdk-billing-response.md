@@ -51,7 +51,7 @@ Proposed
 
 **開啟 usage credits 作為 overflow**
 
-在 Claude.ai 帳號設定開啟 usage credits，讓 Agent SDK credit 用盡後自動以 usage credits（按量計費）接續，不產生硬止。對 cc-mobile 來說零代碼改動，屬帳號層級設定，可隨時關閉，是訂閱用戶最低阻力的 bridge 方案。適合用量偶發性超標但不需架構改動的場景。
+在 Claude.ai 帳號設定（Settings → Billing）開啟 usage credits toggle，讓 Agent SDK credit 用盡後自動以 usage credits（按量計費）接續，不產生硬止。Pro、Max5x、Max20x 方案是否都有此 toggle，目前**未確認**（文件未逐方案列舉開關可用性）。對 cc-mobile 來說零代碼改動，屬帳號層級設定，可隨時關閉，是訂閱用戶最低阻力的 bridge 方案。適合用量偶發性超標但不需架構改動的場景。
 
 ---
 
@@ -67,6 +67,7 @@ Proposed
 
 - 翻轉 `CLAUDE.md:16` 「No additional API keys needed」定位，使用者需申請並管理 API key。
 - ADR-007 的 V1 `query()` + plugin 載入能力**是否得以保留**：**待驗證假設（needs spike）**。V1 `query()` 透過包裝本地 `claude` CLI binary 運作（CLAUDE.md:16、ADR-007），API key 路徑下 CLI binary 是否仍被呼叫並載入 plugin，目前無文件依據，不得斷言為已知。
+- **封鎖語言**：此方向須先執行 plugin spike 才能定案；spike 通過前不可拍板。表中「低工程量」評估以 spike 通過為前提，若 spike 失敗則此評估失效。若 plugin 在 API key 路徑下失效，方向 A 即塌縮、等同純 API（方向 C），兩者實為同一條路。
 - 開啟的門：個人或私有部署場景下可完全控制費用；往後多租戶擴展亦以此為基礎。
 - 關閉的門：「零設定啟動」的易用性承諾消失；文件與 onboarding 需隨之更新。
 
@@ -80,6 +81,7 @@ WS 連線建立時由前端傳入 per-user API key，server 以此 key 發起 SD
 
 - 翻轉 `CLAUDE.md:16` 定位（同方向 A），且進一步要求**每位使用者**各自持有 API key。
 - 現行 `CC_MOBILE_ALLOWED_ROOTS` 安全模型假設單一擁有者；多 key 引入使用者隔離複雜度。
+- **多人部署適用性**：若單台 cc-mobile 服務多人，因訂閱 credit 屬個人帳號、**不可共享**，訂閱 credit 路徑在多人部署下不可行；per-user key 是此場景下的可行替代路徑。
 - 開啟的門：費用由各用戶自擔，部署者不需負擔 API 費用。
 - 關閉的門：WS 協議增加 key 傳遞欄位（對外契約），往後移除需協調所有客戶端。
 
