@@ -1,0 +1,47 @@
+{
+  "PreToolUse": [
+    {
+      "_comment": "ADR-011 spike A2/A3 hook 設定片段 — 請將此物件內容合併進 ~/.claude/settings.json 的頂層",
+      "_usage": "1) 建立 hook script（見下方 hook_script_template）  2) 將 hooks 區段複製到 ~/.claude/settings.json  3) 把 hook_script_path 佔位符換成實際腳本路徑",
+      "matcher": ".*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "/tmp/spike-011-hook.sh"
+        }
+      ]
+    }
+  ],
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/tmp/spike-011-hook.sh"
+          }
+        ]
+      }
+    ]
+  },
+  "_hook_script_template": {
+    "_path": "/tmp/spike-011-hook.sh",
+    "_content_lines": [
+      "#!/usr/bin/env bash",
+      "# PreToolUse hook — A2 用途：記錄 payload + 回傳 deny",
+      "# payload 由 claude 以 JSON 寫入 stdin，欄位包括：",
+      "#   session_id, transcript_path, tool_name, tool_input",
+      "LOG=/tmp/spike-011-hook-payload.json",
+      "cat > \"$LOG\"",
+      "# 回傳 permissionDecision:deny 阻止工具執行",
+      "echo '{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\"}}'",
+      "",
+      "# A3 用途（阻塞版，改用此檔案）：",
+      "# DELAY=${SPIKE_DELAY:-5}",
+      "# cat > \"$LOG\"",
+      "# sleep \"$DELAY\"",
+      "# echo '{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\"}}'"
+    ]
+  }
+}

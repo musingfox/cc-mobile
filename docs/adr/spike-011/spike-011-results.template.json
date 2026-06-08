@@ -1,0 +1,42 @@
+[
+  {
+    "item_id": "A1",
+    "assumption": "claude --session-id $UUID 互動模式會在 ~/.claude/projects/<encoded-cwd>/$UUID.jsonl 建立持久化檔案，即 issue #44607 所描述的 session-id 與 JSONL 檔名綁定行為已成立",
+    "claude_version": "",
+    "observed": "",
+    "verdict": "PENDING",
+    "timestamp": ""
+  },
+  {
+    "item_id": "A2",
+    "assumption": "互動模式 PreToolUse hook 會被觸發，payload 包含 session_id、transcript_path、tool_name、tool_input 四個欄位，且回傳 permissionDecision:deny 可確實阻止工具執行",
+    "claude_version": "",
+    "observed": "",
+    "verdict": "PENDING",
+    "timestamp": ""
+  },
+  {
+    "item_id": "A3",
+    "assumption": "PreToolUse hook 阻塞期間 claude 會持續等待且不自行推進，決策在阻塞結束後生效，可承受至少 60 秒阻塞（即可支撐 ADR-002 手機端人工決策的時間需求）",
+    "claude_version": "",
+    "observed": "",
+    "verdict": "PENDING",
+    "timestamp": ""
+  },
+  {
+    "item_id": "A4",
+    "assumption": "互動 session 進行中 tail 對應 JSONL 可近即時（<2 秒）觀察到 tool_use 開始與 tool_result 落檔，flush 顆粒為逐筆即時而非批次",
+    "claude_version": "",
+    "observed": "",
+    "verdict": "PENDING",
+    "timestamp": ""
+  },
+  {
+    "item_id": "A5",
+    "assumption": "pending permission 暫態（hook 等待期間）不會寫入 JSONL，因此 UI 的即時 permission 狀態必須依賴 PreToolUse hook 推送而非 tail JSONL",
+    "claude_version": "",
+    "observed": "",
+    "verdict": "PENDING",
+    "timestamp": ""
+  }
+]
