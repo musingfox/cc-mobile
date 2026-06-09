@@ -22,7 +22,7 @@
 export type SpawnerFn = (
   args: string[],
   cwd: string,
-) => { write: (data: string) => void; kill?: () => void };
+) => { write: (data: string) => void; kill?: () => void; exited?: Promise<number> };
 
 /**
  * Resolve the absolute path to pty-worker.mjs.
@@ -114,9 +114,17 @@ export class PtyDriver {
    * @param cwd       - Working directory for the spawned process
    * @param prompt    - Text to inject, followed by "\r" (Enter)
    */
-  driveOnce(sessionId: string, cwd: string, prompt: string): void {
+  driveOnce(
+    sessionId: string,
+    cwd: string,
+    prompt: string,
+  ): { kill: () => void; exited: Promise<number> } {
     const args = ["claude", "--session-id", sessionId];
     const proc = this.spawner(args, cwd);
     proc.write(`${prompt}\r`);
+    return {
+      kill: proc.kill ?? (() => {}),
+      exited: proc.exited ?? Promise.resolve(0),
+    };
   }
 }

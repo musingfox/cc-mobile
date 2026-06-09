@@ -60,6 +60,11 @@ export interface RunPtySessionOptions {
   spawner?: SpawnerFn;
   /** Injected poll function. */
   getMessagesFn?: GetMessagesFn;
+  /**
+   * Called synchronously with the process handle immediately after driveOnce,
+   * before any await/poll. Caller may use this to register kill/exited for teardown.
+   */
+  onHandle?: (h: { kill: () => void; exited: Promise<number> }) => void;
   /** Poll timeout in ms. Default: 60000. */
   timeout?: number;
   /** Poll interval in ms. Default: 500. */
@@ -242,12 +247,14 @@ export async function readLatestAssistantResponse(
 
   return new Promise<string>((resolve, reject) => {
     let settled = false;
+    let pollTimer: ReturnType<typeof setTimeout> | undefined;
 
     // H-E fix: independent top-level timer so a never-settling pollFn still times out.
     // This fires regardless of whether poll() is suspended inside an awaited pollFn call.
     const timeoutHandle = setTimeout(() => {
       if (!settled) {
         settled = true;
+        clearTimeout(pollTimer);
         reject("timeout");
       }
     }, timeout);
@@ -262,6 +269,7 @@ export async function readLatestAssistantResponse(
         if (!settled) {
           settled = true;
           clearTimeout(timeoutHandle);
+          clearTimeout(pollTimer);
           reject("timeout");
         }
         return;
@@ -275,6 +283,7 @@ export async function readLatestAssistantResponse(
         if (!settled) {
           settled = true;
           clearTimeout(timeoutHandle);
+          clearTimeout(pollTimer);
           reject(err);
         }
         return;
@@ -299,6 +308,7 @@ export async function readLatestAssistantResponse(
           if (endTurnsSeen > baselineEndTurnCount) {
             settled = true;
             clearTimeout(timeoutHandle);
+            clearTimeout(pollTimer);
             resolve(extractEndTurnText(raw));
             return;
           }
@@ -310,12 +320,13 @@ export async function readLatestAssistantResponse(
         if (!settled) {
           settled = true;
           clearTimeout(timeoutHandle);
+          clearTimeout(pollTimer);
           reject("timeout");
         }
         return;
       }
 
-      setTimeout(poll, interval);
+      pollTimer = setTimeout(poll, interval);
     };
 
     // Start polling immediately (no leading delay)
@@ -354,7 +365,10 @@ export async function runPtySession(
 
   // 1. Drive: synchronous PTY injection (write-before-poll — preserves ordering contract)
   const driver = new PtyDriver(options?.spawner);
-  driver.driveOnce(sessionId, cwd, prompt);
+  const handle = driver.driveOnce(sessionId, cwd, prompt);
+
+  // H-C-2 fix: expose handle to caller synchronously, before any await/poll
+  options?.onHandle?.(handle);
 
   // 2. Count baseline end_turn messages (H3 fix: ignore pre-existing responses)
   let baselineEndTurnCount = 0;

@@ -63,5 +63,14 @@ rl.on("line", (line) => {
 
 rl.on("close", () => {
   // H-D fix: stdin closed — kill the PTY so the worker exits rather than hanging
-  ptyProc.kill();
+  // Explicit SIGTERM so SIGHUP-immune children (trap '' SIGHUP) are still terminated
+  ptyProc.kill("SIGTERM");
+});
+
+// H-C-1 fix: handle SIGTERM sent to the worker — forward explicitly to PTY child.
+// node-pty's kill() with no args sends SIGHUP; SIGHUP-immune children ignore it.
+// Must pass "SIGTERM" explicitly so the child is terminated regardless of SIGHUP traps.
+process.on("SIGTERM", () => {
+  ptyProc.kill("SIGTERM");
+  process.exit(0);
 });
