@@ -32,3 +32,4 @@ playwright-report/
 blob-report/
 .playwright-mcp/
 .obsidian.yaml
+.spiral/
