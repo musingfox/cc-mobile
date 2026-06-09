@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CMD=\"$CLAUDE_TOOL_ARG_command\"; if ! echo \"$CMD\" | grep -qE '^\\s*(git|jj)\\s+commit'; then exit 0; fi; echo 'Running tests before commit...'; bun test 2>&1; exit $?"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bunx biome check --write \"$CLAUDE_TOOL_ARG_file_path\" 2>&1; exit 0"
+          }
+        ]
+      }
+    ]
+  }
+}
