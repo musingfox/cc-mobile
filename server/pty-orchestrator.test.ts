@@ -155,7 +155,7 @@ describe("PtyOrchestrator — kill-prior (H3)", () => {
     d2.catch(() => {});
 
     // Prior handle was killed exactly once by H3 logic
-    expect(spy.killCount()).toBeGreaterThanOrEqual(1);
+    expect(spy.killCount()).toBe(1);
   });
 });
 
@@ -247,5 +247,45 @@ describe("PtyOrchestrator — cancelAll-partial: only kills listed sessions", ()
 
     expect(spy1.killCount()).toBe(1);
     expect(spy2.killCount()).toBe(0);
+  });
+});
+
+describe("PtyOrchestrator — hasSession cleanup (happy path)", () => {
+  it("hasSession(id) is false after successful drive() completes", async () => {
+    const orch = new PtyOrchestrator({ timeout: 5000, interval: 10 });
+    const sessionId = "cleanup-happy";
+
+    await orch.drive(sessionId, "/tmp", "hello", () => {}, {
+      spawner: makeImmediateSpawner(),
+      getMessagesFn: makeReplyGetMessages("done"),
+    });
+
+    expect(orch.hasSession(sessionId)).toBe(false);
+  });
+});
+
+describe("PtyOrchestrator — hasSession cleanup (error path)", () => {
+  it("hasSession(id) is false after drive() error (catch block)", async () => {
+    const sent: unknown[] = [];
+    const orch = new PtyOrchestrator({ timeout: 5000, interval: 10 });
+    const sessionId = "cleanup-error";
+
+    let calls = 0;
+    const rejectAfterBaseline: GetMessagesFn = async (_id: string) => {
+      calls++;
+      if (calls === 1) {
+        return [makeUserMsg("prompt")];
+      }
+      throw new Error("simulated pty error");
+    };
+
+    await orch.drive(sessionId, "/tmp", "hello", (msg) => sent.push(msg), {
+      spawner: makeImmediateSpawner(),
+      getMessagesFn: rejectAfterBaseline,
+    });
+
+    expect(sent).toHaveLength(1);
+    expect((sent[0] as Record<string, unknown>).type).toBe("error");
+    expect(orch.hasSession(sessionId)).toBe(false);
   });
 });

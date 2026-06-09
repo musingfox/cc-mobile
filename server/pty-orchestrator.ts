@@ -128,6 +128,7 @@ export class PtyOrchestrator {
           sessionId,
         });
       }
+      if (this.sessions.get(sessionId) === state) this.sessions.delete(sessionId);
       return;
     }
 
@@ -136,6 +137,7 @@ export class PtyOrchestrator {
 
     // Suppress send if cancelled
     if (state.cancelled) {
+      if (this.sessions.get(sessionId) === state) this.sessions.delete(sessionId);
       return;
     }
 
@@ -156,6 +158,14 @@ export class PtyOrchestrator {
       type: "stream_end",
       sessionId,
     });
+    if (this.sessions.get(sessionId) === state) this.sessions.delete(sessionId);
+  }
+
+  /**
+   * Returns true if a session state is currently tracked in the Map.
+   */
+  hasSession(id: string): boolean {
+    return this.sessions.has(id);
   }
 
   /**

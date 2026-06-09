@@ -123,7 +123,7 @@ const ReconnectMessage = z.object({
 
 const PtySendMessage = z.object({
   type: z.literal("pty_send"),
-  sessionId: z.string(),
+  sessionId: z.string().uuid(),
   cwd: z.string(),
   prompt: z.string(),
 });
