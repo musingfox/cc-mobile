@@ -14,7 +14,7 @@ import type { createPermissionHandler, PendingPermissionSnapshot } from "./permi
 import { ClientMessage, ServerMessage } from "./protocol";
 import { PtyOrchestrator } from "./pty-orchestrator";
 import { createPtyPermissionHandler } from "./pty-permission-endpoint";
-import { createPtyPermissionRelay } from "./pty-permission-relay";
+import { createPtyPermissionRelay, type PtyRelaySnapshot } from "./pty-permission-relay";
 import { loadSessionHistory } from "./session-history";
 import { getClaudeSessionInfo, listClaudeSessions, renameClaudeSession } from "./session-listing";
 import type { InitData, SessionManager } from "./session-manager";
@@ -152,6 +152,7 @@ export function createWsPlugin(
   const persistentState = {
     permissionHandler: null as PermissionHandler | null,
     pausedPermissions: [] as PendingPermissionSnapshot[],
+    pausedPtyPermissions: [] as PtyRelaySnapshot[],
   };
 
   // Helper to send buffered messages
@@ -163,7 +164,7 @@ export function createWsPlugin(
   // PTY permission HTTP handler — uses ptyRelay + session existence check
   const ptyPermissionHttpHandler = createPtyPermissionHandler({
     relay: ptyRelay,
-    hasSession: (sessionId) => wsRef !== null && sessionId.length > 0,
+    hasSession: (sessionId) => ptyOrchestrator.hasSession(sessionId),
   });
 
   return new Elysia()
@@ -208,6 +209,12 @@ export function createWsPlugin(
         if (persistentState.pausedPermissions.length > 0) {
           persistentState.permissionHandler.resumePending(persistentState.pausedPermissions);
           persistentState.pausedPermissions = [];
+        }
+
+        // Resume paused PTY permissions if any
+        if (persistentState.pausedPtyPermissions.length > 0) {
+          ptyRelay.resumePending(persistentState.pausedPtyPermissions);
+          persistentState.pausedPtyPermissions = [];
         }
 
         // Send cached capabilities on reconnect
@@ -701,6 +708,7 @@ export function createWsPlugin(
         if (persistentState.permissionHandler) {
           persistentState.pausedPermissions = persistentState.permissionHandler.pausePending();
         }
+        persistentState.pausedPtyPermissions = ptyRelay.pausePending();
 
         // Cancel all in-flight PTY sessions to avoid leaking PTY handles
         const ptySessionIds = (ws.data as WsData).ptySessionIds;
