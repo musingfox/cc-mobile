@@ -45,8 +45,9 @@ export function stripAnsi(s: string): string {
  *   "unknown" — not enough signal to classify
  *
  * Token rules (gate-derived):
- *   trust:   buffer contains "safety" OR "project" (NOT "trust" — the confirm echo
- *            "Yes, I trust this folder" also contains "trust" and must NOT classify as trust)
+ *   trust:   buffer contains "Isthisaproject" OR "Quicksafetycheck"
+ *            (anchored phrases from the trust/safety screen after stripAnsi; avoids false
+ *             positives from user text like "my-project" or "safety-tools")
  *   ready:   buffer contains "Claude Code" (with space) OR "╭"
  *   (❯ is deliberately excluded from ready tokens — it appears on both screens)
  *   (trust-as-token is deliberately excluded — see E2 trap above)
@@ -54,7 +55,7 @@ export function stripAnsi(s: string): string {
  * Priority: trust > ready (trust screen is evaluated first)
  */
 export function classify(strippedText: string): "trust" | "ready" | "unknown" {
-  if (strippedText.includes("safety") || strippedText.includes("project")) {
+  if (strippedText.includes("Isthisaproject") || strippedText.includes("Quicksafetycheck")) {
     return "trust";
   }
   if (strippedText.includes("Claude Code") || strippedText.includes("╭")) {

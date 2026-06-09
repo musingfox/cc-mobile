@@ -255,6 +255,9 @@ export function driveReadiness(
           return;
         }
       }
+      // actions === [] means classify returned "unknown" — re-arm the settle timer
+      // directly WITHOUT clearing the just-fired timer (gate E-H2-1 timer-count semantics).
+      debounce = setT(onSettle, opts.settleMs);
     };
 
     proc.onData((chunk: string) => {
