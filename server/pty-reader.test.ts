@@ -247,11 +247,15 @@ describe("readLatestAssistantResponse", () => {
 
 describe("runPtySession", () => {
   it("returns the assistant reply", async () => {
+    // H3: baseline poll (call 1) sees no end_turn; call 2+ has the reply.
+    // Stateful mock mirrors the multi-turn contract: new end_turns appear after driveOnce.
+    let pollCount = 0;
     const spawner: SpawnerFn = (_args, _cwd) => ({ write: () => {} });
-    const getMessagesFn: GetMessagesFn = async () => [
-      makeUserMsg("u1", "test prompt"),
-      makeEndTurnMsg("a1", "u1", "reply text"),
-    ];
+    const getMessagesFn: GetMessagesFn = async () => {
+      pollCount++;
+      if (pollCount === 1) return [makeUserMsg("u1", "test prompt")];
+      return [makeUserMsg("u1", "test prompt"), makeEndTurnMsg("a1", "u1", "reply text")];
+    };
 
     const result = await runPtySession("sess", "/cwd", "test prompt", {
       spawner,
@@ -296,6 +300,8 @@ describe("runPtySession", () => {
   });
 
   it("sends prompt + CR to PTY", async () => {
+    // H3: stateful mock — baseline call returns no end_turn; subsequent calls return reply.
+    let pollCount = 0;
     const writtenData: string[] = [];
     const spawner: SpawnerFn = (_args, _cwd) => ({
       write: (data: string) => {
@@ -303,10 +309,11 @@ describe("runPtySession", () => {
       },
     });
 
-    const getMessagesFn: GetMessagesFn = async () => [
-      makeUserMsg("u1", "my question"),
-      makeEndTurnMsg("a1", "u1", "answer"),
-    ];
+    const getMessagesFn: GetMessagesFn = async () => {
+      pollCount++;
+      if (pollCount === 1) return [makeUserMsg("u1", "my question")];
+      return [makeUserMsg("u1", "my question"), makeEndTurnMsg("a1", "u1", "answer")];
+    };
 
     await runPtySession("sess", "/cwd", "my question", {
       spawner,
@@ -319,15 +326,19 @@ describe("runPtySession", () => {
   });
 
   it("uses the correct session-id in spawner args", async () => {
+    // H3: stateful mock — baseline call returns no end_turn; subsequent calls return reply.
+    let pollCount = 0;
     const capturedArgs: string[][] = [];
     const spawner: SpawnerFn = (args, _cwd) => {
       capturedArgs.push(args);
       return { write: () => {} };
     };
 
-    const getMessagesFn: GetMessagesFn = async () => [
-      makeEndTurnMsg("a1", null as unknown as string, "ok"),
-    ];
+    const getMessagesFn: GetMessagesFn = async () => {
+      pollCount++;
+      if (pollCount === 1) return [];
+      return [makeEndTurnMsg("a1", null as unknown as string, "ok")];
+    };
 
     await runPtySession("target-sess-id", "/cwd", "hello", {
       spawner,

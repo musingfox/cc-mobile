@@ -16,10 +16,12 @@
     "lint:fix": "bunx biome check --write .",
     "test": "bun test",
     "test:e2e": "bunx playwright test",
-    "test:e2e:ui": "bunx playwright test --ui"
+    "test:e2e:ui": "bunx playwright test --ui",
+    "postinstall": "chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.148",
+    "node-pty": "1.1.0",
     "@fontsource/fira-code": "^5.2.7",
     "@fontsource/ibm-plex-mono": "^5.2.7",
     "@fontsource/ibm-plex-sans": "^5.2.8",

@@ -2,9 +2,9 @@
  * pty-driver.ts — PTY spawn abstraction for ADR-011 human-in-the-loop drive layer.
  *
  * Hard constraints:
- *   - NO top-level import of node-pty (parked decision: Node.js worker vs script(1))
+ *   - NO top-level import of node-pty (node-pty lives only in pty-worker.mjs)
  *   - NO top-level import of SDK query() or getSessionMessages
- *   - SpawnerFn is the sole seam; real PTY wiring is the next slice's job
+ *   - SpawnerFn is the sole seam; real PTY wiring goes through the Node.js worker
  *
  * ToS note: driveOnce is triggered by a human action forwarded from the mobile UI.
  * This module contains no scheduling, no loops, no auto-approve logic.
@@ -21,18 +21,33 @@
 export type SpawnerFn = (args: string[], cwd: string) => { write: (data: string) => void };
 
 /**
- * Default spawner placeholder.
+ * Default spawner: lazy-starts the pty-worker.mjs subprocess via Bun.spawn.
  *
- * Real PTY transport (Node.js worker or macOS script(1)) is a parked one-way door.
- * See .spiral/state.json parked_decisions. The next slice that wires a real spawner
- * will replace this default.
+ * The worker path is read from PTY_WORKER env var at call time (not import time)
+ * so tests can swap it after import.
  *
- * Called (not at construction) so the error surfaces at driveOnce() time, not import time.
+ * The worker process receives JSON commands on its stdin and emits JSON events
+ * on its stdout (see pty-worker.mjs for the protocol).
  */
-function defaultSpawner(_args: string[], _cwd: string): { write: (data: string) => void } {
-  throw new Error(
-    "real PTY spawner not wired yet — parked decision: Node.js worker vs script(1), see .spiral/state.json",
-  );
+function defaultSpawner(args: string[], cwd: string): { write: (data: string) => void } {
+  const workerPath = process.env.PTY_WORKER ?? "server/pty-worker.mjs";
+
+  const proc = Bun.spawn(["node", workerPath, ...args], {
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "inherit",
+    cwd,
+    env: process.env,
+  });
+
+  return {
+    write(data: string): void {
+      const msg = JSON.stringify({ type: "write", data }) + "\n";
+      proc.stdin.write(new TextEncoder().encode(msg));
+      // Flush Bun's FileSink buffer so the worker receives bytes immediately
+      (proc.stdin as unknown as { flush?: () => void }).flush?.();
+    },
+  };
 }
 
 /**
@@ -46,7 +61,7 @@ export class PtyDriver {
   private readonly spawner: SpawnerFn;
 
   /**
-   * @param spawner - Injectable spawn function. Omit to get the parked-decision placeholder.
+   * @param spawner - Injectable spawn function. Omit to use the default worker-based spawner.
    */
   constructor(spawner?: SpawnerFn) {
     this.spawner = spawner ?? defaultSpawner;

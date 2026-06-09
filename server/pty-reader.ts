@@ -46,6 +46,12 @@ export interface ReadLatestOptions {
   timeout?: number;
   /** Poll interval in ms. Default: 500. */
   interval?: number;
+  /**
+   * Number of end_turn assistant messages already present before this turn.
+   * Only accept a new end_turn that pushes the count beyond this baseline.
+   * Default: 0 (accept any end_turn — legacy behavior).
+   */
+  baselineEndTurnCount?: number;
 }
 
 /** Options for runPtySession. */
@@ -232,6 +238,8 @@ export async function readLatestAssistantResponse(
     pollFn = (id: string) => getSessionMessages(id) as Promise<unknown[]>;
   }
 
+  const baselineEndTurnCount = options.baselineEndTurnCount ?? 0;
+
   return new Promise<string>((resolve, reject) => {
     const start = Date.now();
 
@@ -242,11 +250,19 @@ export async function readLatestAssistantResponse(
         return;
       }
 
-      const messages = await pollFn(sessionId);
+      // H2 fix: wrap pollFn in try/catch so throws propagate as rejections
+      let messages: unknown[];
+      try {
+        messages = await pollFn(sessionId);
+      } catch (err) {
+        reject(err);
+        return;
+      }
 
-      // Find the last end_turn assistant message
+      // H3 fix: count end_turn messages, resolve only when count exceeds baseline
       // If afterUserUuid provided: look for assistant messages that appear after it in the array
       let foundAfter = !afterUserUuid; // if no uuid filter, accept from the start
+      let endTurnsSeen = 0;
       for (const raw of messages) {
         if (!foundAfter) {
           const obj = raw as Record<string, unknown>;
@@ -256,8 +272,11 @@ export async function readLatestAssistantResponse(
           continue;
         }
         if (isEndTurnAssistant(raw)) {
-          resolve(extractEndTurnText(raw));
-          return;
+          endTurnsSeen++;
+          if (endTurnsSeen > baselineEndTurnCount) {
+            resolve(extractEndTurnText(raw));
+            return;
+          }
         }
       }
 
@@ -294,14 +313,39 @@ export async function runPtySession(
   prompt: string,
   options?: RunPtySessionOptions,
 ): Promise<string> {
-  // 1. Drive: synchronous PTY injection (write-before-poll)
+  // Resolve the poll function once so we can reuse it for baseline + poll
+  let pollFn: GetMessagesFn;
+  if (options?.getMessagesFn) {
+    pollFn = options.getMessagesFn;
+  } else {
+    // Dynamic import to avoid top-level SDK dependency
+    const { getSessionMessages } = await import("@anthropic-ai/claude-agent-sdk");
+    pollFn = (id: string) => getSessionMessages(id) as Promise<unknown[]>;
+  }
+
+  // 1. Drive: synchronous PTY injection (write-before-poll — preserves ordering contract)
   const driver = new PtyDriver(options?.spawner);
   driver.driveOnce(sessionId, cwd, prompt);
 
-  // 2. Poll: wait for end_turn response
+  // 2. Count baseline end_turn messages (H3 fix: ignore pre-existing responses)
+  let baselineEndTurnCount = 0;
+  try {
+    const baselineMessages = await pollFn(sessionId);
+    for (const raw of baselineMessages) {
+      if (isEndTurnAssistant(raw)) {
+        baselineEndTurnCount++;
+      }
+    }
+  } catch {
+    // If baseline poll fails, proceed with 0 baseline (best-effort)
+    baselineEndTurnCount = 0;
+  }
+
+  // 3. Poll: wait for a new end_turn response beyond the baseline
   return readLatestAssistantResponse(sessionId, undefined, {
-    getMessagesFn: options?.getMessagesFn,
+    getMessagesFn: pollFn,
     timeout: options?.timeout,
     interval: options?.interval,
+    baselineEndTurnCount,
   });
 }
