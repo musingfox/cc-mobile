@@ -176,4 +176,15 @@ export class PtyOrchestrator {
       state.handle = undefined;
     }
   }
+
+  /**
+   * Cancel all in-flight PTY sessions in the given list.
+   *
+   * Only cancels sessions whose IDs appear in sessionIds — does not touch others.
+   */
+  cancelAll(sessionIds: string[]): void {
+    for (const id of sessionIds) {
+      this.cancel(id);
+    }
+  }
 }

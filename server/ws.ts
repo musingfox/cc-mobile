@@ -9,7 +9,7 @@ import {
 } from "./capabilities-cache";
 import type { ServerConfig } from "./config";
 import { EventBuffer } from "./event-buffer";
-import { buildUrl } from "./path-utils";
+import { buildUrl, resolveAndValidateCwd } from "./path-utils";
 import type { createPermissionHandler, PendingPermissionSnapshot } from "./permission-bridge";
 import { ClientMessage, ServerMessage } from "./protocol";
 import { PtyOrchestrator } from "./pty-orchestrator";
@@ -79,6 +79,7 @@ type PermissionHandler = ReturnType<PermissionHandlerFactory>;
 
 interface WsData {
   currentSessionId?: string;
+  ptySessionIds: Set<string>;
 }
 
 export function buildCachedCapabilities(
@@ -139,6 +140,7 @@ export function createWsPlugin(
 
     open(ws) {
       console.log("[ws] client connected");
+      (ws.data as WsData).ptySessionIds = new Set<string>();
 
       // Create or reuse permission handler
       if (!persistentState.permissionHandler) {
@@ -622,7 +624,23 @@ export function createWsPlugin(
             // Existing query() path is not touched. No permission handling (happy-path only).
             const { sessionId, cwd, prompt } = message;
             (ws.data as WsData).currentSessionId = sessionId;
-            await ptyOrchestrator.drive(sessionId, cwd, prompt, (msg) =>
+
+            // H1 security: validate cwd before driving
+            const cwdResult = resolveAndValidateCwd(cwd, serverConfig.allowedRoots);
+            if (!cwdResult.ok) {
+              ws.send({
+                type: "error",
+                code: cwdResult.error.code,
+                message: cwdResult.error.message,
+              });
+              break;
+            }
+
+            // Track sessionId before await so close() can cancel in-flight drives
+            (ws.data as WsData).ptySessionIds ??= new Set<string>();
+            (ws.data as WsData).ptySessionIds.add(sessionId);
+
+            await ptyOrchestrator.drive(sessionId, cwdResult.path, prompt, (msg) =>
               sendBuffered(ws, sessionId, msg as Record<string, unknown>),
             );
             break;
@@ -648,11 +666,9 @@ export function createWsPlugin(
         persistentState.pausedPermissions = persistentState.permissionHandler.pausePending();
       }
 
-      // Cancel any in-flight PTY session to avoid leaking the PTY handle
-      const sid = (ws.data as WsData).currentSessionId;
-      if (sid) {
-        ptyOrchestrator.cancel(sid);
-      }
+      // Cancel all in-flight PTY sessions to avoid leaking PTY handles
+      const ptySessionIds = (ws.data as WsData).ptySessionIds;
+      ptyOrchestrator.cancelAll([...(ptySessionIds ?? [])]);
 
       console.log("[ws] client disconnected");
     },
