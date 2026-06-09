@@ -62,5 +62,6 @@ rl.on("line", (line) => {
 });
 
 rl.on("close", () => {
-  // stdin closed; let the pty process finish naturally
+  // H-D fix: stdin closed — kill the PTY so the worker exits rather than hanging
+  ptyProc.kill();
 });

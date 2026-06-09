@@ -241,12 +241,29 @@ export async function readLatestAssistantResponse(
   const baselineEndTurnCount = options.baselineEndTurnCount ?? 0;
 
   return new Promise<string>((resolve, reject) => {
+    let settled = false;
+
+    // H-E fix: independent top-level timer so a never-settling pollFn still times out.
+    // This fires regardless of whether poll() is suspended inside an awaited pollFn call.
+    const timeoutHandle = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        reject("timeout");
+      }
+    }, timeout);
+
     const start = Date.now();
 
     const poll = async () => {
-      // Check timeout before calling
+      if (settled) return;
+
+      // Check elapsed time before calling pollFn
       if (Date.now() - start >= timeout) {
-        reject("timeout");
+        if (!settled) {
+          settled = true;
+          clearTimeout(timeoutHandle);
+          reject("timeout");
+        }
         return;
       }
 
@@ -255,9 +272,15 @@ export async function readLatestAssistantResponse(
       try {
         messages = await pollFn(sessionId);
       } catch (err) {
-        reject(err);
+        if (!settled) {
+          settled = true;
+          clearTimeout(timeoutHandle);
+          reject(err);
+        }
         return;
       }
+
+      if (settled) return;
 
       // H3 fix: count end_turn messages, resolve only when count exceeds baseline
       // If afterUserUuid provided: look for assistant messages that appear after it in the array
@@ -274,6 +297,8 @@ export async function readLatestAssistantResponse(
         if (isEndTurnAssistant(raw)) {
           endTurnsSeen++;
           if (endTurnsSeen > baselineEndTurnCount) {
+            settled = true;
+            clearTimeout(timeoutHandle);
             resolve(extractEndTurnText(raw));
             return;
           }
@@ -282,7 +307,11 @@ export async function readLatestAssistantResponse(
 
       // Not found yet — check timeout again then schedule next poll
       if (Date.now() - start >= timeout) {
-        reject("timeout");
+        if (!settled) {
+          settled = true;
+          clearTimeout(timeoutHandle);
+          reject("timeout");
+        }
         return;
       }
 

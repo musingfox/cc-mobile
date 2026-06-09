@@ -16,29 +16,65 @@
  *
  * args:  argv passed to the process (e.g. ["claude", "--session-id", id])
  * cwd:   working directory for the spawned process
- * returns: { write(data) } — write injects bytes as if typed at the keyboard
+ * returns: { write(data), kill?, exited? } — write injects bytes as if typed at the keyboard;
+ *          kill (optional) terminates the process; exited (optional) resolves when it ends
  */
-export type SpawnerFn = (args: string[], cwd: string) => { write: (data: string) => void };
+export type SpawnerFn = (
+  args: string[],
+  cwd: string,
+) => { write: (data: string) => void; kill?: () => void };
+
+/**
+ * Resolve the absolute path to pty-worker.mjs.
+ *
+ * If PTY_WORKER env var is set, use it (test/override path).
+ * Otherwise return the absolute path co-located with this module.
+ * H-A fix: never return a relative fallback string — always absolute.
+ */
+export function resolveWorkerPath(): string {
+  if (process.env.PTY_WORKER) {
+    return process.env.PTY_WORKER;
+  }
+  // import.meta.dir is the absolute directory of this source file (Bun built-in)
+  return import.meta.dir + "/pty-worker.mjs";
+}
 
 /**
  * Default spawner: lazy-starts the pty-worker.mjs subprocess via Bun.spawn.
  *
- * The worker path is read from PTY_WORKER env var at call time (not import time)
- * so tests can swap it after import.
+ * The worker path resolves via resolveWorkerPath() at call time (not import time)
+ * so tests can swap PTY_WORKER after import.
  *
- * The worker process receives JSON commands on its stdin and emits JSON events
- * on its stdout (see pty-worker.mjs for the protocol).
+ * The worker process receives JSON commands on its stdin; responses come from
+ * JSONL written to the session file — worker stdout is not needed and is set to
+ * "ignore" to avoid accumulation (H-B fix).
  */
-function defaultSpawner(args: string[], cwd: string): { write: (data: string) => void } {
-  const workerPath = process.env.PTY_WORKER ?? "server/pty-worker.mjs";
+export function defaultSpawner(
+  args: string[],
+  cwd: string,
+): { write: (data: string) => void; kill: () => void; exited: Promise<number> } {
+  const workerPath = resolveWorkerPath();
 
   const proc = Bun.spawn(["node", workerPath, ...args], {
     stdin: "pipe",
-    stdout: "pipe",
+    stdout: "ignore",
     stderr: "inherit",
     cwd,
     env: process.env,
   });
+
+  // H-C fix: idempotent kill — guard with a flag so double-call is safe
+  let killed = false;
+  function kill(): void {
+    if (killed) return;
+    killed = true;
+    try {
+      proc.stdin.end();
+    } catch {
+      // stdin may already be closed
+    }
+    proc.kill("SIGTERM");
+  }
 
   return {
     write(data: string): void {
@@ -47,6 +83,8 @@ function defaultSpawner(args: string[], cwd: string): { write: (data: string) =>
       // Flush Bun's FileSink buffer so the worker receives bytes immediately
       (proc.stdin as unknown as { flush?: () => void }).flush?.();
     },
+    kill,
+    exited: proc.exited,
   };
 }
 
