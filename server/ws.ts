@@ -12,6 +12,7 @@ import { EventBuffer } from "./event-buffer";
 import { buildUrl } from "./path-utils";
 import type { createPermissionHandler, PendingPermissionSnapshot } from "./permission-bridge";
 import { ClientMessage, ServerMessage } from "./protocol";
+import { PtyOrchestrator } from "./pty-orchestrator";
 import { loadSessionHistory } from "./session-history";
 import { getClaudeSessionInfo, listClaudeSessions, renameClaudeSession } from "./session-listing";
 import type { InitData, SessionManager } from "./session-manager";
@@ -116,6 +117,9 @@ export function createWsPlugin(
 ) {
   let cachedCapabilities: Capabilities | null = loadCachedCapabilities();
   const wsPath = buildUrl(serverConfig.basePath, "/ws");
+
+  // PTY orchestrator — one instance per WS plugin, real spawner/getMessagesFn by default
+  const ptyOrchestrator = new PtyOrchestrator();
 
   // Persistent state across reconnects
   const eventBuffer = new EventBuffer(500);
@@ -612,6 +616,17 @@ export function createWsPlugin(
             }
             break;
           }
+
+          case "pty_send": {
+            // PTY happy-path: drive prompt via PTY, forward stream_chunk + stream_end to client.
+            // Existing query() path is not touched. No permission handling (happy-path only).
+            const { sessionId, cwd, prompt } = message;
+            (ws.data as WsData).currentSessionId = sessionId;
+            await ptyOrchestrator.drive(sessionId, cwd, prompt, (msg) =>
+              sendBuffered(ws, sessionId, msg as Record<string, unknown>),
+            );
+            break;
+          }
         }
       } catch (error) {
         console.error("[ws] error handling message:", error);
@@ -631,6 +646,12 @@ export function createWsPlugin(
       // Pause pending permissions for potential reconnect
       if (persistentState.permissionHandler) {
         persistentState.pausedPermissions = persistentState.permissionHandler.pausePending();
+      }
+
+      // Cancel any in-flight PTY session to avoid leaking the PTY handle
+      const sid = (ws.data as WsData).currentSessionId;
+      if (sid) {
+        ptyOrchestrator.cancel(sid);
       }
 
       console.log("[ws] client disconnected");

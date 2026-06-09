@@ -121,6 +121,13 @@ const ReconnectMessage = z.object({
   sessionIds: z.array(z.string()),
 });
 
+const PtySendMessage = z.object({
+  type: z.literal("pty_send"),
+  sessionId: z.string(),
+  cwd: z.string(),
+  prompt: z.string(),
+});
+
 export const ClientMessage = z.discriminatedUnion("type", [
   NewSessionMessage,
   SendMessage,
@@ -139,6 +146,7 @@ export const ClientMessage = z.discriminatedUnion("type", [
   ReconnectMessage,
   SetSessionTitleMessage,
   AppendUserMessageSchema,
+  PtySendMessage,
 ]);
 
 export type ClientMessage = z.infer<typeof ClientMessage>;
