@@ -683,8 +683,14 @@ export function createWsPlugin(
               (ws.data as WsData).ptySessionIds ??= new Set<string>();
               (ws.data as WsData).ptySessionIds.add(sessionId);
 
-              await ptyOrchestrator.drive(sessionId, cwdResult.path, prompt, (msg) =>
-                sendBuffered(ws, sessionId, msg as Record<string, unknown>),
+              await ptyOrchestrator.drive(
+                sessionId,
+                cwdResult.path,
+                prompt,
+                (msg) => sendBuffered(ws, sessionId, msg as Record<string, unknown>),
+                {
+                  isPermissionPending: () => ptyRelay.hasPendingForSession(sessionId),
+                },
               );
               break;
             }

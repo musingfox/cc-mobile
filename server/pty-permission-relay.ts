@@ -115,6 +115,18 @@ export function createPtyPermissionRelay(
   }
 
   /**
+   * Returns true iff some pending entry belongs to the given session.
+   * Per-session scan (not global count): another session's pending permission
+   * must not be reported here.
+   */
+  function hasPendingForSession(sessionId: string): boolean {
+    for (const entry of pending.values()) {
+      if (entry.sessionId === sessionId) return true;
+    }
+    return false;
+  }
+
+  /**
    * Pause all pending permission requests (e.g. on WebSocket disconnect).
    * Clears each timer but does NOT resolve the promise and does NOT delete from map.
    * Returns snapshots that can be passed to resumePending on reconnect.
@@ -171,6 +183,7 @@ export function createPtyPermissionRelay(
     requestPtyPermission,
     resolvePermission,
     getPendingCount,
+    hasPendingForSession,
     pausePending,
     resumePending,
   };

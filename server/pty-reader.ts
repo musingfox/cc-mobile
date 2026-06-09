@@ -53,6 +53,19 @@ export interface ReadLatestOptions {
    * Default: 0 (accept any end_turn — legacy behavior).
    */
   baselineEndTurnCount?: number;
+  /**
+   * Optional predicate: returns true while a permission for this session is
+   * pending (PreToolUse hook blocking). On any poll tick where it returns true,
+   * the deadline baseline is reset so the full `timeout` window restarts once
+   * pending clears. Omitted ⇒ pure legacy 60s behavior.
+   */
+  isPermissionPending?: () => boolean;
+  /** Injectable clock seam (test): wall-clock reader. Default: Date.now. */
+  nowFn?: () => number;
+  /** Injectable clock seam (test): timer scheduler. Default: setTimeout. */
+  setTimeoutFn?: (fn: () => void, ms: number) => unknown;
+  /** Injectable clock seam (test): timer canceller. Default: clearTimeout. */
+  clearTimeoutFn?: (id: unknown) => void;
 }
 
 /** Options for runPtySession. */
@@ -70,6 +83,14 @@ export interface RunPtySessionOptions {
   timeout?: number;
   /** Poll interval in ms. Default: 500. */
   interval?: number;
+  /** Optional predicate: freeze the poll deadline while a permission is pending. */
+  isPermissionPending?: () => boolean;
+  /** Injectable clock seam (test): wall-clock reader. Default: Date.now. */
+  nowFn?: () => number;
+  /** Injectable clock seam (test): timer scheduler. Default: setTimeout. */
+  setTimeoutFn?: (fn: () => void, ms: number) => unknown;
+  /** Injectable clock seam (test): timer canceller. Default: clearTimeout. */
+  clearTimeoutFn?: (id: unknown) => void;
 }
 
 // ── Pure helpers (no SDK, no pty) ─────────────────────────────────────────
@@ -332,31 +353,58 @@ export async function readLatestAssistantResponse(
 
   const baselineEndTurnCount = options.baselineEndTurnCount ?? 0;
 
+  // Clock seam (OWD-1): a single virtual clock backs BOTH the backstop timer and
+  // the elapsed Date.now() checks. Defaults are the real wall-clock + timers.
+  const nowFn = options.nowFn ?? Date.now;
+  const setT: (fn: () => void, ms: number) => unknown =
+    options.setTimeoutFn ?? ((fn, ms) => setTimeout(fn, ms));
+  const clearT: (id: unknown) => void =
+    options.clearTimeoutFn ?? ((id) => clearTimeout(id as ReturnType<typeof setTimeout>));
+  const isPermissionPending = options.isPermissionPending;
+
   return new Promise<string>((resolve, reject) => {
     let settled = false;
-    let pollTimer: ReturnType<typeof setTimeout> | undefined;
+    let pollTimer: unknown;
 
     // H-E fix: independent top-level timer so a never-settling pollFn still times out.
     // This fires regardless of whether poll() is suspended inside an awaited pollFn call.
-    const timeoutHandle = setTimeout(() => {
-      if (!settled) {
-        settled = true;
-        clearTimeout(pollTimer);
-        reject("timeout");
-      }
-    }, timeout);
+    const armBackstop = (): unknown =>
+      setT(() => {
+        if (!settled) {
+          settled = true;
+          clearT(pollTimer);
+          reject("timeout");
+        }
+      }, timeout);
 
-    const start = Date.now();
+    // `start` and `timeoutHandle` are mutable: a pending tick resets the baseline
+    // (D3) by moving `start` to now AND re-arming the backstop together.
+    let start = nowFn();
+    let timeoutHandle = armBackstop();
 
     const poll = async () => {
       if (settled) return;
 
+      // D3: while a permission is pending, reset the deadline baseline so the full
+      // `timeout` window restarts once pending clears. Move `start`, kill the stale
+      // backstop, and re-arm it — all three move together (else the old backstop
+      // mis-fires or the elapsed check trips). Skip the elapsed check + pollFn this
+      // tick; reset ONLY on pending=true (the post-flip window is carried by the
+      // backstop armed during the last pending tick).
+      if (isPermissionPending?.()) {
+        start = nowFn();
+        clearT(timeoutHandle);
+        timeoutHandle = armBackstop();
+        pollTimer = setT(poll, interval);
+        return;
+      }
+
       // Check elapsed time before calling pollFn
-      if (Date.now() - start >= timeout) {
+      if (nowFn() - start >= timeout) {
         if (!settled) {
           settled = true;
-          clearTimeout(timeoutHandle);
-          clearTimeout(pollTimer);
+          clearT(timeoutHandle);
+          clearT(pollTimer);
           reject("timeout");
         }
         return;
@@ -369,8 +417,8 @@ export async function readLatestAssistantResponse(
       } catch (err) {
         if (!settled) {
           settled = true;
-          clearTimeout(timeoutHandle);
-          clearTimeout(pollTimer);
+          clearT(timeoutHandle);
+          clearT(pollTimer);
           reject(err);
         }
         return;
@@ -394,8 +442,8 @@ export async function readLatestAssistantResponse(
           endTurnsSeen++;
           if (endTurnsSeen > baselineEndTurnCount) {
             settled = true;
-            clearTimeout(timeoutHandle);
-            clearTimeout(pollTimer);
+            clearT(timeoutHandle);
+            clearT(pollTimer);
             resolve(extractEndTurnText(raw));
             return;
           }
@@ -403,17 +451,17 @@ export async function readLatestAssistantResponse(
       }
 
       // Not found yet — check timeout again then schedule next poll
-      if (Date.now() - start >= timeout) {
+      if (nowFn() - start >= timeout) {
         if (!settled) {
           settled = true;
-          clearTimeout(timeoutHandle);
-          clearTimeout(pollTimer);
+          clearT(timeoutHandle);
+          clearT(pollTimer);
           reject("timeout");
         }
         return;
       }
 
-      pollTimer = setTimeout(poll, interval);
+      pollTimer = setT(poll, interval);
     };
 
     // Start polling immediately (no leading delay)
@@ -501,5 +549,9 @@ export async function runPtySession(
     timeout: options?.timeout,
     interval: options?.interval,
     baselineEndTurnCount,
+    isPermissionPending: options?.isPermissionPending,
+    nowFn: options?.nowFn,
+    setTimeoutFn: options?.setTimeoutFn,
+    clearTimeoutFn: options?.clearTimeoutFn,
   });
 }

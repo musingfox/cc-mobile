@@ -33,6 +33,14 @@ export interface DriveOptions {
   getMessagesFn?: GetMessagesFn;
   timeout?: number;
   interval?: number;
+  /** Optional predicate: freeze the poll deadline while a permission is pending. */
+  isPermissionPending?: () => boolean;
+  /** Injectable clock seam (test): wall-clock reader. Default: Date.now. */
+  nowFn?: () => number;
+  /** Injectable clock seam (test): timer scheduler. Default: setTimeout. */
+  setTimeoutFn?: (fn: () => void, ms: number) => unknown;
+  /** Injectable clock seam (test): timer canceller. Default: clearTimeout. */
+  clearTimeoutFn?: (id: unknown) => void;
 }
 
 interface SessionState {
@@ -107,6 +115,10 @@ export class PtyOrchestrator {
         ...(effectiveGetMessagesFn ? { getMessagesFn: effectiveGetMessagesFn } : {}),
         ...(effectiveTimeout !== undefined ? { timeout: effectiveTimeout } : {}),
         ...(effectiveInterval !== undefined ? { interval: effectiveInterval } : {}),
+        ...(opts?.isPermissionPending ? { isPermissionPending: opts.isPermissionPending } : {}),
+        ...(opts?.nowFn ? { nowFn: opts.nowFn } : {}),
+        ...(opts?.setTimeoutFn ? { setTimeoutFn: opts.setTimeoutFn } : {}),
+        ...(opts?.clearTimeoutFn ? { clearTimeoutFn: opts.clearTimeoutFn } : {}),
         onHandle: (handle) => {
           // H4: check cancelled flag synchronously (may have been set during spawn)
           if (state.cancelled) {
