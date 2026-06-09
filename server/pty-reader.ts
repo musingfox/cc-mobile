@@ -14,7 +14,8 @@
  */
 
 import type { SpawnerFn } from "./pty-driver";
-import { PtyDriver } from "./pty-driver";
+import { defaultSpawner } from "./pty-driver";
+import { TuiReadinessMachine } from "./tui-readiness";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -363,12 +364,85 @@ export async function runPtySession(
     pollFn = (id: string) => getSessionMessages(id) as Promise<unknown[]>;
   }
 
-  // 1. Drive: synchronous PTY injection (write-before-poll — preserves ordering contract)
-  const driver = new PtyDriver(options?.spawner);
-  const handle = driver.driveOnce(sessionId, cwd, prompt);
+  // Spawn the process handle directly (without writing yet — readiness path defers the write).
+  // We call the spawner directly rather than via PtyDriver.driveOnce so we can inspect onData
+  // before deciding when to write the prompt.
+  const effectiveSpawner: SpawnerFn = options?.spawner ?? defaultSpawner;
+  const args = ["claude", "--session-id", sessionId];
+  const proc = effectiveSpawner(args, cwd);
+
+  const handle = {
+    kill: proc.kill ?? (() => {}),
+    exited: proc.exited ?? Promise.resolve(0),
+  };
 
   // H-C-2 fix: expose handle to caller synchronously, before any await/poll
   options?.onHandle?.(handle);
+
+  if (proc.onData) {
+    // ── Readiness-aware path ──────────────────────────────────────────────────
+    // onData is present: use TuiReadinessMachine to detect trust/ready screens
+    // before sending the prompt. Trust screen → send \r to confirm, then watch
+    // for ready screen → send prompt + \r.
+    const machine = new TuiReadinessMachine({
+      settleMs: 750,
+      readinessTimeoutMs: 30000,
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      let settled = false;
+
+      const finish = (err?: unknown) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(tickTimer);
+        if (err !== undefined) reject(err);
+        else resolve();
+      };
+
+      let tickTimer: ReturnType<typeof setTimeout>;
+
+      const scheduleTick = () => {
+        let last = Date.now();
+        const tick = () => {
+          if (settled) return;
+          const now = Date.now();
+          const elapsed = now - last;
+          last = now;
+          const actions = machine.tick(elapsed);
+          for (const action of actions) {
+            if (action === "sendConfirm") {
+              proc.write("\r");
+            } else if (action === "sendPrompt") {
+              proc.write(`${prompt}\r`);
+              finish();
+              return;
+            } else if (action === "timeout") {
+              finish(new Error("tui-readiness: timeout waiting for TUI ready state"));
+              return;
+            }
+          }
+          if (!settled) {
+            tickTimer = setTimeout(tick, 100);
+          }
+        };
+        tickTimer = setTimeout(tick, 100);
+      };
+
+      proc.onData!((chunk: string) => {
+        if (!settled) {
+          machine.feedChunk(chunk);
+        }
+      });
+
+      scheduleTick();
+    });
+  } else {
+    // ── Legacy path (no onData) ───────────────────────────────────────────────
+    // Spawner is a legacy mock (e.g. orchestrator tests) that does not expose
+    // onData. Preserve old behavior: write prompt immediately (blind injection).
+    proc.write(`${prompt}\r`);
+  }
 
   // 2. Count baseline end_turn messages (H3 fix: ignore pre-existing responses)
   let baselineEndTurnCount = 0;

@@ -1,0 +1,85 @@
+{
+  "note": "real claude v2.1.x TUI startup in UNTRUSTED dir; \\r sent at idx 7 to confirm trust",
+  "chunks": [
+    {
+      "t": 702,
+      "data": "\u001b7\u001b[r\u001b8\u001b[?25h"
+    },
+    {
+      "t": 718,
+      "data": "\u001b[?25l"
+    },
+    {
+      "t": 718,
+      "data": "\u001b[?2004h\u001b[?1004h\u001b[?2031h\u001b[<u\u001b[>1u\u001b[>4;2m"
+    },
+    {
+      "t": 731,
+      "data": "\u001b[?2026h\r\r\n\u001b[38;2;224;213;97m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[39m\r\r\n\u001b[2G\u001b[38;2;224;213;97m\u001b[1mAccessing\u001b[12Gworkspace:\u001b[22m\u001b[39m\r\r\n\r\r\n\u001b[2G\u001b[1m/Users/nickhuang/.claude-fix-ClxP82\u001b[22m\r\r\n\r\r\n\u001b[2GQuick\u001b[8Gsafety\u001b[15Gcheck:\u001b[22GIs\u001b[25Gthis\u001b[30Ga\u001b[32Gproject\u001b[40Gyou\u001b[44Gcreated\u001b[52Gor\u001b[55Gone\u001b[59Gyou\u001b[63Gtrust?\u001b[70G(Like\u001b[76Gyour\u001b[81Gown\u001b[85Gcode,\u001b[91Ga\u001b[93Gwell-known\u001b[104Gopen\u001b[109Gsource\u001b[116Gpro"
+    },
+    {
+      "t": 732,
+      "data": "ject,\u001b[125Gor\u001b[128Gwork\u001b[133Gfrom\u001b[138Gyour\u001b[143Gteam).\u001b[150GIf\u001b[153Gnot,\u001b[158Gtake\u001b[163Ga\u001b[165Gmoment\u001b[172Gto\u001b[175Greview\u001b[182Gwhat's\u001b[189Gin\u001b[192Gthis\u001b[197Gfolder\u001b[204Gfirst.\r\r\n\r\r\n\u001b[2GClaude\u001b[9GCode'll\u001b[17Gbe\u001b[20Gable\u001b[25Gto\u001b[28Gread,\u001b[34Gedit,\u001b[40Gand\u001b[44Gexecute\u001b[52Gfiles\u001b[58Ghere.\r\r\n\r\r\n\u001b[2G\u001b]8;id=zaxmda;https://code.claude.com/docs/en/security\u0007\u001b[38;2;98;94;76mSecurity guide\u001b[39m\u001b]8;;\u0007\r\r\n\r\r\n\u001b[2G\u001b[38;2;88;209;235m❯\u001b[4G\u001b[38;2;98;94;76m1.\u001b[7G\u001b[38;2;88;209;235mYes,\u001b[12GI\u001b[14Gtrust\u001b[20Gthis\u001b[25Gfolder\u001b[39m\r\r\n\u001b[4G\u001b[38;2;98;94;76m2.\u001b[7G\u001b[39mNo,\u001b[11Gexit\r\r\n\r\r\n\u001b[2G\u001b[38;2;98;94;76mEnter\u001b[8Gto\u001b[11Gconfirm\u001b[19G·\u001b[21GEsc\u001b[25Gto\u001b[28Gcancel\u001b[39m\r\r\n\u001b[1C\u001b[4A\u001b[?2026l"
+    },
+    {
+      "t": 735,
+      "data": "\u001b[>0q"
+    },
+    {
+      "t": 735,
+      "data": "\u001b[c"
+    },
+    {
+      "t": 4024,
+      "data": "\u001b[?2026h\u001b[1D\u001b[4B\r\u001b[6C\u001b[4A\u001b[38;2;152;224;36mYes, I trust this folder\u001b[32G✔\u001b[39m\r\r\n\r\n\r\n\r\n\u001b[1C\u001b[4A\u001b[?2026l"
+    },
+    {
+      "t": 4073,
+      "data": "\u001b[?2026h\u001b[1D\u001b[4B\u001b[2K\u001b[1A\u001b[2K\u001b[1A\u001b[2K\u001b[1A\u001b[2K\u001b[1A\u001b[2K\u001b[1A\u001b[2K\u001b[1A\u001b[2K\u001b[1A\u001b[2K\u001b[1A\u001b[2K\u001b[1A\u001b[2K\u001b[1A\u001b[2K\u001b[1A\u001b[2K\u001b[1A\u001b[2K\u001b[1A\u001b[2K\u001b[1A\u001b[2K\u001b[1A\u001b[2K\u001b[G\u001b[1A\u001b[K\r\u001b[1B\u001b[K\r\u001b[1B\u001b[K\r\u001b[1B\u001b[K\r\u001b[1B\u001b[K\r\u001b[1B\u001b[K\r\u001b[1B\u001b[K\r\u001b[1B\u001b[K\r\u001b[1B\u001b[K\r\u001b[1B\u001b[K\r\u001b[1B\u001b[K\r\u001b[1B\u001b[K\r\u001b[1B\u001b[K\r\u001b[1B\u001b[K\r\u001b[1B\u001b[K\r\u001b[1B\u001b[K\r\u001b[15A\u001b[?2026l"
+    },
+    {
+      "t": 4485,
+      "data": "\u001b[?1049h\u001b[2J\u001b[H\u001b[<u\u001b[>1u\u001b[>4;2m\u001b[?1000h\u001b[?1002h\u001b[?1003h\u001b[?1006h"
+    },
+    {
+      "t": 4488,
+      "data": "\u001b]0;✳ Claude Code\u0007"
+    },
+    {
+      "t": 4489,
+      "data": "\u001b]9;4;0;\u0007"
+    },
+    {
+      "t": 4514,
+      "data": "\u001b[?2026h\u001b[H\r\u001b[1B\u001b[38;2;253;151;31m╭───\u001b[6G\u001b[38;2;215;119;87mClaude Code\u001b[18G\u001b[38;2;153;153;153mv2.1.169\u001b[27G\u001b[38;2;253;151;31m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮\r\u001b[1B│\u001b[54G\u001b[2m│\u001b[56G\u001b[22m\u001b[1mTips for getting started\u001b[220G\u001b[22m│\r\u001b[1B│\u001b[19G\u001b[39m\u001b[1mWelcome back Nick!\u001b[54G\u001b[22m\u001b[2m\u001b[38;2;253;151;31m│\u001b[56G\u001b[39m\u001b[22mAsk\u001b[60GClaude\u001b[67Gto\u001b[70Gcreate\u001b[77Ga\u001b[79Gnew\u001b[83Gapp\u001b[87Gor\u001b[90Gclone\u001b[96Ga\u001b[98Grepository\u001b[220G\u001b[38;2;253;151;31m│\r\u001b[1B│\u001b[54G\u001b[2m│\u001b[56G\u001b["
+    },
+    {
+      "t": 4514,
+      "data": "22m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[220G│\r\u001b[1B│\u001b[24G\u001b[38;2;215;119;87m ▐\u001b[48;2;0;0;0m▛███▜\u001b[49m▌\u001b[54G\u001b[2m\u001b[38;2;253;151;31m│\u001b[56G\u001b[22m\u001b[1mWhat's new\u001b[220G\u001b[22m│\r\u001b[1B│\u001b[24G\u001b[38;2;215;119;87m▝▜\u001b[48;2;0;0;0m█████\u001b[49m▛▘\u001b[54G\u001b[2m\u001b[38;2;253;151;31m│\u001b[56G\u001b[39m\u001b[22mAdded\u001b[62G`--safe-mode`\u001b[76Gflag\u001b[81G(and\u001b[86G`CLAUDE_CODE_SAFE_MODE`)\u001b[111Gto\u001b[114Gstart\u001b[120GClaude\u001b[127GCode\u001b[132Gwith\u001b[137Gall\u001b[141Gcustomizations\u001b[156G(CLAUDE.md,\u001b[168Gplugins,\u001b[177Gskills,\u001b[185Ghooks,\u001b[192GMCP\u001b[196Gservers)\u001b[205Gdisabled\u001b[214Gfor\u001b[218G…\u001b["
+    },
+    {
+      "t": 4514,
+      "data": "220G\u001b[38;2;253;151;31m│\r\u001b[1B│\u001b[24G\u001b[38;2;215;119;87m  ▘▘ ▝▝  \u001b[54G\u001b[2m\u001b[38;2;253;151;31m│\u001b[56G\u001b[39m\u001b[22mAdded\u001b[62G`/cd`\u001b[68Gcommand\u001b[76Gto\u001b[79Gmove\u001b[84Ga\u001b[86Gsession\u001b[94Gto\u001b[97Ga\u001b[99Gnew\u001b[103Gworking\u001b[111Gdirectory\u001b[121Gwithout\u001b[129Gbreaking\u001b[138Gthe\u001b[142Gprompt\u001b[149Gcache\u001b[155Gmid-session\u001b[220G\u001b[38;2;253;151;31m│\r\u001b[1B│\u001b[5G\u001b[38;2;98;94;76mOpus 4.8 (1M context) with hi… · Claude Max · \u001b[54G\u001b[2m\u001b[38;2;253;151;31m│\u001b[56G\u001b[39m\u001b[22mAdded\u001b[62Ga\u001b[64G`disableBundledSkills`\u001b[87Gsetting\u001b[95Gand\u001b[99G`CLAUDE_CODE_DISABLE_BUNDLED_SKILLS`\u001b[136Genvironment\u001b[148Gvariable\u001b[157Gto\u001b[160Ghide\u001b[165Gbundled\u001b[173Gskills,\u001b[181Gworkflows,\u001b[192Gand\u001b[196Gbuilt-in\u001b[205Gslash\u001b[211Gcommand…\u001b[220G\u001b[38;2;253;151;31m│\r\u001b[1B│\u001b[5G\u001b[38;2;98;94;76mHsuan Lin Huang\u001b[54G\u001b[2m\u001b[38;2;253;151;31m│\u001b[56G\u001b[22m\u001b[38;2;98;94;76m\u001b[3m/release-notes for more\u001b[220G\u001b[23m\u001b[38;2;253;151;31m│\r\u001b[1B│\u001b[18G\u001b[38;2;98;94;76m~/.claude-fix-ClxP82\u001b[54G\u001b[2m\u001b[38;2;253;151;31m│\u001b[220G\u001b[22m│\r\u001b[1B╰──────────────"
+    },
+    {
+      "t": 4514,
+      "data": "────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\r\u001b[203C\u001b[33B\u001b[38;2;98;94;76m● high · /effort\r\u001b[1B\u001b[38;2;196;197;181m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────"
+    },
+    {
+      "t": 4514,
+      "data": "───────────────────────────────────────────────────────────────────────────────────────────────────────────\r\u001b[1B\u001b[39m❯ \r\u001b[1B\u001b[38;2;196;197;181m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\r\u001b[2C"
+    },
+    {
+      "t": 4514,
+      "data": "\u001b[2B\u001b[38;2;224;213;97m⏵⏵ auto mode on\u001b[38;2;98;94;76m (shift+tab to cycle) · ← for agents\u001b[39m\u001b[50;1H\u001b[47;3H\u001b[?25h\u001b[?2026l"
+    },
+    {
+      "t": 4609,
+      "data": "\u001b[?2026h\u001b[?25l\u001b[H\r\u001b[2C\u001b[48B\u001b[38;2;122;162;247m.claude-fix-ClxP82\u001b[38;2;98;94;76m \u001b[38;2;86;95;137m|\u001b[38;2;98;94;76m \u001b[38;2;125;207;255mOpus 4.8 (1M context)\u001b[38;2;98;94;76m \u001b[38;2;86;95;137m|\u001b[38;2;98;94;76m \u001b[38;2;86;95;137m░░░░░░░░░░░░░░░\u001b[38;2;98;94;76m 0%\u001b[39m\u001b[50;1H\u001b[47;3H\u001b[?25h\u001b[?2026l"
+    },
+    {
+      "t": 4856,
+      "data": "\u001b[?2026h\u001b[?25l\u001b[H\r\u001b[1C\u001b[13B\u001b[38;2;224;213;97m⚠ 1 setup issue: MCP\u001b[38;2;98;94;76m · /doctor\u001b[39m\u001b[50;1H\u001b[47;3H\u001b[?25h\u001b[?2026l"
+    }
+  ]
+}

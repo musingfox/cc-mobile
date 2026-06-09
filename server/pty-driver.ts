@@ -16,13 +16,19 @@
  *
  * args:  argv passed to the process (e.g. ["claude", "--session-id", id])
  * cwd:   working directory for the spawned process
- * returns: { write(data), kill?, exited? } — write injects bytes as if typed at the keyboard;
- *          kill (optional) terminates the process; exited (optional) resolves when it ends
+ * returns: { write(data), kill?, exited?, onData? } — write injects bytes as if typed at the keyboard;
+ *          kill (optional) terminates the process; exited (optional) resolves when it ends;
+ *          onData (optional) registers a callback for raw PTY output chunks — enables readiness detection
  */
 export type SpawnerFn = (
   args: string[],
   cwd: string,
-) => { write: (data: string) => void; kill?: () => void; exited?: Promise<number> };
+) => {
+  write: (data: string) => void;
+  kill?: () => void;
+  exited?: Promise<number>;
+  onData?: (cb: (chunk: string) => void) => void;
+};
 
 /**
  * Resolve the absolute path to pty-worker.mjs.
@@ -52,12 +58,19 @@ export function resolveWorkerPath(): string {
 export function defaultSpawner(
   args: string[],
   cwd: string,
-): { write: (data: string) => void; kill: () => void; exited: Promise<number> } {
+): {
+  write: (data: string) => void;
+  kill: () => void;
+  exited: Promise<number>;
+  onData: (cb: (chunk: string) => void) => void;
+} {
   const workerPath = resolveWorkerPath();
 
+  // H-B fix (updated): stdout is now "pipe" so we can read PTY data for readiness detection.
+  // Previously was "ignore" to avoid accumulation; now we consume it actively via NDJSON parsing.
   const proc = Bun.spawn(["node", workerPath, ...args], {
     stdin: "pipe",
-    stdout: "ignore",
+    stdout: "pipe",
     stderr: "inherit",
     cwd,
     env: process.env,
@@ -76,6 +89,49 @@ export function defaultSpawner(
     proc.kill("SIGTERM");
   }
 
+  // onData subscribers: registered before or after the reader loop starts
+  const dataCallbacks: Array<(chunk: string) => void> = [];
+
+  // Read worker stdout as NDJSON: each line is {type:"data",data} or {type:"exit",code}
+  // We consume the stream asynchronously so it doesn't accumulate in the pipe buffer.
+  (async () => {
+    try {
+      const reader = proc.stdout.getReader();
+      const decoder = new TextDecoder();
+      let partial = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const text = decoder.decode(value, { stream: true });
+        partial += text;
+        // Process complete lines
+        const lines = partial.split("\n");
+        partial = lines.pop() ?? ""; // last element may be incomplete
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          try {
+            const msg = JSON.parse(trimmed) as { type: string; data?: string };
+            if (msg.type === "data" && typeof msg.data === "string") {
+              for (const cb of dataCallbacks) {
+                try {
+                  cb(msg.data);
+                } catch {
+                  /* ignore subscriber errors */
+                }
+              }
+            }
+          } catch {
+            // Ignore malformed NDJSON lines
+          }
+        }
+      }
+    } catch {
+      // Pipe closed or proc exited — normal teardown
+    }
+  })();
+
   return {
     write(data: string): void {
       const msg = JSON.stringify({ type: "write", data }) + "\n";
@@ -85,6 +141,9 @@ export function defaultSpawner(
     },
     kill,
     exited: proc.exited,
+    onData(cb: (chunk: string) => void): void {
+      dataCallbacks.push(cb);
+    },
   };
 }
 
