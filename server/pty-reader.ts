@@ -183,6 +183,89 @@ function rawMessagesToHistory(messages: unknown[]): HistoryEntry[] {
   return result;
 }
 
+// ── driveReadiness ────────────────────────────────────────────────────────────
+
+/**
+ * Drive a PTY process through the TUI readiness handshake before sending a prompt.
+ *
+ * Semantics (debounce pattern):
+ *   - Seeds one overall timeout at entry (readinessTimeoutMs). Rejects with string "timeout"
+ *     if readiness is never reached in time.
+ *   - Registers proc.onData: each chunk feeds machine.feedChunk + clears+re-arms settle timer.
+ *   - When the settle timer fires, calls machine.tick(settleMs):
+ *       sendConfirm → proc.write("\r") (machine has already reset its buffer)
+ *       sendPrompt  → proc.write(prompt+"\r") then resolve
+ *       timeout     → reject string "timeout"
+ *   - On resolve or reject: both timers are cleared; settled guard prevents further action.
+ *
+ * @param proc   - PTY process handle with onData + write
+ * @param prompt - Prompt text to send when TUI is ready
+ * @param opts   - Timing config + optional injectable timer functions
+ */
+export function driveReadiness(
+  proc: { onData: (cb: (chunk: string) => void) => void; write: (data: string) => void },
+  prompt: string,
+  opts: {
+    settleMs: number;
+    readinessTimeoutMs: number;
+    setTimeoutFn?: (fn: () => void, ms: number) => unknown;
+    clearTimeoutFn?: (id: unknown) => void;
+  },
+): Promise<void> {
+  const setT = opts.setTimeoutFn ?? ((fn, ms) => setTimeout(fn, ms));
+  const clearT = opts.clearTimeoutFn ?? ((id) => clearTimeout(id as ReturnType<typeof setTimeout>));
+
+  return new Promise<void>((resolve, reject) => {
+    let settled = false;
+    let debounce: unknown;
+
+    const machine = new TuiReadinessMachine({
+      settleMs: opts.settleMs,
+      readinessTimeoutMs: opts.readinessTimeoutMs,
+    });
+
+    const finish = (err?: unknown) => {
+      if (settled) return;
+      settled = true;
+      clearT(debounce);
+      clearT(overall);
+      if (err !== undefined) reject(err);
+      else resolve();
+    };
+
+    // Seed overall timeout once at entry
+    const overall = setT(() => {
+      finish("timeout");
+    }, opts.readinessTimeoutMs);
+
+    const onSettle = () => {
+      if (settled) return;
+      const actions = machine.tick(opts.settleMs);
+      for (const action of actions) {
+        if (action === "sendConfirm") {
+          proc.write("\r");
+          // machine has already reset its buffer; no re-arm here — onData does that
+          return;
+        } else if (action === "sendPrompt") {
+          proc.write(prompt + "\r");
+          finish();
+          return;
+        } else if (action === "timeout") {
+          finish("timeout");
+          return;
+        }
+      }
+    };
+
+    proc.onData((chunk: string) => {
+      if (settled) return;
+      machine.feedChunk(chunk);
+      clearT(debounce);
+      debounce = setT(onSettle, opts.settleMs);
+    });
+  });
+}
+
 // ── Exported functions ─────────────────────────────────────────────────────
 
 /**
@@ -381,62 +464,13 @@ export async function runPtySession(
 
   if (proc.onData) {
     // ── Readiness-aware path ──────────────────────────────────────────────────
-    // onData is present: use TuiReadinessMachine to detect trust/ready screens
-    // before sending the prompt. Trust screen → send \r to confirm, then watch
-    // for ready screen → send prompt + \r.
-    const machine = new TuiReadinessMachine({
-      settleMs: 750,
-      readinessTimeoutMs: 30000,
-    });
-
-    await new Promise<void>((resolve, reject) => {
-      let settled = false;
-
-      const finish = (err?: unknown) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(tickTimer);
-        if (err !== undefined) reject(err);
-        else resolve();
-      };
-
-      let tickTimer: ReturnType<typeof setTimeout>;
-
-      const scheduleTick = () => {
-        let last = Date.now();
-        const tick = () => {
-          if (settled) return;
-          const now = Date.now();
-          const elapsed = now - last;
-          last = now;
-          const actions = machine.tick(elapsed);
-          for (const action of actions) {
-            if (action === "sendConfirm") {
-              proc.write("\r");
-            } else if (action === "sendPrompt") {
-              proc.write(`${prompt}\r`);
-              finish();
-              return;
-            } else if (action === "timeout") {
-              finish(new Error("tui-readiness: timeout waiting for TUI ready state"));
-              return;
-            }
-          }
-          if (!settled) {
-            tickTimer = setTimeout(tick, 100);
-          }
-        };
-        tickTimer = setTimeout(tick, 100);
-      };
-
-      proc.onData!((chunk: string) => {
-        if (!settled) {
-          machine.feedChunk(chunk);
-        }
-      });
-
-      scheduleTick();
-    });
+    // onData is present: use driveReadiness (debounce-based) to detect trust/ready
+    // screens before sending the prompt.
+    await driveReadiness(
+      proc as { onData: (cb: (chunk: string) => void) => void; write: (data: string) => void },
+      prompt,
+      { settleMs: 750, readinessTimeoutMs: 30000 },
+    );
   } else {
     // ── Legacy path (no onData) ───────────────────────────────────────────────
     // Spawner is a legacy mock (e.g. orchestrator tests) that does not expose
