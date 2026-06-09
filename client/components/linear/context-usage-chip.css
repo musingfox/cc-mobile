@@ -1,0 +1,20 @@
+.lin-context-usage-chip {
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: #6a6a6a;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  padding: 3px 9px;
+  flex-shrink: 0;
+}
+
+.lin-context-usage-chip.is-warning {
+  color: #c4a66a;
+  border-color: rgba(196, 166, 106, 0.4);
+  background: rgba(196, 166, 106, 0.08);
+}
+
+.lin-context-usage-chip.is-loading {
+  color: #4a4a4a;
+}

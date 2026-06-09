@@ -255,3 +255,26 @@ export function isMemoryRecall(chunk: unknown): chunk is MemoryRecallEvent {
   const c = chunk as Record<string, unknown>;
   return c.type === "system" && c.subtype === "memory_recall";
 }
+
+// Compact boundary event from SDK — emitted when the SDK auto-compacts
+// conversation history mid-turn. Used to render an in-chat divider so users
+// can see where context was summarized.
+export type CompactBoundaryEvent = {
+  type: "system";
+  subtype: "compact_boundary";
+  uuid: string;
+  session_id?: string;
+  compact_metadata: {
+    trigger: "manual" | "auto";
+    pre_tokens?: number;
+    post_tokens?: number;
+    duration_ms?: number;
+    preserved_segment?: unknown;
+  };
+};
+
+export function isCompactBoundary(chunk: unknown): chunk is CompactBoundaryEvent {
+  if (!chunk || typeof chunk !== "object") return false;
+  const c = chunk as Record<string, unknown>;
+  return c.type === "system" && c.subtype === "compact_boundary";
+}

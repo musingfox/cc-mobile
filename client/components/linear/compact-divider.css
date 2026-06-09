@@ -1,0 +1,22 @@
+.lin-compact-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 4px;
+  margin: 6px 0;
+}
+
+.lin-compact-divider-line {
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.lin-compact-divider-label {
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  color: #6a6a6a;
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}

@@ -9,6 +9,12 @@ import {
   saveSessionState,
 } from "../services/session-persistence";
 
+export type CompactMetadata = {
+  trigger: "manual" | "auto";
+  preTokens?: number;
+  postTokens?: number;
+};
+
 export type Message = {
   id: string;
   role: "user" | "assistant" | "tool";
@@ -19,6 +25,8 @@ export type Message = {
   contentBlocks?: ContentBlock[];
   agentLabel?: string;
   agentDescription?: string;
+  kind?: "compact_boundary";
+  compactMetadata?: CompactMetadata;
 };
 
 export type PendingPermission = {
@@ -37,6 +45,7 @@ export type ModelInfo = {
   supportedEffortLevels?: string[];
   supportsFastMode?: boolean;
   supportsAdaptiveThinking?: boolean;
+  contextLength?: number;
 };
 
 export type AccountInfo = {
@@ -120,6 +129,12 @@ export type UsageData = {
   terminalReason?: import("../services/tool-events").TerminalReason;
 };
 
+export type ContextUsage = {
+  totalTokens: number;
+  maxTokens: number;
+  percentage: number;
+};
+
 export type RateLimitInfo = {
   status: "allowed" | "allowed_warning" | "rejected";
   resetsAt?: number;
@@ -143,6 +158,7 @@ export type SessionState = {
   activeAgents: Map<string, ActiveAgent>;
   activeHook: { hookId: string; hookName: string } | null;
   usage: UsageData | null;
+  contextUsage: ContextUsage | null;
   promptSuggestion: string | null;
   resolvedActions: ResolvedAction[];
   agentState: "idle" | "running" | "requires_action" | null;
@@ -226,6 +242,7 @@ interface AppState {
 
   // Usage
   updateUsage: (sessionId: string, usage: UsageData) => void;
+  setContextUsage: (sessionId: string, contextUsage: ContextUsage | null) => void;
 
   // Capabilities (shared across sessions)
   capabilities: Capabilities | null;
@@ -325,6 +342,7 @@ export const useAppStore = create<AppState>((set) => ({
         activeAgents: new Map(),
         activeHook: null,
         usage: null,
+        contextUsage: null,
         promptSuggestion: null,
         resolvedActions: [],
         agentState: null,
@@ -605,6 +623,14 @@ export const useAppStore = create<AppState>((set) => ({
       sessions: updateSession(state.sessions, sessionId, (s) => ({
         ...s,
         usage,
+      })),
+    })),
+
+  setContextUsage: (sessionId, contextUsage) =>
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (s) => ({
+        ...s,
+        contextUsage,
       })),
     })),
 

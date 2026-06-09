@@ -18,6 +18,7 @@ interface SerializableSessionState {
   activeAgents: [string, SessionState["activeAgents"] extends Map<string, infer T> ? T : never][];
   activeHook: SessionState["activeHook"];
   usage: SessionState["usage"];
+  contextUsage: SessionState["contextUsage"];
   promptSuggestion: string | null;
   resolvedActions: ResolvedAction[];
   agentState: "idle" | "running" | "requires_action" | null;
@@ -39,6 +40,7 @@ export function saveSessionState(sessionId: string, state: SessionState): void {
       activeAgents: Array.from(state.activeAgents.entries()),
       activeHook: state.activeHook,
       usage: state.usage,
+      contextUsage: state.contextUsage,
       promptSuggestion: state.promptSuggestion,
       resolvedActions: state.resolvedActions || [],
       agentState: state.agentState,
@@ -74,6 +76,7 @@ export function loadSessionState(sessionId: string): SessionState | null {
       activeTools: new Map(parsed.activeTools),
       activeAgents: new Map(parsed.activeAgents),
       resolvedActions: parsed.resolvedActions || [],
+      contextUsage: parsed.contextUsage ?? null,
       agentState: parsed.agentState ?? null,
       receivedAuthoritativeState: parsed.receivedAuthoritativeState ?? false,
     };

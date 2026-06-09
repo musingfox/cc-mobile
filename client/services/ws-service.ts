@@ -12,7 +12,9 @@ import { notificationService } from "./notification";
 import { saveProject } from "./projects";
 import { toastService } from "./toast-service";
 import {
+  type CompactBoundaryEvent,
   isApiRetry,
+  isCompactBoundary,
   isHookResponse,
   isHookStarted,
   isMemoryRecall,
@@ -88,6 +90,83 @@ export function handleMemoryRecallChunk(
     },
   });
   return true;
+}
+
+/**
+ * Surface SDK `compact_boundary` system events as in-chat dividers. We append
+ * a synthetic `Message` flagged with `kind: "compact_boundary"` so the chat
+ * renderer can draw a "history compacted" separator between the last
+ * pre-compact and first post-compact turn.
+ *
+ * The divider is session-only — `HistoryMessageSchema` is intentionally NOT
+ * extended, so reloads from disk won't include it.
+ */
+export function handleCompactBoundaryChunk(
+  sessionId: string,
+  chunk: unknown,
+  store: {
+    sessions: Map<string, { messages: unknown[] }>;
+    addMessage: (sessionId: string, message: import("../stores/app-store").Message) => void;
+  },
+  now: () => number = Date.now,
+): boolean {
+  if (!isCompactBoundary(chunk)) return false;
+  const c = chunk as CompactBoundaryEvent;
+  if (!c.compact_metadata || typeof c.compact_metadata !== "object") {
+    console.warn("[ws-service] compact_boundary chunk missing compact_metadata", { chunk });
+    return false;
+  }
+  const session = store.sessions.get(sessionId);
+  if (!session) return false;
+  const meta = c.compact_metadata;
+  const trigger: "manual" | "auto" = meta.trigger === "manual" ? "manual" : "auto";
+  const compactMetadata: import("../stores/app-store").CompactMetadata = {
+    trigger,
+    ...(typeof meta.pre_tokens === "number" ? { preTokens: meta.pre_tokens } : {}),
+    ...(typeof meta.post_tokens === "number" ? { postTokens: meta.post_tokens } : {}),
+  };
+  store.addMessage(sessionId, {
+    id: `compact-${c.session_id ?? sessionId}-${c.uuid ?? "unknown"}`,
+    role: "assistant",
+    content: "",
+    timestamp: now(),
+    kind: "compact_boundary",
+    compactMetadata,
+  });
+  return true;
+}
+
+// Fallback context window when the active model's contextLength is unknown.
+// 200k matches Claude Sonnet 4.x; conservative for newer models.
+export const MAX_TOKENS_FALLBACK = 200_000;
+
+/**
+ * Derive an aggregate context-occupancy snapshot from a `result.usage` payload.
+ * Sums input, output, and cached input tokens (the same components Anthropic
+ * counts against the context window). Returns `null` when the payload is
+ * missing entirely so callers can preserve the previous chip reading.
+ */
+export function deriveContextUsage(
+  usage:
+    | {
+        input_tokens?: number;
+        output_tokens?: number;
+        cache_read_input_tokens?: number;
+        cache_creation_input_tokens?: number;
+      }
+    | undefined,
+  maxTokens: number | null | undefined,
+): { totalTokens: number; maxTokens: number; percentage: number } | null {
+  if (!usage || typeof usage !== "object") return null;
+  const totalTokens =
+    (usage.input_tokens ?? 0) +
+    (usage.output_tokens ?? 0) +
+    (usage.cache_read_input_tokens ?? 0) +
+    (usage.cache_creation_input_tokens ?? 0);
+  const effectiveMax =
+    typeof maxTokens === "number" && maxTokens > 0 ? maxTokens : MAX_TOKENS_FALLBACK;
+  const percentage = totalTokens / effectiveMax;
+  return { totalTokens, maxTokens: effectiveMax, percentage };
 }
 
 export function handleModelNotFoundError(chunk: Record<string, unknown>): boolean {
@@ -398,6 +477,16 @@ class WsService {
             terminalReason,
           });
 
+          // Refresh context-occupancy chip from the same usage payload.
+          // Active model lookup keys on `capabilities.model`; fall back to
+          // MAX_TOKENS_FALLBACK when the model isn't catalogued.
+          const activeModelValue = store.capabilities?.model;
+          const activeModel = store.capabilities?.models?.find((m) => m.value === activeModelValue);
+          const contextUsage = deriveContextUsage(chunk.usage, activeModel?.contextLength);
+          if (contextUsage) {
+            store.setContextUsage(sessionId, contextUsage);
+          }
+
           // Show toast for abnormal terminal reasons
           const errorMessage = getTerminalReasonMessage(terminalReason);
           if (errorMessage) {
@@ -548,6 +637,11 @@ class WsService {
         // Existing sweepers (text content_block_start, assistant turn cleanup)
         // remove it once the model starts replying.
         if (handleMemoryRecallChunk(sessionId, chunk, store)) {
+          break;
+        }
+
+        // Surface compact_boundary as an in-chat divider message.
+        if (handleCompactBoundaryChunk(sessionId, chunk, store)) {
           break;
         }
 

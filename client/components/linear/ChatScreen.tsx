@@ -7,6 +7,8 @@ import { useSettingsStore } from "../../stores/settings-store";
 import MarkdownRenderer from "../MarkdownRenderer";
 import ActivityStrip from "./ActivityStrip";
 import type { LinearScreen } from "./AppShell";
+import CompactDivider from "./CompactDivider";
+import ContextUsageChip from "./ContextUsageChip";
 import InputBarA, { type InputBarAHandle } from "./InputBarA";
 import PermissionModeSheet from "./PermissionModeSheet";
 import PermissionSheetA from "./PermissionSheetA";
@@ -102,6 +104,7 @@ export default function ChatScreen({ onNavigate }: Props) {
   const activeTools = session.activeTools;
   const activeAgents = session.activeAgents;
   const usage = session.usage;
+  const contextUsage = session.contextUsage;
   const model = capabilities?.model ?? "claude";
   const projectName = basename(session.cwd);
   const displayPath = session.cwd.replace(/^\/Users\/[^/]+/, "~");
@@ -160,6 +163,7 @@ export default function ChatScreen({ onNavigate }: Props) {
         >
           {permissionLabel}
         </button>
+        <ContextUsageChip contextUsage={contextUsage} />
         <span className="lin-chat-model">{model}</span>
       </header>
 
@@ -169,6 +173,15 @@ export default function ChatScreen({ onNavigate }: Props) {
         )}
 
         {messages.map((m) => {
+          if (m.kind === "compact_boundary") {
+            return (
+              <CompactDivider
+                key={m.id}
+                preTokens={m.compactMetadata?.preTokens}
+                postTokens={m.compactMetadata?.postTokens}
+              />
+            );
+          }
           if (m.role === "user") {
             return (
               <div key={m.id} className="lin-msg lin-msg--user">
