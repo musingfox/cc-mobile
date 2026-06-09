@@ -967,6 +967,21 @@ class WsService {
     useAppStore.getState().setStreaming(sessionId, true);
   }
 
+  ptySend(sessionId: string, cwd: string, prompt: string) {
+    if (!this.ws) return;
+
+    useAppStore.getState().addMessage(sessionId, {
+      id: `user-${Date.now()}`,
+      role: "user",
+      content: prompt,
+      timestamp: Date.now(),
+    });
+
+    this.sendMessage({ type: "pty_send", sessionId, cwd, prompt });
+
+    useAppStore.getState().setStreaming(sessionId, true);
+  }
+
   appendUserMessage(sessionId: string, content: string | ContentBlock[]) {
     if (!this.ws) return;
 

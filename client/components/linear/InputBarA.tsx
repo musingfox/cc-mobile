@@ -46,7 +46,9 @@ const InputBarA = forwardRef<InputBarAHandle, Props>(function InputBarA(
 ) {
   const inputDraft = useAppStore((s) => s.inputDraft);
   const setInputDraft = useAppStore((s) => s.setInputDraft);
+  const sessionCwd = useAppStore((s) => (sessionId ? s.sessions.get(sessionId)?.cwd : undefined));
 
+  const [ptyMode, setPtyMode] = useState(false);
   const [images, setImages] = useState<ImageAttachment[]>([]);
   const [files, setFiles] = useState<FileAttachment[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -99,14 +101,20 @@ const InputBarA = forwardRef<InputBarAHandle, Props>(function InputBarA(
     const trimmed = inputDraft.trim();
     if ((!trimmed && images.length === 0 && files.length === 0) || disabled || isUploading) return;
     if (!sessionId) return;
-    hapticService.tap();
 
-    const content = buildContentBlocks(
-      trimmed,
-      images.map((img) => ({ base64: img.base64, mediaType: img.mediaType })),
-      files.map((f) => f.path),
-    );
-    wsService.send(sessionId, content);
+    if (ptyMode) {
+      if (!sessionCwd) return;
+      hapticService.tap();
+      wsService.ptySend(sessionId, sessionCwd, trimmed);
+    } else {
+      hapticService.tap();
+      const content = buildContentBlocks(
+        trimmed,
+        images.map((img) => ({ base64: img.base64, mediaType: img.mediaType })),
+        files.map((f) => f.path),
+      );
+      wsService.send(sessionId, content);
+    }
 
     setInputDraft("");
     setImages([]);
@@ -293,6 +301,15 @@ const InputBarA = forwardRef<InputBarAHandle, Props>(function InputBarA(
             aria-label="Insert agent mention"
           >
             <Icon name="at" size={15} color={T.fg3} />
+          </button>
+          <button
+            type="button"
+            className="lin-icon-btn"
+            aria-label="PTY mode"
+            aria-pressed={ptyMode}
+            onClick={() => setPtyMode((v) => !v)}
+          >
+            PTY
           </button>
           {isStreaming ? (
             <button
