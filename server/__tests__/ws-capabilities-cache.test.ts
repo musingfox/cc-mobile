@@ -41,9 +41,10 @@ describe("WebSocket capabilities cache wiring", () => {
 
   test("C2 wiring: reconnect/resume sends spread cached capabilities", () => {
     const wsSource = readFileSync(join(import.meta.dir, "..", "ws.ts"), "utf8");
-    expect(wsSource).toContain('type: "capabilities",\n          ...cachedCapabilities,');
-    expect(wsSource).toContain(
-      'type: "capabilities",\n                sessionId,\n                ...cachedCapabilities,',
-    );
+    // open/reconnect path: type:"capabilities" immediately followed by ...cachedCapabilities (whitespace-insensitive)
+    expect(wsSource).toMatch(/type:\s*"capabilities",\s*\.\.\.cachedCapabilities,/);
+    // resume path: type:"capabilities" followed by bare sessionId then ...cachedCapabilities
+    // "bare sessionId," means `sessionId,` on its own (not `sessionId: something,`)
+    expect(wsSource).toMatch(/type:\s*"capabilities",\s*sessionId,\s*\.\.\.cachedCapabilities,/);
   });
 });
