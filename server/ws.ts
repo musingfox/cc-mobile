@@ -113,6 +113,53 @@ export function buildCachedCapabilities(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Capabilities emit helpers — extracted seams (logic-free; byte-equivalent)
+// ---------------------------------------------------------------------------
+
+/** open/reconnect path: bare ws.send, no sessionId */
+export function emitCapabilitiesOnOpen(
+  ws: { send: (msg: Record<string, unknown>) => void },
+  cachedCapabilities: Capabilities | null,
+): void {
+  if (cachedCapabilities) {
+    ws.send({
+      type: "capabilities",
+      ...cachedCapabilities,
+    });
+  }
+}
+
+/** init path: sendBuffered with sessionId */
+export function emitCapabilitiesOnInit(
+  sendBuf: (ws: any, sessionId: string, msg: Record<string, unknown>) => void,
+  ws: any,
+  sessionId: string,
+  cachedCapabilities: Capabilities,
+): void {
+  sendBuf(ws, sessionId, {
+    type: "capabilities",
+    sessionId,
+    ...cachedCapabilities,
+  });
+}
+
+/** resume path: sendBuffered with sessionId */
+export function emitCapabilitiesOnResume(
+  sendBuf: (ws: any, sessionId: string, msg: Record<string, unknown>) => void,
+  ws: any,
+  sessionId: string,
+  cachedCapabilities: Capabilities | null,
+): void {
+  if (cachedCapabilities) {
+    sendBuf(ws, sessionId, {
+      type: "capabilities",
+      sessionId,
+      ...cachedCapabilities,
+    });
+  }
+}
+
 export function createWsPlugin(
   sessionManager: SessionManager,
   permissionBridgeFactory: PermissionHandlerFactory,
@@ -218,12 +265,7 @@ export function createWsPlugin(
         }
 
         // Send cached capabilities on reconnect
-        if (cachedCapabilities) {
-          ws.send({
-            type: "capabilities",
-            ...cachedCapabilities,
-          });
-        }
+        emitCapabilitiesOnOpen(ws, cachedCapabilities);
       },
 
       async message(ws, data) {
@@ -321,11 +363,7 @@ export function createWsPlugin(
                   cachedCapabilities = buildCachedCapabilities(msg, initData);
                   saveCachedCapabilities(cachedCapabilities);
 
-                  sendBuffered(ws, message.sessionId, {
-                    type: "capabilities",
-                    sessionId: message.sessionId,
-                    ...cachedCapabilities,
-                  });
+                  emitCapabilitiesOnInit(sendBuffered, ws, message.sessionId, cachedCapabilities);
                 }
 
                 // Detect and forward session_state_changed as dedicated message
@@ -547,13 +585,7 @@ export function createWsPlugin(
               }
 
               // Send cached capabilities if available
-              if (cachedCapabilities) {
-                sendBuffered(ws, sessionId, {
-                  type: "capabilities",
-                  sessionId,
-                  ...cachedCapabilities,
-                });
-              }
+              emitCapabilitiesOnResume(sendBuffered, ws, sessionId, cachedCapabilities);
               break;
             }
 
