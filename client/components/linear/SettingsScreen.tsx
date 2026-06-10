@@ -2,12 +2,11 @@ import { useState } from "react";
 import { Icon } from "../../design/icons";
 import { tokens as T } from "../../design/tokens";
 import { hapticService } from "../../services/haptic";
-import { wsService } from "../../services/ws-service";
 import { useAppStore } from "../../stores/app-store";
 import { useSettingsStore } from "../../stores/settings-store";
 import type { LinearScreen } from "./AppShell";
 import EnvVarSheet from "./EnvVarSheet";
-import ModelSheet from "./ModelSheet";
+import ModelSheet, { FALLBACK_MODELS } from "./ModelSheet";
 import "./settings.css";
 
 interface Props {
@@ -69,8 +68,6 @@ function Toggle({ on, onChange }: ToggleProps) {
 
 export default function SettingsScreen({ onNavigate }: Props) {
   const permissionMode = useSettingsStore((s) => s.permissionMode);
-  const setPermissionMode = useSettingsStore((s) => s.setPermissionMode);
-  const setStorePermMode = useAppStore((s) => s.setPermissionMode);
 
   const model = useSettingsStore((s) => s.model);
   const capabilities = useAppStore((s) => s.capabilities);
@@ -84,16 +81,14 @@ export default function SettingsScreen({ onNavigate }: Props) {
   const envVars = useSettingsStore((s) => s.envVars);
 
   const account = capabilities?.accountInfo;
-  const models = capabilities?.models ?? [];
+  const deviceModels = capabilities?.models ?? [];
+  const selectableModels = deviceModels.length > 0 ? deviceModels : FALLBACK_MODELS;
   const [envOpen, setEnvOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
 
-  const handleSelectMode = (id: string) => {
-    hapticService.tap();
-    setPermissionMode(id);
-    setStorePermMode(id);
-    wsService.setPermissionMode(id);
-  };
+  const activeMode =
+    PERMISSION_MODES.find((m) => m.id === permissionMode) ??
+    PERMISSION_MODES.find((m) => m.id === "auto");
 
   return (
     <div className="lin-settings">
@@ -110,34 +105,17 @@ export default function SettingsScreen({ onNavigate }: Props) {
       </header>
 
       <div className="lin-settings-body lin-scroll">
-        {/* PERMISSION MODE */}
+        {/* PERMISSION MODE — fixed global default; per-session override via chat screen */}
         <section className="lin-settings-group">
           <div className="lin-settings-group-label">PERMISSION MODE</div>
           <div className="lin-settings-card">
-            {PERMISSION_MODES.map((m) => {
-              const selected = permissionMode === m.id;
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  className="lin-settings-row"
-                  onClick={() => handleSelectMode(m.id)}
-                >
-                  <span className={`lin-radio ${selected ? "is-selected" : ""}`} aria-hidden>
-                    {selected && <span className="lin-radio-dot" />}
-                  </span>
-                  <div className="lin-settings-row-main">
-                    <div
-                      className="lin-settings-row-title"
-                      style={m.warn ? { color: T.diffRemoveText } : undefined}
-                    >
-                      {m.title}
-                    </div>
-                    <div className="lin-settings-row-desc">{m.desc}</div>
-                  </div>
-                </button>
-              );
-            })}
+            <div className="lin-settings-row is-static">
+              <div className="lin-settings-row-main">
+                <div className="lin-settings-row-title">{activeMode?.title}</div>
+                <div className="lin-settings-row-desc">{activeMode?.desc}</div>
+              </div>
+              <div className="lin-settings-row-value">Default</div>
+            </div>
           </div>
         </section>
 
@@ -154,37 +132,20 @@ export default function SettingsScreen({ onNavigate }: Props) {
               </div>
               <div className="lin-settings-row-value">Linear</div>
             </div>
-            {capabilities === null ? (
-              <div className="lin-settings-row is-static">
-                <div className="lin-settings-row-main">
-                  <div className="lin-settings-row-title">Model</div>
-                  <div className="lin-settings-row-desc">Loading models…</div>
+            <button type="button" className="lin-settings-row" onClick={() => setModelOpen(true)}>
+              <div className="lin-settings-row-main">
+                <div className="lin-settings-row-title">Model</div>
+                <div className="lin-settings-row-desc">
+                  {model === ""
+                    ? "Device default"
+                    : (selectableModels.find((m) => m.value === model)?.displayName ?? model)}
                 </div>
-                <div className="lin-settings-row-value is-mono">{model || "—"}</div>
               </div>
-            ) : models.length === 0 ? (
-              <div className="lin-settings-row is-static">
-                <div className="lin-settings-row-main">
-                  <div className="lin-settings-row-title">Model</div>
-                </div>
-                <div className="lin-settings-row-value is-mono">{model || "—"}</div>
+              <div className="lin-settings-row-value is-mono">
+                {model || capabilities?.model || "—"}
               </div>
-            ) : (
-              <button type="button" className="lin-settings-row" onClick={() => setModelOpen(true)}>
-                <div className="lin-settings-row-main">
-                  <div className="lin-settings-row-title">Model</div>
-                  <div className="lin-settings-row-desc">
-                    {model === ""
-                      ? "Device default"
-                      : (models.find((m) => m.value === model)?.displayName ?? model)}
-                  </div>
-                </div>
-                <div className="lin-settings-row-value is-mono">
-                  {model || capabilities?.model || "—"}
-                </div>
-                <Icon name="chevronR" size={16} color={T.fg3} />
-              </button>
-            )}
+              <Icon name="chevronR" size={16} color={T.fg3} />
+            </button>
           </div>
         </section>
 

@@ -9,11 +9,22 @@ interface Props {
   onClose: () => void;
 }
 
+// CLI model aliases — used until the device reports its own model list
+// (capabilities.models is only populated after an SDK init message).
+// Aliases resolve to the current model on the local claude CLI, so they
+// never go stale with CLI updates.
+export const FALLBACK_MODELS = [
+  { value: "opus", displayName: "Opus", description: "Most capable" },
+  { value: "sonnet", displayName: "Sonnet", description: "Balanced speed and intelligence" },
+  { value: "haiku", displayName: "Haiku", description: "Fastest and most cost-effective" },
+];
+
 export default function ModelSheet({ open, onClose }: Props) {
   const selectedModel = useSettingsStore((s) => s.model);
   const setModel = useSettingsStore((s) => s.setModel);
   const capabilities = useAppStore((s) => s.capabilities);
-  const models = capabilities?.models ?? [];
+  const deviceModels = capabilities?.models ?? [];
+  const models = deviceModels.length > 0 ? deviceModels : FALLBACK_MODELS;
   const activeModel = capabilities?.model;
 
   const handleSelect = (value: string) => {

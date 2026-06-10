@@ -32,11 +32,11 @@ describe("settings service", () => {
       envVars: {},
       model: "claude-sonnet-4-6",
       effort: null,
-      permissionMode: "default",
+      permissionMode: "auto",
     });
     const stored = mockStorage.get("cc-mobile-settings");
     expect(stored).toBe(
-      '{"defaultCwd":"/tmp","theme":"light","notificationsEnabled":false,"hapticsEnabled":false,"envVars":{},"model":"claude-sonnet-4-6","effort":null,"permissionMode":"default"}',
+      '{"defaultCwd":"/tmp","theme":"light","notificationsEnabled":false,"hapticsEnabled":false,"envVars":{},"model":"claude-sonnet-4-6","effort":null,"permissionMode":"auto"}',
     );
   });
 
@@ -51,7 +51,7 @@ describe("settings service", () => {
       envVars: {},
       model: "",
       effort: null,
-      permissionMode: "default",
+      permissionMode: "auto",
     });
   });
 
@@ -66,12 +66,15 @@ describe("settings service", () => {
       envVars: {},
       model: "",
       effort: null,
-      permissionMode: "default",
+      permissionMode: "auto",
     });
   });
 
-  test("loadSettings returns saved values", () => {
-    mockStorage.set("cc-mobile-settings", '{"defaultCwd":"/workspace","theme":"claude"}');
+  test("loadSettings returns saved values (stale permissionMode coerced to auto)", () => {
+    mockStorage.set(
+      "cc-mobile-settings",
+      '{"defaultCwd":"/workspace","theme":"claude","permissionMode":"default"}',
+    );
     const result = loadSettings();
     expect(result).toEqual({
       defaultCwd: "/workspace",
@@ -81,7 +84,7 @@ describe("settings service", () => {
       envVars: {},
       model: "",
       effort: null,
-      permissionMode: "default",
+      permissionMode: "auto",
     });
   });
 });

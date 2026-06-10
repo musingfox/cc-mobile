@@ -12,9 +12,9 @@ describe("SettingsScreen", () => {
   const originalSetPermissionMode = wsService.setPermissionMode;
 
   beforeEach(() => {
-    useAppStore.setState({ capabilities: null, permissionMode: "default" });
+    useAppStore.setState({ capabilities: null, permissionMode: "auto" });
     useSettingsStore.setState({
-      permissionMode: "default",
+      permissionMode: "auto",
       model: "claude-sonnet-4",
       defaultCwd: "/tmp/project",
       envVars: {},
@@ -68,23 +68,20 @@ describe("SettingsScreen", () => {
     expect(getByText("Opus 4")).not.toBeNull();
   });
 
-  test("shows loading model row when capabilities are null", () => {
-    const setModelMock = mock(() => {});
-    wsService.setModel = setModelMock as typeof wsService.setModel;
-
+  test("model row opens sheet with fallback aliases when capabilities are null", () => {
     useAppStore.setState({ capabilities: null });
 
-    const { container, getByText } = render(<SettingsScreen onNavigate={() => {}} />);
+    const { getByText, queryByText } = render(<SettingsScreen onNavigate={() => {}} />);
 
-    expect(getByText("Loading models…")).not.toBeNull();
-    const staticRows = container.querySelectorAll(".lin-settings-row.is-static");
-    expect(staticRows.length > 0).toBe(true);
+    expect(queryByText("Opus")).toBeNull();
+    fireEvent.click(getByText("Model").closest(".lin-settings-row") as HTMLElement);
 
-    fireEvent.click(getByText("Loading models…"));
-    expect(setModelMock).toHaveBeenCalledTimes(0);
+    expect(getByText("Opus")).not.toBeNull();
+    expect(getByText("Sonnet")).not.toBeNull();
+    expect(getByText("Haiku")).not.toBeNull();
   });
 
-  test("shows static model row when model list is empty", () => {
+  test("model row opens sheet with fallback aliases when model list is empty", () => {
     useAppStore.setState({
       capabilities: {
         commands: [],
@@ -94,10 +91,11 @@ describe("SettingsScreen", () => {
       },
     });
 
-    const { queryByText, getByText } = render(<SettingsScreen onNavigate={() => {}} />);
+    const { getByText, queryByText } = render(<SettingsScreen onNavigate={() => {}} />);
 
-    expect(getByText("Model")).not.toBeNull();
     expect(queryByText("Loading models…")).toBeNull();
+    fireEvent.click(getByText("Model").closest(".lin-settings-row") as HTMLElement);
+    expect(getByText("Opus")).not.toBeNull();
   });
 
   test("C3a-TC1: permission modes include auto entry", () => {
@@ -107,23 +105,24 @@ describe("SettingsScreen", () => {
     expect(autoMode?.desc.length).toBeGreaterThan(0);
   });
 
-  test("C3a-TC2: tapping auto updates radio and sends set_permission_mode", () => {
-    const tapMock = mock(() => {});
+  test("C3a-TC2: permission mode is a static display showing Auto, not a selector", () => {
     const setPermissionModeMock = mock(() => {});
-    hapticService.tap = tapMock;
     wsService.setPermissionMode = setPermissionModeMock as typeof wsService.setPermissionMode;
 
-    const { getByText } = render(<SettingsScreen onNavigate={() => {}} />);
+    const { getByText, queryByText } = render(<SettingsScreen onNavigate={() => {}} />);
     const autoTitle = getByText("Auto");
 
-    fireEvent.click(autoTitle.closest(".lin-settings-row") as HTMLElement);
-
-    expect(tapMock).toHaveBeenCalledTimes(1);
-    expect(useSettingsStore.getState().permissionMode).toBe("auto");
-    expect(setPermissionModeMock).toHaveBeenCalledWith("auto");
-
+    // Display-only: row is static, no radios, other modes are not rendered
     const autoRow = autoTitle.closest(".lin-settings-row");
-    expect(autoRow?.querySelector(".lin-radio.is-selected")).not.toBeNull();
+    expect(autoRow?.classList.contains("is-static")).toBe(true);
+    expect(autoRow?.querySelector(".lin-radio")).toBeNull();
+    expect(queryByText("Bypass All")).toBeNull();
+    expect(queryByText("Accept Edits")).toBeNull();
+
+    // Clicking it does nothing
+    fireEvent.click(autoRow as HTMLElement);
+    expect(setPermissionModeMock).toHaveBeenCalledTimes(0);
+    expect(useSettingsStore.getState().permissionMode).toBe("auto");
   });
 
   test("opens env var sheet from workspace environment row", () => {

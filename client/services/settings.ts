@@ -21,7 +21,7 @@ const defaultSettings: Settings = {
   envVars: {},
   model: "",
   effort: null,
-  permissionMode: "default",
+  permissionMode: "auto",
 };
 
 export function saveSettings(settings: Settings): void {
@@ -63,10 +63,9 @@ export function loadSettings(): Settings {
         parsed.effort === null || typeof parsed.effort === "string"
           ? parsed.effort
           : defaultSettings.effort,
-      permissionMode:
-        typeof parsed.permissionMode === "string"
-          ? parsed.permissionMode
-          : defaultSettings.permissionMode,
+      // Global mode is fixed to "auto"; per-session overrides live in app-store.
+      // Persisted values are ignored so stale pre-"auto" settings can't stick.
+      permissionMode: defaultSettings.permissionMode,
     };
   } catch (error) {
     console.error("[settings] failed to load, using defaults:", error);
