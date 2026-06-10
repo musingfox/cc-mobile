@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Icon } from "../../design/icons";
 import { tokens as T } from "../../design/tokens";
 import { hapticService } from "../../services/haptic";
+import { notificationService } from "../../services/notification";
+import { toastService } from "../../services/toast-service";
 import { useAppStore } from "../../stores/app-store";
 import { useSettingsStore } from "../../stores/settings-store";
 import type { LinearScreen } from "./AppShell";
@@ -48,18 +50,22 @@ export const PERMISSION_MODES: PermissionMode[] = [
 interface ToggleProps {
   on: boolean;
   onChange: (next: boolean) => void;
+  disabled?: boolean;
 }
 
-function Toggle({ on, onChange }: ToggleProps) {
+function Toggle({ on, onChange, disabled }: ToggleProps) {
   return (
     <button
       type="button"
       className={`lin-toggle ${on ? "is-on" : ""}`}
       onClick={() => {
+        if (disabled) return;
         hapticService.tap();
         onChange(!on);
       }}
       aria-pressed={on}
+      aria-disabled={disabled}
+      disabled={disabled}
     >
       <span className="lin-toggle-knob" />
     </button>
@@ -89,6 +95,32 @@ export default function SettingsScreen({ onNavigate }: Props) {
   const activeMode =
     PERMISSION_MODES.find((m) => m.id === permissionMode) ??
     PERMISSION_MODES.find((m) => m.id === "auto");
+
+  // Notification API only exists in iOS standalone PWAs (Add to Home Screen);
+  // a plain Safari tab has no `Notification` at all.
+  const notifSupported = typeof window !== "undefined" && "Notification" in window;
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission | null>(
+    notifSupported ? Notification.permission : null,
+  );
+  const hapticSupported = hapticService.isSupported();
+
+  const notifDesc = !notifSupported
+    ? "Add to Home Screen to enable (iOS)"
+    : notifPermission === "denied"
+      ? "Blocked — allow notifications in system settings"
+      : "Permission requests & completion";
+
+  const handleNotificationsChange = async (next: boolean) => {
+    if (next && notifSupported && Notification.permission !== "granted") {
+      const result = await notificationService.requestPermission();
+      setNotifPermission(result);
+      if (result !== "granted") {
+        toastService.error("Notification permission was not granted");
+        return;
+      }
+    }
+    setNotificationsEnabled(next);
+  };
 
   return (
     <div className="lin-settings">
@@ -156,16 +188,28 @@ export default function SettingsScreen({ onNavigate }: Props) {
             <div className="lin-settings-row is-static">
               <div className="lin-settings-row-main">
                 <div className="lin-settings-row-title">Notifications</div>
-                <div className="lin-settings-row-desc">Permission requests &amp; completion</div>
+                <div className="lin-settings-row-desc">{notifDesc}</div>
               </div>
-              <Toggle on={notificationsEnabled} onChange={setNotificationsEnabled} />
+              <Toggle
+                on={notificationsEnabled}
+                onChange={handleNotificationsChange}
+                disabled={!notifSupported}
+              />
             </div>
             <div className="lin-settings-row is-static">
               <div className="lin-settings-row-main">
                 <div className="lin-settings-row-title">Haptics</div>
-                <div className="lin-settings-row-desc">Vibrate on taps and stream events</div>
+                <div className="lin-settings-row-desc">
+                  {hapticSupported
+                    ? "Vibrate on taps and stream events"
+                    : "Not supported on this device"}
+                </div>
               </div>
-              <Toggle on={hapticsEnabled} onChange={setHapticsEnabled} />
+              <Toggle
+                on={hapticsEnabled}
+                onChange={setHapticsEnabled}
+                disabled={!hapticSupported}
+              />
             </div>
           </div>
         </section>

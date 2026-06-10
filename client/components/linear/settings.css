@@ -141,6 +141,8 @@
 .lin-toggle {
   width: 46px;
   height: 28px;
+  /* global touch-friendly `button { min-height: 48px }` would stretch the pill */
+  min-height: 28px;
   border-radius: 99px;
   border: none;
   background: rgba(255, 255, 255, 0.16);
@@ -150,6 +152,11 @@
   align-items: center;
   transition: background 150ms ease;
   flex-shrink: 0;
+}
+
+.lin-toggle:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .lin-toggle.is-on {
