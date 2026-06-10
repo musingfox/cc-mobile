@@ -152,6 +152,11 @@
   background: rgba(255, 255, 255, 0.04);
 }
 
+.lin-icon-btn[aria-pressed="true"] {
+  color: #c2b89a;
+  background: rgba(194, 184, 154, 0.14);
+}
+
 .lin-composer-attach .lin-attach-trigger {
   width: 36px;
   height: 36px;
