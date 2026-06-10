@@ -84,6 +84,27 @@ function makeNeverGetMessages(): GetMessagesFn {
   return (_id: string): Promise<unknown[]> => new Promise(() => {});
 }
 
+/**
+ * A spawner that exits immediately AND tracks kill calls —
+ * for exactly-once kill regression tests (EX-A, EX-B).
+ */
+function makeCountingImmediateSpawner(): {
+  spawner: SpawnerFn;
+  killCount: () => number;
+} {
+  let count = 0;
+  return {
+    spawner: (_args, _cwd) => ({
+      write: (_data: string) => {},
+      kill: () => {
+        count++;
+      },
+      exited: Promise.resolve(0),
+    }),
+    killCount: () => count,
+  };
+}
+
 // ── Test cases ────────────────────────────────────────────────────────────────
 
 describe("PtyOrchestrator — drive happy path", () => {
@@ -247,6 +268,51 @@ describe("PtyOrchestrator — cancelAll-partial: only kills listed sessions", ()
 
     expect(spy1.killCount()).toBe(1);
     expect(spy2.killCount()).toBe(0);
+  });
+});
+
+describe("PtyOrchestrator — exactly-once kill on success path (EX-A)", () => {
+  it("kill is called exactly once after successful drive() completes", async () => {
+    const sent: unknown[] = [];
+    const spy = makeCountingImmediateSpawner();
+    const orch = new PtyOrchestrator({ timeout: 5000, interval: 10 });
+
+    await orch.drive("exa-sess", "/tmp", "hello", (msg) => sent.push(msg), {
+      spawner: spy.spawner,
+      getMessagesFn: makeReplyGetMessages("hi"),
+    });
+
+    expect(spy.killCount()).toBe(1);
+    expect(sent).toHaveLength(2);
+    expect((sent[0] as Record<string, unknown>).type).toBe("stream_chunk");
+    expect(((sent[0] as Record<string, unknown>).chunk as Record<string, unknown>).type).toBe(
+      "assistant",
+    );
+    expect((sent[1] as Record<string, unknown>).type).toBe("stream_end");
+  });
+});
+
+describe("PtyOrchestrator — exactly-once kill on error path (EX-B)", () => {
+  it("kill is called exactly once after drive() errors", async () => {
+    const sent: unknown[] = [];
+    const spy = makeCountingImmediateSpawner();
+    const orch = new PtyOrchestrator({ timeout: 5000, interval: 10 });
+
+    let calls = 0;
+    const rejectAfterBaseline: GetMessagesFn = async (_id: string) => {
+      calls++;
+      if (calls === 1) return [makeUserMsg("prompt")];
+      throw new Error("simulated pty error");
+    };
+
+    await orch.drive("exb-sess", "/tmp", "hello", (msg) => sent.push(msg), {
+      spawner: spy.spawner,
+      getMessagesFn: rejectAfterBaseline,
+    });
+
+    expect(spy.killCount()).toBe(1);
+    expect(sent).toHaveLength(1);
+    expect((sent[0] as Record<string, unknown>).type).toBe("error");
   });
 });
 
