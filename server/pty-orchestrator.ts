@@ -130,8 +130,10 @@ export class PtyOrchestrator {
         },
       });
     } catch (err) {
-      // On error: clear handle, send error if not cancelled
+      // On error: kill handle before clearing (capture pattern ensures exactly-once)
+      const hErr = state.handle;
       state.handle = undefined;
+      hErr?.kill();
       if (!state.cancelled) {
         send({
           type: "error",
@@ -144,8 +146,10 @@ export class PtyOrchestrator {
       return;
     }
 
-    // Clear handle after successful resolve
+    // Clear handle after successful resolve (kill first — TUI won't self-exit)
+    const hOk = state.handle;
     state.handle = undefined;
+    hOk?.kill();
 
     // Suppress send if cancelled
     if (state.cancelled) {
