@@ -19,6 +19,7 @@ BOLD=$'\033[1m'; R=$'\033[0m'; G=$'\033[32m'; Y=$'\033[33m'; RED=$'\033[31m'
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 HOOK="$REPO_ROOT/server/pty-permission-hook.ts"
+STOP_HOOK="$REPO_ROOT/server/pty-stop-hook.ts"
 
 # ── uninstall ──────────────────────────────────────────────────────────────
 if [[ "${1:-}" == "--uninstall" ]]; then
@@ -38,6 +39,8 @@ fi
 
 DIR="${1:?用法: install-pty-hook.sh <測試專案目錄> [PERMISSION_URL]}"
 URL="${2:-http://localhost:3001/api/pty-permission}"
+# Stop-hook response URL: same host/port as the permission URL, /api/pty-response path.
+RESPONSE_URL="${URL%/api/pty-permission}/api/pty-response"
 
 # ── 前置檢查 ────────────────────────────────────────────────────────────────
 [[ -f "$HOOK" ]] || { echo "${RED}找不到 hook script: $HOOK${R}"; exit 1; }
@@ -58,6 +61,8 @@ if [[ -f "$SETTINGS" && ! -f "$SETTINGS.ccmobile-bak" ]]; then
 fi
 
 # matcher=Bash：第一次 live 用秒級 Bash 工具（如 ls/echo），對齊 H2「選秒級工具」條件。
+# Stop hook（matcher 空＝所有 stop）：把 last_assistant_message 回傳 server，作為 PTY 讀回管道
+# （ADR-011，claude v2.1.177 互動 session 不 flush JSONL，故不可 poll getSessionMessages）。
 cat > "$SETTINGS" <<JSON
 {
   "hooks": {
@@ -68,16 +73,26 @@ cat > "$SETTINGS" <<JSON
           { "type": "command", "command": "CC_MOBILE_PERMISSION_URL='$URL' bun '$HOOK'" }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          { "type": "command", "command": "CC_MOBILE_RESPONSE_URL='$RESPONSE_URL' bun '$STOP_HOOK'" }
+        ]
+      }
     ]
   }
 }
 JSON
 
-echo "${BOLD}${G}✓ PreToolUse hook 已裝。${R}"
+echo "${BOLD}${G}✓ PreToolUse + Stop hook 已裝。${R}"
 echo "  測試專案 : $DIR"
 echo "  settings : $SETTINGS"
-echo "  hook     : bun $HOOK"
+echo "  perm hook: bun $HOOK"
+echo "  stop hook: bun $STOP_HOOK"
 echo "  POST 至  : $URL"
+echo "  回應 POST: $RESPONSE_URL"
 echo ""
 echo "${BOLD}${Y}關鍵前置（live 跑起來的必要條件）：${R}"
 echo "  1. server 要跑著，且其 ${BOLD}CC_MOBILE_ALLOWED_ROOTS${R} 必須包含上面測試專案目錄"

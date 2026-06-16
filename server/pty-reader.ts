@@ -91,6 +91,14 @@ export interface RunPtySessionOptions {
   setTimeoutFn?: (fn: () => void, ms: number) => unknown;
   /** Injectable clock seam (test): timer canceller. Default: clearTimeout. */
   clearTimeoutFn?: (id: unknown) => void;
+  /**
+   * ADR-011 readback seam. When provided, runPtySession uses this to obtain the
+   * assistant reply INSTEAD of polling getSessionMessages — registered before the
+   * prompt is sent, resolved by the Stop-hook relay. This is the live path for
+   * claude v2.1.177 (which does not flush JSONL while alive). When omitted, the
+   * legacy getSessionMessages poll path is used (preserved for tests/fallback).
+   */
+  awaitResponseFn?: (sessionId: string) => Promise<string>;
 }
 
 // ── Pure helpers (no SDK, no pty) ─────────────────────────────────────────
@@ -513,20 +521,39 @@ export async function runPtySession(
   // H-C-2 fix: expose handle to caller synchronously, before any await/poll
   options?.onHandle?.(handle);
 
-  if (proc.onData) {
-    // ── Readiness-aware path ──────────────────────────────────────────────────
-    // onData is present: use driveReadiness (debounce-based) to detect trust/ready
-    // screens before sending the prompt.
-    await driveReadiness(
-      proc as { onData: (cb: (chunk: string) => void) => void; write: (data: string) => void },
-      prompt,
-      { settleMs: 750, readinessTimeoutMs: 30000 },
-    );
-  } else {
-    // ── Legacy path (no onData) ───────────────────────────────────────────────
-    // Spawner is a legacy mock (e.g. orchestrator tests) that does not expose
-    // onData. Preserve old behavior: write prompt immediately (blind injection).
-    proc.write(`${prompt}\r`);
+  // ADR-011 readback seam: register the response waiter BEFORE the prompt is sent,
+  // so a fast Stop-hook delivery cannot race ahead of our listener.
+  const responsePromise = options?.awaitResponseFn?.(sessionId);
+
+  try {
+    if (proc.onData) {
+      // ── Readiness-aware path ──────────────────────────────────────────────────
+      // onData is present: use driveReadiness (debounce-based) to detect trust/ready
+      // screens before sending the prompt.
+      await driveReadiness(
+        proc as { onData: (cb: (chunk: string) => void) => void; write: (data: string) => void },
+        prompt,
+        { settleMs: 750, readinessTimeoutMs: 30000 },
+      );
+    } else {
+      // ── Legacy path (no onData) ───────────────────────────────────────────────
+      // Spawner is a legacy mock (e.g. orchestrator tests) that does not expose
+      // onData. Preserve old behavior: write prompt immediately (blind injection).
+      proc.write(`${prompt}\r`);
+    }
+  } catch (err) {
+    // Readiness failed → the prompt was never delivered, so no Stop hook will fire.
+    // Swallow the orphaned response waiter's eventual timeout rejection (it self-cleans
+    // from the relay map) and fail fast with the readiness error instead of hanging.
+    responsePromise?.catch(() => {});
+    throw err;
+  }
+
+  // ADR-011 readback: if a response waiter was registered, the reply arrives via the
+  // Stop-hook relay — await it directly and skip the JSONL poll (which never resolves
+  // for live PTY sessions on claude v2.1.177).
+  if (responsePromise !== undefined) {
+    return await responsePromise;
   }
 
   // 2. Count baseline end_turn messages (H3 fix: ignore pre-existing responses)
