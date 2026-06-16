@@ -6,7 +6,6 @@ import { toastService } from "../../services/toast-service";
 import { uploadFile } from "../../services/upload-service";
 import { wsService } from "../../services/ws-service";
 import { useAppStore } from "../../stores/app-store";
-import { buildContentBlocks } from "../../utils/content-block-builder";
 import { resizeImage } from "../../utils/image-resize";
 import AttachmentSheet from "./AttachmentSheet";
 import "./input-bar.css";
@@ -48,19 +47,10 @@ const InputBarA = forwardRef<InputBarAHandle, Props>(function InputBarA(
   const setInputDraft = useAppStore((s) => s.setInputDraft);
   const sessionCwd = useAppStore((s) => (sessionId ? s.sessions.get(sessionId)?.cwd : undefined));
 
-  const [ptyMode, setPtyMode] = useState(false);
   const [images, setImages] = useState<ImageAttachment[]>([]);
   const [files, setFiles] = useState<FileAttachment[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [appendedCount, setAppendedCount] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  // Reset the staged-notes counter whenever the user switches sessions —
-  // the server-side buffer is per-session so the chip from session A should
-  // never leak into session B.
-  useEffect(() => {
-    setAppendedCount(0);
-  }, [sessionId]);
 
   useEffect(() => {
     const ta = textareaRef.current;
@@ -100,46 +90,14 @@ const InputBarA = forwardRef<InputBarAHandle, Props>(function InputBarA(
   const handleSend = () => {
     const trimmed = inputDraft.trim();
     if ((!trimmed && images.length === 0 && files.length === 0) || disabled || isUploading) return;
-    if (!sessionId) return;
+    if (!sessionId || !sessionCwd) return;
 
-    if (ptyMode) {
-      if (!sessionCwd) return;
-      hapticService.tap();
-      wsService.ptySend(sessionId, sessionCwd, trimmed);
-    } else {
-      hapticService.tap();
-      const content = buildContentBlocks(
-        trimmed,
-        images.map((img) => ({ base64: img.base64, mediaType: img.mediaType })),
-        files.map((f) => f.path),
-      );
-      wsService.send(sessionId, content);
-    }
-
-    setInputDraft("");
-    setImages([]);
-    setFiles([]);
-    setAppendedCount(0);
-    if (textareaRef.current) textareaRef.current.style.height = "auto";
-  };
-
-  const handleAppend = () => {
-    const trimmed = inputDraft.trim();
-    if ((!trimmed && images.length === 0 && files.length === 0) || disabled || isUploading) return;
-    if (!sessionId) return;
     hapticService.tap();
-
-    const content = buildContentBlocks(
-      trimmed,
-      images.map((img) => ({ base64: img.base64, mediaType: img.mediaType })),
-      files.map((f) => f.path),
-    );
-    wsService.appendUserMessage(sessionId, content);
+    wsService.ptySend(sessionId, sessionCwd, trimmed);
 
     setInputDraft("");
     setImages([]);
     setFiles([]);
-    setAppendedCount((c) => c + 1);
     if (textareaRef.current) textareaRef.current.style.height = "auto";
   };
 
@@ -200,7 +158,9 @@ const InputBarA = forwardRef<InputBarAHandle, Props>(function InputBarA(
     if (e.nativeEvent.isComposing || e.keyCode === 229) {
       return;
     }
-    if (e.key === "Enter" && !e.shiftKey) {
+    // Plain Enter inserts a newline (mobile keyboards have no Shift+Enter), so the
+    // textarea is genuinely multi-line. Cmd/Ctrl+Enter sends (desktop convenience).
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       handleSend();
     }
@@ -211,12 +171,6 @@ const InputBarA = forwardRef<InputBarAHandle, Props>(function InputBarA(
 
   return (
     <div className="lin-input-bar">
-      {appendedCount > 0 && (
-        <div className="lin-input-staged-chip">
-          <Icon name="layers" size={12} color={T.fg3} />
-          <span>{`${appendedCount} note${appendedCount === 1 ? "" : "s"} staged · tap Send to ask`}</span>
-        </div>
-      )}
       {hasAttachments && (
         <div className="lin-input-chips">
           {images.map((img) => (
@@ -302,15 +256,6 @@ const InputBarA = forwardRef<InputBarAHandle, Props>(function InputBarA(
           >
             <Icon name="at" size={15} color={T.fg3} />
           </button>
-          <button
-            type="button"
-            className="lin-icon-btn"
-            aria-label="PTY mode"
-            aria-pressed={ptyMode}
-            onClick={() => setPtyMode((v) => !v)}
-          >
-            PTY
-          </button>
           {isStreaming ? (
             <button
               type="button"
@@ -321,26 +266,15 @@ const InputBarA = forwardRef<InputBarAHandle, Props>(function InputBarA(
               <Icon name="stop" size={12} color={T.bg} />
             </button>
           ) : (
-            <>
-              <button
-                type="button"
-                className="lin-icon-btn"
-                onClick={handleAppend}
-                disabled={!canSend}
-                aria-label="Append note"
-              >
-                <Icon name="plus" size={15} color={T.fg3} />
-              </button>
-              <button
-                type="button"
-                className="lin-send-btn"
-                onClick={handleSend}
-                disabled={!canSend}
-                aria-label="Send"
-              >
-                <Icon name="send" size={14} color={T.bg} />
-              </button>
-            </>
+            <button
+              type="button"
+              className="lin-send-btn"
+              onClick={handleSend}
+              disabled={!canSend}
+              aria-label="Send"
+            >
+              <Icon name="send" size={14} color={T.bg} />
+            </button>
           )}
         </div>
       </div>

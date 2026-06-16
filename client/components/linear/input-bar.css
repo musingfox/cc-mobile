@@ -185,20 +185,3 @@
 .lin-send-btn.is-stop {
   background: #c48a8a;
 }
-
-/* Staged-notes chip ---------------------------------------- */
-
-.lin-input-staged-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 8px;
-  padding: 6px 10px;
-  border: 1px solid rgba(176, 156, 217, 0.35);
-  border-radius: 999px;
-  background: rgba(176, 156, 217, 0.08);
-  color: #a09abb;
-  font-size: 11.5px;
-  line-height: 1.2;
-  width: fit-content;
-}
