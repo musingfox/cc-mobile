@@ -35,6 +35,8 @@ export interface DriveOptions {
   interval?: number;
   /** Optional predicate: freeze the poll deadline while a permission is pending. */
   isPermissionPending?: () => boolean;
+  /** ADR-011 readback seam: obtain the reply via the Stop-hook relay instead of polling. */
+  awaitResponseFn?: (sessionId: string) => Promise<string>;
   /** Injectable clock seam (test): wall-clock reader. Default: Date.now. */
   nowFn?: () => number;
   /** Injectable clock seam (test): timer scheduler. Default: setTimeout. */
@@ -116,6 +118,7 @@ export class PtyOrchestrator {
         ...(effectiveTimeout !== undefined ? { timeout: effectiveTimeout } : {}),
         ...(effectiveInterval !== undefined ? { interval: effectiveInterval } : {}),
         ...(opts?.isPermissionPending ? { isPermissionPending: opts.isPermissionPending } : {}),
+        ...(opts?.awaitResponseFn ? { awaitResponseFn: opts.awaitResponseFn } : {}),
         ...(opts?.nowFn ? { nowFn: opts.nowFn } : {}),
         ...(opts?.setTimeoutFn ? { setTimeoutFn: opts.setTimeoutFn } : {}),
         ...(opts?.clearTimeoutFn ? { clearTimeoutFn: opts.clearTimeoutFn } : {}),

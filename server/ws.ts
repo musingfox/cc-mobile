@@ -15,6 +15,8 @@ import { ClientMessage, ServerMessage } from "./protocol";
 import { PtyOrchestrator } from "./pty-orchestrator";
 import { createPtyPermissionHandler } from "./pty-permission-endpoint";
 import { createPtyPermissionRelay, type PtyRelaySnapshot } from "./pty-permission-relay";
+import { createPtyResponseHandler } from "./pty-response-endpoint";
+import { createPtyResponseRelay } from "./pty-response-relay";
 import { loadSessionHistory } from "./session-history";
 import { getClaudeSessionInfo, listClaudeSessions, renameClaudeSession } from "./session-listing";
 import type { InitData, SessionManager } from "./session-manager";
@@ -168,6 +170,7 @@ export function createWsPlugin(
   let cachedCapabilities: Capabilities | null = loadCachedCapabilities();
   const wsPath = buildUrl(serverConfig.basePath, "/ws");
   const ptyPermApiPath = buildUrl(serverConfig.basePath, "/api/pty-permission");
+  const ptyResponseApiPath = buildUrl(serverConfig.basePath, "/api/pty-response");
 
   // PTY orchestrator — one instance per WS plugin, real spawner/getMessagesFn by default
   const ptyOrchestrator = new PtyOrchestrator();
@@ -214,8 +217,14 @@ export function createWsPlugin(
     hasSession: (sessionId) => ptyOrchestrator.hasSession(sessionId),
   });
 
+  // PTY response relay + HTTP handler — Stop hook delivers the assistant reply here,
+  // resolving the in-flight drive() (ADR-011 readback for claude v2.1.177).
+  const ptyResponseRelay = createPtyResponseRelay();
+  const ptyResponseHttpHandler = createPtyResponseHandler({ relay: ptyResponseRelay });
+
   return new Elysia()
     .post(ptyPermApiPath, ({ request }) => ptyPermissionHttpHandler(request))
+    .post(ptyResponseApiPath, ({ request }) => ptyResponseHttpHandler(request))
     .ws(wsPath, {
       body: t.Any(), // We'll validate with Zod
 
@@ -722,6 +731,7 @@ export function createWsPlugin(
                 (msg) => sendBuffered(ws, sessionId, msg as Record<string, unknown>),
                 {
                   isPermissionPending: () => ptyRelay.hasPendingForSession(sessionId),
+                  awaitResponseFn: (sid) => ptyResponseRelay.awaitResponse(sid),
                 },
               );
               break;
