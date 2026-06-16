@@ -3,27 +3,17 @@ import { Icon } from "../../design/icons";
 import { tokens as T } from "../../design/tokens";
 import { wsService } from "../../services/ws-service";
 import { useAppStore } from "../../stores/app-store";
-import { useSettingsStore } from "../../stores/settings-store";
 import MarkdownRenderer from "../MarkdownRenderer";
 import ActivityStrip from "./ActivityStrip";
 import type { LinearScreen } from "./AppShell";
 import CompactDivider from "./CompactDivider";
 import ContextUsageChip from "./ContextUsageChip";
 import InputBarA, { type InputBarAHandle } from "./InputBarA";
-import PermissionModeSheet from "./PermissionModeSheet";
 import PermissionSheetA from "./PermissionSheetA";
 import PickerSheet from "./PickerSheet";
 import QuickActions from "./QuickActions";
 import ToolCardA from "./ToolCardA";
 import "./chat.css";
-
-const PERMISSION_MODE_LABELS: Record<string, string> = {
-  default: "Default",
-  auto: "Auto",
-  acceptEdits: "Accept Edits",
-  plan: "Plan",
-  bypassPermissions: "Bypass",
-};
 
 interface Props {
   onNavigate: (screen: LinearScreen) => void;
@@ -42,12 +32,9 @@ export default function ChatScreen({ onNavigate }: Props) {
   );
   const capabilities = useAppStore((s) => s.capabilities);
 
-  const globalPermissionMode = useSettingsStore((s) => s.permissionMode);
-
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<InputBarAHandle>(null);
   const [pickerKind, setPickerKind] = useState<"slash" | "agent" | null>(null);
-  const [permissionSheetOpen, setPermissionSheetOpen] = useState(false);
 
   const messages = session?.messages ?? [];
   const lastContent = messages[messages.length - 1]?.content ?? "";
@@ -108,10 +95,6 @@ export default function ChatScreen({ onNavigate }: Props) {
   const model = capabilities?.model ?? "claude";
   const projectName = basename(session.cwd);
   const displayPath = session.cwd.replace(/^\/Users\/[^/]+/, "~");
-  const hasOverride = session.permissionMode !== undefined;
-  const effectivePermissionMode = session.permissionMode ?? globalPermissionMode;
-  const permissionLabel =
-    PERMISSION_MODE_LABELS[effectivePermissionMode] ?? effectivePermissionMode;
 
   const handleApprove = () => {
     if (activeSessionId) wsService.approvePermission(activeSessionId);
@@ -155,14 +138,6 @@ export default function ChatScreen({ onNavigate }: Props) {
           <span className="lin-chat-title">{projectName}</span>
           <span className="lin-chat-path">{displayPath}</span>
         </div>
-        <button
-          type="button"
-          className={`lin-chat-mode-chip ${hasOverride ? "is-override" : ""}`}
-          onClick={() => setPermissionSheetOpen(true)}
-          aria-label="Permission mode"
-        >
-          {permissionLabel}
-        </button>
         <ContextUsageChip contextUsage={contextUsage} />
         <span className="lin-chat-model">{model}</span>
       </header>
@@ -254,12 +229,6 @@ export default function ChatScreen({ onNavigate }: Props) {
           }))}
         />
       )}
-
-      <PermissionModeSheet
-        open={permissionSheetOpen}
-        onClose={() => setPermissionSheetOpen(false)}
-        sessionId={activeSessionId}
-      />
     </div>
   );
 }
