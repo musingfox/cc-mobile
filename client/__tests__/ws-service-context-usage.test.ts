@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { deriveContextUsage, MAX_TOKENS_FALLBACK } from "../services/ws-service";
+import {
+  deriveContextUsage,
+  MAX_TOKENS_FALLBACK,
+  ONE_MILLION_CONTEXT,
+  resolveContextWindow,
+} from "../services/ws-service";
 
 describe("deriveContextUsage", () => {
   test("sums input + output + cache tokens against provided maxTokens", () => {
@@ -48,5 +53,28 @@ describe("deriveContextUsage", () => {
   test("percentage reflects warning threshold", () => {
     const result = deriveContextUsage({ input_tokens: 170_000 }, 200_000);
     expect(result?.percentage).toBeGreaterThanOrEqual(0.8);
+  });
+});
+
+describe("resolveContextWindow", () => {
+  test("returns 1M for a [1m] model regardless of catalogued contextLength", () => {
+    expect(resolveContextWindow("claude-opus-4-8[1m]", 200_000)).toBe(ONE_MILLION_CONTEXT);
+    expect(resolveContextWindow("claude-opus-4-8[1m]", undefined)).toBe(ONE_MILLION_CONTEXT);
+    expect(ONE_MILLION_CONTEXT).toBe(1_000_000);
+  });
+
+  test("returns the catalogued contextLength for non-1m models", () => {
+    expect(resolveContextWindow("claude-sonnet-4-6", 200_000)).toBe(200_000);
+  });
+
+  test("returns undefined when neither signal is present (caller falls back)", () => {
+    expect(resolveContextWindow("claude-sonnet-4-6", undefined)).toBeUndefined();
+    expect(resolveContextWindow(undefined, undefined)).toBeUndefined();
+  });
+
+  test("feeds deriveContextUsage so a 1M model shows /1M not /200k", () => {
+    const max = resolveContextWindow("claude-opus-4-8[1m]", 200_000);
+    const usage = deriveContextUsage({ input_tokens: 55_000 }, max);
+    expect(usage?.maxTokens).toBe(1_000_000);
   });
 });
