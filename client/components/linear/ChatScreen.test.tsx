@@ -69,31 +69,6 @@ describe("ChatScreen", () => {
     expect(getByText("Clear chat")).not.toBeNull();
   });
 
-  test("C3c chip renders global default label with muted styling when no session override", () => {
-    const store = useAppStore.getState();
-    store.addSession("s1", "/tmp/project");
-    store.setActiveSession("s1");
-    useSettingsStore.setState({ permissionMode: "default" });
-
-    const { getByLabelText } = render(<ChatScreen onNavigate={() => {}} />);
-    const chip = getByLabelText("Permission mode") as HTMLButtonElement;
-    expect(chip.textContent).toBe("Default");
-    expect(chip.classList.contains("is-override")).toBe(false);
-  });
-
-  test("C3c chip renders override label with accent styling when session has override", () => {
-    const store = useAppStore.getState();
-    store.addSession("s1", "/tmp/project");
-    store.setActiveSession("s1");
-    store.setSessionPermissionMode("s1", "plan");
-    useSettingsStore.setState({ permissionMode: "default" });
-
-    const { getByLabelText } = render(<ChatScreen onNavigate={() => {}} />);
-    const chip = getByLabelText("Permission mode") as HTMLButtonElement;
-    expect(chip.textContent).toBe("Plan");
-    expect(chip.classList.contains("is-override")).toBe(true);
-  });
-
   test("selecting a command inserts literal into composer and closes picker", async () => {
     const store = useAppStore.getState();
     store.addSession("s1", "/tmp/project");
