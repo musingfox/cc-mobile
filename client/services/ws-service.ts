@@ -140,6 +140,23 @@ export function handleCompactBoundaryChunk(
 // 200k matches Claude Sonnet 4.x; conservative for newer models.
 export const MAX_TOKENS_FALLBACK = 200_000;
 
+// Context window for the 1M-context beta models (marked with a "[1m]" suffix in
+// the model string, e.g. "claude-opus-4-8[1m]").
+export const ONE_MILLION_CONTEXT = 1_000_000;
+
+/**
+ * Resolve the effective context window for a model. The catalogued contextLength
+ * does not reflect the 1M beta, so a "[1m]" suffix in the model string overrides
+ * it. Returns undefined when neither signal is present (caller falls back).
+ */
+export function resolveContextWindow(
+  modelValue: string | undefined,
+  contextLength: number | undefined,
+): number | undefined {
+  if (modelValue?.includes("[1m]")) return ONE_MILLION_CONTEXT;
+  return contextLength;
+}
+
 /**
  * Derive an aggregate context-occupancy snapshot from a `result.usage` payload.
  * Sums input, output, and cached input tokens (the same components Anthropic
@@ -482,7 +499,8 @@ class WsService {
           // MAX_TOKENS_FALLBACK when the model isn't catalogued.
           const activeModelValue = store.capabilities?.model;
           const activeModel = store.capabilities?.models?.find((m) => m.value === activeModelValue);
-          const contextUsage = deriveContextUsage(chunk.usage, activeModel?.contextLength);
+          const maxTokens = resolveContextWindow(activeModelValue, activeModel?.contextLength);
+          const contextUsage = deriveContextUsage(chunk.usage, maxTokens);
           if (contextUsage) {
             store.setContextUsage(sessionId, contextUsage);
           }
