@@ -7,6 +7,7 @@ import { stripBasePath } from "./path-utils";
 import { createPermissionHandler } from "./permission-bridge";
 import { SessionManager } from "./session-manager";
 import { createUploadPlugin } from "./upload";
+import { createUploadImagePlugin } from "./upload-image";
 import { createWsPlugin } from "./ws";
 
 export const WS_IDLE_TIMEOUT_SECONDS = 240;
@@ -26,6 +27,7 @@ const _app = new Elysia({
 })
   .use(createWsPlugin(sessionManager, createPermissionHandler, serverConfig))
   .use(createUploadPlugin(serverConfig))
+  .use(createUploadImagePlugin(serverConfig))
   .get("*", async ({ request }) => {
     // Skip if dist/ doesn't exist (dev mode)
     if (!existsSync(DIST_DIR)) {
