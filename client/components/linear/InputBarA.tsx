@@ -3,11 +3,12 @@ import { Icon } from "../../design/icons";
 import { tokens as T } from "../../design/tokens";
 import { hapticService } from "../../services/haptic";
 import { toastService } from "../../services/toast-service";
-import { uploadFile } from "../../services/upload-service";
+import { uploadFile, uploadImage } from "../../services/upload-service";
 import { wsService } from "../../services/ws-service";
 import { useAppStore } from "../../stores/app-store";
 import { resizeImage } from "../../utils/image-resize";
 import AttachmentSheet from "./AttachmentSheet";
+import { runSend } from "./send-flow";
 import "./input-bar.css";
 
 interface Props {
@@ -93,12 +94,34 @@ const InputBarA = forwardRef<InputBarAHandle, Props>(function InputBarA(
     if (!sessionId || !sessionCwd) return;
 
     hapticService.tap();
-    wsService.ptySend(sessionId, sessionCwd, trimmed);
 
-    setInputDraft("");
-    setImages([]);
-    setFiles([]);
-    if (textareaRef.current) textareaRef.current.style.height = "auto";
+    const imagesToSend = images.map((img) => ({ base64: img.base64, mediaType: img.mediaType }));
+    const fileAbsPaths = files.map((f) => f.path);
+
+    // Kick off async send; guard image landing via runSend re-entrancy lock.
+    if (imagesToSend.length > 0) {
+      setIsUploading(true);
+    }
+
+    runSend({
+      sessionId,
+      cwd: sessionCwd,
+      text: trimmed,
+      images: imagesToSend,
+      fileAbsPaths,
+      uploadImage,
+      ptySend: wsService.ptySend.bind(wsService),
+      clearInputs: () => {
+        setInputDraft("");
+        setImages([]);
+        setFiles([]);
+        if (textareaRef.current) textareaRef.current.style.height = "auto";
+      },
+    }).finally(() => {
+      if (imagesToSend.length > 0) {
+        setIsUploading(false);
+      }
+    });
   };
 
   const handleInterrupt = () => {
