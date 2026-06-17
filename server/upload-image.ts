@@ -18,6 +18,17 @@ function mediaTypeToExt(mediaType: string): string {
   return EXT_MAP[mediaType] ?? ".bin";
 }
 
+// H3 decode seam — exported so tests can inject a spy.
+// ALL base64 decoding in this module routes through this function.
+export function decodeBase64(s: string): Uint8Array {
+  const binaryStr = atob(s);
+  const bytes = new Uint8Array(binaryStr.length);
+  for (let i = 0; i < binaryStr.length; i++) {
+    bytes[i] = binaryStr.charCodeAt(i);
+  }
+  return bytes;
+}
+
 export function createUploadImagePlugin(serverConfig: ServerConfig) {
   const uploadPath = buildUrl(serverConfig.basePath, "/api/upload-image");
 
@@ -46,20 +57,43 @@ export function createUploadImagePlugin(serverConfig: ServerConfig) {
       return { error: "base64 is required" };
     }
 
-    // Decode base64 BEFORE creating any directory
+    // H3: early-reject on string length before decode — and before any other
+    // per-character check. base64 expands by 4/3, so if length > MAX * 4/3
+    // the decoded size would exceed the cap. Reject with 413 immediately,
+    // and do NOT call decodeBase64. This check runs first so that an
+    // oversize string gets 413 even if it also happens to fail % 4.
+    const MAX_BASE64_LEN = Math.ceil((MAX_IMAGE_SIZE * 4) / 3);
+    if (base64.length > MAX_BASE64_LEN) {
+      set.status = 413;
+      return { error: "image exceeds size limit" };
+    }
+
+    // H2: strict base64 — length must be a multiple of 4.
+    // Bun's atob() does NOT throw on bad length (silently truncates),
+    // so we must validate BEFORE calling decode.
+    if (base64.length % 4 !== 0) {
+      set.status = 400;
+      return { error: "invalid base64: length must be a multiple of 4" };
+    }
+
+    // Decode base64 BEFORE creating any directory.
+    // Uses the injectable seam so tests can spy on call count.
     let bytes: Uint8Array;
     try {
-      const binaryStr = atob(base64);
-      bytes = new Uint8Array(binaryStr.length);
-      for (let i = 0; i < binaryStr.length; i++) {
-        bytes[i] = binaryStr.charCodeAt(i);
-      }
+      bytes = decodeBase64(base64);
     } catch {
       set.status = 400;
       return { error: "invalid base64" };
     }
 
-    // Size cap check — before creating directory
+    // H2 follow-up: decode yielded 0 usable bytes (e.g. "=" alone).
+    if (bytes.length === 0) {
+      set.status = 400;
+      return { error: "invalid base64: decodes to empty" };
+    }
+
+    // Size cap check — before creating directory.
+    // (belt-and-suspenders: the length early-reject above already gates most cases)
     if (bytes.length > MAX_IMAGE_SIZE) {
       set.status = 413;
       return { error: "image exceeds size limit" };
