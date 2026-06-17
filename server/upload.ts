@@ -3,7 +3,7 @@ import { extname, join } from "node:path";
 import { Elysia, t } from "elysia";
 import type { ServerConfig } from "./config";
 import { buildUrl } from "./path-utils";
-import { ensureUploadDir } from "./upload-manager";
+import { ensureUploadDir, safeSessionDir } from "./upload-manager";
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 
@@ -17,6 +17,16 @@ export function createUploadPlugin(serverConfig: ServerConfig) {
 
       if (!sessionId) {
         return new Response(JSON.stringify({ error: "sessionId is required" }), {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      // Guard: validate sessionId before touching the filesystem
+      try {
+        safeSessionDir(sessionId);
+      } catch {
+        return new Response(JSON.stringify({ error: "invalid sessionId" }), {
           status: 400,
           headers: { "Content-Type": "application/json" },
         });
