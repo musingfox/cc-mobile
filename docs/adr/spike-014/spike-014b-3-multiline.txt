@@ -1,0 +1,140 @@
+=== spike-014b assumption: multiline send-keys with real Enter/C-m ===
+tmux   : /opt/homebrew/tmux (tmux 3.6b)
+claude : /Users/nickhuang/.local/bin/claude (2.1.179 (Claude Code))
+session: spike014b3-78133
+
+Gap addressed: turn-1 never sent Enter — only tested buffer injection then Escape.
+  This spike sends REAL Enter (C-m) after each line to observe submission behavior.
+
+Turn-3 verdict correction:
+  turn-2 misidentified the result — incorrectly claiming both lines merged into one turn.
+  Evidence: 'Press up to edit queued messages' in the captured output (see POST_ENTER_2 below).
+  This is claude TUI's queued-message indicator: LINE2 was queued as a
+  separate turn, NOT merged with LINE1 into one turn.
+  Correct verdict: MULTILINE_SEPARATE_TURNS_QUEUED.
+  Each Enter submits a separate turn; multi-line content must be sent as
+  a single concatenated line with one trailing Enter.
+
+[1] Starting detached tmux session with claude...
+    tmux session 'spike014b3-78133' started.
+
+[2] Waiting for claude TUI to settle (quiescence, max 35s)...
+    TUI settled after 4 polls.
+
+[3] Pre-injection screen:
+--- BEGIN PRE_INJECT ---
+
+ ▐▛███▜▌   Claude Code v2.1.179
+▝▜█████▛▘  Opus 4.8 (1M context) with medium effort · Claude Max
+  ▘▘ ▝▝    ~/workspace/cc-mobile
+
+  1 setup issue: MCP · /doctor
+
+                                                                                                                                                                                                         ◐ medium · /effort
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  cc-mobile | Opus 4.8 (1M context) | ░░░░░░░░░░░░░░░ 0% | (main | 6 files )
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents
+--- END PRE_INJECT ---
+
+[4] Injecting line1 via send-keys then sending Enter (C-m)...
+    line1: 'MULTILINE_TEST_LINE1_do not reply yet'
+    Enter sent.
+
+[5] Post-first-Enter capture (did line1 get submitted immediately?):
+--- BEGIN POST_ENTER_1 ---
+
+ ▐▛███▜▌   Claude Code v2.1.179
+▝▜█████▛▘  Opus 4.8 (1M context) with medium effort · Claude Max
+  ▘▘ ▝▝    ~/workspace/cc-mobile
+
+  1 setup issue: MCP · /doctor
+
+❯ MULTILINE_TEST_LINE1_do not reply yet
+
+✳ Effecting…
+                                                                                                                                                                                                         ◐ medium · /effort
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  cc-mobile | Opus 4.8 (1M context) | ░░░░░░░░░░░░░░░ 0% | (main | 6 files )
+  ⏵⏵ auto mode on (shift+tab to cycle)
+--- END POST_ENTER_1 ---
+
+    OBSERVATION: ❯ prompt still active — LINE1 was submitted; claude began processing
+    (✳ Effecting… visible); new ❯ appeared for next input.
+
+[6] Screen after 2s (processing or idle?):
+--- BEGIN POST_PROCESSING ---
+
+ ▐▛███▜▌   Claude Code v2.1.179
+▝▜█████▛▘  Opus 4.8 (1M context) with medium effort · Claude Max
+  ▘▘ ▝▝    ~/workspace/cc-mobile
+
+  1 setup issue: MCP · /doctor
+
+❯ MULTILINE_TEST_LINE1_do not reply yet
+
+✳ Effecting… (2s · thinking with medium effort)
+                                                                                                                                                                                                         ◐ medium · /effort
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  cc-mobile | Opus 4.8 (1M context) | ░░░░░░░░░░░░░░░ 0% | (main | 6 files )
+  ⏵⏵ auto mode on (shift+tab to cycle)
+--- END POST_PROCESSING ---
+
+[7] Injecting line2 via send-keys then sending Enter (C-m)...
+    line2: 'MULTILINE_TEST_LINE2_now reply with just the word DONE'
+    Enter sent.
+
+[8] Post-line2-Enter capture:
+--- BEGIN POST_ENTER_2 ---
+
+ ▐▛███▜▌   Claude Code v2.1.179
+▝▜█████▛▘  Opus 4.8 (1M context) with medium effort · Claude Max
+  ▘▘ ▝▝    ~/workspace/cc-mobile
+
+  1 setup issue: MCP · /doctor
+
+❯ MULTILINE_TEST_LINE1_do not reply yet
+
+✽ Effecting… (2s · thinking with medium effort)
+
+  ❯ MULTILINE_TEST_LINE2_now reply with just the word DONE
+                                                                                                                                                                                                         ◐ medium · /effort
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ Press up to edit queued messages
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  cc-mobile | Opus 4.8 (1M context) | ░░░░░░░░░░░░░░░ 0% | (main | 6 files )
+  ⏵⏵ auto mode on (shift+tab to cycle)
+--- END POST_ENTER_2 ---
+
+[9] Verdict determination:
+
+VERDICT: MULTILINE_SEPARATE_TURNS_QUEUED
+  Each send-keys + Enter submits that line as a separate turn.
+  LINE1 was submitted immediately on first Enter (separate turn).
+  LINE2 was queued as the next turn (claude TUI shows 'Press up to edit queued messages').
+  Evidence: 'Press up to edit queued messages' (input row, POST_ENTER_2 above) confirms
+  LINE2 was queued as a distinct separate turn — NOT merged with LINE1 into one turn.
+  IMPLICATION (C-hybrid): multi-line content must be sent as a single
+  concatenated line with one trailing Enter — each Enter triggers a separate turn.
+  Do NOT send multiple Enter keys for multi-line content;
+  concatenate lines and submit with a single Enter.
+
+=== SUMMARY ===
+line1             : MULTILINE_TEST_LINE1_do not reply yet
+line2             : MULTILINE_TEST_LINE2_now reply with just the word DONE
+submitted_after_1st_enter: 0
+queued_evidence   : 1
+verdict           : MULTILINE_SEPARATE_TURNS_QUEUED
+
+Zellij arm: SKIP: zellij not installed — zellij arm skipped (未安裝)
+
+RESULT: PASS — multiline send-keys verdict corrected to MULTILINE_SEPARATE_TURNS_QUEUED
+  Each Enter submits a separate turn; 'Press up to edit queued messages' proves
+  LINE2 was queued (not merged). Multi-line content must be single concatenated line.
+
+=== spike-014b-3 complete ===

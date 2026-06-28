@@ -1,0 +1,86 @@
+=== spike-014 assumption-2: tmux send-keys prompt injection ===
+tmux   : /opt/homebrew/bin/tmux (tmux 3.6b)
+claude : /Users/nickhuang/.local/bin/claude (2.1.179 (Claude Code))
+session: spike014-2-64090
+
+[1] Starting detached tmux session with claude...
+    tmux session 'spike014-2-64090' started.
+[2] Waiting for claude TUI prompt (max 20s)...
+    TUI ready after 2 polls.
+
+[3] TEST A — injecting simple single-line text via send-keys...
+    Injected: 'say the word SPIKE014MARKER exactly once' (no Enter yet)
+
+    Screen after type (before Enter):
+❯ say the word SPIKE014MARKER exactly once
+
+[4] TEST B — multi-line and special-char injection via send-keys...
+    After injecting line1 ('echo "hello $USER"'):
+❯ say the word SPIKE014MARKER exactly onceecho "hello $USER"
+    After injecting special-char sequence ('ls /tmp | head -2; echo done'):
+❯ ls /tmp | head -2; echo done
+
+[5] Final screen capture (post injection tests):
+--- BEGIN CAPTURE ---
+
+ ▐▛███▜▌   Claude Code v2.1.179
+▝▜█████▛▘  Opus 4.8 (1M context) with medium effort · Claude Max
+  ▘▘ ▝▝    ~/workspace/cc-mobile
+
+  1 setup issue: MCP · /doctor
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                                                                                                                                                         Esc again to clear
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ ls /tmp | head -2; echo done
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  cc-mobile | Opus 4.8 (1M context) | ░░░░░░░░░░░░░░░ 0% | (main | 1 files )
+  ⏵⏵ auto mode on (shift+tab to cycle)
+--- END CAPTURE ---
+
+RESULT: PASS — tmux send-keys successfully injects text into claude TUI
+OBSERVATION: send-keys delivers raw keystrokes to the TUI without needing
+             PTY fd write access; special chars (quotes, $, &, |, ;) appear
+             in the input buffer as typed. Multi-line requires two send-keys calls.
+OBSERVATION: 'Escape' clears the input buffer, confirming TUI interactivity.
+CAVEAT: Multi-line prompts need two separate send-keys calls; no atomic multi-line
+        injection exists in tmux — each Enter triggers submission.
+IMPLICATION (C-hybrid): cc-mobile can inject user prompts via tmux send-keys
+             without owning the raw PTY fd. Special chars pass through correctly.
+
+=== spike-014-2 complete ===

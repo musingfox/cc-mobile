@@ -1,0 +1,163 @@
+=== spike-014 assumption-3: Stop hook fires inside tmux-owned session ===
+tmux   : /opt/homebrew/bin/tmux (tmux 3.6b)
+claude : /Users/nickhuang/.local/bin/claude (2.1.179 (Claude Code))
+session: spike014-3-66466
+work   : /tmp/spike-014-3-66466
+
+Zellij arm: SKIP: zellij not installed — zellij arm skipped; tmux arm runs below
+
+[1] Hook script   : /tmp/spike-014-3-66466/stop-hook.sh
+[1] Marker file   : /tmp/spike-014-3-66466/hook_fired.txt
+[1] Settings file : /tmp/spike-014-3-66466/settings.json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "SPIKE_MARKER_FILE='/tmp/spike-014-3-66466/hook_fired.txt' bash '/tmp/spike-014-3-66466/stop-hook.sh'"
+          }
+        ]
+      }
+    ]
+  }
+}
+
+[2] Starting tmux session with claude --settings '/tmp/spike-014-3-66466/settings.json'...
+    tmux session 'spike014-3-66466' created.
+[3] Waiting for TUI prompt (max 30s, 0.5s intervals)...
+    TUI ready after 2 polls (1000ms).
+
+[4] Screen before injection:
+--- BEGIN PRE-INJECT CAPTURE ---
+
+ ▐▛███▜▌   Claude Code v2.1.179
+▝▜█████▛▘  Opus 4.8 (1M context) with medium effort · Claude Max
+  ▘▘ ▝▝    ~/workspace/cc-mobile
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                                                                                                                                                         ◐ medium · /effort
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents
+--- END PRE-INJECT CAPTURE ---
+
+[5] Injecting trivial prompt and pressing Enter...
+    Sent: 'Reply with just the word HOOKTEST' + Enter
+
+[6] Waiting for Stop hook to fire (max 90s)...
+
+[7] Marker file contents (/tmp/spike-014-3-66466/hook_fired.txt):
+--- BEGIN HOOK OUTPUT ---
+HOOK_FIRED
+timestamp: 2026-06-17T11:09:30Z
+--- payload ---
+{"session_id":"44b08495-0d3d-41ae-911e-fb04e7a85d63","transcript_path":"/Users/nickhuang/.claude/projects/-Users-nickhuang-workspace-cc-mobile/44b08495-0d3d-41ae-911e-fb04e7a85d63.jsonl","cwd":"/Users/nickhuang/workspace/cc-mobile","permission_mode":"auto","effort":{"level":"medium"},"hook_event_name":"Stop","stop_hook_active":false,"last_assistant_message":"HOOKTEST","background_tasks":[],"session_crons":[]}
+--- END HOOK OUTPUT ---
+
+[8] tmux screen capture at hook evaluation time:
+--- BEGIN SCREEN CAPTURE ---
+
+ ▐▛███▜▌   Claude Code v2.1.179
+▝▜█████▛▘  Opus 4.8 (1M context) with medium effort · Claude Max
+  ▘▘ ▝▝    ~/workspace/cc-mobile
+
+  1 setup issue: MCP · /doctor
+
+❯ Reply with just the word HOOKTEST
+
+⏺ HOOKTEST
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+✢ Skedaddling… (running stop hooks… 2/3 · 1s · ↓ 3 tokens)
+                                                                                                                                                                                                         ◐ medium · /effort
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  cc-mobile | Opus 4.8 (1M context) | ░░░░░░░░░░░░░░░ 0% | (main | 1 files )
+  ⏵⏵ auto mode on (shift+tab to cycle)
+--- END SCREEN CAPTURE ---
+
+RESULT: PASS — Stop hook fired while claude ran inside a tmux-owned session
+OBSERVATION: hook marker file appeared after 4 × 500ms (2000ms total)
+OBSERVATION: The Stop hook payload contains: session_id, transcript_path,
+             last_assistant_message, cwd, hook_event_name=Stop.
+OBSERVATION: last_assistant_message = the reply text cc-mobile needs to relay
+             to the phone — identical to the ADR-011 pty-stop-hook.ts channel.
+IMPLICATION (C-hybrid): cc-mobile can register a Stop hook (--settings <file>)
+             when it launches claude inside its owned tmux session. The hook is
+             the primary reply-readback channel without any PTY onData access.
+ZELLIJ ARM : SKIP: zellij not installed — zellij arm skipped; tmux arm runs below
+
+=== spike-014-3 complete ===

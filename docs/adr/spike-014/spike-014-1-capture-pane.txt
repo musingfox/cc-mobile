@@ -1,0 +1,69 @@
+=== spike-014 assumption-1: tmux capture-pane TUI readiness ===
+tmux   : /opt/homebrew/bin/tmux (tmux 3.6b)
+claude : /Users/nickhuang/.local/bin/claude (2.1.179 (Claude Code))
+session: spike014-1-63783
+
+[1] Starting detached tmux session with claude...
+    tmux session 'spike014-1-63783' started.
+[2] Polling tmux capture-pane for claude TUI readiness...
+
+[3] capture-pane output after 2 polls (1000ms):
+--- BEGIN CAPTURE ---
+
+ ▐▛███▜▌   Claude Code v2.1.179
+▝▜█████▛▘  Opus 4.8 (1M context) with medium effort · Claude Max
+  ▘▘ ▝▝    ~/workspace/cc-mobile
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                                                                                                                                                         ◐ medium · /effort
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents
+--- END CAPTURE ---
+
+RESULT: PASS — claude TUI readiness detected via capture-pane (not PTY onData)
+OBSERVATION: tmux capture-pane surfaces the rendered TUI screen without needing
+             direct access to the PTY file descriptor or onData callback.
+IMPLICATION (C-hybrid): cc-mobile can probe live session state via capture-pane
+             even when it only owns the tmux session wrapper, not the PTY fd.
+
+=== spike-014-1 complete ===

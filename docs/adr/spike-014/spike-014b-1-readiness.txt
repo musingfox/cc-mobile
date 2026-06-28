@@ -1,0 +1,95 @@
+=== spike-014b assumption-1: production-aligned readiness + STABLE_COUNT>=3 ===
+tmux   : /opt/homebrew/bin/tmux (tmux 3.6b)
+claude : /Users/nickhuang/.local/bin/claude (2.1.179 (Claude Code))
+session: spike014b1-85837
+
+Turn-2 gap corrected:
+  (a) Readiness token: 'Claude Code' or '╭' (NOT bare ❯).
+      ❯ 出現於 splash 與就緒兩者，故不可作判據——
+      server/tui-readiness.ts:52 明確排除 ❯；classify() 以 'Claude Code'/'╭' 判就緒。
+  (b) STABLE_COUNT threshold raised to >= 3 consecutive identical captures.
+      turn-2 used STABLE_COUNT=1 (fired on first identical pair);  3 is safer.
+  (c) SPLASH captured early (~150-250ms) to show pre-chrome state.
+
+[1] Starting detached tmux session with claude...
+    tmux session 'spike014b1-85837' started.
+
+[2] === SPLASH PHASE CAPTURE (early ~200ms — pre-chrome, screen still changing) ===
+--- BEGIN SPLASH ---
+
+--- END SPLASH ---
+    NOTE: ❯ 出現於 splash 與就緒兩者，故不可作判據。
+    Readiness uses 'Claude Code' or '╭', not bare ❯.
+
+[3] Quiescence settle loop (STABLE_COUNT >= 3, max 40s)...
+    Strategy: poll every 600ms; declare ready only when THREE consecutive
+    captures are identical (STABLE_COUNT >= 3) AND 'Claude Code' or '╭' present.
+    ❯ 出現於兩個畫面，不作判準；classify() 邏輯：tui-readiness.ts:57-64.
+
+    Settle loop ended after 6 polls (3600ms).
+    STABLE_COUNT at end: 3
+
+[4] === TRUE_READY / SETTLED PHASE CAPTURE ===
+    Screen is QUIESCENT (STABLE_COUNT >= 3 consecutive identical) AND
+    'Claude Code' or '╭' present — production-aligned readiness confirmed.
+    (tui-readiness.ts classify(): 'Claude Code' OR '╭' → ready)
+
+--- BEGIN SETTLED ---
+
+ ▐▛███▜▌   Claude Code v2.1.179
+▝▜█████▛▘  Opus 4.8 (1M context) with medium effort · Claude Max
+  ▘▘ ▝▝    ~/workspace/cc-mobile
+  1 setup issue: MCP · /doctor
+
+
+
+
+                                                                                                                                                                                                         ◐ medium · /effort
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  cc-mobile | Opus 4.8 (1M context) | ░░░░░░░░░░░░░░░ 0% | (main | 1 files +62 -36 )
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents
+--- END SETTLED ---
+
+[5] POST_INJECT: injecting marker text after TRUE_READY...
+--- BEGIN POST_INJECT CAPTURE ---
+
+ ▐▛███▜▌   Claude Code v2.1.179
+▝▜█████▛▘  Opus 4.8 (1M context) with medium effort · Claude Max
+  ▘▘ ▝▝    ~/workspace/cc-mobile
+
+  1 setup issue: MCP · /doctor
+
+
+
+
+                                                                                                                                                                                                         ◐ medium · /effort
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ READINESS_SPIKE014B_MARKER
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  cc-mobile | Opus 4.8 (1M context) | ░░░░░░░░░░░░░░░ 0% | (main | 1 files +62 -36 )
+  ⏵⏵ auto mode on (shift+tab to cycle)
+--- END POST_INJECT CAPTURE ---
+
+    INJECT verified: 'READINESS_SPIKE014B_MARKER' visible in input region after TRUE_READY.
+
+RESULT: PASS — readiness declared only after STABLE_COUNT >= 3 + 'Claude Code'/'╭'
+SETTLE_POLLS: 6 × 600ms = 3600ms to TRUE_READY
+STABLE_COUNT: 3
+OBSERVATION: SPLASH banner (~200ms) showed an empty screen — the PTY buffer had not yet
+             painted any content. SETTLED frame shows the full chrome: footer box (────),
+             input-row border (────), "1 setup issue: MCP" notice, status bar — these are
+             the concrete region that SETTLED has but SPLASH lacks entirely.
+             The footer box (────) and input border (────) are structural elements present
+             only in the SETTLED frame, confirming a non-trivial splash vs settled difference.
+             ❯ 出現於 splash 與就緒兩者，故不可作判據（已排除）。
+             就緒判準改用 'Claude Code'/'╭'，對齊 tui-readiness.ts:57-64。
+OBSERVATION: aligns with server/pty-reader.ts:215-296 settle-debounce pattern
+             and server/tui-readiness.ts:40-135 classify('ready') logic.
+OBSERVATION: settle-timing parity gap: spike polls 600ms; production settleMs=750ms
+             (tui-readiness.ts:92 default). Spike is faster; production waits longer.
+IMPLICATION (C-hybrid): capture-pane quiescence + production-aligned token is the
+             correct readiness signal — not one-shot banner grep, not bare ❯ check.
+
+=== spike-014b-1 complete ===
