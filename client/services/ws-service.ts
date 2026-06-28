@@ -262,7 +262,10 @@ class WsService {
   private reconnectTimeout: number | null = null;
   private reconnectDelay = 1000;
   private lastToolBatchTime = 0;
-  private lastEventId: number | null = null;
+  // Per-session replay cursor. eventIds are assigned per-session by the server
+  // (starting at 1), so a single global cursor would mis-baseline replay across
+  // sessions and silently drop missed events on reconnect (→ stuck spinner).
+  private lastEventIds = new Map<string, number>();
   private pendingResumeSdkSessionId: string | null = null;
   private disconnectBannerTimeout: number | null = null;
 
@@ -276,11 +279,16 @@ class WsService {
     const store = useAppStore.getState();
     store.setConnectionState("connecting");
 
-    // Restore lastEventId from localStorage
+    // Restore per-session lastEventIds from localStorage
     try {
-      const stored = localStorage.getItem("ccm:lastEventId");
-      if (stored && this.lastEventId === null) {
-        this.lastEventId = parseInt(stored, 10);
+      if (this.lastEventIds.size === 0) {
+        const stored = localStorage.getItem("ccm:lastEventIds");
+        if (stored) {
+          const obj = JSON.parse(stored) as Record<string, number>;
+          for (const [sid, id] of Object.entries(obj)) {
+            if (typeof id === "number") this.lastEventIds.set(sid, id);
+          }
+        }
       }
     } catch {}
 
@@ -310,12 +318,18 @@ class WsService {
         this.setPermissionMode(settings.permissionMode);
       }
 
-      // Send reconnect message if we have lastEventId
-      if (this.lastEventId !== null) {
-        const sessionIds = Array.from(useAppStore.getState().sessions.keys());
-        if (sessionIds.length > 0) {
-          this.sendMessage({ type: "reconnect", lastEventId: this.lastEventId, sessionIds });
-        }
+      // Send reconnect with per-session cursors so the server replays the events
+      // missed during the drop for EACH session independently (eventIds are
+      // per-session). Without this, a global cursor drops missed events → spinner
+      // stuck forever after a flaky reconnect.
+      const sessionIds = Array.from(useAppStore.getState().sessions.keys());
+      if (sessionIds.length > 0) {
+        this.sendMessage({
+          type: "reconnect",
+          lastEventId: null,
+          lastEventIds: Object.fromEntries(this.lastEventIds),
+          sessionIds,
+        });
       }
 
       // If we have restored sessions, don't auto-create a new one
@@ -331,13 +345,18 @@ class WsService {
         const msg = JSON.parse(event.data);
         debugLog.add("recv", msg);
 
-        // Handle event envelope — unwrap and track eventId
+        // Handle event envelope — unwrap and track per-session eventId
         if (msg.type === "event") {
-          this.lastEventId = msg.eventId;
-          // Save to localStorage for persistence across page reloads
-          try {
-            localStorage.setItem("ccm:lastEventId", String(msg.eventId));
-          } catch {}
+          if (typeof msg.sessionId === "string" && typeof msg.eventId === "number") {
+            this.lastEventIds.set(msg.sessionId, msg.eventId);
+            // Persist per-session cursors across page reloads
+            try {
+              localStorage.setItem(
+                "ccm:lastEventIds",
+                JSON.stringify(Object.fromEntries(this.lastEventIds)),
+              );
+            } catch {}
+          }
           this.handleMessage(msg.payload);
           return;
         }

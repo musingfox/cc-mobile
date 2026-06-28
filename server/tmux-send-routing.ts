@@ -98,7 +98,34 @@ export function createTmuxSendRouting(options: TmuxSendRoutingOptions = {}) {
     const responsePromise = relay.awaitResponse(claudeUuid);
 
     // Exactly one send-keys; arg has no embedded newline (per C2-Concat)
-    await runCommand("tmux", ["send-keys", "-t", `ccm-${claudeUuid}`, flattened, "Enter"]);
+    const result = await runCommand("tmux", [
+      "send-keys",
+      "-t",
+      `ccm-${claudeUuid}`,
+      flattened,
+      "Enter",
+    ]);
+
+    // tmux send-keys failed (no server / no such session): the Stop hook will
+    // never fire, so the armed waiter would hang the client UI forever. Swallow
+    // the cancel rejection, drop the waiter, and surface an error so the client
+    // stops spinning instead of awaiting a reply that can never arrive.
+    if (result.code !== 0) {
+      responsePromise.catch(() => {});
+      relay.cancel(claudeUuid);
+      const failSink = clientSinks.get(claudeUuid);
+      if (failSink) {
+        failSink({
+          type: "error",
+          sessionId: claudeUuid,
+          code: "tmux_send_failed",
+          message: `Terminal session ccm-${claudeUuid} is not reachable (${
+            result.stderr.trim() || "tmux send-keys failed"
+          }). The paired terminal session may have closed.`,
+        });
+      }
+      return;
+    }
 
     // When resolved by Stop POST via relay, deliver to THIS client's sink only.
     // Chunk shape aligned to pty-orchestrator.ts:164-179 (assistant + stream_end)

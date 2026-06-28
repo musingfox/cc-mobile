@@ -191,9 +191,6 @@ export function createWsPlugin(
   const ptyPermApiPath = buildUrl(serverConfig.basePath, "/api/pty-permission");
   const ptyResponseApiPath = buildUrl(serverConfig.basePath, "/api/pty-response");
 
-  // PTY orchestrator — one instance per WS plugin, real spawner/getMessagesFn by default
-  const ptyOrchestrator = new PtyOrchestrator();
-
   // PTY permission relay — shared instance; sendToClient is wired per active WS connection
   // wsRef holds the current active WebSocket so the relay can push permission_request to client
   // eslint-disable-next-line prefer-const
@@ -227,8 +224,15 @@ export function createWsPlugin(
 
   // Helper to send buffered messages
   function sendBuffered(ws: any, sessionId: string, message: Record<string, unknown>) {
+    // Append to the buffer FIRST so the event survives a dead/mid-close socket:
+    // a reconnecting client recovers it via per-session replay even if the live
+    // ws.send below fails.
     const eventId = eventBuffer.append(sessionId, message);
-    ws.send({ type: "event", eventId, sessionId, payload: message });
+    try {
+      ws.send({ type: "event", eventId, sessionId, payload: message });
+    } catch {
+      // Socket is mid-close/dead (transient reconnect). Event is already buffered.
+    }
   }
 
   // PTY response relay + HTTP handler — Stop hook delivers the assistant reply here,
@@ -245,6 +249,13 @@ export function createWsPlugin(
   const tmuxRegistry = makeTmuxRegistry({
     responseUrl: tmuxResponseUrl,
     permissionUrl: tmuxPermissionUrl,
+  });
+
+  // PTY orchestrator — per-session --settings injection (ADR-014) reuses the same
+  // loopback hook URLs as tmux, so PTY readback/permissions no longer depend on the
+  // global ~/.claude/settings.json (fixes new-session hang when global Stop hook is altered).
+  const ptyOrchestrator = new PtyOrchestrator({
+    settings: { responseUrl: tmuxResponseUrl, permissionUrl: tmuxPermissionUrl },
   });
 
   // DP-1: on process shutdown, kill every cc-mobile-owned tmux session + unlink its settings.
@@ -811,13 +822,17 @@ export function createWsPlugin(
             }
 
             case "reconnect": {
-              const { lastEventId, sessionIds } = message;
+              const { lastEventId, lastEventIds, sessionIds } = message;
 
               for (const sessionId of sessionIds) {
-                const events = eventBuffer.replay(sessionId, lastEventId ?? -1);
+                // Per-session baseline (eventIds are per-session). Fall back to the
+                // legacy global lastEventId only if no per-session cursor was sent.
+                const perSession = lastEventIds?.[sessionId];
+                const hasBaseline = perSession !== undefined || lastEventId !== null;
+                const baseline = perSession ?? lastEventId ?? -1;
+                const events = eventBuffer.replay(sessionId, baseline);
                 const stats = eventBuffer.getStats(sessionId);
-                const gapDetected =
-                  lastEventId !== null && stats.oldest !== null && lastEventId < stats.oldest;
+                const gapDetected = hasBaseline && stats.oldest !== null && baseline < stats.oldest;
 
                 for (const evt of events) {
                   ws.send({
@@ -915,9 +930,13 @@ export function createWsPlugin(
         persistentState.pausedPtyPermissions = ptyRelay.pausePending();
         persistentState.pausedTmuxPermissions = tmuxPermissionRelay.pausePending();
 
-        // Cancel all in-flight PTY sessions to avoid leaking PTY handles
-        const ptySessionIds = (ws.data as WsData).ptySessionIds;
-        ptyOrchestrator.cancelAll([...(ptySessionIds ?? [])]);
+        // Do NOT cancel in-flight PTY drives on disconnect: a transient reconnect
+        // would otherwise abort the turn and suppress its stream_end, leaving the
+        // reconnected client's spinner stuck. Let the drive finish — it buffers
+        // stream_chunk + stream_end (sendBuffered appends regardless of socket
+        // state) so the reconnecting client recovers them via per-session replay,
+        // and the drive self-cleans its PTY handle on resolve. Explicit user
+        // interrupts still cancel via the interrupt path, not here.
 
         // Remove this connection's tmux uuid->sink bindings (baton map §cleanup).
         // Dead-binding leak prevention only; no rebind/replay to a new connection.

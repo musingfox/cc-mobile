@@ -108,21 +108,6 @@ export function buildClaudeSettings(input: BuildClaudeSettingsInput): {
     },
   };
 
-  if (input.permissionUrl && input.permissionHookPath) {
-    const permCommand = `CC_MOBILE_PERMISSION_URL='${input.permissionUrl}' bun '${input.permissionHookPath}'`;
-    result.hooks.PreToolUse = [
-      {
-        matcher: "Bash",
-        hooks: [
-          {
-            type: "command",
-            command: permCommand,
-          },
-        ],
-      },
-    ];
-  }
-
   return result;
 }
 
@@ -184,7 +169,15 @@ export function createTmuxRegistry(options: TmuxRegistryOptions = {}) {
     const inner: string[] =
       claudeBin === "sleep" || claudeBin.endsWith("/sleep")
         ? ["sleep", "300"]
-        : [claudeBin, "--settings", settingsPath, "--session-id", claudeUuid];
+        : [
+            claudeBin,
+            "--permission-mode",
+            "bypassPermissions",
+            "--settings",
+            settingsPath,
+            "--session-id",
+            claudeUuid,
+          ];
 
     // Launch: detached tmux session owned by cc-mobile, cwd respected, hooks via --settings
     const tmuxNewArgs = ["new-session", "-d", "-s", tmuxName, "-c", cwd, "--", ...inner];
