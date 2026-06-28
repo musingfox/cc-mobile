@@ -137,4 +137,39 @@ describe("createPtyResponseRelay", () => {
     expect(await a).toBe("A");
     expect(relay.hasPending("sb")).toBe(true);
   });
+
+  it("T1: cancel('u1') rejects the waiter with 'cancelled', clears pending, and calls clearTimeout before reject", async () => {
+    const t = makeTimers();
+    let clearCalled = false;
+    const originalClear = t.clearTimeoutFn;
+    const relay = createPtyResponseRelay({
+      setTimeoutFn: t.setTimeoutFn,
+      clearTimeoutFn: (id) => {
+        clearCalled = true;
+        originalClear(id);
+      },
+    });
+
+    const p = relay.awaitResponse("u1");
+    expect(relay.hasPending("u1")).toBe(true);
+    expect(t.count()).toBe(1);
+
+    relay.cancel("u1");
+
+    expect(clearCalled).toBe(true); // clear before reject
+    expect(relay.hasPending("u1")).toBe(false);
+    await expect(p).rejects.toThrow("cancelled");
+  });
+
+  it("T2: cancel('nope') with no waiter does not throw and getPendingCount unchanged", () => {
+    const t = makeTimers();
+    const relay = createPtyResponseRelay({
+      setTimeoutFn: t.setTimeoutFn,
+      clearTimeoutFn: t.clearTimeoutFn,
+    });
+
+    const initialCount = relay.getPendingCount();
+    expect(() => relay.cancel("nope")).not.toThrow();
+    expect(relay.getPendingCount()).toBe(initialCount);
+  });
 });
