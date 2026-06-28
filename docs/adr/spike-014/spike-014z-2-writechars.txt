@@ -1,0 +1,92 @@
+=== Spike 014z-2: zellij write-chars prompt injection with special chars ===
+Date: 2026-06-17
+zellij: /opt/homebrew/bin/zellij 0.44.3
+claude: ~/.local/bin/claude 2.1.179
+
+=== Spike 014z-2: zellij write-chars prompt injection with special chars ===
+zellij : /opt/homebrew/bin/zellij (zellij 0.44.3)
+claude : /Users/nickhuang/.local/bin/claude (2.1.179 (Claude Code))
+session: spike014z2-44886
+
+[1] Creating background zellij session 'spike014z2-44886'...
+    Terminal pane: terminal_0
+
+[2] Launching claude in zellij session...
+    Polling for TUI readiness (max 30s)...
+    TUI ready after 2 polls (1000ms)
+
+[3] TEST A — simple text injection (no Enter yet)...
+    Screen after typing (before Enter):
+❯ say the word SPIKE014ZMARKER exactly once
+    Escape (byte 27) sent to clear input buffer.
+
+[4] TEST B — special char injection...
+    Injecting: echo "hello $USER | grep test; ls `pwd`"
+    Screen after special-char injection:
+  onceecho "hello $USER | grep test; ls `pwd`"
+
+[5] TEST C — submit a real prompt (with Enter) and wait for response...
+    Sent: 'Reply with just the word ZETEST and nothing else' + Enter
+    Waiting for claude response (max 60s)...
+
+[6] Final dump-screen:
+--- BEGIN DUMP ---
+
+           Claude Code v2.1.179
+ ▐▛███▜▌   Opus 4.8 (1M context) with mediu…
+▝▜█████▛▘  Claude Max
+  ▘▘ ▝▝    ~/workspace/cc-mobile
+
+  3 setup issues: MCP · /doctor
+
+❯ say the word SPIKE014ZMARKER exactly onceecho
+  "hello $USER | grep test; ls `pwd`"Reply
+  with just the word ZETEST and nothing else
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+· Fermenting…
+                             Esc again to clear
+────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────
+  cc-mobile | Opus 4.8 (1M context) | ░░░░░░░░…
+  ⏵⏵ auto mode on (shift+tab to cycle)
+--- END DUMP ---
+
+=== FINDINGS ===
+RESULT: PASS
+- write-chars sends raw chars (no shell interpretation — $, |, ;, backtick literal)
+- write 13 sends CR/Enter to submit
+- write 27 (ESC byte) clears input buffer; send-keys 'Escape' is INVALID in 0.44.3
+- special chars (nickhuang, |, ;, backtick, double-quote) injected correctly
+- claude responded to submitted prompt after 1 × 500ms
+- dump-screen captured the response
+- Awkward vs tmux: must discover pane-id first; two-command (write-chars + write 13) vs tmux's single send-keys with Enter
+
+=== spike-014z-2 complete ===

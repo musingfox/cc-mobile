@@ -1,0 +1,88 @@
+=== Spike 014z-1: zellij dump-screen TUI readiness ===
+Date: 2026-06-17
+zellij: /opt/homebrew/bin/zellij 0.44.3
+claude: ~/.local/bin/claude 2.1.179
+
+=== Spike 014z-1: zellij dump-screen TUI readiness ===
+zellij : /opt/homebrew/bin/zellij (zellij 0.44.3)
+claude : /Users/nickhuang/.local/bin/claude (2.1.179 (Claude Code))
+session: spike014z1-44634
+
+[1] Creating background zellij session 'spike014z1-44634'...
+    Background PID: 44639
+    Active sessions: [32;1mspike014z1-44634[m [Created [35;1m2s[m ago] 
+
+[2] Discovering terminal pane ID...
+    Panes: PANE_ID  TYPE  TITLE
+plugin_0  plugin  (.) - zellij:link
+plugin_3  plugin  About Zellij
+terminal_0  terminal  Pane #1
+    Using pane: terminal_0
+
+[3] Launching claude inside zellij via write-chars...
+    Sent: '/Users/nickhuang/.local/bin/claude' + Enter (byte 13)
+
+[4] Polling dump-screen for TUI readiness (max 30s, 0.5s intervals)...
+    Polled 2 times (1000ms)
+
+[5] Final dump-screen output:
+--- BEGIN DUMP ---
+
+           Claude Code v2.1.179
+ ▐▛███▜▌   Opus 4.8 (1M context) with mediu…
+▝▜█████▛▘  Claude Max
+  ▘▘ ▝▝    ~/workspace/cc-mobile
+
+  2 setup issues: MCP · /doctor
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                             ◐ medium · /effort
+────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────
+  cc-mobile | Opus 4.8 (1M context) | ░░░░░░░░…
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← for…
+--- END DUMP ---
+
+=== FINDINGS ===
+RESULT: PASS
+- TUI readiness detected after 2 × 500ms = 1000ms
+- ZELLIJ_SESSION_NAME env var is required for out-of-session action targeting
+- attach -b creates headless session (no TTY needed); equivalent to tmux new-session -d
+- list-panes reveals pane IDs; terminal_0 is the initial shell pane
+- dump-screen --pane-id <id> prints viewport to stdout cleanly
+- No --session flag on 'zellij action'; env var is the only cross-session mechanism
+- Awkward vs tmux: extra step to discover pane-id; env var workaround not documented clearly
+
+=== spike-014z-1 complete ===
