@@ -212,6 +212,10 @@ export function createTmuxRegistry(options: TmuxRegistryOptions = {}) {
     return { tmuxName, panePid, settingsPath };
   }
 
+  function listSessions(): string[] {
+    return [...sessions.keys()];
+  }
+
   function hasSession(claudeUuid: string): HasSessionResult {
     const entry = sessions.get(claudeUuid);
     if (!entry) {
@@ -246,10 +250,19 @@ export function createTmuxRegistry(options: TmuxRegistryOptions = {}) {
     return { killed: true };
   }
 
+  async function teardownAll(): Promise<void> {
+    // Iterate a snapshot of keys; teardown mutates the map. No polling timer involved.
+    for (const claudeUuid of [...sessions.keys()]) {
+      await teardown(claudeUuid);
+    }
+  }
+
   return {
     createSession,
+    listSessions,
     hasSession,
     teardown,
+    teardownAll,
     // internal for debug if needed, but not required by contracts
     _sessions: sessions,
   };

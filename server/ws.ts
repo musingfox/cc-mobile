@@ -23,6 +23,10 @@ import { loadSessionHistory } from "./session-history";
 import { getClaudeSessionInfo, listClaudeSessions, renameClaudeSession } from "./session-listing";
 import type { InitData, SessionManager } from "./session-manager";
 
+// Idempotency guard (DP-1): ensure tmux teardown signal handlers are registered
+// at most once per process, even if createWsPlugin is invoked multiple times.
+let tmuxShutdownHandlersRegistered = false;
+
 function expandPath(p: string): string {
   if (p.startsWith("~/") || p === "~") {
     return resolve(homedir(), p.slice(2));
@@ -164,11 +168,24 @@ export function emitCapabilitiesOnResume(
   }
 }
 
+/**
+ * Optional injection seam for tests (additive; production passes nothing).
+ * Lets a test substitute a spy registry / relay factory to exercise tmux
+ * lifecycle wiring (DP-1 signal teardown, EX-A2 relay timeout) without spawning.
+ */
+export interface WsPluginTestDeps {
+  createTmuxRegistry?: typeof createTmuxRegistry;
+  createTmuxPermissionRelay?: typeof createPtyPermissionRelay;
+}
+
 export function createWsPlugin(
   sessionManager: SessionManager,
   permissionBridgeFactory: PermissionHandlerFactory,
   serverConfig: ServerConfig,
+  deps: WsPluginTestDeps = {},
 ) {
+  const makeTmuxRegistry = deps.createTmuxRegistry ?? createTmuxRegistry;
+  const makeTmuxPermissionRelay = deps.createTmuxPermissionRelay ?? createPtyPermissionRelay;
   let cachedCapabilities: Capabilities | null = loadCachedCapabilities();
   const wsPath = buildUrl(serverConfig.basePath, "/ws");
   const ptyPermApiPath = buildUrl(serverConfig.basePath, "/api/pty-permission");
@@ -205,6 +222,7 @@ export function createWsPlugin(
     permissionHandler: null as PermissionHandler | null,
     pausedPermissions: [] as PendingPermissionSnapshot[],
     pausedPtyPermissions: [] as PtyRelaySnapshot[],
+    pausedTmuxPermissions: [] as PtyRelaySnapshot[],
   };
 
   // Helper to send buffered messages
@@ -224,10 +242,22 @@ export function createWsPlugin(
   const tmuxResponseUrl = `http://127.0.0.1:${serverConfig.port}${tmuxResponseApiPath}`;
   const tmuxPermApiPath = buildUrl(serverConfig.basePath, "/api/pty-permission");
   const tmuxPermissionUrl = `http://127.0.0.1:${serverConfig.port}${tmuxPermApiPath}`;
-  const tmuxRegistry = createTmuxRegistry({
+  const tmuxRegistry = makeTmuxRegistry({
     responseUrl: tmuxResponseUrl,
     permissionUrl: tmuxPermissionUrl,
   });
+
+  // DP-1: on process shutdown, kill every cc-mobile-owned tmux session + unlink its settings.
+  // Idempotent registration: a module-level flag prevents duplicate listeners if this plugin
+  // is constructed more than once in the same process (e.g. tests).
+  if (!tmuxShutdownHandlersRegistered) {
+    tmuxShutdownHandlersRegistered = true;
+    const onShutdown = () => {
+      void tmuxRegistry.teardownAll();
+    };
+    process.on("SIGTERM", onShutdown);
+    process.on("SIGINT", onShutdown);
+  }
 
   // Independent tmux send routing (sink map) + response uses the shared ptyResponseRelay (arm/resolve)
   // per DP-2; pty path untouched.
@@ -237,19 +267,22 @@ export function createWsPlugin(
 
   // Independent tmux permission relay instance; sendToClient uses the claudeUuid->sink map
   // so permission_request only reaches originating client (E5: ptyRelay/wsRef left as-is).
-  const tmuxPermissionRelay = createPtyPermissionRelay((sessionId, requestId, tool) => {
-    const sink = tmuxSendRouting.getClient(sessionId);
-    if (sink) {
-      // sink is the sendBuffered wrapper, which already does eventBuffer.append + ws.send.
-      // Appending here too would double-append (replay would re-send the prompt).
-      sink({
-        type: "permission_request",
-        sessionId,
-        requestId,
-        tool,
-      });
-    }
-  });
+  const tmuxPermissionRelay = makeTmuxPermissionRelay(
+    (sessionId, requestId, tool) => {
+      const sink = tmuxSendRouting.getClient(sessionId);
+      if (sink) {
+        // sink is the sendBuffered wrapper, which already does eventBuffer.append + ws.send.
+        // Appending here too would double-append (replay would re-send the prompt).
+        sink({
+          type: "permission_request",
+          sessionId,
+          requestId,
+          tool,
+        });
+      }
+    },
+    { timeoutMs: 90000 }, // tunable: unattended tmux permission TTL (90s vs relay default 600s)
+  );
 
   // Re-create perm handler with shim relay that routes to tmuxRelay for tmux sessions (hasSession also or'd)
   // Original ptyPermissionHttpHandler creation moved down to here (was early) to access tmux*.
@@ -812,6 +845,12 @@ export function createWsPlugin(
                 (msg: Record<string, unknown>) => sendBuffered(ws, claudeUuid, msg),
                 ws,
               );
+              // Resume any tmux permission requests paused on the prior disconnect:
+              // re-fires permission_request to the freshly-rebound sink (frozen-countdown).
+              if (persistentState.pausedTmuxPermissions.length > 0) {
+                tmuxPermissionRelay.resumePending(persistentState.pausedTmuxPermissions);
+                persistentState.pausedTmuxPermissions = [];
+              }
               await tmuxSendRouting.send({ claudeUuid, content });
               break;
             }
@@ -870,6 +909,7 @@ export function createWsPlugin(
           persistentState.pausedPermissions = persistentState.permissionHandler.pausePending();
         }
         persistentState.pausedPtyPermissions = ptyRelay.pausePending();
+        persistentState.pausedTmuxPermissions = tmuxPermissionRelay.pausePending();
 
         // Cancel all in-flight PTY sessions to avoid leaking PTY handles
         const ptySessionIds = (ws.data as WsData).ptySessionIds;

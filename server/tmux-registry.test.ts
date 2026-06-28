@@ -224,6 +224,75 @@ describe("HasSession", () => {
   });
 });
 
+// ── TeardownAll + listSessions contract (EX-B1, EX-B3) ───────────────────────
+
+/**
+ * Spy runner: never touches real tmux. Returns canned success + a fake pane_pid
+ * so createSession populates the sessions map without spawning anything.
+ */
+function makeSpyRunner() {
+  const calls: Array<{ cmd: string; args: string[] }> = [];
+  const runCommand = async (cmd: string, args: string[]) => {
+    calls.push({ cmd, args });
+    if (cmd === "tmux" && args[0] === "list-panes") {
+      return { code: 0, stdout: "4242\n", stderr: "" };
+    }
+    return { code: 0, stdout: "", stderr: "" };
+  };
+  return { calls, runCommand };
+}
+
+describe("TeardownAll (EX-B1)", () => {
+  it("creates two sessions then teardownAll kills each, empties listSessions, unlinks settings", async () => {
+    const spy = makeSpyRunner();
+    const reg = createTmuxRegistry({
+      runCommand: spy.runCommand,
+      claudeBin: "sleep",
+      responseUrl: "http://127.0.0.1:3001/cc/api/pty-response",
+    });
+
+    const a = await reg.createSession({ claudeUuid: "uuid-a", cwd: tmpdir() });
+    const b = await reg.createSession({ claudeUuid: "uuid-b", cwd: tmpdir() });
+    trackSettings(a.settingsPath);
+    trackSettings(b.settingsPath);
+
+    expect(reg.listSessions().sort()).toEqual(["uuid-a", "uuid-b"]);
+    expect(existsSync(a.settingsPath)).toBe(true);
+    expect(existsSync(b.settingsPath)).toBe(true);
+
+    await reg.teardownAll();
+
+    // each got a kill-session for its ccm-<uuid>
+    const kills = spy.calls
+      .filter((c) => c.cmd === "tmux" && c.args[0] === "kill-session")
+      .map((c) => c.args[c.args.indexOf("-t") + 1]);
+    expect(kills).toContain("ccm-uuid-a");
+    expect(kills).toContain("ccm-uuid-b");
+
+    // listSessions now empty, settings unlinked
+    expect(reg.listSessions()).toEqual([]);
+    expect(existsSync(a.settingsPath)).toBe(false);
+    expect(existsSync(b.settingsPath)).toBe(false);
+  });
+});
+
+describe("NoPollingTimer (EX-B3)", () => {
+  it("constructing a registry registers no active timers (no setInterval polling scan)", () => {
+    const before = process.getActiveResourcesInfo
+      ? process.getActiveResourcesInfo().filter((r) => r === "Timeout").length
+      : 0;
+    const reg = createTmuxRegistry({ responseUrl: "http://x" });
+    const after = process.getActiveResourcesInfo
+      ? process.getActiveResourcesInfo().filter((r) => r === "Timeout").length
+      : 0;
+    expect(after).toBe(before);
+    // structural: registry source contains no setInterval polling scan
+    const src = readFileSync(join(import.meta.dir, "tmux-registry.ts"), "utf8");
+    expect(src.includes("setInterval")).toBe(false);
+    expect(reg.listSessions()).toEqual([]);
+  });
+});
+
 // ── Teardown contract ────────────────────────────────────────────────────────
 
 describe("Teardown", () => {
