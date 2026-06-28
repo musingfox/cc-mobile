@@ -87,8 +87,15 @@ describe("EX-A0: missing sink never auto-allows", () => {
 
     let resolved: { allow: boolean } | null = null;
     relay
-      .requestPtyPermission({ sessionId: "uuidX", toolUseId: "t1", toolName: "Bash", toolInput: {} })
-      .then((r) => { resolved = r; });
+      .requestPtyPermission({
+        sessionId: "uuidX",
+        toolUseId: "t1",
+        toolName: "Bash",
+        toolInput: {},
+      })
+      .then((r) => {
+        resolved = r;
+      });
 
     // sendToClient was attempted, but no sink existed -> nothing delivered, no allow
     expect(sendCalls).toBe(1);
@@ -113,14 +120,22 @@ describe("EX-A1: pausePending snapshots in-flight request", () => {
     const clock = makeFakeClock();
     const rec = makeRecorder();
     const relay = createPtyPermissionRelay(
-      (sessionId, requestId, tool) => rec.sink({ type: "permission_request", sessionId, requestId, tool }),
+      (sessionId, requestId, tool) =>
+        rec.sink({ type: "permission_request", sessionId, requestId, tool }),
       { timeoutMs: 90000, setTimeoutFn: clock.setTimeoutFn, clearTimeoutFn: clock.clearTimeoutFn },
     );
 
     let resolved: unknown = null;
     relay
-      .requestPtyPermission({ sessionId: "uuidA", toolUseId: "tA", toolName: "Bash", toolInput: { cmd: "ls" } })
-      .then((r) => { resolved = r; });
+      .requestPtyPermission({
+        sessionId: "uuidA",
+        toolUseId: "tA",
+        toolName: "Bash",
+        toolInput: { cmd: "ls" },
+      })
+      .then((r) => {
+        resolved = r;
+      });
 
     expect(relay.getPendingCount()).toBeGreaterThanOrEqual(1);
 
@@ -152,7 +167,9 @@ describe("EX-A2 relay: 90000ms timeout boundary", () => {
     let resolved: { allow: boolean } | null = null;
     relay
       .requestPtyPermission({ sessionId: "s", toolUseId: "t", toolName: "Bash", toolInput: {} })
-      .then((r) => { resolved = r; });
+      .then((r) => {
+        resolved = r;
+      });
 
     clock.advance(89999);
     await Promise.resolve();
@@ -225,8 +242,15 @@ describe("EX-C2: frozen countdown re-fires to rebound sink", () => {
     routing.registerClient("uuidD", rec1.sink, ws1);
     let resolved: { allow: boolean } | null = null;
     relay
-      .requestPtyPermission({ sessionId: "uuidD", toolUseId: "tD", toolName: "Bash", toolInput: {} })
-      .then((r) => { resolved = r; });
+      .requestPtyPermission({
+        sessionId: "uuidD",
+        toolUseId: "tD",
+        toolName: "Bash",
+        toolInput: {},
+      })
+      .then((r) => {
+        resolved = r;
+      });
     expect(rec1.msgs.filter((m) => m.type === "permission_request").length).toBe(1);
 
     // disconnect: pause snapshot (timer frozen)
@@ -265,8 +289,15 @@ describe("EX-C2: frozen countdown re-fires to rebound sink", () => {
 
     let resolved: { allow: boolean } | null = null;
     relay
-      .requestPtyPermission({ sessionId: "uuidE", toolUseId: "tE", toolName: "Bash", toolInput: {} })
-      .then((r) => { resolved = r; });
+      .requestPtyPermission({
+        sessionId: "uuidE",
+        toolUseId: "tE",
+        toolName: "Bash",
+        toolInput: {},
+      })
+      .then((r) => {
+        resolved = r;
+      });
 
     // craft an expired snapshot (elapsed >= timeout)
     const snaps = relay.pausePending();

@@ -27,7 +27,11 @@ export interface BuildClaudeSettingsInput {
 
 export interface TmuxRegistryOptions {
   /** Injectable runner for tmux/claude invocations (default: Bun.spawn based). */
-  runCommand?: (cmd: string, args: string[], opts?: { cwd?: string; env?: NodeJS.ProcessEnv }) => Promise<RunResult>;
+  runCommand?: (
+    cmd: string,
+    args: string[],
+    opts?: { cwd?: string; env?: NodeJS.ProcessEnv },
+  ) => Promise<RunResult>;
   /** Path to claude binary (default: Bun.which('claude') || 'claude'). For tests: 'sleep'. */
   claudeBin?: string;
   /** Full URL for Stop hook POST target (e.g. http://127.0.0.1:3001/cc/api/pty-response). */
@@ -187,7 +191,9 @@ export function createTmuxRegistry(options: TmuxRegistryOptions = {}) {
     const newRes = await run("tmux", tmuxNewArgs, { cwd });
     if (newRes.code !== 0) {
       // cleanup settings on failure
-      try { await unlink(settingsPath); } catch {}
+      try {
+        await unlink(settingsPath);
+      } catch {}
       throw new Error(`tmux new-session failed: ${newRes.stderr || newRes.stdout}`);
     }
 
@@ -195,14 +201,22 @@ export function createTmuxRegistry(options: TmuxRegistryOptions = {}) {
     const listRes = await run("tmux", ["list-panes", "-t", tmuxName, "-F", "#{pane_pid}"], { cwd });
     if (listRes.code !== 0) {
       // best effort kill
-      try { await run("tmux", ["kill-session", "-t", tmuxName]); } catch {}
-      try { await unlink(settingsPath); } catch {}
+      try {
+        await run("tmux", ["kill-session", "-t", tmuxName]);
+      } catch {}
+      try {
+        await unlink(settingsPath);
+      } catch {}
       throw new Error(`tmux list-panes failed: ${listRes.stderr || listRes.stdout}`);
     }
     const panePid = parseInt(listRes.stdout.trim(), 10);
     if (!panePid || Number.isNaN(panePid)) {
-      try { await run("tmux", ["kill-session", "-t", tmuxName]); } catch {}
-      try { await unlink(settingsPath); } catch {}
+      try {
+        await run("tmux", ["kill-session", "-t", tmuxName]);
+      } catch {}
+      try {
+        await unlink(settingsPath);
+      } catch {}
       throw new Error(`failed to parse pane_pid from tmux: ${listRes.stdout}`);
     }
 

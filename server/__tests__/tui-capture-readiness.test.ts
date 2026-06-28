@@ -7,7 +7,7 @@ const fixture = (name: string) =>
   readFileSync(join(import.meta.dir, "fixtures/tui-capture", name), "utf8");
 
 describe("PerFrameReady", () => {
-  test("T1: given empty string \"\" -> expect false", () => {
+  test('T1: given empty string "" -> expect false', () => {
     expect(perFrameReady("")).toBe(false);
   });
 
@@ -39,7 +39,7 @@ describe("SettleDecision", () => {
     expect(settleDecision(frames, 3)).toEqual({ ready: true, readyAtIndex: 5 });
   });
 
-  test("T2: given [\"\",\"\",\"\"] -> expect {ready:false, readyAtIndex:null}", () => {
+  test('T2: given ["","",""] -> expect {ready:false, readyAtIndex:null}', () => {
     expect(settleDecision(["", "", ""], 3)).toEqual({ ready: false, readyAtIndex: null });
   });
 
@@ -69,7 +69,12 @@ describe("SettleLoop", () => {
     let i = 0;
     const seq = [b0, b1, settled, settled, settled];
     const fake = async () => seq[i++] ?? settled;
-    const res = await settleLoop({ capture: fake, stableCount: 3, pollIntervalMs: 1, timeoutMs: 100 });
+    const res = await settleLoop({
+      capture: fake,
+      stableCount: 3,
+      pollIntervalMs: 1,
+      timeoutMs: 100,
+    });
     expect(res).toEqual({ ready: true, reason: "stable" });
   });
 

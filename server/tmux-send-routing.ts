@@ -3,7 +3,7 @@ import { createPtyResponseRelay } from "./pty-response-relay";
 export type RunCommand = (
   cmd: string,
   args: string[],
-  opts?: { cwd?: string; env?: NodeJS.ProcessEnv }
+  opts?: { cwd?: string; env?: NodeJS.ProcessEnv },
 ) => Promise<RunResult>;
 
 export interface RunResult {

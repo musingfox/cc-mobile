@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-set -euo pipefail
+# NOTE: no `-e`. Gating is driven by the ERRORS counter + final exit, not by
+# set -e. With -e, any warn-check that sets found=1 (lockfile/whitespace/EOL…)
+# returns non-zero via the trailing `[ $found -eq 0 ] && pass` and aborts the
+# whole hook — making non-blocking warnings wrongly block commits.
+set -uo pipefail
 
 # ========================================
 # Hook Guard Pre-commit
@@ -9,7 +13,9 @@ set -euo pipefail
 # --- CLAUDECODE Skip Logic ---
 SKIP_LINT="${CLAUDECODE:+1}"
 SKIP_FORMAT="${CLAUDECODE:+1}"
-SKIP_TEST="${CLAUDECODE:+1}"
+# Test gate runs for every agent/client (incl. Claude Code). The Claude-side
+# PreToolUse bun-test gate was removed; this hook is now the single test gate.
+SKIP_TEST=""
 
 # --- Configuration ---
 FILE_SIZE_LIMIT=512000  # bytes (500KB)

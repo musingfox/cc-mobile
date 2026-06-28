@@ -1,6 +1,6 @@
-import { describe, expect, it, beforeEach } from "bun:test";
-import { createTmuxSendRouting, flattenPrompt, type RunCommand } from "./tmux-send-routing";
+import { beforeEach, describe, expect, it } from "bun:test";
 import { createPtyResponseRelay } from "./pty-response-relay";
+import { createTmuxSendRouting, flattenPrompt, type RunCommand } from "./tmux-send-routing";
 
 // ── C2-Concat ──────────────────────────────────────────────────────────────────
 
@@ -63,7 +63,9 @@ function makeMockRelay() {
       const entry = pending.get(sessionId);
       if (entry) {
         pending.delete(sessionId);
-        try { entry.reject(new Error("cancelled")); } catch {}
+        try {
+          entry.reject(new Error("cancelled"));
+        } catch {}
       }
     },
     getPendingCount: () => pending.size,
@@ -74,7 +76,9 @@ function makeMockRelay() {
 type SinkCall = Record<string, unknown>;
 function makeSinkRecorder() {
   const calls: SinkCall[] = [];
-  const sink = (msg: SinkCall) => { calls.push(msg); };
+  const sink = (msg: SinkCall) => {
+    calls.push(msg);
+  };
   return { sink, calls };
 }
 
@@ -306,5 +310,3 @@ describe("C2-CloseCleanup", () => {
     expect(() => routing.cleanupByOwner({ id: "nobody" })).not.toThrow();
   });
 });
-
-
