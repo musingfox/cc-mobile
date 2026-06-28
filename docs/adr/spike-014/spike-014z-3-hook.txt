@@ -1,0 +1,168 @@
+=== Spike 014z-3: Stop hook fires inside zellij-owned session ===
+Date: 2026-06-17
+zellij: /opt/homebrew/bin/zellij 0.44.3
+claude: ~/.local/bin/claude 2.1.179
+
+=== Spike 014z-3: Stop hook fires inside zellij-owned session ===
+zellij : /opt/homebrew/bin/zellij (zellij 0.44.3)
+claude : /Users/nickhuang/.local/bin/claude (2.1.179 (Claude Code))
+session: spike014z3-45588
+work   : /tmp/spike-014z-3-45588
+
+[1] Hook script   : /tmp/spike-014z-3-45588/stop-hook.sh
+[1] Marker file   : /tmp/spike-014z-3-45588/hook_fired.txt
+[1] Settings file : /tmp/spike-014z-3-45588/settings.json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "SPIKE_MARKER_FILE='/tmp/spike-014z-3-45588/hook_fired.txt' bash '/tmp/spike-014z-3-45588/stop-hook.sh'"
+          }
+        ]
+      }
+    ]
+  }
+}
+
+[2] Creating background zellij session 'spike014z3-45588'...
+    Panes: PANE_ID  TYPE  TITLE
+plugin_0  plugin  (.) - zellij:link
+plugin_3  plugin  About Zellij
+terminal_0  terminal  Pane #1
+    Terminal pane: terminal_0
+
+[3] Launching claude --settings '/tmp/spike-014z-3-45588/settings.json' via write-chars...
+    Sent: '/Users/nickhuang/.local/bin/claude --settings /tmp/spike-014z-3-45588/settings.json' + Enter
+
+[4] Polling for TUI readiness (max 30s)...
+    TUI ready after 2 polls (1000ms)
+
+[5] Screen before injection:
+--- BEGIN PRE-INJECT DUMP ---
+
+           Claude Code v2.1.179
+ ▐▛███▜▌   Opus 4.8 (1M context) with mediu…
+▝▜█████▛▘  Claude Max
+  ▘▘ ▝▝    ~/workspace/cc-mobile
+
+  2 setup issues: MCP · /doctor
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                             ◐ medium · /effort
+────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────
+
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← for…
+--- END PRE-INJECT DUMP ---
+
+[6] Injecting 'say hi' prompt...
+    Sent: 'Reply with just the word HOOKZTEST' + Enter
+
+[7] Waiting for Stop hook to fire (max 90s)...
+
+[8] Marker file contents (/tmp/spike-014z-3-45588/hook_fired.txt):
+--- BEGIN HOOK OUTPUT ---
+HOOK_FIRED
+timestamp: 2026-06-17T13:10:04Z
+--- payload ---
+{"session_id":"8efa6ca0-b597-4a43-be9e-24aab422a571","transcript_path":"/Users/nickhuang/.claude/projects/-Users-nickhuang-workspace-cc-mobile/8efa6ca0-b597-4a43-be9e-24aab422a571.jsonl","cwd":"/Users/nickhuang/workspace/cc-mobile","permission_mode":"auto","effort":{"level":"medium"},"hook_event_name":"Stop","stop_hook_active":false,"last_assistant_message":"HOOKZTEST","background_tasks":[],"session_crons":[]}
+--- END HOOK OUTPUT ---
+
+[9] dump-screen at hook evaluation time:
+--- BEGIN SCREEN DUMP ---
+
+           Claude Code v2.1.179
+ ▐▛███▜▌   Opus 4.8 (1M context) with mediu…
+▝▜█████▛▘  Claude Max
+  ▘▘ ▝▝    ~/workspace/cc-mobile
+
+  3 setup issues: MCP · /doctor
+
+❯ Reply with just the word HOOKZTEST
+
+⏺ HOOKZTEST
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+✢ Propagating… (running stop hooks… 2/3 · 4s ·
+↓ 3 tokens)
+                             ◐ medium · /effort
+────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────
+  cc-mobile | Opus 4.8 (1M context) | ░░░░░░░░…
+  ⏵⏵ auto mode on (shift+tab to cycle)
+--- END SCREEN DUMP ---
+
+=== FINDINGS ===
+RESULT: PASS
+- Stop hook fired while claude ran inside a zellij-owned session
+- Hook marker appeared after 9 × 500ms = 4500ms
+- claude launched via write-chars + --settings pointing to temp file
+- Hook payload contains: session_id, transcript_path, last_assistant_message
+- last_assistant_message = reply text cc-mobile needs (same as ADR-011 PTY channel)
+- ZELLIJ mechanism: attach -b + ZELLIJ_SESSION_NAME env var + write-chars + dump-screen
+- Awkward vs tmux: no --session flag, must use env var; pane-id discovery step needed
+- Hook behavior: identical to tmux arm — Stop hook is multiplexer-agnostic
+
+=== spike-014z-3 complete ===
