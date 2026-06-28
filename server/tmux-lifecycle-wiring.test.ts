@@ -53,7 +53,12 @@ function makeSpyRegistry() {
     },
     _sessions: new Map(),
   });
-  return { factory: factory as any, get calls() { return teardownAllCalls; } };
+  return {
+    factory: factory as any,
+    get calls() {
+      return teardownAllCalls;
+    },
+  };
 }
 
 // Capture the timeoutMs the production wiring passes into the tmux permission relay.
@@ -70,7 +75,12 @@ function makeRelayCapture() {
       resumePending: () => {},
     };
   };
-  return { factory: factory as any, get timeoutMs() { return captured; } };
+  return {
+    factory: factory as any,
+    get timeoutMs() {
+      return captured;
+    },
+  };
 }
 
 // Snapshot existing listeners so we leave the process as we found it.
@@ -110,12 +120,8 @@ describe("EX-B2: shutdown signal handlers call teardownAll, idempotently", () =>
     expect(sigintAfter1).toBe(sigintBase + 1);
 
     // Invoke the freshly-registered handlers (do NOT actually raise a signal).
-    const newSigterm = process
-      .listeners("SIGTERM")
-      .filter((l) => !beforeSigterm.includes(l));
-    const newSigint = process
-      .listeners("SIGINT")
-      .filter((l) => !beforeSigint.includes(l));
+    const newSigterm = process.listeners("SIGTERM").filter((l) => !beforeSigterm.includes(l));
+    const newSigint = process.listeners("SIGINT").filter((l) => !beforeSigint.includes(l));
     for (const l of newSigterm) (l as any)();
     for (const l of newSigint) (l as any)();
     expect(spy.calls).toBeGreaterThanOrEqual(2);

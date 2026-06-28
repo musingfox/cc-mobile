@@ -37,8 +37,12 @@ describe("C2-PermRoute", () => {
     const bRecorder = makeSinkRecorder();
 
     // For test we simulate the map by separate relays, but mimic the ws shim dispatch
-    const relayA = createPtyPermissionRelay((sid, rid, tool) => aRecorder.sink(sid, rid, tool), { timeoutMs: 10 });
-    const relayB = createPtyPermissionRelay((sid, rid, tool) => bRecorder.sink(sid, rid, tool), { timeoutMs: 10 });
+    const relayA = createPtyPermissionRelay((sid, rid, tool) => aRecorder.sink(sid, rid, tool), {
+      timeoutMs: 10,
+    });
+    const relayB = createPtyPermissionRelay((sid, rid, tool) => bRecorder.sink(sid, rid, tool), {
+      timeoutMs: 10,
+    });
 
     // Shim like in ws: choose relay by 'has'
     const hasA = makeMockHasSession({ uuidA: true });
@@ -59,7 +63,7 @@ describe("C2-PermRoute", () => {
         tool_use_id: "t1",
         tool_name: "Bash",
         tool_input: {},
-      })
+      }),
     );
 
     expect(res.status).not.toBe(404);
@@ -92,7 +96,9 @@ describe("C2-PermTeardown", () => {
 
   it("T2: given POST /api/pty-permission {session_id:'u1', tool_use_id:'t1', tool_name:'Bash', tool_input:{}} after teardown -> expect 404 {error:'session_not_found'}; no sink invocation", async () => {
     const recorder = makeSinkRecorder();
-    const relay = createPtyPermissionRelay((sid, rid, tool) => recorder.sink(sid, rid, tool), { timeoutMs: 10 });
+    const relay = createPtyPermissionRelay((sid, rid, tool) => recorder.sink(sid, rid, tool), {
+      timeoutMs: 10,
+    });
     const hasSession = makeMockHasSession({ u1: false }); // after teardown
 
     const handler = createPtyPermissionHandler({
@@ -106,7 +112,7 @@ describe("C2-PermTeardown", () => {
         tool_use_id: "t1",
         tool_name: "Bash",
         tool_input: {},
-      })
+      }),
     );
 
     expect(res.status).toBe(404);

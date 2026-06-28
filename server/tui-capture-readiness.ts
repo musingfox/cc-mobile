@@ -24,7 +24,7 @@ export function perFrameReady(frame: string): boolean {
 
 export function settleDecision(
   frames: string[],
-  stableCount = 3
+  stableCount = 3,
 ): { ready: boolean; readyAtIndex: number | null } {
   if (!Array.isArray(frames) || frames.length === 0 || stableCount < 1) {
     return { ready: false, readyAtIndex: null };

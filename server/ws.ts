@@ -17,11 +17,11 @@ import { createPtyPermissionHandler } from "./pty-permission-endpoint";
 import { createPtyPermissionRelay, type PtyRelaySnapshot } from "./pty-permission-relay";
 import { createPtyResponseHandler } from "./pty-response-endpoint";
 import { createPtyResponseRelay } from "./pty-response-relay";
-import { createTmuxRegistry } from "./tmux-registry";
-import { createTmuxSendRouting } from "./tmux-send-routing";
 import { loadSessionHistory } from "./session-history";
 import { getClaudeSessionInfo, listClaudeSessions, renameClaudeSession } from "./session-listing";
 import type { InitData, SessionManager } from "./session-manager";
+import { createTmuxRegistry } from "./tmux-registry";
+import { createTmuxSendRouting } from "./tmux-send-routing";
 
 // Idempotency guard (DP-1): ensure tmux teardown signal handlers are registered
 // at most once per process, even if createWsPlugin is invoked multiple times.
@@ -366,7 +366,11 @@ export function createWsPlugin(
               const claudeUuid = String(raw.claudeUuid ?? "");
               const rawCwd = String(raw.cwd ?? "");
               if (!claudeUuid || !rawCwd) {
-                ws.send({ type: "error", code: "invalid_tmux_create", message: "claudeUuid and cwd required" });
+                ws.send({
+                  type: "error",
+                  code: "invalid_tmux_create",
+                  message: "claudeUuid and cwd required",
+                });
                 return;
               }
               const cwd = expandPath(rawCwd);

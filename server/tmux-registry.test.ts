@@ -13,7 +13,7 @@ import { afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { existsSync, readFileSync, rmSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createTmuxRegistry, buildClaudeSettings } from "./tmux-registry";
+import { buildClaudeSettings, createTmuxRegistry } from "./tmux-registry";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -28,9 +28,7 @@ function makeDummySleepRunner() {
       // Rewrite the tail (the "claude ..." part) to "sleep 300"
       // Expected shape from impl: [... , '--', 'claude-or-sleep', ...claudeFlags]
       const dashIdx = args.indexOf("--");
-      const fixedArgs = dashIdx >= 0
-        ? [...args.slice(0, dashIdx + 1), "sleep", "300"]
-        : args; // fallback
+      const fixedArgs = dashIdx >= 0 ? [...args.slice(0, dashIdx + 1), "sleep", "300"] : args; // fallback
       const proc = Bun.spawn(["tmux", ...fixedArgs], {
         cwd: opts.cwd,
         env: opts.env ?? process.env,
@@ -71,7 +69,9 @@ const toKillTmux: string[] = [];
 afterEach(() => {
   // cleanup temp settings files created by registry
   for (const p of toClean.splice(0)) {
-    try { unlinkSync(p); } catch {}
+    try {
+      unlinkSync(p);
+    } catch {}
   }
   // best-effort kill any tmux sessions left by tests (idempotent)
   for (const name of toKillTmux.splice(0)) {
@@ -81,8 +81,12 @@ afterEach(() => {
   }
 });
 
-function trackSettings(p: string) { toClean.push(p); }
-function trackTmux(name: string) { toKillTmux.push(name); }
+function trackSettings(p: string) {
+  toClean.push(p);
+}
+function trackTmux(name: string) {
+  toKillTmux.push(name);
+}
 
 // ── SettingsInjection contract ───────────────────────────────────────────────
 
@@ -94,7 +98,9 @@ describe("SettingsInjection (pure)", () => {
     });
     expect(settings.hooks.Stop[0].matcher).toBe("");
     const cmd = settings.hooks.Stop[0].hooks[0].command;
-    expect(cmd).toBe("CC_MOBILE_RESPONSE_URL='http://127.0.0.1:3001/cc/api/pty-response' bun '/r/server/pty-stop-hook.ts'");
+    expect(cmd).toBe(
+      "CC_MOBILE_RESPONSE_URL='http://127.0.0.1:3001/cc/api/pty-response' bun '/r/server/pty-stop-hook.ts'",
+    );
   });
 
   it("T2: wires PreToolUse[0] with Bash matcher and CC_MOBILE_PERMISSION_URL + bun + quoted path", () => {
@@ -107,7 +113,9 @@ describe("SettingsInjection (pure)", () => {
     const pre = settings.hooks.PreToolUse!;
     expect(pre[0].matcher).toBe("Bash");
     const cmd = pre[0].hooks[0].command;
-    expect(cmd).toBe("CC_MOBILE_PERMISSION_URL='http://127.0.0.1:3001/cc/api/pty-permission' bun '/r/server/pty-permission-hook.ts'");
+    expect(cmd).toBe(
+      "CC_MOBILE_PERMISSION_URL='http://127.0.0.1:3001/cc/api/pty-permission' bun '/r/server/pty-permission-hook.ts'",
+    );
   });
 
   it("T3: throws when responseUrl is empty", () => {
@@ -167,9 +175,9 @@ describe("CreateSession", () => {
     // actually track after first
     // recreate to get path for cleanup not critical
 
-    await expect(
-      reg.createSession({ claudeUuid: "dup-uuid", cwd: "/tmp" }),
-    ).rejects.toThrow(/already registered/);
+    await expect(reg.createSession({ claudeUuid: "dup-uuid", cwd: "/tmp" })).rejects.toThrow(
+      /already registered/,
+    );
   });
 
   it.skipIf(!hasTmux)("T3: when tmux absent the case is skipped (not failed)", () => {
