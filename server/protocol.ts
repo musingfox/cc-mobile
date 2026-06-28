@@ -128,6 +128,12 @@ const PtySendMessage = z.object({
   prompt: z.string(),
 });
 
+const TmuxSendMessage = z.object({
+  type: z.literal("tmux_send"),
+  claudeUuid: z.string(),
+  content: z.string(),
+});
+
 export const ClientMessage = z.discriminatedUnion("type", [
   NewSessionMessage,
   SendMessage,
@@ -147,6 +153,7 @@ export const ClientMessage = z.discriminatedUnion("type", [
   SetSessionTitleMessage,
   AppendUserMessageSchema,
   PtySendMessage,
+  TmuxSendMessage,
 ]);
 
 export type ClientMessage = z.infer<typeof ClientMessage>;

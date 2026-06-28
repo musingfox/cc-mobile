@@ -18,6 +18,7 @@ import { createPtyPermissionRelay, type PtyRelaySnapshot } from "./pty-permissio
 import { createPtyResponseHandler } from "./pty-response-endpoint";
 import { createPtyResponseRelay } from "./pty-response-relay";
 import { createTmuxRegistry } from "./tmux-registry";
+import { createTmuxSendRouting } from "./tmux-send-routing";
 import { loadSessionHistory } from "./session-history";
 import { getClaudeSessionInfo, listClaudeSessions, renameClaudeSession } from "./session-listing";
 import type { InitData, SessionManager } from "./session-manager";
@@ -212,12 +213,6 @@ export function createWsPlugin(
     ws.send({ type: "event", eventId, sessionId, payload: message });
   }
 
-  // PTY permission HTTP handler — uses ptyRelay + session existence check
-  const ptyPermissionHttpHandler = createPtyPermissionHandler({
-    relay: ptyRelay,
-    hasSession: (sessionId) => ptyOrchestrator.hasSession(sessionId),
-  });
-
   // PTY response relay + HTTP handler — Stop hook delivers the assistant reply here,
   // resolving the in-flight drive() (ADR-011 readback for claude v2.1.177).
   const ptyResponseRelay = createPtyResponseRelay();
@@ -232,6 +227,43 @@ export function createWsPlugin(
   const tmuxRegistry = createTmuxRegistry({
     responseUrl: tmuxResponseUrl,
     permissionUrl: tmuxPermissionUrl,
+  });
+
+  // Independent tmux send routing (sink map) + response uses the shared ptyResponseRelay (arm/resolve)
+  // per DP-2; pty path untouched.
+  const tmuxSendRouting = createTmuxSendRouting({
+    responseRelay: ptyResponseRelay,
+  });
+
+  // Independent tmux permission relay instance; sendToClient uses the claudeUuid->sink map
+  // so permission_request only reaches originating client (E5: ptyRelay/wsRef left as-is).
+  const tmuxPermissionRelay = createPtyPermissionRelay((sessionId, requestId, tool) => {
+    const sink = tmuxSendRouting.getClient(sessionId);
+    if (sink) {
+      // sink is the sendBuffered wrapper, which already does eventBuffer.append + ws.send.
+      // Appending here too would double-append (replay would re-send the prompt).
+      sink({
+        type: "permission_request",
+        sessionId,
+        requestId,
+        tool,
+      });
+    }
+  });
+
+  // Re-create perm handler with shim relay that routes to tmuxRelay for tmux sessions (hasSession also or'd)
+  // Original ptyPermissionHttpHandler creation moved down to here (was early) to access tmux*.
+  const ptyPermissionHttpHandler = createPtyPermissionHandler({
+    relay: {
+      requestPtyPermission: (params: any) => {
+        if (tmuxRegistry.hasSession(params.sessionId).present) {
+          return tmuxPermissionRelay.requestPtyPermission(params);
+        }
+        return ptyRelay.requestPtyPermission(params);
+      },
+    } as any,
+    hasSession: (sessionId: string) =>
+      ptyOrchestrator.hasSession(sessionId) || tmuxRegistry.hasSession(sessionId).present,
   });
 
   return new Elysia()
@@ -328,6 +360,7 @@ export function createWsPlugin(
             } else if (raw.type === "tmux_teardown") {
               const claudeUuid = String(raw.claudeUuid ?? "");
               const result = await tmuxRegistry.teardown(claudeUuid);
+              tmuxSendRouting.teardown(claudeUuid);
               ws.send({
                 type: "tmux_teardown_result",
                 claudeUuid,
@@ -768,6 +801,21 @@ export function createWsPlugin(
               break;
             }
 
+            case "tmux_send": {
+              // TMUX happy-path (C-hybrid): use send-keys to inject prompt into owned tmux+claude session.
+              // Arms one-per-turn waiter via shared response relay; delivers via independent sink map.
+              // Does not touch PtyOrchestrator or SessionManager.
+              const { claudeUuid, content } = message;
+              // Register (or rebind) this ws as the owner for replies/perms for this claudeUuid
+              tmuxSendRouting.registerClient(
+                claudeUuid,
+                (msg: Record<string, unknown>) => sendBuffered(ws, claudeUuid, msg),
+                ws,
+              );
+              await tmuxSendRouting.send({ claudeUuid, content });
+              break;
+            }
+
             case "pty_send": {
               // PTY happy-path: drive prompt via PTY, forward stream_chunk + stream_end to client.
               // Existing query() path is not touched. No permission handling (happy-path only).
@@ -826,6 +874,10 @@ export function createWsPlugin(
         // Cancel all in-flight PTY sessions to avoid leaking PTY handles
         const ptySessionIds = (ws.data as WsData).ptySessionIds;
         ptyOrchestrator.cancelAll([...(ptySessionIds ?? [])]);
+
+        // Remove this connection's tmux uuid->sink bindings (baton map §cleanup).
+        // Dead-binding leak prevention only; no rebind/replay to a new connection.
+        tmuxSendRouting.cleanupByOwner(ws);
 
         wsRef = null;
         console.log("[ws] client disconnected");

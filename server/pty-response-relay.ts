@@ -100,11 +100,27 @@ export function createPtyResponseRelay(options: PtyResponseRelayOptions = {}) {
     return pending.size;
   }
 
+  /**
+   * Cancel a pending response waiter for the session.
+   * First calls the injected clearTimeout, then rejects the pending promise with Error("cancelled"),
+   * then removes the entry. No-op (no throw) if no such waiter.
+   */
+  function cancel(sessionId: string): void {
+    const entry = pending.get(sessionId);
+    if (!entry) {
+      return;
+    }
+    clearTimeoutFn(entry.timerId);
+    entry.reject(new Error("cancelled"));
+    pending.delete(sessionId);
+  }
+
   return {
     awaitResponse,
     resolveResponse,
     hasPending,
     getPendingCount,
+    cancel,
   };
 }
 
