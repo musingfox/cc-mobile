@@ -17,6 +17,7 @@ import { createPtyPermissionHandler } from "./pty-permission-endpoint";
 import { createPtyPermissionRelay, type PtyRelaySnapshot } from "./pty-permission-relay";
 import { createPtyResponseHandler } from "./pty-response-endpoint";
 import { createPtyResponseRelay } from "./pty-response-relay";
+import { createTmuxRegistry } from "./tmux-registry";
 import { loadSessionHistory } from "./session-history";
 import { getClaudeSessionInfo, listClaudeSessions, renameClaudeSession } from "./session-listing";
 import type { InitData, SessionManager } from "./session-manager";
@@ -222,6 +223,17 @@ export function createWsPlugin(
   const ptyResponseRelay = createPtyResponseRelay();
   const ptyResponseHttpHandler = createPtyResponseHandler({ relay: ptyResponseRelay });
 
+  // C-hybrid TmuxRegistry (minimal WS seam only; reuses pty-response-relay/endpoint verbatim via URLs).
+  // Created here so hooks always target the live server port+basePath. No changes to SessionManager/PtyOrchestrator.
+  const tmuxResponseApiPath = buildUrl(serverConfig.basePath, "/api/pty-response");
+  const tmuxResponseUrl = `http://127.0.0.1:${serverConfig.port}${tmuxResponseApiPath}`;
+  const tmuxPermApiPath = buildUrl(serverConfig.basePath, "/api/pty-permission");
+  const tmuxPermissionUrl = `http://127.0.0.1:${serverConfig.port}${tmuxPermApiPath}`;
+  const tmuxRegistry = createTmuxRegistry({
+    responseUrl: tmuxResponseUrl,
+    permissionUrl: tmuxPermissionUrl,
+  });
+
   return new Elysia()
     .post(ptyPermApiPath, ({ request }) => ptyPermissionHttpHandler(request))
     .post(ptyResponseApiPath, ({ request }) => ptyResponseHttpHandler(request))
@@ -279,6 +291,59 @@ export function createWsPlugin(
 
       async message(ws, data) {
         console.log("[ws] received:", (data as Record<string, unknown>)?.type ?? "unknown");
+
+        // Minimal WS seam for tmux_create / tmux_teardown (C-hybrid).
+        // These bypass ClientMessage (protocol.ts untouched per contract). Reuse pty-response etc via urls.
+        const raw = data as Record<string, unknown>;
+        if (raw.type === "tmux_create" || raw.type === "tmux_teardown") {
+          try {
+            if (raw.type === "tmux_create") {
+              const claudeUuid = String(raw.claudeUuid ?? "");
+              const rawCwd = String(raw.cwd ?? "");
+              if (!claudeUuid || !rawCwd) {
+                ws.send({ type: "error", code: "invalid_tmux_create", message: "claudeUuid and cwd required" });
+                return;
+              }
+              const cwd = expandPath(rawCwd);
+              const cwdError = validateCwd(cwd);
+              if (cwdError) {
+                ws.send({ type: "error", code: "invalid_cwd", message: cwdError });
+                return;
+              }
+              if (!validateAllowedPath(cwd, serverConfig.allowedRoots)) {
+                ws.send({
+                  type: "error",
+                  code: "path_not_allowed",
+                  message: "Project path is not in the allowed roots",
+                });
+                return;
+              }
+              const info = await tmuxRegistry.createSession({ claudeUuid, cwd });
+              ws.send({
+                type: "tmux_created",
+                claudeUuid,
+                tmuxName: info.tmuxName,
+                panePid: info.panePid,
+              });
+            } else if (raw.type === "tmux_teardown") {
+              const claudeUuid = String(raw.claudeUuid ?? "");
+              const result = await tmuxRegistry.teardown(claudeUuid);
+              ws.send({
+                type: "tmux_teardown_result",
+                claudeUuid,
+                killed: result.killed,
+              });
+            }
+          } catch (error) {
+            ws.send({
+              type: "error",
+              code: "tmux_error",
+              message: error instanceof Error ? error.message : String(error),
+            });
+          }
+          return;
+        }
+
         const parsed = ClientMessage.safeParse(data);
         if (!parsed.success) {
           console.warn("[ws] invalid message:", parsed.error.message);
