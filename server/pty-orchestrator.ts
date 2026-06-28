@@ -11,9 +11,13 @@
  *   - cancel(sessionId): void
  */
 
+import { unlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { SpawnerFn } from "./pty-driver";
 import type { GetMessagesFn } from "./pty-reader";
 import { runPtySession } from "./pty-reader";
+import { buildClaudeSettings } from "./tmux-registry";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -26,6 +30,12 @@ export interface PtyOrchestratorOptions {
   timeout?: number;
   /** Poll interval in ms. Default: 500. */
   interval?: number;
+  /**
+   * ADR-014 per-session settings injection. When provided, each drive() writes a
+   * per-session `--settings` file wiring Stop + PreToolUse hooks to these loopback
+   * URLs, decoupling readback/permissions from global ~/.claude/settings.json.
+   */
+  settings?: { responseUrl: string; permissionUrl: string };
 }
 
 export interface DriveOptions {
@@ -61,6 +71,7 @@ export class PtyOrchestrator {
   private readonly getMessagesFn?: GetMessagesFn;
   private readonly timeout?: number;
   private readonly interval?: number;
+  private readonly settings?: { responseUrl: string; permissionUrl: string };
 
   private readonly sessions = new Map<string, SessionState>();
 
@@ -69,6 +80,7 @@ export class PtyOrchestrator {
     this.getMessagesFn = opts?.getMessagesFn;
     this.timeout = opts?.timeout;
     this.interval = opts?.interval;
+    this.settings = opts?.settings;
   }
 
   /**
@@ -109,10 +121,25 @@ export class PtyOrchestrator {
     const state: SessionState = { cancelled: false };
     this.sessions.set(sessionId, state);
 
+    // ADR-014: write a per-session --settings file so the claude process gets its
+    // Stop/PreToolUse hooks from here, not the global ~/.claude/settings.json.
+    let settingsPath: string | undefined;
+    if (this.settings) {
+      settingsPath = join(tmpdir(), `ccm-pty-settings-${sessionId}.json`);
+      const settingsObj = buildClaudeSettings({
+        responseUrl: this.settings.responseUrl,
+        stopHookPath: join(import.meta.dir, "pty-stop-hook.ts"),
+        permissionUrl: this.settings.permissionUrl,
+        permissionHookPath: join(import.meta.dir, "pty-permission-hook.ts"),
+      });
+      await writeFile(settingsPath, JSON.stringify(settingsObj, null, 2), "utf8");
+    }
+
     // Drive via runPtySession with onHandle seam
     let reply: string;
     try {
       reply = await runPtySession(sessionId, cwd, prompt, {
+        ...(settingsPath ? { settingsPath } : {}),
         ...(effectiveSpawner ? { spawner: effectiveSpawner } : {}),
         ...(effectiveGetMessagesFn ? { getMessagesFn: effectiveGetMessagesFn } : {}),
         ...(effectiveTimeout !== undefined ? { timeout: effectiveTimeout } : {}),
@@ -137,6 +164,9 @@ export class PtyOrchestrator {
       const hErr = state.handle;
       state.handle = undefined;
       hErr?.kill();
+      if (settingsPath) {
+        await unlink(settingsPath).catch(() => {});
+      }
       if (!state.cancelled) {
         send({
           type: "error",
@@ -153,6 +183,9 @@ export class PtyOrchestrator {
     const hOk = state.handle;
     state.handle = undefined;
     hOk?.kill();
+    if (settingsPath) {
+      await unlink(settingsPath).catch(() => {});
+    }
 
     // Suppress send if cancelled
     if (state.cancelled) {

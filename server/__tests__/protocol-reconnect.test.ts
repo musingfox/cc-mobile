@@ -24,6 +24,29 @@ describe("Reconnect Protocol - Client Messages", () => {
     expect(result.sessionIds).toEqual(["s1"]);
   });
 
+  it("accepts reconnect with per-session lastEventIds", () => {
+    const result = ClientMessage.parse({
+      type: "reconnect",
+      lastEventId: null,
+      lastEventIds: { s1: 3, s2: 7 },
+      sessionIds: ["s1", "s2"],
+    });
+    expect(result.type).toBe("reconnect");
+    expect((result as { lastEventIds?: Record<string, number> }).lastEventIds).toEqual({
+      s1: 3,
+      s2: 7,
+    });
+  });
+
+  it("accepts reconnect without lastEventIds (backward compat)", () => {
+    const result = ClientMessage.safeParse({
+      type: "reconnect",
+      lastEventId: 42,
+      sessionIds: ["s1"],
+    });
+    expect(result.success).toBe(true);
+  });
+
   it("rejects reconnect without sessionIds", () => {
     const result = ClientMessage.safeParse({
       type: "reconnect",

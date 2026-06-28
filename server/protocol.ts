@@ -117,7 +117,13 @@ const ListDirectoriesMessage = z.object({
 
 const ReconnectMessage = z.object({
   type: z.literal("reconnect"),
+  // Legacy single global cursor — kept for backward compatibility. eventIds are
+  // per-session (start at 1), so a single global cursor breaks replay across
+  // sessions; prefer lastEventIds below.
   lastEventId: z.number().nullable(),
+  // Per-session replay baseline: { [sessionId]: lastSeenEventId }. The server
+  // replays events with eventId > baseline for each session independently.
+  lastEventIds: z.record(z.string(), z.number()).optional(),
   sessionIds: z.array(z.string()),
 });
 

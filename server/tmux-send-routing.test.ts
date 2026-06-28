@@ -125,6 +125,45 @@ describe("C2-Inject", () => {
   });
 });
 
+// ── C2-SendFail (tmux send-keys non-zero exit must not hang the client) ──────────
+
+describe("C2-SendFail", () => {
+  it("T1: given u1 registered and tmux send-keys exits non-zero -> expect sink receives {type:'error', sessionId:'u1'}; hasPending('u1')===false (no hung waiter)", async () => {
+    const failingRun: RunCommand = async () => ({
+      code: 1,
+      stdout: "",
+      stderr: "no server running on /tmp/tmux-501/default",
+    });
+    const { relay } = makeMockRelay();
+    const { sink, calls: sinkCalls } = makeSinkRecorder();
+    const routing = createTmuxSendRouting({ runCommand: failingRun, responseRelay: relay });
+
+    routing.registerClient("u1", sink);
+    await routing.send({ claudeUuid: "u1", content: "hi" });
+
+    expect(routing.hasPending("u1")).toBe(false);
+    expect(sinkCalls.length).toBe(1);
+    const err = sinkCalls[0] as any;
+    expect(err.type).toBe("error");
+    expect(err.sessionId).toBe("u1");
+    expect(typeof err.message).toBe("string");
+    expect(err.message.length).toBeGreaterThan(0);
+  });
+
+  it("T2: given send-keys exits zero (success) -> expect NO error sink call; hasPending('u1')===true (regression: success path unchanged)", async () => {
+    const { run } = makeMockRunCommand();
+    const { relay } = makeMockRelay();
+    const { sink, calls: sinkCalls } = makeSinkRecorder();
+    const routing = createTmuxSendRouting({ runCommand: run, responseRelay: relay });
+
+    routing.registerClient("u1", sink);
+    await routing.send({ claudeUuid: "u1", content: "hi" });
+
+    expect(routing.hasPending("u1")).toBe(true);
+    expect(sinkCalls.length).toBe(0);
+  });
+});
+
 // ── C2-DeliverReply (uses pty endpoint handler + relay seam for Stop POST) ────────────
 
 import { createPtyResponseHandler } from "./pty-response-endpoint";

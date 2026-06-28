@@ -103,18 +103,17 @@ describe("SettingsInjection (pure)", () => {
     );
   });
 
-  it("T2: wires PreToolUse[0] with Bash matcher and CC_MOBILE_PERMISSION_URL + bun + quoted path", () => {
+  it("T2: does NOT wire PreToolUse even when permissionUrl + permissionHookPath given; Stop still present", () => {
     const settings = buildClaudeSettings({
       responseUrl: "http://127.0.0.1:3001/cc/api/pty-response",
       stopHookPath: "/r/server/pty-stop-hook.ts",
       permissionUrl: "http://127.0.0.1:3001/cc/api/pty-permission",
       permissionHookPath: "/r/server/pty-permission-hook.ts",
     });
-    const pre = settings.hooks.PreToolUse!;
-    expect(pre[0].matcher).toBe("Bash");
-    const cmd = pre[0].hooks[0].command;
-    expect(cmd).toBe(
-      "CC_MOBILE_PERMISSION_URL='http://127.0.0.1:3001/cc/api/pty-permission' bun '/r/server/pty-permission-hook.ts'",
+    expect(settings.hooks.PreToolUse).toBeUndefined();
+    expect(settings.hooks.Stop).toBeDefined();
+    expect(settings.hooks.Stop[0].hooks[0].command).toBe(
+      "CC_MOBILE_RESPONSE_URL='http://127.0.0.1:3001/cc/api/pty-response' bun '/r/server/pty-stop-hook.ts'",
     );
   });
 
@@ -184,6 +183,66 @@ describe("CreateSession", () => {
     // This it.skipIf ensures that when !hasTmux the whole block is skipped by bun:test
     // rather than running and failing. (The contract's T3)
     expect(true).toBe(true); // never reached when skipped
+  });
+});
+
+// ── bypassPermissions inner args (C2) ────────────────────────────────────────
+
+describe("CreateSession inner args (bypassPermissions)", () => {
+  it("C2: real claudeBin inner args carry adjacent --permission-mode bypassPermissions before --settings", async () => {
+    let capturedNew: string[] | undefined;
+    const runner = async (cmd: string, args: string[]) => {
+      if (cmd === "tmux" && args[0] === "new-session") {
+        capturedNew = args;
+        return { code: 0, stdout: "", stderr: "" };
+      }
+      if (cmd === "tmux" && args[0] === "list-panes") {
+        return { code: 0, stdout: "4242", stderr: "" };
+      }
+      return { code: 0, stdout: "", stderr: "" };
+    };
+    const reg = createTmuxRegistry({
+      runCommand: runner,
+      claudeBin: "/usr/local/bin/claude",
+      responseUrl: "http://127.0.0.1:3001/cc/api/pty-response",
+    });
+    const res = await reg.createSession({ claudeUuid: "args-uuid", cwd: "/tmp" });
+    trackSettings(res.settingsPath);
+
+    expect(capturedNew).toBeDefined();
+    const dashIdx = capturedNew!.indexOf("--");
+    const inner = capturedNew!.slice(dashIdx + 1);
+    const pmIdx = inner.indexOf("--permission-mode");
+    expect(pmIdx).toBeGreaterThanOrEqual(0);
+    expect(inner[pmIdx + 1]).toBe("bypassPermissions");
+    // --permission-mode comes before --settings
+    expect(pmIdx).toBeLessThan(inner.indexOf("--settings"));
+    expect(inner[0]).toBe("/usr/local/bin/claude");
+  });
+
+  it("C2: claudeBin='sleep' inner args remain sleep 300 (no permission-mode)", async () => {
+    let capturedNew: string[] | undefined;
+    const runner = async (cmd: string, args: string[]) => {
+      if (cmd === "tmux" && args[0] === "new-session") {
+        capturedNew = args;
+        return { code: 0, stdout: "", stderr: "" };
+      }
+      if (cmd === "tmux" && args[0] === "list-panes") {
+        return { code: 0, stdout: "4242", stderr: "" };
+      }
+      return { code: 0, stdout: "", stderr: "" };
+    };
+    const reg = createTmuxRegistry({
+      runCommand: runner,
+      claudeBin: "sleep",
+      responseUrl: "http://127.0.0.1:3001/cc/api/pty-response",
+    });
+    const res = await reg.createSession({ claudeUuid: "sleep-uuid", cwd: "/tmp" });
+    trackSettings(res.settingsPath);
+
+    const dashIdx = capturedNew!.indexOf("--");
+    const inner = capturedNew!.slice(dashIdx + 1);
+    expect(inner).toEqual(["sleep", "300"]);
   });
 });
 

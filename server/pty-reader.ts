@@ -99,6 +99,13 @@ export interface RunPtySessionOptions {
    * legacy getSessionMessages poll path is used (preserved for tests/fallback).
    */
   awaitResponseFn?: (sessionId: string) => Promise<string>;
+  /**
+   * ADR-014 per-session settings injection. When set, claude is spawned with
+   * `--settings <path>` so Stop/PreToolUse hooks come from this file instead of
+   * the global ~/.claude/settings.json — decouples readback from global settings
+   * (fixes the hang when the global Stop hook is altered/occupied).
+   */
+  settingsPath?: string;
 }
 
 // ── Pure helpers (no SDK, no pty) ─────────────────────────────────────────
@@ -510,7 +517,17 @@ export async function runPtySession(
   // We call the spawner directly rather than via PtyDriver.driveOnce so we can inspect onData
   // before deciding when to write the prompt.
   const effectiveSpawner: SpawnerFn = options?.spawner ?? defaultSpawner;
-  const args = ["claude", "--session-id", sessionId];
+  const args = options?.settingsPath
+    ? [
+        "claude",
+        "--permission-mode",
+        "bypassPermissions",
+        "--settings",
+        options.settingsPath,
+        "--session-id",
+        sessionId,
+      ]
+    : ["claude", "--permission-mode", "bypassPermissions", "--session-id", sessionId];
   const proc = effectiveSpawner(args, cwd);
 
   const handle = {

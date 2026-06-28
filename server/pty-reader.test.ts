@@ -350,4 +350,60 @@ describe("runPtySession", () => {
     expect(capturedArgs[0]).toContain("--session-id");
     expect(capturedArgs[0]).toContain("target-sess-id");
   });
+
+  it("C1: spawner args carry adjacent --permission-mode bypassPermissions (no settingsPath)", async () => {
+    let pollCount = 0;
+    const capturedArgs: string[][] = [];
+    const spawner: SpawnerFn = (args, _cwd) => {
+      capturedArgs.push(args);
+      return { write: () => {} };
+    };
+    const getMessagesFn: GetMessagesFn = async () => {
+      pollCount++;
+      if (pollCount === 1) return [];
+      return [makeEndTurnMsg("a1", null as unknown as string, "ok")];
+    };
+
+    await runPtySession("sess-id", "/cwd", "hello", {
+      spawner,
+      getMessagesFn,
+      timeout: 2000,
+      interval: 10,
+    });
+
+    const args = capturedArgs[0];
+    const pmIdx = args.indexOf("--permission-mode");
+    expect(pmIdx).toBeGreaterThanOrEqual(0);
+    expect(args[pmIdx + 1]).toBe("bypassPermissions");
+    expect(args).not.toContain("--settings");
+  });
+
+  it("C1: spawner args carry --permission-mode bypassPermissions plus --settings (with settingsPath)", async () => {
+    let pollCount = 0;
+    const capturedArgs: string[][] = [];
+    const spawner: SpawnerFn = (args, _cwd) => {
+      capturedArgs.push(args);
+      return { write: () => {} };
+    };
+    const getMessagesFn: GetMessagesFn = async () => {
+      pollCount++;
+      if (pollCount === 1) return [];
+      return [makeEndTurnMsg("a1", null as unknown as string, "ok")];
+    };
+
+    await runPtySession("sess-id", "/cwd", "hello", {
+      spawner,
+      getMessagesFn,
+      settingsPath: "/tmp/some-settings.json",
+      timeout: 2000,
+      interval: 10,
+    });
+
+    const args = capturedArgs[0];
+    const pmIdx = args.indexOf("--permission-mode");
+    expect(pmIdx).toBeGreaterThanOrEqual(0);
+    expect(args[pmIdx + 1]).toBe("bypassPermissions");
+    expect(args).toContain("--settings");
+    expect(args).toContain("/tmp/some-settings.json");
+  });
 });
