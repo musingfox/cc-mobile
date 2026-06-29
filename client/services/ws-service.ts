@@ -93,6 +93,32 @@ export function handleMemoryRecallChunk(
 }
 
 /**
+ * Dedupe API retry toasts within a single turn. The SDK emits one
+ * `api_retry` message per attempt; if `(error_status, attempt)` has
+ * already been surfaced, suppress the re-emit so a 3-retry burst no
+ * longer produces duplicate toasts for the same attempt index.
+ *
+ * Compound key preserves the 1/3 → 2/3 → 3/3 progression while
+ * collapsing accidental duplicates. Caller is expected to clear
+ * `seenKeys` on `stream_end`.
+ */
+export function handleApiRetryChunk(
+  chunk: Record<string, unknown>,
+  seenKeys: Set<string>,
+): boolean {
+  if (!isApiRetry(chunk)) return false;
+  const statusKey = chunk.error_status ?? "unknown";
+  const key = `${statusKey}-${chunk.attempt}`;
+  if (seenKeys.has(key)) return true; // handled (suppressed)
+  seenKeys.add(key);
+  const delayMs = chunk.retry_delay_ms as number | undefined;
+  const delaySec = delayMs && delayMs > 0 ? Math.round(delayMs / 1000) : 0;
+  const suffix = delaySec > 0 ? ` in ${delaySec}s...` : "...";
+  toastService.info(`API retrying (${chunk.attempt}/${chunk.max_retries})${suffix}`);
+  return true;
+}
+
+/**
  * Surface SDK `compact_boundary` system events as in-chat dividers. We append
  * a synthetic `Message` flagged with `kind: "compact_boundary"` so the chat
  * renderer can draw a "history compacted" separator between the last
@@ -268,6 +294,9 @@ class WsService {
   private lastEventIds = new Map<string, number>();
   private pendingResumeSdkSessionId: string | null = null;
   private disconnectBannerTimeout: number | null = null;
+  // Dedupe set for `api_retry` toasts within a single turn. Cleared on
+  // `stream_end`. Key shape: `${error_status ?? "unknown"}-${attempt}`.
+  private apiRetrySeenKeys = new Set<string>();
 
   private sendMessage(msg: Record<string, unknown>) {
     if (!this.ws) return;
@@ -481,12 +510,8 @@ class WsService {
           break;
         }
 
-        // Handle API retry notifications
-        if (isApiRetry(chunk)) {
-          const delaySec = Math.round(chunk.retry_delay_ms / 1000);
-          toastService.info(
-            `API retrying (${chunk.attempt}/${chunk.max_retries}) in ${delaySec}s...`,
-          );
+        // Handle API retry notifications (with per-turn dedupe)
+        if (handleApiRetryChunk(chunk, this.apiRetrySeenKeys)) {
           break;
         }
 
@@ -752,6 +777,8 @@ class WsService {
       }
 
       case "stream_end":
+        // Re-arm api_retry dedupe so the next turn can show its own toasts.
+        this.apiRetrySeenKeys.clear();
         if (sessionId) {
           const session = store.sessions.get(sessionId);
 
