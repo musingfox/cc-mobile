@@ -11,6 +11,7 @@ import ContextUsageChip from "./ContextUsageChip";
 import InputBarA, { type InputBarAHandle } from "./InputBarA";
 import PermissionSheetA from "./PermissionSheetA";
 import PickerSheet from "./PickerSheet";
+import PromptSuggestionChip from "./PromptSuggestionChip";
 import QuickActions from "./QuickActions";
 import RateLimitChip from "./RateLimitChip";
 import ToolCardA from "./ToolCardA";
@@ -207,6 +208,8 @@ export default function ChatScreen({ onNavigate }: Props) {
       {messages.length === 0 && <QuickActions />}
 
       <RateLimitChip />
+
+      <PromptSuggestionChip sessionId={activeSessionId} />
 
       <PermissionSheetA pending={pendingPermission} onApprove={handleApprove} onDeny={handleDeny} />
 

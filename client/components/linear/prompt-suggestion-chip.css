@@ -1,0 +1,25 @@
+.lin-prompt-suggestion-chip {
+  margin: 0 16px 6px;
+  padding: 6px 12px;
+  border-radius: 14px;
+  background: rgba(120, 160, 255, 0.1);
+  color: #b6c8ff;
+  border: 1px solid rgba(120, 160, 255, 0.22);
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lin-prompt-suggestion-chip:hover {
+  background: rgba(120, 160, 255, 0.16);
+}
+
+.lin-prompt-suggestion-chip-prefix {
+  opacity: 0.72;
+  font-weight: 500;
+}

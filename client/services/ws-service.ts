@@ -1029,6 +1029,8 @@ class WsService {
     this.sendMessage({ type: "send", sessionId, content });
 
     useAppStore.getState().setStreaming(sessionId, true);
+    // Clear any pending prompt suggestion — it's stale once the user sends.
+    useAppStore.getState().setPromptSuggestion(sessionId, null);
   }
 
   ptySend(sessionId: string, cwd: string, prompt: string) {
@@ -1087,6 +1089,8 @@ class WsService {
     this.sendMessage({ type: "command", sessionId, command });
 
     useAppStore.getState().setStreaming(sessionId, true);
+    // Clear any pending prompt suggestion — it's stale once the user sends.
+    useAppStore.getState().setPromptSuggestion(sessionId, null);
   }
 
   private recordPermissionAction(
