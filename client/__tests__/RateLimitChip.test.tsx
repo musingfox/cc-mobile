@@ -3,9 +3,11 @@ import { cleanup, render } from "@testing-library/react";
 import RateLimitChip from "../components/linear/RateLimitChip";
 import { useAppStore } from "../stores/app-store";
 
-function setRateLimit(info: Parameters<typeof useAppStore.getState>[0] extends never
-  ? never
-  : ReturnType<typeof useAppStore.getState>["rateLimitInfo"]) {
+function setRateLimit(
+  info: Parameters<typeof useAppStore.getState>[0] extends never
+    ? never
+    : ReturnType<typeof useAppStore.getState>["rateLimitInfo"],
+) {
   useAppStore.setState({ rateLimitInfo: info });
 }
 

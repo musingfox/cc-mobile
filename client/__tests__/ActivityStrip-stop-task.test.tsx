@@ -23,9 +23,7 @@ describe("ActivityStrip stop button", () => {
       <ActivityStrip tools={new Map()} agents={agents} onStopAgent={onStopAgent} />,
     );
 
-    const btn = container.querySelector(
-      ".lin-activity-agent-stop",
-    ) as HTMLButtonElement | null;
+    const btn = container.querySelector(".lin-activity-agent-stop") as HTMLButtonElement | null;
     expect(btn).not.toBeNull();
     expect(btn?.disabled).toBe(false);
 

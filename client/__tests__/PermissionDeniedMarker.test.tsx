@@ -16,9 +16,7 @@ describe("PermissionDeniedMarker", () => {
   });
 
   test("uses a marker class distinct from tool-error styling", () => {
-    const { container } = render(
-      <PermissionDeniedMarker toolName="Read" message="denied" />,
-    );
+    const { container } = render(<PermissionDeniedMarker toolName="Read" message="denied" />);
     const root = container.querySelector(".lin-deny-marker");
     expect(root).not.toBeNull();
     // No tool-error variants should be present

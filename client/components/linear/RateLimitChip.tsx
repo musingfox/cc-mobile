@@ -48,11 +48,7 @@ export default function RateLimitChip() {
   if (!isRejected && !isGatedSubscription) return null;
 
   // Stale window: timestamp has passed but the slot wasn't cleared yet.
-  if (
-    typeof rateLimitInfo.resetsAt === "number" &&
-    rateLimitInfo.resetsAt <= now &&
-    !isRejected
-  ) {
+  if (typeof rateLimitInfo.resetsAt === "number" && rateLimitInfo.resetsAt <= now && !isRejected) {
     return null;
   }
 
