@@ -377,6 +377,32 @@ export class SessionManager {
     }
   }
 
+  /**
+   * Stop a specific subagent task within an active query without aborting the
+   * parent conversation. Emits an `ErrorMessage`-shaped object via the
+   * supplied `emitError` callback when there's no active turn or the SDK
+   * rejects the stop. Never throws — UI surfaces failures through the
+   * callback.
+   */
+  async stopTask(
+    sessionId: string,
+    taskId: string,
+    emitError: (code: string, message: string) => void,
+  ): Promise<void> {
+    const q = this.activeQueries.get(sessionId);
+    if (!q) {
+      emitError("no_active_query", "No active turn to stop");
+      return;
+    }
+    try {
+      await q.stopTask(taskId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[session-manager] stopTask failed for ${sessionId}/${taskId}:`, msg);
+      emitError("stop_task_failed", msg);
+    }
+  }
+
   destroySession(sessionId: string): void {
     const q = this.activeQueries.get(sessionId);
     if (q) {

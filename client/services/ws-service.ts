@@ -1213,6 +1213,16 @@ class WsService {
     this.sendMessage({ type: "interrupt", sessionId });
   }
 
+  /**
+   * Stop a single subagent task without aborting the parent conversation.
+   * The server emits an `error` message (code `no_active_query` or
+   * `stop_task_failed`) if the SDK cannot stop the task.
+   */
+  stopTask(sessionId: string, taskId: string) {
+    if (!this.ws) return;
+    this.sendMessage({ type: "stop_task", sessionId, taskId });
+  }
+
   setSessionTitle(sdkSessionId: string, title: string, dir?: string) {
     if (!this.ws) return;
     this.sendMessage({

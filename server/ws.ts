@@ -577,6 +577,18 @@ export function createWsPlugin(
               break;
             }
 
+            case "stop_task": {
+              await sessionManager.stopTask(message.sessionId, message.taskId, (code, errMsg) => {
+                sendBuffered(ws, message.sessionId, {
+                  type: "error",
+                  code,
+                  message: errMsg,
+                  sessionId: message.sessionId,
+                });
+              });
+              break;
+            }
+
             case "get_server_config": {
               ws.send({
                 type: "server_config",

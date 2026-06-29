@@ -31,6 +31,12 @@ function deriveMemoryLabel(input: Record<string, unknown> | undefined): {
 interface ActivityStripProps {
   tools: Map<string, ActiveTool>;
   agents?: Map<string, ActiveAgent>;
+  /**
+   * Invoked when the user taps the ✕ button on a running subagent card.
+   * The card transitions to "stopped" via the SDK's `task_notification` event;
+   * this handler only fires the stop request.
+   */
+  onStopAgent?: (taskId: string) => void;
 }
 
 function getTargetHint(input?: Record<string, unknown>): string | null {
@@ -88,7 +94,7 @@ function formatTokens(n?: number): string | null {
   return String(n);
 }
 
-export default function ActivityStrip({ tools, agents }: ActivityStripProps) {
+export default function ActivityStrip({ tools, agents, onStopAgent }: ActivityStripProps) {
   const agentList = agents ? Array.from(agents.entries()) : [];
   const liveAgents = agentList.filter(([, a]) => a.status === "running");
   // Only group sub-tools under a *running* agent — if the owning agent has
@@ -134,6 +140,15 @@ export default function ActivityStrip({ tools, agents }: ActivityStripProps) {
                 {agent.toolCount !== undefined && <span>{agent.toolCount} tools</span>}
                 {tokens && <span>{tokens} tok</span>}
               </div>
+              <button
+                type="button"
+                className="lin-activity-agent-stop"
+                aria-label={`Stop ${agent.taskType || "subagent"}`}
+                disabled={agent.status !== "running"}
+                onClick={() => onStopAgent?.(taskId)}
+              >
+                ✕
+              </button>
             </div>
             {subs.length > 0 && (
               <div className="lin-activity-agent-children">

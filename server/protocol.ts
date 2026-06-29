@@ -47,6 +47,12 @@ const AppendUserMessageSchema = z.object({
   content: z.union([z.string(), z.array(ContentBlockSchema)]),
 });
 
+const StopTaskMessage = z.object({
+  type: z.literal("stop_task"),
+  sessionId: z.string(),
+  taskId: z.string(),
+});
+
 const PermissionMessage = z.object({
   type: z.literal("permission"),
   requestId: z.string(),
@@ -158,6 +164,7 @@ export const ClientMessage = z.discriminatedUnion("type", [
   ReconnectMessage,
   SetSessionTitleMessage,
   AppendUserMessageSchema,
+  StopTaskMessage,
   PtySendMessage,
   TmuxSendMessage,
 ]);

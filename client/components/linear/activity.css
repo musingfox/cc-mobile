@@ -129,3 +129,32 @@
   font-weight: 500;
   color: #d8d8e0;
 }
+
+/* Per-agent stop control ----------------------------------- */
+
+.lin-activity-agent-stop {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.lin-activity-agent-stop:hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+.lin-activity-agent-stop:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
