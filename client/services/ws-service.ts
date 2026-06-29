@@ -18,6 +18,7 @@ import {
   isHookResponse,
   isHookStarted,
   isMemoryRecall,
+  isNotification,
   isPermissionDenied,
   isPromptSuggestion,
   isRateLimitEvent,
@@ -150,6 +151,41 @@ export function handleApiRetryChunk(
   const delaySec = delayMs && delayMs > 0 ? Math.round(delayMs / 1000) : 0;
   const suffix = delaySec > 0 ? ` in ${delaySec}s...` : "...";
   toastService.info(`API retrying (${chunk.attempt}/${chunk.max_retries})${suffix}`);
+  return true;
+}
+
+/**
+ * Map an SDK `notification` chunk to a toast with priority-based
+ * severity. Deduped by `key` (or by `text:<text>` when `key` is absent
+ * or empty). Priority routing:
+ *   - `immediate` | `high` → `toastService.error`
+ *   - `medium` | unknown    → `toastService.info`
+ *   - `low`                → `toastService.info` (shorter timeout)
+ * Default timeouts: error 6000ms, medium 4000ms, low 2000ms; overridden
+ * by `chunk.timeout_ms` when provided.
+ */
+export function handleNotificationChunk(
+  chunk: Record<string, unknown>,
+  seenKeys: Set<string>,
+): boolean {
+  if (!isNotification(chunk)) return false;
+  const dedupeKey =
+    typeof chunk.key === "string" && chunk.key.length > 0 ? chunk.key : `text:${chunk.text}`;
+  if (seenKeys.has(dedupeKey)) return true; // handled (suppressed)
+  seenKeys.add(dedupeKey);
+
+  const text = chunk.text;
+  const priority = chunk.priority;
+  const timeoutMs = typeof chunk.timeout_ms === "number" ? chunk.timeout_ms : undefined;
+
+  if (priority === "immediate" || priority === "high") {
+    toastService.error(text, timeoutMs ?? 6000);
+  } else if (priority === "low") {
+    toastService.info(text, timeoutMs ?? 2000);
+  } else {
+    // medium or unknown value
+    toastService.info(text, timeoutMs ?? 4000);
+  }
   return true;
 }
 
@@ -332,6 +368,10 @@ class WsService {
   // Dedupe set for `api_retry` toasts within a single turn. Cleared on
   // `stream_end`. Key shape: `${error_status ?? "unknown"}-${attempt}`.
   private apiRetrySeenKeys = new Set<string>();
+  // Dedupe set for `notification` toasts across the WS connection. Key is the
+  // notification `key` (globally unique per event) or `text:<text>` fallback;
+  // cleared on disconnect so a fresh session starts unbiased.
+  private notificationSeenKeys = new Set<string>();
 
   private sendMessage(msg: Record<string, unknown>) {
     if (!this.ws) return;
@@ -455,6 +495,8 @@ class WsService {
     ws.onclose = () => {
       console.log("[ws-service] disconnected");
       this.ws = null;
+      // Reset notification dedupe — a fresh session starts unbiased.
+      this.notificationSeenKeys.clear();
       // Delay showing disconnect banner — if reconnect is fast, user won't notice
       this.disconnectBannerTimeout = window.setTimeout(() => {
         useAppStore.getState().setConnectionState("disconnected");
@@ -547,6 +589,11 @@ class WsService {
 
         // Handle API retry notifications (with per-turn dedupe)
         if (handleApiRetryChunk(chunk, this.apiRetrySeenKeys)) {
+          break;
+        }
+
+        // Handle SDK notification queue (priority-routed toast, dedup by key)
+        if (handleNotificationChunk(chunk, this.notificationSeenKeys)) {
           break;
         }
 

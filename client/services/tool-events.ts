@@ -299,3 +299,22 @@ export function isPermissionDenied(chunk: unknown): chunk is PermissionDeniedEve
   const c = chunk as Record<string, unknown>;
   return c.type === "system" && c.subtype === "permission_denied";
 }
+
+// SDK notification event — generic queue of user-facing messages
+// emitted by the SDK. `priority` selects toast severity; `key` is
+// meant to be globally unique for dedup.
+export type NotificationEvent = {
+  type: "system";
+  subtype: "notification";
+  key?: string;
+  text: string;
+  priority?: "low" | "medium" | "high" | "immediate";
+  color?: string;
+  timeout_ms?: number;
+};
+
+export function isNotification(chunk: Record<string, unknown>): chunk is NotificationEvent {
+  return (
+    chunk.type === "system" && chunk.subtype === "notification" && typeof chunk.text === "string"
+  );
+}
