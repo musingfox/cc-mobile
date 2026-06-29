@@ -18,6 +18,7 @@ import {
   isHookResponse,
   isHookStarted,
   isMemoryRecall,
+  isPermissionDenied,
   isPromptSuggestion,
   isRateLimitEvent,
   isResultMessage,
@@ -29,6 +30,7 @@ import {
   isToolStart,
   isToolUseSummary,
   type MemoryRecallEvent,
+  type PermissionDeniedEvent,
   type TerminalReason,
 } from "./tool-events";
 
@@ -89,6 +91,39 @@ export function handleMemoryRecallChunk(
       ...(c.mode !== undefined ? { mode: c.mode } : {}),
     },
   });
+  return true;
+}
+
+/**
+ * Append a greyed inline `permission_denied` marker to the chat and clear
+ * the corresponding ActiveTool entry (if present). Triggered by SDK
+ * `{type:"system", subtype:"permission_denied"}` chunks for auto-denials
+ * (mode/rule/classifier) — interactive denials go through `canUseTool`.
+ */
+export function handlePermissionDeniedChunk(
+  sessionId: string,
+  chunk: unknown,
+  store: {
+    addMessage: (sessionId: string, message: import("../stores/app-store").Message) => void;
+    removeActiveTool: (sessionId: string, toolUseId: string) => void;
+  },
+  now: () => number = Date.now,
+): boolean {
+  if (!isPermissionDenied(chunk)) return false;
+  const c = chunk as PermissionDeniedEvent;
+  const toolName = typeof c.tool_name === "string" && c.tool_name ? c.tool_name : "unknown tool";
+  const id = `deny-${c.uuid ?? `${now()}-${Math.random().toString(36).slice(2, 8)}`}`;
+  store.addMessage(sessionId, {
+    id,
+    kind: "permission_denied",
+    role: "assistant",
+    toolName,
+    content: typeof c.message === "string" ? c.message : "",
+    timestamp: now(),
+  });
+  if (typeof c.tool_use_id === "string" && c.tool_use_id) {
+    store.removeActiveTool(sessionId, c.tool_use_id);
+  }
   return true;
 }
 
@@ -704,6 +739,12 @@ class WsService {
 
         // Surface compact_boundary as an in-chat divider message.
         if (handleCompactBoundaryChunk(sessionId, chunk, store)) {
+          break;
+        }
+
+        // Non-interactive permission denials (mode/rule/classifier) — render
+        // inline grey marker and drop matching ActiveTool entry.
+        if (handlePermissionDeniedChunk(sessionId, chunk, store)) {
           break;
         }
 

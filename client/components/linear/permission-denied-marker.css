@@ -1,0 +1,22 @@
+.lin-deny-marker {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 6px 0;
+  padding: 8px 12px;
+  border-left: 2px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 12px;
+  border-radius: 4px;
+}
+
+.lin-deny-marker-label {
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.lin-deny-marker-msg {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+}

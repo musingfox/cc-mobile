@@ -278,3 +278,24 @@ export function isCompactBoundary(chunk: unknown): chunk is CompactBoundaryEvent
   const c = chunk as Record<string, unknown>;
   return c.type === "system" && c.subtype === "compact_boundary";
 }
+
+// Permission denied event from SDK — emitted when a tool call is auto-denied
+// by mode/rule/classifier (not via interactive canUseTool prompt).
+export type PermissionDeniedEvent = {
+  type: "system";
+  subtype: "permission_denied";
+  tool_name?: string;
+  tool_use_id?: string;
+  agent_id?: string;
+  decision_reason_type?: string;
+  decision_reason?: string;
+  message: string;
+  session_id?: string;
+  uuid?: string;
+};
+
+export function isPermissionDenied(chunk: unknown): chunk is PermissionDeniedEvent {
+  if (!chunk || typeof chunk !== "object") return false;
+  const c = chunk as Record<string, unknown>;
+  return c.type === "system" && c.subtype === "permission_denied";
+}

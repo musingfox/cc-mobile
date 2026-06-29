@@ -9,6 +9,7 @@ import type { LinearScreen } from "./AppShell";
 import CompactDivider from "./CompactDivider";
 import ContextUsageChip from "./ContextUsageChip";
 import InputBarA, { type InputBarAHandle } from "./InputBarA";
+import PermissionDeniedMarker from "./PermissionDeniedMarker";
 import PermissionSheetA from "./PermissionSheetA";
 import PickerSheet from "./PickerSheet";
 import PromptSuggestionChip from "./PromptSuggestionChip";
@@ -156,6 +157,15 @@ export default function ChatScreen({ onNavigate }: Props) {
                 key={m.id}
                 preTokens={m.compactMetadata?.preTokens}
                 postTokens={m.compactMetadata?.postTokens}
+              />
+            );
+          }
+          if (m.kind === "permission_denied") {
+            return (
+              <PermissionDeniedMarker
+                key={m.id}
+                toolName={m.toolName || "unknown tool"}
+                message={m.content}
               />
             );
           }

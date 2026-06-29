@@ -25,7 +25,7 @@ export type Message = {
   contentBlocks?: ContentBlock[];
   agentLabel?: string;
   agentDescription?: string;
-  kind?: "compact_boundary";
+  kind?: "compact_boundary" | "permission_denied";
   compactMetadata?: CompactMetadata;
 };
 
