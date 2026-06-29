@@ -12,6 +12,7 @@ import InputBarA, { type InputBarAHandle } from "./InputBarA";
 import PermissionSheetA from "./PermissionSheetA";
 import PickerSheet from "./PickerSheet";
 import QuickActions from "./QuickActions";
+import RateLimitChip from "./RateLimitChip";
 import ToolCardA from "./ToolCardA";
 import "./chat.css";
 
@@ -204,6 +205,8 @@ export default function ChatScreen({ onNavigate }: Props) {
       )}
 
       {messages.length === 0 && <QuickActions />}
+
+      <RateLimitChip />
 
       <PermissionSheetA pending={pendingPermission} onApprove={handleApprove} onDeny={handleDeny} />
 

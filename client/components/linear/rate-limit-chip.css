@@ -1,0 +1,31 @@
+.lin-rate-limit-chip {
+  margin: 0 16px 6px;
+  align-self: flex-start;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  background: rgba(255, 200, 90, 0.12);
+  color: #e8c074;
+  border: 1px solid rgba(255, 200, 90, 0.25);
+}
+
+.lin-rate-limit-chip--rejected {
+  background: rgba(255, 90, 90, 0.14);
+  color: #f0a0a0;
+  border-color: rgba(255, 90, 90, 0.3);
+}
+
+.lin-rate-limit-chip--warning {
+  background: rgba(255, 200, 90, 0.12);
+  color: #e8c074;
+  border-color: rgba(255, 200, 90, 0.25);
+}
+
+.lin-rate-limit-chip--neutral {
+  background: rgba(255, 255, 255, 0.06);
+  color: #c0c0c0;
+  border-color: rgba(255, 255, 255, 0.12);
+}
