@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon } from "../../design/icons";
 import { tokens as T } from "../../design/tokens";
+import { hapticService } from "../../services/haptic";
 import type { PendingPermission } from "../../stores/app-store";
 
 const TIMEOUT_SECONDS = 60;
+const SWIPE_THRESHOLD_PX = 80;
 
 interface Props {
   pending: PendingPermission | null;
@@ -26,10 +28,37 @@ function targetOf(p: PendingPermission): { target: string; line?: number } {
 
 export default function PermissionSheetA({ pending, onApprove, onDeny }: Props) {
   const [secondsLeft, setSecondsLeft] = useState(TIMEOUT_SECONDS);
+  const [dragX, setDragX] = useState(0);
+  const touchStartX = useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    setDragX(e.touches[0].clientX - touchStartX.current);
+  };
+
+  const handleTouchEnd = () => {
+    if (touchStartX.current === null) return;
+    const dx = dragX;
+    touchStartX.current = null;
+    setDragX(0);
+    if (dx >= SWIPE_THRESHOLD_PX) {
+      hapticService.tap();
+      onApprove();
+    } else if (dx <= -SWIPE_THRESHOLD_PX) {
+      hapticService.tap();
+      onDeny();
+    }
+  };
 
   useEffect(() => {
     if (!pending) return;
     setSecondsLeft(TIMEOUT_SECONDS);
+    setDragX(0);
+    touchStartX.current = null;
     const start = Date.now();
     const interval = setInterval(() => {
       const elapsed = Math.floor((Date.now() - start) / 1000);
@@ -43,7 +72,13 @@ export default function PermissionSheetA({ pending, onApprove, onDeny }: Props) 
   const { target, line } = targetOf(pending);
 
   return (
-    <div className="lin-permission">
+    <div
+      className="lin-permission"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      style={dragX !== 0 ? { transform: `translateX(${dragX}px)` } : undefined}
+    >
       <div className="lin-permission-row">
         <Icon name="shield" size={14} color={T.accentWarn} />
         <span className="lin-permission-label">Permission Required</span>

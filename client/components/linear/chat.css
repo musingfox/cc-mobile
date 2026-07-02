@@ -459,6 +459,22 @@
   color: #9ec09e;
 }
 
+.lin-tool-diffstat {
+  display: flex;
+  gap: 5px;
+  flex-shrink: 0;
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+}
+
+.lin-diffstat-add {
+  color: #9ec09e;
+}
+
+.lin-diffstat-remove {
+  color: #d49898;
+}
+
 .lin-diff-remove {
   background: rgba(196, 138, 138, 0.1);
   border-left-color: #c48a8a;

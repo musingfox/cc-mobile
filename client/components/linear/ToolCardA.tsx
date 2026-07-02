@@ -56,6 +56,8 @@ export default function ToolCardA({
 }: Props) {
   const [expanded, setExpanded] = useState(false);
   const diff = diffOf(toolName, input);
+  const addCount = diff ? diff.filter((l) => l.type === "add").length : 0;
+  const removeCount = diff ? diff.filter((l) => l.type === "remove").length : 0;
   const target = targetOf(toolName, input);
   const showAgent = Boolean(agentLabel) && Boolean(agentDescription);
 
@@ -81,6 +83,12 @@ export default function ToolCardA({
         <span className="lin-tool-target" title={target}>
           {target}
         </span>
+        {diff && (
+          <span className="lin-tool-diffstat">
+            <span className="lin-diffstat-add">+{addCount}</span>
+            <span className="lin-diffstat-remove">-{removeCount}</span>
+          </span>
+        )}
         <Icon name={expanded ? "chevronU" : "chevronD"} size={12} color={T.fg3} />
       </button>
 
