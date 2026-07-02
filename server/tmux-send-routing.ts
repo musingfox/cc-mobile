@@ -94,6 +94,15 @@ export function createTmuxSendRouting(options: TmuxSendRoutingOptions = {}) {
 
     const flattened = flattenPrompt(content);
 
+    // Capture the sink bound at arm-time. If the owner disconnects before the
+    // reply resolves, cleanupByOwner() removes it from clientSinks — but this
+    // reference still points at the buffer-first sink, which appends to
+    // eventBuffer before attempting delivery. That keeps the reply
+    // recoverable via eventBuffer.replay() on reconnect (E1) without
+    // resurrecting a stale connection: if a fresh sink was registered by the
+    // time the reply lands, the re-lookup below takes priority (E3).
+    const armTimeSink = clientSinks.get(claudeUuid);
+
     // Arm waiter first (makes hasPending true)
     const responsePromise = relay.awaitResponse(claudeUuid);
 
@@ -131,7 +140,11 @@ export function createTmuxSendRouting(options: TmuxSendRoutingOptions = {}) {
     // Chunk shape aligned to pty-orchestrator.ts:164-179 (assistant + stream_end)
     responsePromise
       .then((text: string) => {
-        const currentSink = clientSinks.get(claudeUuid);
+        // E3: prefer the currently-registered sink (a reconnect may have
+        // rebound claudeUuid to a new owner). E1: fall back to the arm-time
+        // sink so a reply arriving while fully disconnected still lands in
+        // eventBuffer via the buffer-first sink instead of being dropped.
+        const currentSink = clientSinks.get(claudeUuid) ?? armTimeSink;
         if (currentSink) {
           currentSink({
             type: "stream_chunk",
