@@ -336,7 +336,7 @@ describe("C2-CloseCleanup", () => {
     routing.cleanupByOwner(wsA);
 
     expect(routing.getClient("u1")).toBeUndefined();
-    expect(routing.hasPending("u1")).toBe(false);
+    expect(routing.hasPending("u1")).toBe(true);
     expect(routing.getClient("u2")).toBeDefined();
     expect(routing.hasPending("u2")).toBe(true);
   });

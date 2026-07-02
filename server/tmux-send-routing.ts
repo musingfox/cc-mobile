@@ -173,17 +173,16 @@ export function createTmuxSendRouting(options: TmuxSendRoutingOptions = {}) {
     }
   }
 
-  // Clean every dead uuid->sink binding owned by a given connection (ws close).
-  // Same per-uuid cleanup as teardown; does NOT rebind/replay to any new connection.
+  // Clean dead uuid->sink bindings owned by a disconnecting connection (ws close).
+  // This is a TEMPORARY disconnect, not a terminal teardown: unlike teardown(), it
+  // does NOT cancel the relay waiter (E2) — a reply that arrives while disconnected
+  // must still be recoverable by a later registerClient() reconnect (E1/E3). Only the
+  // dead sink + owner bookkeeping is removed; the claudeUuid remains routable.
   function cleanupByOwner(owner: unknown): void {
     const uuids = ownerToUuids.get(owner);
     if (!uuids) return;
     for (const claudeUuid of uuids) {
       clientSinks.delete(claudeUuid);
-      const cancelFn = (relay as any).cancel;
-      if (typeof cancelFn === "function") {
-        cancelFn(claudeUuid);
-      }
       uuidToOwner.delete(claudeUuid);
     }
     ownerToUuids.delete(owner);
