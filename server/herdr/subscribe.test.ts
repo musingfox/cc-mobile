@@ -150,3 +150,125 @@ describe("herdr subscribe: EventSubscription", () => {
     expect(events.length).toBe(0);
   });
 });
+
+interface ScheduledTimer {
+  fn: () => void;
+  ms: number;
+}
+
+/** Deterministic fake clock: records backoff schedules, fires them manually. */
+function fakeClock() {
+  const scheduled: ScheduledTimer[] = [];
+  const setTimeoutFn = (fn: () => void, ms: number) => {
+    const entry: ScheduledTimer = { fn, ms };
+    scheduled.push(entry);
+    return entry;
+  };
+  const clearTimeoutFn = (handle: unknown) => {
+    const index = scheduled.indexOf(handle as ScheduledTimer);
+    if (index >= 0) scheduled.splice(index, 1);
+  };
+  const fireNext = async () => {
+    const entry = scheduled.shift();
+    entry?.fn();
+    await flush();
+  };
+  return { scheduled, setTimeoutFn, clearTimeoutFn, fireNext };
+}
+
+describe("herdr subscribe: SubscriptionReconnect", () => {
+  it("T1: backs off exponentially from 1s and caps the schedule at 30s", async () => {
+    const fake = fakeSubscriptionConnect();
+    const clock = fakeClock();
+    const startPromise = subscribeEvents(
+      { subscriptions: [SUBSCRIPTION_SPEC], onEvent: () => {}, onError: () => {} },
+      baseDeps(fake.connect, {
+        setTimeoutFn: clock.setTimeoutFn,
+        clearTimeoutFn: clock.clearTimeoutFn,
+      }),
+    );
+    await flush();
+    fake.sessions[0]?.pushLine(SUBSCRIPTION_ACK_LINE);
+    await startPromise;
+
+    fake.sessions[0]?.close();
+    expect(clock.scheduled[0]?.ms).toBe(1000);
+
+    fake.failNext(10);
+    await clock.fireNext();
+    expect(clock.scheduled[0]?.ms).toBe(2000);
+    await clock.fireNext();
+    expect(clock.scheduled[0]?.ms).toBe(4000);
+    await clock.fireNext();
+    expect(clock.scheduled[0]?.ms).toBe(8000);
+    await clock.fireNext();
+    expect(clock.scheduled[0]?.ms).toBe(16000);
+    await clock.fireNext();
+    expect(clock.scheduled[0]?.ms).toBe(30000);
+    await clock.fireNext();
+    expect(clock.scheduled[0]?.ms).toBe(30000);
+  });
+
+  it("T2: successful re-subscribe resyncs from session.snapshot and resets backoff", async () => {
+    const fake = fakeSubscriptionConnect();
+    const clock = fakeClock();
+    const resyncs: SessionSnapshot[] = [];
+    let snapshotFetches = 0;
+    const startPromise = subscribeEvents(
+      {
+        subscriptions: [SUBSCRIPTION_SPEC],
+        onEvent: () => {},
+        onResync: (snapshot) => resyncs.push(snapshot),
+        onError: () => {},
+      },
+      baseDeps(fake.connect, {
+        fetchSnapshot: async () => {
+          snapshotFetches += 1;
+          return parsedSnapshotFixture();
+        },
+        setTimeoutFn: clock.setTimeoutFn,
+        clearTimeoutFn: clock.clearTimeoutFn,
+      }),
+    );
+    await flush();
+    fake.sessions[0]?.pushLine(SUBSCRIPTION_ACK_LINE);
+    await startPromise;
+    expect(snapshotFetches).toBe(0);
+
+    fake.sessions[0]?.close();
+    await clock.fireNext();
+    fake.sessions[1]?.pushLine(SUBSCRIPTION_ACK_LINE);
+    await flush();
+
+    expect(snapshotFetches).toBe(1);
+    expect(resyncs.length).toBe(1);
+    expect(resyncs[0]?.protocol).toBe(17);
+
+    fake.sessions[1]?.close();
+    expect(clock.scheduled[0]?.ms).toBe(1000);
+  });
+
+  it("T3: stop() while a backoff timer is pending cancels all further connect attempts", async () => {
+    const fake = fakeSubscriptionConnect();
+    const clock = fakeClock();
+    const startPromise = subscribeEvents(
+      { subscriptions: [SUBSCRIPTION_SPEC], onEvent: () => {}, onError: () => {} },
+      baseDeps(fake.connect, {
+        setTimeoutFn: clock.setTimeoutFn,
+        clearTimeoutFn: clock.clearTimeoutFn,
+      }),
+    );
+    await flush();
+    fake.sessions[0]?.pushLine(SUBSCRIPTION_ACK_LINE);
+    const handle = await startPromise;
+
+    fake.sessions[0]?.close();
+    expect(clock.scheduled.length).toBe(1);
+
+    handle.stop();
+
+    expect(clock.scheduled.length).toBe(0);
+    await flush();
+    expect(fake.attempts()).toBe(1);
+  });
+});

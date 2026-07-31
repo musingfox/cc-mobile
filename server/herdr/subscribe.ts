@@ -51,6 +51,9 @@ export interface SubscribeDeps {
   clearTimeoutFn?: ClearTimeoutFn;
 }
 
+export const INITIAL_BACKOFF_MS = 1_000;
+export const MAX_BACKOFF_MS = 30_000;
+
 /**
  * Opens a long-lived events.subscribe stream. Resolves with a handle after
  * the daemon confirms the subscription; rejects with HerdrRpcError when the
@@ -60,12 +63,14 @@ export async function subscribeEvents(
   options: SubscribeEventsOptions,
   deps: SubscribeDeps,
 ): Promise<SubscriptionHandle> {
+  const setTimeoutFn = deps.setTimeoutFn ?? ((fn: () => void, ms: number) => setTimeout(fn, ms));
   const clearTimeoutFn: ClearTimeoutFn =
     deps.clearTimeoutFn ?? ((handle) => clearTimeout(handle as ReturnType<typeof setTimeout>));
 
   let stopped = false;
   let connection: HerdrConnection | undefined;
   let pendingTimer: TimerHandle | undefined;
+  let nextBackoffMs = INITIAL_BACKOFF_MS;
   let subscriptionSeq = 0;
 
   /** Opens one connection, writes the subscribe request, resolves on ack. */
@@ -178,10 +183,38 @@ export async function subscribeEvents(
     });
   }
 
-  /** Unexpected connection loss after ack; reconnect lands with SubscriptionReconnect. */
+  /**
+   * Unexpected connection loss after ack: re-subscribe with exponential
+   * backoff (1s, 2s, 4s … capped at 30s, reset after success). Events emitted
+   * during the gap are NOT replayed — the wire carries no sequence numbers;
+   * consumers re-align from a fresh session.snapshot via onResync.
+   */
   function onUnexpectedClose(): void {
     if (stopped) return;
-    options.onError?.(new HerdrTransportError("herdr events.subscribe: connection lost"));
+    const delayMs = nextBackoffMs;
+    nextBackoffMs = Math.min(nextBackoffMs * 2, MAX_BACKOFF_MS);
+    pendingTimer = setTimeoutFn(() => {
+      pendingTimer = undefined;
+      void attemptReconnect();
+    }, delayMs);
+  }
+
+  async function attemptReconnect(): Promise<void> {
+    if (stopped) return;
+    try {
+      await openOnce();
+    } catch (error) {
+      options.onError?.(error instanceof Error ? error : new Error(String(error)));
+      onUnexpectedClose();
+      return;
+    }
+    nextBackoffMs = INITIAL_BACKOFF_MS;
+    try {
+      const snapshot = await deps.fetchSnapshot();
+      if (!stopped) options.onResync?.(snapshot);
+    } catch (error) {
+      options.onError?.(error instanceof Error ? error : new Error(String(error)));
+    }
   }
 
   await openOnce();
