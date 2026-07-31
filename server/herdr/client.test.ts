@@ -140,3 +140,17 @@ describe("herdr client: PaneTextInput", () => {
     expect((error as HerdrRpcError).code).toBe("pane_not_found");
   });
 });
+
+describe("herdr client: PaneKeyInput", () => {
+  it("T1: presses named keys with verbatim wire params and resolves void on ok", async () => {
+    const { transport, calls } = fakeTransport(() => resultOf(OK_LINE));
+    const client = createHerdrClient({ transport });
+
+    const result = await client.paneSendKeys("pane-1", ["Enter"]);
+
+    expect(result).toBeUndefined();
+    expect(calls.length).toBe(1);
+    expect(calls[0]?.method).toBe("pane.send_keys");
+    expect(calls[0]?.params).toEqual({ pane_id: "pane-1", keys: ["Enter"] });
+  });
+});
