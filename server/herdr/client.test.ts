@@ -3,7 +3,9 @@ import { createHerdrClient } from "./client";
 import { HerdrProtocolError, HerdrRpcError } from "./errors";
 import type { HerdrRequestOptions, HerdrTransport } from "./transport";
 import {
+  AGENT_INFO_LINE,
   AGENT_LIST_LINE,
+  AGENT_NOT_FOUND_ERROR_LINE,
   OK_LINE,
   PANE_NOT_FOUND_ERROR_LINE,
   PANE_READ_LINE,
@@ -201,5 +203,31 @@ describe("herdr client: AgentList", () => {
       expect(statuses).toContain(agent.agent_status);
       expect(typeof agent.revision).toBe("number");
     }
+  });
+});
+
+describe("herdr client: AgentGet", () => {
+  it("T1: resolves a single pane's AgentInfo with numeric revision", async () => {
+    const { transport, calls } = fakeTransport(() => resultOf(AGENT_INFO_LINE));
+    const client = createHerdrClient({ transport });
+
+    const agent = await client.agentGet("wD:p1");
+
+    expect(calls[0]?.method).toBe("agent.get");
+    expect(calls[0]?.params).toEqual({ target: "wD:p1" });
+    expect(typeof agent.revision).toBe("number");
+    expect(agent.pane_id).toBe("wD:p1");
+  });
+
+  it("T2: rejects HerdrRpcError agent_not_found when the pane has no detected agent", async () => {
+    const { transport } = fakeTransport(() => {
+      throw rpcErrorOf(AGENT_NOT_FOUND_ERROR_LINE);
+    });
+    const client = createHerdrClient({ transport });
+
+    const error = await client.agentGet("w1G:p1").catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(HerdrRpcError);
+    expect((error as HerdrRpcError).code).toBe("agent_not_found");
   });
 });

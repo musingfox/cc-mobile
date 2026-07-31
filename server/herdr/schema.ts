@@ -136,6 +136,14 @@ export const AgentListResultSchema = z
   .passthrough();
 export type AgentListResult = z.infer<typeof AgentListResultSchema>;
 
+export const AgentInfoResultSchema = z
+  .object({
+    type: z.literal("agent_info"),
+    agent: AgentInfoSchema,
+  })
+  .passthrough();
+export type AgentInfoResult = z.infer<typeof AgentInfoResultSchema>;
+
 export const OkResultSchema = z
   .object({
     type: z.literal("ok"),
@@ -149,6 +157,7 @@ export const HerdrResultSchema = z.discriminatedUnion("type", [
   SessionSnapshotResultSchema,
   PaneReadResultSchema,
   AgentListResultSchema,
+  AgentInfoResultSchema,
   OkResultSchema,
 ]);
 export type HerdrResult = z.infer<typeof HerdrResultSchema>;

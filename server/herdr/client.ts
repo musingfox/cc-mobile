@@ -2,6 +2,7 @@ import type { ZodType } from "zod";
 import { HerdrProtocolError } from "./errors";
 import {
   type AgentInfo,
+  AgentInfoResultSchema,
   AgentListResultSchema,
   OkResultSchema,
   type PaneRead,
@@ -91,6 +92,15 @@ export function createHerdrClient(options: HerdrClientOptions = {}) {
   }
 
   /**
+   * Fetches one pane's agent info by target (accepts a pane id).
+   * Panes without a detected agent reject with code "agent_not_found".
+   */
+  async function agentGet(target: string): Promise<AgentInfo> {
+    const result = await call("agent.get", { target }, AgentInfoResultSchema);
+    return result.agent;
+  }
+
+  /**
    * Reads pane content. `source` is required and forwarded verbatim —
    * beware: `"recent"` / `"recent_unwrapped"` are empty on fresh panes;
    * use `"visible"` for what is on screen. Returns text plus the pane's
@@ -117,6 +127,7 @@ export function createHerdrClient(options: HerdrClientOptions = {}) {
     call,
     sessionSnapshot,
     agentList,
+    agentGet,
     paneRead,
     paneSendText,
     paneSendKeys,
