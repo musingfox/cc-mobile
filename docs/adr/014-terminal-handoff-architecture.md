@@ -1,8 +1,8 @@
 # ADR-014: Terminal ↔ cc-mobile 即時共享架構決策
 
 ## Status
-
-Accepted（2026-06-17）
+Superseded by [ADR-015](015-herdr-terminal-layer.md)
+C-hybrid 概念由 ADR-015 承接，tmux 實作細節作廢（原 Accepted（2026-06-17））
 
 ## Context
 
