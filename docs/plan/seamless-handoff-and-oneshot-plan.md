@@ -2,6 +2,8 @@
 
 > `/context-flow:cf` 交棒文件（baton）— 對應 ADR-013 的執行落地計畫。
 >
+> **Supersession note (ADR-015)**: ADR-013 拍板已由 ADR-015 修訂為長存 session、Track C tmux 實作將由 herdr 重做（#20-#25）。
+>
 > 本文件區分兩條獨立開發軌道，分別供後續 `/spiral` 輪次消費：
 > - **Track B**：在現行一次性（one-shot）模型上做立即可執行的改善，不動核心控制流程。
 > - **Track C**：無縫接力架構改造，三個核心元件的完整重構，視為獨立的 /spiral 輪次。
