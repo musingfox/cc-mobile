@@ -12,6 +12,7 @@ import {
   PONG_LINE,
   PONG_PROTOCOL_18_LINE,
   SESSION_SNAPSHOT_LINE,
+  TIMEOUT_ERROR_LINE,
 } from "./wire-fixtures";
 
 /** Extracts the `result` object from a wire fixture line (what the transport resolves to). */
@@ -229,5 +230,33 @@ describe("herdr client: AgentGet", () => {
 
     expect(error).toBeInstanceOf(HerdrRpcError);
     expect((error as HerdrRpcError).code).toBe("agent_not_found");
+  });
+});
+
+describe("herdr client: AgentWait", () => {
+  it("T1: passes wire params verbatim, sets read deadline past the daemon timeout, resolves AgentInfo", async () => {
+    const { transport, calls } = fakeTransport(() => resultOf(AGENT_INFO_LINE));
+    const client = createHerdrClient({ transport });
+
+    const agent = await client.agentWait({ target: "pane-1", until: ["idle"], timeout_ms: 60000 });
+
+    expect(calls[0]?.method).toBe("agent.wait");
+    expect(calls[0]?.params).toEqual({ target: "pane-1", until: ["idle"], timeout_ms: 60000 });
+    expect(calls[0]?.options?.timeoutMs).toBeGreaterThanOrEqual(65000);
+    expect(typeof agent.revision).toBe("number");
+  });
+
+  it("T2: surfaces the daemon-side timeout as a typed HerdrRpcError", async () => {
+    const { transport } = fakeTransport(() => {
+      throw rpcErrorOf(TIMEOUT_ERROR_LINE);
+    });
+    const client = createHerdrClient({ transport });
+
+    const error = await client
+      .agentWait({ target: "pane-1", until: ["idle"], timeout_ms: 500 })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(HerdrRpcError);
+    expect((error as HerdrRpcError).code).toBe("timeout");
   });
 });

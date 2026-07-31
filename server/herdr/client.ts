@@ -4,6 +4,7 @@ import {
   type AgentInfo,
   AgentInfoResultSchema,
   AgentListResultSchema,
+  type AgentStatus,
   OkResultSchema,
   type PaneRead,
   PaneReadResultSchema,
@@ -24,6 +25,11 @@ import {
 
 /** The single herdr wire protocol version this client understands (see ADR-015 / issue #20). */
 export const SUPPORTED_PROTOCOL = 17;
+
+/** Default daemon-side wait budget when the caller passes no timeout_ms. */
+const DEFAULT_AGENT_WAIT_TIMEOUT_MS = 60_000;
+/** Client read-deadline margin so the daemon's own timeout always fires first. */
+const AGENT_WAIT_DEADLINE_MARGIN_MS = 5_000;
 
 export interface HerdrClientOptions {
   /** Explicit socket path; falls back to $HERDR_SOCKET_PATH, then ~/.config/herdr/herdr.sock. */
@@ -101,6 +107,25 @@ export function createHerdrClient(options: HerdrClientOptions = {}) {
   }
 
   /**
+   * Blocks until the agent reaches one of the requested statuses. The daemon
+   * holds the connection open and responds on resolve or its own timeout
+   * (typed HerdrRpcError code "timeout"); the client read deadline sits
+   * AGENT_WAIT_DEADLINE_MARGIN_MS past the daemon budget so a legitimate
+   * long hold is never killed client-side.
+   */
+  async function agentWait(params: {
+    target: string;
+    until?: AgentStatus[];
+    timeout_ms?: number;
+  }): Promise<AgentInfo> {
+    const daemonBudgetMs = params.timeout_ms ?? DEFAULT_AGENT_WAIT_TIMEOUT_MS;
+    const result = await call("agent.wait", params, AgentInfoResultSchema, {
+      timeoutMs: daemonBudgetMs + AGENT_WAIT_DEADLINE_MARGIN_MS,
+    });
+    return result.agent;
+  }
+
+  /**
    * Reads pane content. `source` is required and forwarded verbatim —
    * beware: `"recent"` / `"recent_unwrapped"` are empty on fresh panes;
    * use `"visible"` for what is on screen. Returns text plus the pane's
@@ -128,6 +153,7 @@ export function createHerdrClient(options: HerdrClientOptions = {}) {
     sessionSnapshot,
     agentList,
     agentGet,
+    agentWait,
     paneRead,
     paneSendText,
     paneSendKeys,
