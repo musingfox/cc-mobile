@@ -128,6 +128,14 @@ export const PaneReadResultSchema = z
   .passthrough();
 export type PaneReadResult = z.infer<typeof PaneReadResultSchema>;
 
+export const AgentListResultSchema = z
+  .object({
+    type: z.literal("agent_list"),
+    agents: z.array(AgentInfoSchema),
+  })
+  .passthrough();
+export type AgentListResult = z.infer<typeof AgentListResultSchema>;
+
 export const OkResultSchema = z
   .object({
     type: z.literal("ok"),
@@ -140,6 +148,7 @@ export const HerdrResultSchema = z.discriminatedUnion("type", [
   PongResultSchema,
   SessionSnapshotResultSchema,
   PaneReadResultSchema,
+  AgentListResultSchema,
   OkResultSchema,
 ]);
 export type HerdrResult = z.infer<typeof HerdrResultSchema>;

@@ -3,6 +3,7 @@ import { createHerdrClient } from "./client";
 import { HerdrProtocolError, HerdrRpcError } from "./errors";
 import type { HerdrRequestOptions, HerdrTransport } from "./transport";
 import {
+  AGENT_LIST_LINE,
   OK_LINE,
   PANE_NOT_FOUND_ERROR_LINE,
   PANE_READ_LINE,
@@ -182,5 +183,23 @@ describe("herdr client: PaneRead", () => {
 
     expect(error).toBeInstanceOf(HerdrRpcError);
     expect((error as HerdrRpcError).code).toBe("pane_not_found");
+  });
+});
+
+describe("herdr client: AgentList", () => {
+  it("T1: lists all detected agents as validated AgentInfo entries", async () => {
+    const { transport, calls } = fakeTransport(() => resultOf(AGENT_LIST_LINE));
+    const client = createHerdrClient({ transport });
+
+    const agents = await client.agentList();
+
+    expect(calls[0]?.method).toBe("agent.list");
+    expect(calls[0]?.params).toEqual({});
+    expect(agents.length).toBe(6);
+    const statuses = ["idle", "working", "blocked", "done", "unknown"];
+    for (const agent of agents) {
+      expect(statuses).toContain(agent.agent_status);
+      expect(typeof agent.revision).toBe("number");
+    }
   });
 });
