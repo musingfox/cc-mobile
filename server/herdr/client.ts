@@ -1,6 +1,11 @@
 import type { ZodType } from "zod";
 import { HerdrProtocolError } from "./errors";
-import { type PongResult, PongResultSchema } from "./schema";
+import {
+  type PongResult,
+  PongResultSchema,
+  type SessionSnapshot,
+  SessionSnapshotResultSchema,
+} from "./schema";
 import {
   createHerdrTransport,
   createUnixConnect,
@@ -56,9 +61,19 @@ export function createHerdrClient(options: HerdrClientOptions = {}) {
     return pong;
   }
 
+  /**
+   * Fetches the full daemon session state as one validated snapshot.
+   * Agent entries expose the monotonic cursors `revision` / `state_change_seq`.
+   */
+  async function sessionSnapshot(): Promise<SessionSnapshot> {
+    const result = await call("session.snapshot", {}, SessionSnapshotResultSchema);
+    return result.snapshot;
+  }
+
   return {
     assertCompatible,
     call,
+    sessionSnapshot,
   };
 }
 

@@ -38,6 +38,49 @@ export type ResponseEnvelope = z.infer<typeof ResponseEnvelopeSchema>;
 // Result payloads (per-method, discriminated on `result.type`)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Domain shapes
+// ---------------------------------------------------------------------------
+
+export const AgentStatusSchema = z.enum(["idle", "working", "blocked", "done", "unknown"]);
+export type AgentStatus = z.infer<typeof AgentStatusSchema>;
+
+/**
+ * One detected agent. Required core fields only; the live daemon omits
+ * `agent_session` / `interactive_ready` (and may omit `state_change_seq`)
+ * on partially detected agents. `revision` and `state_change_seq` are the
+ * monotonic cursors for future gap detection.
+ */
+export const AgentInfoSchema = z
+  .object({
+    terminal_id: z.string(),
+    agent_status: AgentStatusSchema,
+    workspace_id: z.string(),
+    tab_id: z.string(),
+    pane_id: z.string(),
+    focused: z.boolean(),
+    revision: z.number(),
+    state_change_seq: z.number().optional(),
+    agent: z.string().optional(),
+    agent_session: z.unknown().optional(),
+    interactive_ready: z.boolean().optional(),
+    cwd: z.string().optional(),
+    foreground_cwd: z.string().optional(),
+    terminal_title: z.string().optional(),
+    terminal_title_stripped: z.string().optional(),
+  })
+  .passthrough();
+export type AgentInfo = z.infer<typeof AgentInfoSchema>;
+
+export const SessionSnapshotSchema = z
+  .object({
+    version: z.string(),
+    protocol: z.number(),
+    agents: z.array(AgentInfoSchema),
+  })
+  .passthrough();
+export type SessionSnapshot = z.infer<typeof SessionSnapshotSchema>;
+
 export const PongResultSchema = z
   .object({
     type: z.literal("pong"),
@@ -48,6 +91,17 @@ export const PongResultSchema = z
   .passthrough();
 export type PongResult = z.infer<typeof PongResultSchema>;
 
+export const SessionSnapshotResultSchema = z
+  .object({
+    type: z.literal("session_snapshot"),
+    snapshot: SessionSnapshotSchema,
+  })
+  .passthrough();
+export type SessionSnapshotResult = z.infer<typeof SessionSnapshotResultSchema>;
+
 /** Union of every result payload this client understands. */
-export const HerdrResultSchema = z.discriminatedUnion("type", [PongResultSchema]);
+export const HerdrResultSchema = z.discriminatedUnion("type", [
+  PongResultSchema,
+  SessionSnapshotResultSchema,
+]);
 export type HerdrResult = z.infer<typeof HerdrResultSchema>;
