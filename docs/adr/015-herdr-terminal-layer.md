@@ -28,7 +28,8 @@ herdr 提供以下主要 API（JSON-RPC）：
 - `pane.send_keys`
 - `pane.read`
 - `events.subscribe`（含 `pane.agent_status_changed`）
-- `agent attach`
+
+另有 CLI 指令 `herdr agent attach`（非 socket API 方法），供桌機接手 session 使用。
 
 `AgentInfo` 內建欄位：
 - `agent_status`
@@ -49,6 +50,7 @@ C-hybrid 概念保留：cc-mobile 擁有 session，桌機以 `herdr agent attach
 - 桌機接手改用 `herdr agent attach`。
 - SDK query() 驅動路徑移除（明文 defer 至 #25）。
 - 互動 TUI 仍走訂閱互動桶，符合現行計費模型。
+- 本決策不依賴 Anthropic 目前暫停 Agent SDK 使用限制 enforcement 的政策態勢成立（該暫停可隨時撤回）；即使 enforcement 恢復，單一 herdr 主幹與 SDK query() 路徑刪除的決策仍然成立。
 
 此決策不改程式碼，實作於後續 #20-#25。
 

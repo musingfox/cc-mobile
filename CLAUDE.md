@@ -13,7 +13,7 @@ CCMobile — a touch-optimized PWA for interacting with Claude Code from phones/
 - **Frontend**: React + Vite (root: `client/`)
 - **Claude integration**: herdr socket API (JSON-RPC over unix socket, ~/.config/herdr/herdr.sock; see ADR-015); SDK query() pending removal (#25)
 - **Validation**: Zod for WebSocket message schemas (see ADR-001)
-- **No additional API keys needed** — the SDK wraps the local `claude` CLI binary
+- **No additional API keys needed** — herdr drives the local `claude` CLI binary (legacy SDK wrapper pending removal, #25)
 
 ## Commands
 
