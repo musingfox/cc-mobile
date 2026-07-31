@@ -43,6 +43,8 @@ Vite dev server proxies `/ws` and `/api` to Elysia backend on port 3001.
 
 ## Architecture
 
+注意：herdr 主幹為 #20–#25 的目標架構；該系列完成前，現行運行路徑仍為 tmux + PTY（ADR-011/014）。
+
 ```
 Mobile Browser (PWA) ←──WebSocket──→ Elysia Server (dev :3001 / prod :7701)
                                        ├─ WS Plugin (ws.ts) — Zod-validated messages
