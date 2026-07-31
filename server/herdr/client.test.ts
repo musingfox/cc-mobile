@@ -1,12 +1,24 @@
 import { describe, expect, it } from "bun:test";
 import { createHerdrClient } from "./client";
-import { HerdrProtocolError } from "./errors";
+import { HerdrProtocolError, HerdrRpcError } from "./errors";
 import type { HerdrRequestOptions, HerdrTransport } from "./transport";
-import { PONG_LINE, PONG_PROTOCOL_18_LINE, SESSION_SNAPSHOT_LINE } from "./wire-fixtures";
+import {
+  OK_LINE,
+  PANE_NOT_FOUND_ERROR_LINE,
+  PONG_LINE,
+  PONG_PROTOCOL_18_LINE,
+  SESSION_SNAPSHOT_LINE,
+} from "./wire-fixtures";
 
 /** Extracts the `result` object from a wire fixture line (what the transport resolves to). */
 function resultOf(line: string): unknown {
   return (JSON.parse(line) as { result: unknown }).result;
+}
+
+/** Builds the HerdrRpcError the transport would raise for an error fixture line. */
+function rpcErrorOf(line: string): HerdrRpcError {
+  const { error } = JSON.parse(line) as { error: { code: string; message: string } };
+  return new HerdrRpcError(error.code, error.message);
 }
 
 interface RecordedCall {
@@ -99,5 +111,32 @@ describe("herdr client: SnapshotQuery", () => {
     const client = createHerdrClient({ transport });
 
     expect(client.sessionSnapshot()).rejects.toThrow();
+  });
+});
+
+describe("herdr client: PaneTextInput", () => {
+  it("T1: sends exactly one pane.send_text request with verbatim params, no implicit submit", async () => {
+    const { transport, calls } = fakeTransport(() => resultOf(OK_LINE));
+    const client = createHerdrClient({ transport });
+
+    const result = await client.paneSendText("pane-1", "echo HERDR_SMOKE_OK");
+
+    expect(result).toBeUndefined();
+    expect(calls.length).toBe(1);
+    expect(calls[0]?.method).toBe("pane.send_text");
+    expect(calls[0]?.params).toEqual({ pane_id: "pane-1", text: "echo HERDR_SMOKE_OK" });
+    expect(calls.some((c) => c.method === "pane.send_keys")).toBe(false);
+  });
+
+  it("T2: rejects HerdrRpcError pane_not_found for an unknown pane", async () => {
+    const { transport } = fakeTransport(() => {
+      throw rpcErrorOf(PANE_NOT_FOUND_ERROR_LINE);
+    });
+    const client = createHerdrClient({ transport });
+
+    const error = await client.paneSendText("wZZ:p9", "x").catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(HerdrRpcError);
+    expect((error as HerdrRpcError).code).toBe("pane_not_found");
   });
 });

@@ -1,6 +1,7 @@
 import type { ZodType } from "zod";
 import { HerdrProtocolError } from "./errors";
 import {
+  OkResultSchema,
   type PongResult,
   PongResultSchema,
   type SessionSnapshot,
@@ -70,10 +71,19 @@ export function createHerdrClient(options: HerdrClientOptions = {}) {
     return result.snapshot;
   }
 
+  /**
+   * Types `text` into the target pane exactly as given. Never submits:
+   * the daemon's pane.send_text does not press Enter (use paneSendKeys).
+   */
+  async function paneSendText(pane_id: string, text: string): Promise<void> {
+    await call("pane.send_text", { pane_id, text }, OkResultSchema);
+  }
+
   return {
     assertCompatible,
     call,
     sessionSnapshot,
+    paneSendText,
   };
 }
 

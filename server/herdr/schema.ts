@@ -99,9 +99,17 @@ export const SessionSnapshotResultSchema = z
   .passthrough();
 export type SessionSnapshotResult = z.infer<typeof SessionSnapshotResultSchema>;
 
+export const OkResultSchema = z
+  .object({
+    type: z.literal("ok"),
+  })
+  .passthrough();
+export type OkResult = z.infer<typeof OkResultSchema>;
+
 /** Union of every result payload this client understands. */
 export const HerdrResultSchema = z.discriminatedUnion("type", [
   PongResultSchema,
   SessionSnapshotResultSchema,
+  OkResultSchema,
 ]);
 export type HerdrResult = z.infer<typeof HerdrResultSchema>;
