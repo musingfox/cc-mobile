@@ -1,0 +1,152 @@
+import { describe, expect, it } from "bun:test";
+import { HerdrRpcError } from "./errors";
+import { type EventEnvelope, type SessionSnapshot, SessionSnapshotSchema } from "./schema";
+import { type SubscribeDeps, subscribeEvents } from "./subscribe";
+import type { HerdrConnect, HerdrConnectHandlers } from "./transport";
+import {
+  EVENT_LINE_1,
+  EVENT_LINE_2,
+  PANE_NOT_FOUND_ERROR_LINE,
+  SESSION_SNAPSHOT_LINE,
+  SUBSCRIPTION_ACK_LINE,
+} from "./wire-fixtures";
+
+const SUBSCRIPTION_SPEC = {
+  type: "pane.output_matched",
+  pane_id: "pane-1",
+  source: "visible",
+  match: { type: "substring", value: "HERDR_SMOKE" },
+};
+
+/** Flushes pending microtasks + one macrotask turn. */
+function flush(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+interface FakeSession {
+  written: string[];
+  ended: boolean;
+  handlers: HerdrConnectHandlers;
+  pushLine(line: string): void;
+  close(): void;
+}
+
+/** Fake long-lived connection factory; the test scripts ack/event/close per session. */
+function fakeSubscriptionConnect() {
+  const sessions: FakeSession[] = [];
+  let connectAttempts = 0;
+  let failNextConnects = 0;
+  const connect: HerdrConnect = async (handlers) => {
+    connectAttempts += 1;
+    if (failNextConnects > 0) {
+      failNextConnects -= 1;
+      throw new Error("connect ECONNREFUSED");
+    }
+    const session: FakeSession = {
+      written: [],
+      ended: false,
+      handlers,
+      pushLine(line: string) {
+        handlers.onData(`${line}\n`);
+      },
+      close() {
+        handlers.onClose();
+      },
+    };
+    sessions.push(session);
+    return {
+      write(data: string) {
+        session.written.push(data);
+      },
+      end() {
+        session.ended = true;
+      },
+    };
+  };
+  return {
+    connect,
+    sessions,
+    attempts: () => connectAttempts,
+    failNext: (n: number) => {
+      failNextConnects = n;
+    },
+  };
+}
+
+function parsedSnapshotFixture(): SessionSnapshot {
+  const { result } = JSON.parse(SESSION_SNAPSHOT_LINE) as {
+    result: { snapshot: unknown };
+  };
+  return SessionSnapshotSchema.parse(result.snapshot);
+}
+
+function baseDeps(connect: HerdrConnect, extra: Partial<SubscribeDeps> = {}): SubscribeDeps {
+  return {
+    connect,
+    fetchSnapshot: async () => parsedSnapshotFixture(),
+    ...extra,
+  };
+}
+
+describe("herdr subscribe: EventSubscription", () => {
+  it("T1: resolves after ack, then delivers parsed events in order", async () => {
+    const fake = fakeSubscriptionConnect();
+    const events: EventEnvelope[] = [];
+    const startPromise = subscribeEvents(
+      { subscriptions: [SUBSCRIPTION_SPEC], onEvent: (e) => events.push(e) },
+      baseDeps(fake.connect),
+    );
+    await flush();
+
+    const request = JSON.parse(fake.sessions[0]?.written[0] ?? "") as Record<string, unknown>;
+    expect(request.method).toBe("events.subscribe");
+    expect(request.params).toEqual({ subscriptions: [SUBSCRIPTION_SPEC] });
+
+    expect(events.length).toBe(0);
+    fake.sessions[0]?.pushLine(SUBSCRIPTION_ACK_LINE);
+    await startPromise;
+
+    fake.sessions[0]?.pushLine(EVENT_LINE_1);
+    fake.sessions[0]?.pushLine(EVENT_LINE_2);
+    await flush();
+
+    expect(events.length).toBe(2);
+    expect(events[0]?.event).toBe("pane.output_matched");
+    expect(events[0]?.data).toEqual((JSON.parse(EVENT_LINE_1) as { data: unknown }).data);
+    expect(events[1]?.data).toEqual((JSON.parse(EVENT_LINE_2) as { data: unknown }).data);
+  });
+
+  it("T2: rejects the start promise with HerdrRpcError when the daemon replies an error instead of the ack", async () => {
+    const fake = fakeSubscriptionConnect();
+    const startPromise = subscribeEvents(
+      { subscriptions: [SUBSCRIPTION_SPEC], onEvent: () => {} },
+      baseDeps(fake.connect),
+    );
+    await flush();
+
+    fake.sessions[0]?.pushLine(PANE_NOT_FOUND_ERROR_LINE);
+    const error = await startPromise.catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(HerdrRpcError);
+    expect((error as HerdrRpcError).code).toBe("pane_not_found");
+  });
+
+  it("T3: stop() ends the connection and suppresses any further onEvent", async () => {
+    const fake = fakeSubscriptionConnect();
+    const events: EventEnvelope[] = [];
+    const startPromise = subscribeEvents(
+      { subscriptions: [SUBSCRIPTION_SPEC], onEvent: (e) => events.push(e) },
+      baseDeps(fake.connect),
+    );
+    await flush();
+    fake.sessions[0]?.pushLine(SUBSCRIPTION_ACK_LINE);
+    const handle = await startPromise;
+
+    handle.stop();
+
+    expect(fake.sessions[0]?.ended).toBe(true);
+    fake.sessions[0]?.pushLine(EVENT_LINE_1);
+    await flush();
+    expect(events.length).toBe(0);
+  });
+});

@@ -151,6 +151,26 @@ export const OkResultSchema = z
   .passthrough();
 export type OkResult = z.infer<typeof OkResultSchema>;
 
+/** Ack line confirming an events.subscribe stream is live. */
+export const SubscriptionStartedResultSchema = z
+  .object({
+    type: z.literal("subscription_started"),
+  })
+  .passthrough();
+export type SubscriptionStartedResult = z.infer<typeof SubscriptionStartedResultSchema>;
+
+/**
+ * One streamed event line: `{event, data}` — no id, no sequence number
+ * (the wire carries no cursor; per-kind `data` typing lands with consumers).
+ */
+export const EventEnvelopeSchema = z
+  .object({
+    event: z.string(),
+    data: z.unknown(),
+  })
+  .passthrough();
+export type EventEnvelope = z.infer<typeof EventEnvelopeSchema>;
+
 /** Union of every result payload this client understands. */
 export const HerdrResultSchema = z.discriminatedUnion("type", [
   PongResultSchema,
@@ -159,5 +179,6 @@ export const HerdrResultSchema = z.discriminatedUnion("type", [
   AgentListResultSchema,
   AgentInfoResultSchema,
   OkResultSchema,
+  SubscriptionStartedResultSchema,
 ]);
 export type HerdrResult = z.infer<typeof HerdrResultSchema>;

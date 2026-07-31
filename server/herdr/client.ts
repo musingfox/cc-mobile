@@ -15,6 +15,11 @@ import {
   SessionSnapshotResultSchema,
 } from "./schema";
 import {
+  type SubscribeEventsOptions,
+  type SubscriptionHandle,
+  subscribeEvents as startSubscription,
+} from "./subscribe";
+import {
   createHerdrTransport,
   createUnixConnect,
   type HerdrConnect,
@@ -147,9 +152,19 @@ export function createHerdrClient(options: HerdrClientOptions = {}) {
     await call("pane.send_keys", { pane_id, keys }, OkResultSchema);
   }
 
+  /**
+   * Opens a long-lived event stream over its own connection; resolves after
+   * the daemon's subscription ack. On reconnect the consumer re-aligns from a
+   * fresh session.snapshot via onResync (gap events are not replayed).
+   */
+  function subscribeEvents(subscribeOptions: SubscribeEventsOptions): Promise<SubscriptionHandle> {
+    return startSubscription(subscribeOptions, { connect, fetchSnapshot: sessionSnapshot });
+  }
+
   return {
     assertCompatible,
     call,
+    subscribeEvents,
     sessionSnapshot,
     agentList,
     agentGet,
