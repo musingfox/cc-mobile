@@ -2,8 +2,11 @@ import type { ZodType } from "zod";
 import { HerdrProtocolError } from "./errors";
 import {
   OkResultSchema,
+  type PaneRead,
+  PaneReadResultSchema,
   type PongResult,
   PongResultSchema,
+  type ReadSource,
   type SessionSnapshot,
   SessionSnapshotResultSchema,
 } from "./schema";
@@ -79,6 +82,23 @@ export function createHerdrClient(options: HerdrClientOptions = {}) {
     await call("pane.send_text", { pane_id, text }, OkResultSchema);
   }
 
+  /**
+   * Reads pane content. `source` is required and forwarded verbatim —
+   * beware: `"recent"` / `"recent_unwrapped"` are empty on fresh panes;
+   * use `"visible"` for what is on screen. Returns text plus the pane's
+   * monotonic `revision`.
+   */
+  async function paneRead(params: {
+    pane_id: string;
+    source: ReadSource;
+    lines?: number;
+    format?: string;
+    strip_ansi?: boolean;
+  }): Promise<PaneRead> {
+    const result = await call("pane.read", params, PaneReadResultSchema);
+    return result.read;
+  }
+
   /** Presses named keys (tmux-style, e.g. "Enter") in the target pane. */
   async function paneSendKeys(pane_id: string, keys: string[]): Promise<void> {
     await call("pane.send_keys", { pane_id, keys }, OkResultSchema);
@@ -88,6 +108,7 @@ export function createHerdrClient(options: HerdrClientOptions = {}) {
     assertCompatible,
     call,
     sessionSnapshot,
+    paneRead,
     paneSendText,
     paneSendKeys,
   };

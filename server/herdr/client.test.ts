@@ -5,6 +5,7 @@ import type { HerdrRequestOptions, HerdrTransport } from "./transport";
 import {
   OK_LINE,
   PANE_NOT_FOUND_ERROR_LINE,
+  PANE_READ_LINE,
   PONG_LINE,
   PONG_PROTOCOL_18_LINE,
   SESSION_SNAPSHOT_LINE,
@@ -152,5 +153,34 @@ describe("herdr client: PaneKeyInput", () => {
     expect(calls.length).toBe(1);
     expect(calls[0]?.method).toBe("pane.send_keys");
     expect(calls[0]?.params).toEqual({ pane_id: "pane-1", keys: ["Enter"] });
+  });
+});
+
+describe("herdr client: PaneRead", () => {
+  it("T1: forwards the source selector verbatim and returns text + revision", async () => {
+    const { transport, calls } = fakeTransport(() => resultOf(PANE_READ_LINE));
+    const client = createHerdrClient({ transport });
+
+    const read = await client.paneRead({ pane_id: "pane-1", source: "visible" });
+
+    expect(calls[0]?.method).toBe("pane.read");
+    expect(calls[0]?.params).toEqual({ pane_id: "pane-1", source: "visible" });
+    expect(read.text.length).toBeGreaterThan(0);
+    expect(typeof read.revision).toBe("number");
+    expect(read.truncated).toBe(false);
+  });
+
+  it("T2: rejects HerdrRpcError pane_not_found for an unknown pane", async () => {
+    const { transport } = fakeTransport(() => {
+      throw rpcErrorOf(PANE_NOT_FOUND_ERROR_LINE);
+    });
+    const client = createHerdrClient({ transport });
+
+    const error = await client
+      .paneRead({ pane_id: "wZZ:p9", source: "visible" })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(HerdrRpcError);
+    expect((error as HerdrRpcError).code).toBe("pane_not_found");
   });
 });

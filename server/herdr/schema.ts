@@ -99,6 +99,35 @@ export const SessionSnapshotResultSchema = z
   .passthrough();
 export type SessionSnapshotResult = z.infer<typeof SessionSnapshotResultSchema>;
 
+export const ReadSourceSchema = z.enum(["visible", "recent", "recent_unwrapped", "detection"]);
+export type ReadSource = z.infer<typeof ReadSourceSchema>;
+
+/**
+ * pane.read payload. Caveat: `source: "recent"` / `"recent_unwrapped"` return
+ * empty text on freshly created panes — use `"visible"` for screen content.
+ */
+export const PaneReadSchema = z
+  .object({
+    pane_id: z.string(),
+    source: z.string(),
+    text: z.string(),
+    revision: z.number(),
+    truncated: z.boolean(),
+    workspace_id: z.string().optional(),
+    tab_id: z.string().optional(),
+    format: z.string().optional(),
+  })
+  .passthrough();
+export type PaneRead = z.infer<typeof PaneReadSchema>;
+
+export const PaneReadResultSchema = z
+  .object({
+    type: z.literal("pane_read"),
+    read: PaneReadSchema,
+  })
+  .passthrough();
+export type PaneReadResult = z.infer<typeof PaneReadResultSchema>;
+
 export const OkResultSchema = z
   .object({
     type: z.literal("ok"),
@@ -110,6 +139,7 @@ export type OkResult = z.infer<typeof OkResultSchema>;
 export const HerdrResultSchema = z.discriminatedUnion("type", [
   PongResultSchema,
   SessionSnapshotResultSchema,
+  PaneReadResultSchema,
   OkResultSchema,
 ]);
 export type HerdrResult = z.infer<typeof HerdrResultSchema>;
