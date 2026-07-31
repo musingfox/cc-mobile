@@ -33,3 +33,21 @@ export const ResultEnvelopeSchema = z
 
 export const ResponseEnvelopeSchema = z.union([ErrorEnvelopeSchema, ResultEnvelopeSchema]);
 export type ResponseEnvelope = z.infer<typeof ResponseEnvelopeSchema>;
+
+// ---------------------------------------------------------------------------
+// Result payloads (per-method, discriminated on `result.type`)
+// ---------------------------------------------------------------------------
+
+export const PongResultSchema = z
+  .object({
+    type: z.literal("pong"),
+    version: z.string(),
+    protocol: z.number(),
+    capabilities: z.record(z.boolean()),
+  })
+  .passthrough();
+export type PongResult = z.infer<typeof PongResultSchema>;
+
+/** Union of every result payload this client understands. */
+export const HerdrResultSchema = z.discriminatedUnion("type", [PongResultSchema]);
+export type HerdrResult = z.infer<typeof HerdrResultSchema>;

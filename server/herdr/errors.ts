@@ -10,6 +10,17 @@ export class HerdrTransportError extends Error {
 }
 
 /**
+ * The daemon speaks an incompatible wire protocol version (herdr is 0.x with
+ * no compatibility promise; this client pins one protocol number).
+ */
+export class HerdrProtocolError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "HerdrProtocolError";
+  }
+}
+
+/**
  * Daemon-reported error envelope `{id, error: {code, message}}`.
  * Note: protocol errors may carry an empty `id` — never correlate by id echo.
  */
