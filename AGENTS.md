@@ -11,7 +11,7 @@ CCMobile — a touch-optimized PWA for interacting with Claude Code from phones/
 - **Runtime**: Bun
 - **Backend**: Elysia (Bun-native server with native WebSocket support)
 - **Frontend**: React + Vite (root: `client/`)
-- **Claude integration**: `@anthropic-ai/claude-agent-sdk` V1 `query()` API (see ADR-007)
+- **Claude integration**: herdr socket API (JSON-RPC over unix socket at `~/.config/herdr/herdr.sock`; see ADR-015) as terminal multiplexer layer (SDK query() path removed per #25)
 - **Validation**: Zod for WebSocket message schemas (see ADR-001)
 - **No additional API keys needed** — the SDK wraps the local `claude` CLI binary
 
@@ -46,19 +46,19 @@ Vite dev server proxies `/ws` and `/api` to Elysia backend on port 3001.
 ```
 Mobile Browser (PWA) ←──WebSocket──→ Elysia Server (dev :3001 / prod :7701)
                                        ├─ WS Plugin (ws.ts) — Zod-validated messages
-                                       ├─ Session Manager — V1 query() + resume pattern
+                                       ├─ herdr Driver — herdr socket API (JSON-RPC; session.snapshot / pane.send_text / pane.send_keys / pane.read / events.subscribe / agent attach)
                                        ├─ Permission Bridge — canUseTool ↔ WebSocket Promise relay
                                        ├─ Settings Loader — reads ~/.claude/ for plugins
                                        └─ Static file serving (production)
                                               ↓
-                                     Claude Code CLI (local)
+                                     herdr daemon (C-hybrid `herdr agent attach`) + Claude Code CLI (local)
 ```
 
 ### Key Architectural Decisions
 
 All recorded in `docs/adr/`. Key decisions:
 
-- **V1 SDK** (ADR-007): V2 does not support plugins. V1 `query()` with resume pattern for multi-turn.
+- **herdr terminal layer** (ADR-015): herdr socket API replaces tmux as persistent terminal layer (C-hybrid ownership retained: cc-mobile owns session, desktop takes over via `herdr agent attach`). Single herdr trunk; SDK query() path deleted per #25; interactive TUI lands in subscription bucket.
 - **Plugin loading** (ADR-006): Reads `~/.claude/settings.json` + `installed_plugins.json` to pass plugin paths to SDK. `skills: "all"` enables every discovered skill (replaces deprecated `allowedTools: ["Skill"]`).
 - **Permission Bridge** (ADR-002): Promise + 60s timeout pattern. Timeout interrupts conversation.
 - **Zod validation** (ADR-001): Runtime validation on WS messages, single source of truth for types.
