@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed（2026-06-17）
+Proposed（2026-06-17）；一次性模型拍板由 [ADR-015](015-herdr-terminal-layer.md) 承接翻轉（2026-07-31）；路徑區分與 ToS §3(7) 約束原樣有效
 
 ## Context
 
@@ -101,6 +101,8 @@ WS 斷線時，`cancelAll` 殺掉所有仍在跑的 PTY handle。`pausePending` 
 
 **拍板：維持一次性（one-shot）模型，當前不實作長存+重連（long-lived+reconnect）。**
 
+> Superseded: 一次性拍板已被 ADR-015 翻轉為長存 session 模型；本段決策歷史保留供追溯。
+
 理由如下：
 
 1. **現行程式碼是明確的一次性設計**。`pty-orchestrator.ts` 的 `drive()` 在每次 reply 後殺掉 handle；`ws.ts` 的 `close()` 呼叫 `cancelAll` 保證無 PTY 行程洩漏。這是有意識的設計選擇，不是疏漏。
@@ -123,6 +125,8 @@ WS 斷線時，`cancelAll` 殺掉所有仍在跑的 PTY handle。`pausePending` 
 
 **CONDITIONAL（條件式可行）**
 
+> Superseded: 一次性拍板已被 ADR-015 翻轉；可行性結論中關於 one-shot 的假設已過時，長存模型由 ADR-015 承接。
+
 無縫跨裝置接力（seamless desktop ↔ phone handoff）在 cc-mobile 自有架構上技術可建，但有以下前置條件必須先逐一解決：
 
 1. **PTY live handoff ≠ `resume_session`**：現行 `resume_session` 走 SDK `query()` 路徑，是歷史重播，不是行程重接。`/context-flow:cf` 規劃必須明確區分這兩條路徑，並決定是否為 PTY live handoff 建立獨立的接力協定（新 WS 訊息類型、server 端行程登錄表）。
@@ -138,6 +142,8 @@ WS 斷線時，`cancelAll` 殺掉所有仍在跑的 PTY handle。`pausePending` 
 ## 單向門（One-Way Door）警示
 
 **本決策「維持一次性模型」是一道單向門（one-way door）**，在以下意義上難以回退（難回退）：
+
+> Superseded: 該段「應在進入下一輪 /spiral 前重新評估此決策」鉤子已由 ADR-015 兌現，one-shot 拍板改為長存 session。
 
 - 一次性模型確立後，後續每一輪 /spiral 都會在此基礎上建功能（permission UI、context-flow 規劃、多 session 管理）；這些功能的 E2E 測試、UX 流程都以「每次 prompt = 一次行程」為前提。
 - 若日後改為長存+重連，上述所有假設需要系統性推翻：ws.ts 的連線生命週期、pty-orchestrator.ts 的 drive() 語義、client 的 session 狀態機都需要同步改寫。
