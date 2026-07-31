@@ -11,7 +11,7 @@ CCMobile — a touch-optimized PWA for interacting with Claude Code from phones/
 - **Runtime**: Bun
 - **Backend**: Elysia (Bun-native server with native WebSocket support)
 - **Frontend**: React + Vite (root: `client/`)
-- **Claude integration**: `@anthropic-ai/claude-agent-sdk` V1 `query()` API (see ADR-007)
+- **Claude integration**: herdr socket API (JSON-RPC over unix socket, ~/.config/herdr/herdr.sock; see ADR-015); SDK query() pending removal (#25)
 - **Validation**: Zod for WebSocket message schemas (see ADR-001)
 - **No additional API keys needed** — the SDK wraps the local `claude` CLI binary
 
@@ -46,19 +46,19 @@ Vite dev server proxies `/ws` and `/api` to Elysia backend on port 3001.
 ```
 Mobile Browser (PWA) ←──WebSocket──→ Elysia Server (dev :3001 / prod :7701)
                                        ├─ WS Plugin (ws.ts) — Zod-validated messages
-                                       ├─ Session Manager — V1 query() + resume pattern
-                                       ├─ Permission Bridge — canUseTool ↔ WebSocket Promise relay
+                                       ├─ Herdr Socket Main Trunk — JSON-RPC over unix socket (ADR-015)
+                                       ├─ Permission Bridge — canUseTool ↔ WebSocket Promise relay (pending #25)
                                        ├─ Settings Loader — reads ~/.claude/ for plugins
                                        └─ Static file serving (production)
                                               ↓
-                                     Claude Code CLI (local)
+                                     Claude Code CLI (local) via herdr
 ```
 
 ### Key Architectural Decisions
 
 All recorded in `docs/adr/`. Key decisions:
 
-- **V1 SDK** (ADR-007): V2 does not support plugins. V1 `query()` with resume pattern for multi-turn.
+- **Herdr terminal layer** (ADR-015): herdr socket as primary trunk (replaces tmux); C-hybrid concepts carried; SDK query() path removal pending #25.
 - **Plugin loading** (ADR-006): Reads `~/.claude/settings.json` + `installed_plugins.json` to pass plugin paths to SDK. `skills: "all"` enables every discovered skill (replaces deprecated `allowedTools: ["Skill"]`).
 - **Permission Bridge** (ADR-002): Promise + 60s timeout pattern. Timeout interrupts conversation.
 - **Zod validation** (ADR-001): Runtime validation on WS messages, single source of truth for types.
