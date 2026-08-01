@@ -22,23 +22,11 @@ export type ImageBlock = z.infer<typeof ImageBlockSchema>;
 export type ContentBlock = z.infer<typeof ContentBlockSchema>;
 
 // Client → Server messages
-const NewSessionMessage = z.object({
-  type: z.literal("new_session"),
-  cwd: z.string(),
-  title: z.string().optional(),
-});
-
 const SetSessionTitleMessage = z.object({
   type: z.literal("set_session_title"),
   sdkSessionId: z.string(),
   title: z.string(),
   dir: z.string().optional(),
-});
-
-const SendMessage = z.object({
-  type: z.literal("send"),
-  sessionId: z.string(),
-  content: z.union([z.string(), z.array(ContentBlockSchema)]),
 });
 
 const AppendUserMessageSchema = z.object({
@@ -58,12 +46,6 @@ const PermissionMessage = z.object({
   requestId: z.string(),
   allow: z.boolean(),
   answers: z.record(z.string()).optional(),
-});
-
-const CommandMessage = z.object({
-  type: z.literal("command"),
-  sessionId: z.string(),
-  command: z.string(),
 });
 
 const InterruptMessage = z.object({
@@ -108,12 +90,6 @@ const SetModelMessage = z.object({
 const SetEffortMessage = z.object({
   type: z.literal("set_effort"),
   effort: z.enum(["low", "medium", "high", "max"]).nullable(),
-});
-
-const GetSessionInfoMessage = z.object({
-  type: z.literal("get_session_info"),
-  sessionId: z.string(),
-  dir: z.string().optional(),
 });
 
 const ListDirectoriesMessage = z.object({
@@ -162,10 +138,7 @@ const ListTerminalSessionsMessage = z.object({
 });
 
 export const ClientMessage = z.discriminatedUnion("type", [
-  NewSessionMessage,
-  SendMessage,
   PermissionMessage,
-  CommandMessage,
   InterruptMessage,
   GetServerConfigMessage,
   ListSessionsMessage,
@@ -174,7 +147,6 @@ export const ClientMessage = z.discriminatedUnion("type", [
   SetEnvVarsMessage,
   SetModelMessage,
   SetEffortMessage,
-  GetSessionInfoMessage,
   ListDirectoriesMessage,
   ReconnectMessage,
   SetSessionTitleMessage,
@@ -214,13 +186,6 @@ const PermissionRequestMessage = z.object({
     name: z.string(),
     parameters: z.record(z.unknown()),
   }),
-});
-
-const ResultMessage = z.object({
-  type: z.literal("result"),
-  sessionId: z.string(),
-  success: z.boolean(),
-  cost: z.number().optional(),
 });
 
 const ErrorMessage = z.object({
@@ -317,11 +282,6 @@ const SessionHistoryMessage = z.object({
   messages: z.array(HistoryMessageSchema),
 });
 
-const SessionInfoMessage = z.object({
-  type: z.literal("session_info"),
-  session: SessionListItemSchema.nullable(),
-});
-
 const DirectoryListingMessage = z.object({
   type: z.literal("directory_listing"),
   path: z.string(),
@@ -371,13 +331,11 @@ export const ServerMessage = z.discriminatedUnion("type", [
   StreamChunkMessage,
   StreamEndMessage,
   PermissionRequestMessage,
-  ResultMessage,
   ErrorMessage,
   CapabilitiesMessage,
   ServerConfigMessage,
   SessionListMessage,
   SessionHistoryMessage,
-  SessionInfoMessage,
   DirectoryListingMessage,
   EventWrapperMessage,
   ReplayCompleteMessage,

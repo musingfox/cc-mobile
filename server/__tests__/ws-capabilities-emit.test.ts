@@ -1,10 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import {
-  buildCachedCapabilities,
-  emitCapabilitiesOnInit,
-  emitCapabilitiesOnOpen,
-  emitCapabilitiesOnResume,
-} from "../ws";
+import type { Capabilities } from "../capabilities-cache";
+import { emitCapabilitiesOnOpen, emitCapabilitiesOnResume } from "../ws";
 
 // Fake ws with bare send (open/reconnect path)
 function makeFakeWs() {
@@ -26,10 +22,11 @@ function makeFakeSendBuffered() {
   return { fn, payloads };
 }
 
-const SAMPLE_CAPS = buildCachedCapabilities(
-  { slash_commands: [{ name: "c" }], agents: [{ name: "a" }], model: "m" },
-  null,
-);
+const SAMPLE_CAPS: Capabilities = {
+  commands: [{ name: "c" }],
+  agents: [{ name: "a" }],
+  model: "m",
+};
 
 describe("capabilities emit helpers", () => {
   // EX-1: open — cache non-null → exactly one frame with cache fields, no sessionId
@@ -53,28 +50,8 @@ describe("capabilities emit helpers", () => {
     expect(ws.sent).toHaveLength(0);
   });
 
-  // EX-3: init — system/init message → one frame with sessionId + buildCachedCapabilities fields
-  test("EX-3: emitCapabilitiesOnInit emits one frame with sessionId and capability fields", () => {
-    const { fn, payloads } = makeFakeSendBuffered();
-    const initMsg = {
-      type: "system",
-      subtype: "init",
-      slash_commands: [{ name: "c" }],
-      agents: [{ name: "a" }],
-      model: "m",
-    };
-    const caps = buildCachedCapabilities(initMsg, null);
-
-    emitCapabilitiesOnInit(fn, {}, "sess-42", caps);
-
-    expect(payloads).toHaveLength(1);
-    const frame = payloads[0];
-    expect(frame.type).toBe("capabilities");
-    expect(frame.sessionId).toBe("sess-42");
-    expect(frame.commands).toEqual([{ name: "c" }]);
-    expect(frame.agents).toEqual([{ name: "a" }]);
-    expect(frame.model).toBe("m");
-  });
+  // EX-3 covered the init path, which fed capabilities out of the SDK query's
+  // system/init message. That path (and its emit helper) went with #25.
 
   // EX-4: resume — cache non-null → one frame with sessionId + cache fields
   test("EX-4: emitCapabilitiesOnResume with non-null cache emits one frame with sessionId", () => {

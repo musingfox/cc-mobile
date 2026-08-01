@@ -1,10 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { ClientMessage } from "../protocol";
 
+/**
+ * ContentBlock validation. These cases used to ride on `send`, which #25
+ * removed; `append_user_message` is the only surviving carrier of the same
+ * schema, so they are asserted through it. What is pinned is unchanged.
+ */
 describe("ContentBlock schemas", () => {
   test("TC1: Valid string content passes", () => {
     const input = {
-      type: "send",
+      type: "append_user_message",
       sessionId: "sess-123",
       content: "hello world",
     };
@@ -14,7 +19,7 @@ describe("ContentBlock schemas", () => {
 
   test("TC2: Valid text block passes", () => {
     const input = {
-      type: "send",
+      type: "append_user_message",
       sessionId: "sess-123",
       content: [
         {
@@ -29,7 +34,7 @@ describe("ContentBlock schemas", () => {
 
   test("TC3: Valid image block passes", () => {
     const input = {
-      type: "send",
+      type: "append_user_message",
       sessionId: "sess-123",
       content: [
         {
@@ -48,7 +53,7 @@ describe("ContentBlock schemas", () => {
 
   test("TC4: Mixed text and image blocks pass", () => {
     const input = {
-      type: "send",
+      type: "append_user_message",
       sessionId: "sess-123",
       content: [
         {
@@ -71,7 +76,7 @@ describe("ContentBlock schemas", () => {
 
   test("TC5: Invalid media type fails", () => {
     const input = {
-      type: "send",
+      type: "append_user_message",
       sessionId: "sess-123",
       content: [
         {
@@ -90,7 +95,7 @@ describe("ContentBlock schemas", () => {
 
   test("TC6: Missing required field in image block fails", () => {
     const input = {
-      type: "send",
+      type: "append_user_message",
       sessionId: "sess-123",
       content: [
         {
@@ -109,7 +114,7 @@ describe("ContentBlock schemas", () => {
 
   test("TC7: Invalid block type fails", () => {
     const input = {
-      type: "send",
+      type: "append_user_message",
       sessionId: "sess-123",
       content: [
         {
@@ -126,7 +131,7 @@ describe("ContentBlock schemas", () => {
     const mediaTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
     for (const mediaType of mediaTypes) {
       const input = {
-        type: "send",
+        type: "append_user_message",
         sessionId: "sess-123",
         content: [
           {

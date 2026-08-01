@@ -1,15 +1,12 @@
 import { describe, expect, it } from "bun:test";
-import { ClientMessage, ServerMessage } from "../server/protocol";
 import { isApiRetry } from "../client/services/tool-events";
 
-describe("Contract 1: SDK_ENABLE_AGENT_PROGRESS_SUMMARIES", () => {
-  it("query options should include agentProgressSummaries: true", async () => {
-    // This is verified by reading session-manager.ts
-    // The query() options object includes agentProgressSummaries: true
-    // Visual inspection confirms line exists after promptSuggestions: true
-    expect(true).toBe(true);
-  });
-});
+// Contracts 1 (SDK_ENABLE_AGENT_PROGRESS_SUMMARIES), 4 (BACKEND_GET_SESSION_INFO)
+// and 6 (SDK_ASK_USER_QUESTION_PREVIEW_FORMAT) were removed with #25. 1 and 6
+// asserted nothing beyond `expect(true).toBe(true)`, alongside a comment
+// describing options on a `query()` call that no longer exists; 4 pinned the
+// get_session_info / session_info pair, which the client never sent and the
+// protocol no longer carries.
 
 describe("Contract 2: FRONTEND_DISPLAY_AGENT_SUMMARIES", () => {
   it("task_progress with summary should update agent", () => {
@@ -84,61 +81,6 @@ describe("Contract 3: DETECT_AND_DISPLAY_API_RETRY", () => {
   });
 });
 
-describe("Contract 4: BACKEND_GET_SESSION_INFO", () => {
-  it("GetSessionInfoMessage schema validates valid message", () => {
-    const validMessage = {
-      type: "get_session_info",
-      sessionId: "abc123",
-      dir: "/home/user",
-    };
-    const result = ClientMessage.safeParse(validMessage);
-    expect(result.success).toBe(true);
-  });
-
-  it("GetSessionInfoMessage schema validates without optional dir", () => {
-    const validMessage = {
-      type: "get_session_info",
-      sessionId: "abc123",
-    };
-    const result = ClientMessage.safeParse(validMessage);
-    expect(result.success).toBe(true);
-  });
-
-  it("GetSessionInfoMessage schema rejects missing sessionId", () => {
-    const invalidMessage = {
-      type: "get_session_info",
-      dir: "/home/user",
-    };
-    const result = ClientMessage.safeParse(invalidMessage);
-    expect(result.success).toBe(false);
-  });
-
-  it("SessionInfoMessage schema validates valid response", () => {
-    const validMessage = {
-      type: "session_info",
-      session: {
-        sdkSessionId: "session-123",
-        displayTitle: "My Session",
-        cwd: "/home/user",
-        gitBranch: "main",
-        lastModified: 1234567890,
-        createdAt: 1234567890,
-      },
-    };
-    const result = ServerMessage.safeParse(validMessage);
-    expect(result.success).toBe(true);
-  });
-
-  it("SessionInfoMessage schema validates null session", () => {
-    const validMessage = {
-      type: "session_info",
-      session: null,
-    };
-    const result = ServerMessage.safeParse(validMessage);
-    expect(result.success).toBe(true);
-  });
-});
-
 describe("Contract 5: FRONTEND_SESSION_LIST_PAGINATION", () => {
   it("PAGE_SIZE constant is 20", () => {
     // Visual inspection confirms PAGE_SIZE = 20 in SessionListModal.tsx
@@ -171,11 +113,3 @@ describe("Contract 5: FRONTEND_SESSION_LIST_PAGINATION", () => {
   });
 });
 
-describe("Contract 6: SDK_ASK_USER_QUESTION_PREVIEW_FORMAT", () => {
-  it("query options should include toolConfig with askUserQuestion previewFormat", () => {
-    // This is verified by reading session-manager.ts
-    // The query() options object includes:
-    // toolConfig: { askUserQuestion: { previewFormat: "html" } }
-    expect(true).toBe(true);
-  });
-});

@@ -100,7 +100,7 @@ describe("Reconnect Protocol - Server Messages", () => {
 describe("Reconnect Protocol - Backward Compatibility", () => {
   it("existing client messages still work", () => {
     const result = ClientMessage.safeParse({
-      type: "send",
+      type: "append_user_message",
       sessionId: "s1",
       content: "hello",
     });

@@ -1,61 +1,29 @@
 import { homedir } from "node:os";
 import { Elysia, t } from "elysia";
-import {
-  type Capabilities,
-  loadCachedCapabilities,
-  saveCachedCapabilities,
-} from "./capabilities-cache";
+import { type Capabilities, loadCachedCapabilities } from "./capabilities-cache";
 import type { ServerConfig } from "./config";
 import { listDirectories } from "./directory-listing";
 import type { EventBuffer } from "./event-buffer";
 import { buildUrl, expandPath, validateAllowedPath, validateCwd } from "./path-utils";
-import type { createPermissionHandler, PendingPermissionSnapshot } from "./permission-bridge";
 import { ClientMessage, ServerMessage } from "./protocol";
 import type { createPtyPermissionRelay, PtyRelaySnapshot } from "./pty-permission-relay";
 import { loadSessionHistory } from "./session-history";
-import { getClaudeSessionInfo, listClaudeSessions, renameClaudeSession } from "./session-listing";
-import type { InitData, SessionManager } from "./session-manager";
+import { listClaudeSessions, renameClaudeSession } from "./session-listing";
+import type { SessionManager } from "./session-manager";
 import { handleTmuxCreate, handleTmuxTeardown, type TmuxControlBackend } from "./tmux-control";
 
-type PermissionHandlerFactory = typeof createPermissionHandler;
-type PermissionHandler = ReturnType<PermissionHandlerFactory>;
 type PtyPermissionRelay = ReturnType<typeof createPtyPermissionRelay>;
 
 interface WsData {
   currentSessionId?: string;
 }
 
-export function buildCachedCapabilities(
-  msg: Record<string, unknown>,
-  initData: InitData | null,
-): Capabilities {
-  const toNamed = <T extends { name: string }>(arr: unknown): T[] => {
-    if (!Array.isArray(arr)) return [];
-    return arr
-      .map((item) => {
-        if (typeof item === "string") return { name: item } as T;
-        if (
-          item &&
-          typeof item === "object" &&
-          typeof (item as { name?: unknown }).name === "string"
-        ) {
-          return item as T;
-        }
-        return null;
-      })
-      .filter((x): x is T => x !== null);
-  };
-
-  return {
-    commands: toNamed(msg.slash_commands),
-    agents: toNamed(msg.agents),
-    model: (msg.model as string) || "unknown",
-    ...(initData ? { models: initData.models, accountInfo: initData.account } : {}),
-  };
-}
-
 // ---------------------------------------------------------------------------
 // Capabilities emit helpers — extracted seams (logic-free; byte-equivalent)
+//
+// TODO(#25-followup): the disk cache these read has had no writer since the SDK
+// query path was removed, so the slash-command / agent lists are frozen at
+// whatever a pre-#25 run left behind (empty on a machine that never had one).
 // ---------------------------------------------------------------------------
 
 /** open/reconnect path: bare ws.send, no sessionId */
@@ -69,20 +37,6 @@ export function emitCapabilitiesOnOpen(
       ...cachedCapabilities,
     });
   }
-}
-
-/** init path: sendBuffered with sessionId */
-export function emitCapabilitiesOnInit(
-  sendBuf: (ws: any, sessionId: string, msg: Record<string, unknown>) => void,
-  ws: any,
-  sessionId: string,
-  cachedCapabilities: Capabilities,
-): void {
-  sendBuf(ws, sessionId, {
-    type: "capabilities",
-    sessionId,
-    ...cachedCapabilities,
-  });
 }
 
 /** resume path: sendBuffered with sessionId */
@@ -138,23 +92,15 @@ export interface WsCollaborators {
 
 export function createWsPlugin(
   sessionManager: SessionManager,
-  permissionBridgeFactory: PermissionHandlerFactory,
   serverConfig: ServerConfig,
   collaborators: WsCollaborators,
 ) {
-  const {
-    backend,
-    tmuxPermissionRelay,
-    eventBuffer,
-    clientSink,
-  } = collaborators;
-  let cachedCapabilities: Capabilities | null = loadCachedCapabilities();
+  const { backend, tmuxPermissionRelay, eventBuffer, clientSink } = collaborators;
+  const cachedCapabilities: Capabilities | null = loadCachedCapabilities();
   const wsPath = buildUrl(serverConfig.basePath, "/ws");
 
   // Persistent state across reconnects
   const persistentState = {
-    permissionHandler: null as PermissionHandler | null,
-    pausedPermissions: [] as PendingPermissionSnapshot[],
     pausedTmuxPermissions: [] as PtyRelaySnapshot[],
   };
 
@@ -177,40 +123,6 @@ export function createWsPlugin(
     open(ws) {
       console.log("[ws] client connected");
       clientSink.current = (msg) => ws.send(msg);
-
-      // Create or reuse permission handler
-      if (!persistentState.permissionHandler) {
-        const handler = permissionBridgeFactory((requestId, tool) => {
-          const sid = (ws.data as WsData).currentSessionId || "";
-          sendBuffered(ws, sid, {
-            type: "permission_request",
-            sessionId: sid,
-            requestId,
-            tool,
-          });
-        });
-        persistentState.permissionHandler = handler;
-      } else {
-        // Update existing handler to use new connection
-        persistentState.permissionHandler.updateSendToClient((requestId, tool) => {
-          const sid = (ws.data as WsData).currentSessionId || "";
-          sendBuffered(ws, sid, {
-            type: "permission_request",
-            sessionId: sid,
-            requestId,
-            tool,
-          });
-        });
-      }
-
-      // Update all existing sessions to use this connection's permission handler
-      sessionManager.updateCanUseTool(persistentState.permissionHandler.canUseTool);
-
-      // Resume paused permissions if any
-      if (persistentState.pausedPermissions.length > 0) {
-        persistentState.permissionHandler.resumePending(persistentState.pausedPermissions);
-        persistentState.pausedPermissions = [];
-      }
 
       // Send cached capabilities on reconnect
       emitCapabilitiesOnOpen(ws, cachedCapabilities);
@@ -254,54 +166,8 @@ export function createWsPlugin(
         return;
       }
 
-      if (!persistentState.permissionHandler) {
-        ws.send({ type: "error", code: "internal_error", message: "No permission handler" });
-        return;
-      }
-      const handler = persistentState.permissionHandler;
-
       try {
         switch (message.type) {
-          case "new_session": {
-            const cwd = expandPath(message.cwd);
-            const cwdError = validateCwd(cwd);
-            if (cwdError) {
-              ws.send({
-                type: "error",
-                code: "invalid_cwd",
-                message: cwdError,
-              });
-              break;
-            }
-
-            if (!validateAllowedPath(cwd, serverConfig.allowedRoots)) {
-              ws.send({
-                type: "error",
-                code: "path_not_allowed",
-                message: "Project path is not in the allowed roots",
-              });
-              break;
-            }
-
-            const sessionId = crypto.randomUUID();
-            (ws.data as WsData).currentSessionId = sessionId;
-
-            await sessionManager.createSession(
-              sessionId,
-              cwd,
-              handler.canUseTool,
-              undefined,
-              message.title,
-            );
-
-            sendBuffered(ws, sessionId, {
-              type: "session_created",
-              sessionId,
-              cwd,
-            });
-            break;
-          }
-
           case "set_session_title": {
             try {
               await renameClaudeSession(message.sdkSessionId, message.title, message.dir);
@@ -315,53 +181,9 @@ export function createWsPlugin(
             break;
           }
 
-          case "send":
-          case "command": {
-            // Track active session for permission routing
-            (ws.data as WsData).currentSessionId = message.sessionId;
-            const content =
-              message.type === "send"
-                ? message.content // Can be string | ContentBlock[]
-                : message.command; // Always string for commands
-            const generator = sessionManager.sendMessage(message.sessionId, content);
-
-            for await (const sdkMessage of generator) {
-              const msg = sdkMessage as Record<string, unknown>;
-
-              // Extract and cache capabilities from system init message
-              if (msg.type === "system" && msg.subtype === "init") {
-                // Fetch models + account info from SDK
-                const initData = await sessionManager.getInitData(message.sessionId);
-                cachedCapabilities = buildCachedCapabilities(msg, initData);
-                saveCachedCapabilities(cachedCapabilities);
-
-                emitCapabilitiesOnInit(sendBuffered, ws, message.sessionId, cachedCapabilities);
-              }
-
-              // Detect and forward session_state_changed as dedicated message
-              if (msg.type === "system" && msg.subtype === "session_state_changed") {
-                const state = msg.state as string;
-                sendBuffered(ws, message.sessionId, {
-                  type: "session_state",
-                  sessionId: message.sessionId,
-                  state,
-                });
-              }
-
-              sendBuffered(ws, message.sessionId, {
-                type: "stream_chunk",
-                sessionId: message.sessionId,
-                chunk: msg,
-              });
-            }
-
-            sendBuffered(ws, message.sessionId, {
-              type: "stream_end",
-              sessionId: message.sessionId,
-            });
-            break;
-          }
-
+          // TODO(#25-followup): the append buffer this fills has no consumer —
+          // the SDK turn driver that used to drain it is gone. Accepted rather
+          // than rejected so the client method does not start erroring.
           case "append_user_message": {
             try {
               sessionManager.appendUserMessage(message.sessionId, message.content);
@@ -383,9 +205,8 @@ export function createWsPlugin(
           }
 
           case "permission": {
-            handler.resolvePermission(message.requestId, message.allow, message.answers);
-            // And in the tmux/herdr relay — same idempotent broadcast; without
-            // this the herdr path can only ever 90s-timeout-deny.
+            // The tmux/herdr relay is the only holder of in-flight permission
+            // requests; resolving an unknown requestId is a silent no-op.
             tmuxPermissionRelay.resolvePermission(
               message.requestId,
               message.allow,
@@ -399,6 +220,9 @@ export function createWsPlugin(
             break;
           }
 
+          // TODO(#25-followup): there is no in-process turn to stop any more, so
+          // this always answers `no_active_query`. The UI's stop button stays
+          // wired but inert until herdr exposes a per-task interrupt.
           case "stop_task": {
             await sessionManager.stopTask(message.sessionId, message.taskId, (code, errMsg) => {
               sendBuffered(ws, message.sessionId, {
@@ -425,6 +249,11 @@ export function createWsPlugin(
             break;
           }
 
+          // TODO(#25-followup): set_permission_mode / set_env_vars / set_model /
+          // set_effort record state and echo it back, but herdr receives none of
+          // it — the pane's mode comes from the argv app.ts built at startup.
+          // These stay accepted (rather than rejected) so the settings UI does
+          // not error at the user; making the UI honest is a separate ticket.
           case "set_permission_mode": {
             if (message.sessionId) {
               if (!sessionManager.hasSession(message.sessionId)) {
@@ -465,7 +294,7 @@ export function createWsPlugin(
           }
 
           case "set_model": {
-            await sessionManager.setModel(message.model, message.sessionId);
+            sessionManager.setModel(message.model);
             ws.send({
               type: "server_config",
               config: {
@@ -517,12 +346,6 @@ export function createWsPlugin(
             break;
           }
 
-          case "get_session_info": {
-            const session = await getClaudeSessionInfo(message.sessionId, message.dir);
-            ws.send({ type: "session_info", session });
-            break;
-          }
-
           case "resume_session": {
             const cwd = expandPath(message.cwd);
             const cwdError = validateCwd(cwd);
@@ -547,12 +370,7 @@ export function createWsPlugin(
             const sessionId = crypto.randomUUID();
             (ws.data as WsData).currentSessionId = sessionId;
 
-            await sessionManager.createSession(
-              sessionId,
-              cwd,
-              handler.canUseTool,
-              message.sdkSessionId,
-            );
+            await sessionManager.createSession(sessionId, cwd, message.sdkSessionId);
 
             sendBuffered(ws, sessionId, {
               type: "session_created",
@@ -659,7 +477,6 @@ export function createWsPlugin(
             await backend.send({ claudeUuid, content });
             break;
           }
-
         }
       } catch (error) {
         console.error("[ws] error handling message:", error);
@@ -667,19 +484,13 @@ export function createWsPlugin(
           type: "error",
           code: "session_error",
           message: error instanceof Error ? error.message : String(error),
-          sessionId:
-            message.type !== "new_session" && "sessionId" in message
-              ? message.sessionId
-              : undefined,
+          sessionId: "sessionId" in message ? message.sessionId : undefined,
         });
       }
     },
 
     close(ws) {
       // Pause pending permissions for potential reconnect
-      if (persistentState.permissionHandler) {
-        persistentState.pausedPermissions = persistentState.permissionHandler.pausePending();
-      }
       persistentState.pausedTmuxPermissions = tmuxPermissionRelay.pausePending();
 
       // Remove this connection's tmux uuid->sink bindings (baton map §cleanup).

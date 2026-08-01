@@ -1,29 +1,25 @@
-import type {
-  AccountInfo,
-  AgentInfo,
-  CanUseTool,
-  ModelInfo,
-  Query,
-  SDKMessage,
-  SDKSystemMessage,
-  SDKUserMessage,
-  SlashCommand,
-} from "@anthropic-ai/claude-agent-sdk";
-import { query } from "@anthropic-ai/claude-agent-sdk";
+/**
+ * session-manager.ts — the server's session registry and settings state.
+ *
+ * Since #25 this owns no conversation driver. The SDK `query()` path it used to
+ * run is gone; turns are driven by the terminal backend (herdr) instead, and
+ * what remains here is the session map plus the settings the UI reads back
+ * through `get_server_config`.
+ *
+ * TODO(#25-followup): `selectedModel`, `selectedEffort`, `envVars` and the
+ * per-session permission-mode override are written but never read — herdr
+ * receives none of them. Reconnecting them means passing argv/env through
+ * `herdr/registry.ts`; making the UI honest about them is a separate ticket.
+ */
+
 import type { PermissionMode } from "./config";
 import type { ContentBlock } from "./protocol";
-import { loadUserPlugins } from "./settings-loader";
-import { truncateToolResponse } from "./tool-output-truncator";
 import { cleanupUploads } from "./upload-manager";
-
-type SdkPluginConfig = { type: "local"; path: string };
 
 interface SessionConfig {
   cwd: string;
-  canUseTool: CanUseTool;
   sdkSessionId: string | null;
   permissionMode?: PermissionMode;
-  pendingTitle?: string;
   pendingAppendBlocks: ContentBlock[];
 }
 
@@ -49,24 +45,11 @@ function blocksByteSize(blocks: ContentBlock[]): number {
   return total;
 }
 
-export interface Capabilities {
-  commands: SlashCommand[];
-  agents: AgentInfo[];
-  model: string;
-}
-
-export interface InitData {
-  models: ModelInfo[];
-  account: AccountInfo;
-}
-
 export class SessionManager {
   private sessions = new Map<string, SessionConfig>();
-  private plugins: SdkPluginConfig[] | null = null;
-  private activeQueries = new Map<string, Query>();
   private permissionMode: PermissionMode;
   private envVars: Record<string, string> = {};
-  /** Empty string means "follow the CLI / SDK default model" (no override). */
+  /** Empty string means "follow the CLI default model" (no override). */
   private selectedModel = "";
   private selectedEffort: "low" | "medium" | "high" | "max" | null = null;
 
@@ -93,13 +76,6 @@ export class SessionManager {
     }
 
     config.permissionMode = mode;
-
-    const q = this.activeQueries.get(sessionId);
-    if (q) {
-      q.setPermissionMode(mode).catch((err) =>
-        console.warn("[session-manager] mid-turn setPermissionMode failed:", err),
-      );
-    }
   }
 
   getSessionPermissionMode(sessionId: string): PermissionMode | undefined {
@@ -118,19 +94,8 @@ export class SessionManager {
     return this.selectedModel;
   }
 
-  /** Set model for next query. If a query is active, also switch mid-turn. */
-  async setModel(model: string, sessionId?: string): Promise<void> {
+  setModel(model: string): void {
     this.selectedModel = model;
-    if (sessionId) {
-      const q = this.activeQueries.get(sessionId);
-      if (q) {
-        try {
-          await q.setModel(model);
-        } catch (err) {
-          console.warn("[session-manager] mid-turn setModel failed:", err);
-        }
-      }
-    }
   }
 
   getSelectedEffort(): "low" | "medium" | "high" | "max" | null {
@@ -141,42 +106,26 @@ export class SessionManager {
     this.selectedEffort = effort;
   }
 
-  private async getPlugins(): Promise<SdkPluginConfig[]> {
-    if (!this.plugins) {
-      this.plugins = await loadUserPlugins();
-    }
-    return this.plugins;
-  }
-
-  async createSession(
-    sessionId: string,
-    cwd: string,
-    canUseTool: CanUseTool,
-    sdkSessionId?: string,
-    title?: string,
-  ): Promise<void> {
+  async createSession(sessionId: string, cwd: string, sdkSessionId?: string): Promise<void> {
     if (this.sessions.has(sessionId)) {
       throw new Error(`Session ${sessionId} already exists`);
     }
 
-    // `title` only applies to new (non-resumed) sessions; the SDK ignores it
-    // when resuming. Trimmed empty strings are treated as absent.
-    const pendingTitle = !sdkSessionId && title?.trim() ? title.trim() : undefined;
-
     this.sessions.set(sessionId, {
       cwd,
-      canUseTool,
       sdkSessionId: sdkSessionId ?? null,
       permissionMode: undefined,
       pendingAppendBlocks: [],
-      ...(pendingTitle ? { pendingTitle } : {}),
     });
   }
 
   /**
-   * Buffer a user message to be prepended to the next `sendMessage` turn.
-   * Enforces a cap of 50 entries OR 1MB total bytes; rejects atomically when
-   * adding the new content would breach either limit.
+   * Buffer a user message for the session. Enforces a cap of 50 entries OR 1MB
+   * total bytes; rejects atomically when adding the new content would breach
+   * either limit.
+   *
+   * TODO(#25-followup): the buffer has had no consumer since the SDK turn
+   * driver was removed — nothing drains it into an outgoing turn.
    */
   appendUserMessage(sessionId: string, content: string | ContentBlock[]): void {
     const config = this.sessions.get(sessionId);
@@ -199,216 +148,22 @@ export class SessionManager {
     config.pendingAppendBlocks.push(...newBlocks);
   }
 
-  /** Update canUseTool callback for all sessions (e.g. after WS reconnect) */
-  updateCanUseTool(canUseTool: CanUseTool): void {
-    for (const config of this.sessions.values()) {
-      config.canUseTool = canUseTool;
-    }
-  }
-
-  async *sendMessage(
-    sessionId: string,
-    content: string | ContentBlock[],
-  ): AsyncGenerator<SDKMessage> {
-    const config = this.sessions.get(sessionId);
-    if (!config) {
-      throw new Error(`Session ${sessionId} not found`);
-    }
-
-    const plugins = await this.getPlugins();
-    const effectivePermissionMode = config.permissionMode ?? this.permissionMode;
-    const isBypass = effectivePermissionMode === "bypassPermissions";
-
-    // Handle both string and content block array formats
-    // When content is string AND no pending appends: pass as simple string prompt
-    //   (SDK converts to MessageParam internally)
-    // When content is ContentBlock[] OR pending appends exist: use async generator
-    //   to pass SDKUserMessage with prepended buffered blocks.
-    const hasPendingAppends = config.pendingAppendBlocks.length > 0;
-    const newContentBlocks: ContentBlock[] = contentToBlocks(content);
-    const outgoingBlocks: ContentBlock[] = hasPendingAppends
-      ? [...config.pendingAppendBlocks, ...newContentBlocks]
-      : newContentBlocks;
-    // Atomically clear the buffer after building the outgoing content.
-    config.pendingAppendBlocks = [];
-
-    const useGenerator = hasPendingAppends || typeof content !== "string";
-    const promptValue: string | AsyncIterable<SDKUserMessage> = !useGenerator
-      ? (content as string)
-      : (async function* (): AsyncGenerator<SDKUserMessage> {
-          yield {
-            type: "user" as const,
-            message: {
-              role: "user" as const,
-              content: outgoingBlocks.map((block) => {
-                if (block.type === "text") {
-                  return { type: "text" as const, text: block.text };
-                }
-                // image block
-                return {
-                  type: "image" as const,
-                  source: {
-                    type: "base64" as const,
-                    media_type: block.source.media_type,
-                    data: block.source.data,
-                  },
-                };
-              }),
-            },
-            parent_tool_use_id: null,
-            session_id: config.sdkSessionId || sessionId, // Use SDK session_id if available, fallback to WS session_id
-          };
-        })();
-
-    const q = query({
-      prompt: promptValue,
-      options: {
-        ...(config.pendingTitle ? { title: config.pendingTitle } : {}),
-        ...(this.selectedModel ? { model: this.selectedModel } : {}),
-        ...(this.selectedEffort ? { effort: this.selectedEffort } : {}),
-        settingSources: ["user", "project", "local"],
-        systemPrompt: { type: "preset", preset: "claude_code" },
-        includePartialMessages: true,
-        promptSuggestions: true,
-        agentProgressSummaries: true,
-        permissionMode: effectivePermissionMode,
-        ...(isBypass ? { allowDangerouslySkipPermissions: true } : {}),
-        skills: "all",
-        toolConfig: { askUserQuestion: { previewFormat: "markdown" } },
-        hooks: {
-          PostToolUse: [
-            {
-              hooks: [
-                async (input) => {
-                  if (input.hook_event_name !== "PostToolUse") return {};
-                  const replacement = truncateToolResponse(input.tool_response);
-                  if (replacement === null) return {};
-                  return {
-                    hookSpecificOutput: {
-                      hookEventName: "PostToolUse",
-                      updatedToolOutput: replacement,
-                    },
-                  };
-                },
-              ],
-            },
-          ],
-        },
-        plugins,
-        cwd: config.cwd,
-        env: { ...process.env, ...this.envVars },
-        // Don't pass canUseTool in bypass mode — SDK auto-approves everything
-        ...(!isBypass ? { canUseTool: config.canUseTool } : {}),
-        ...(config.sdkSessionId ? { resume: config.sdkSessionId } : {}),
-      },
-    });
-
-    this.activeQueries.set(sessionId, q);
-
-    try {
-      for await (const msg of q) {
-        // Capture SDK session ID for future resume
-        if (msg.type === "system" && msg.subtype === "init" && !config.sdkSessionId) {
-          const sessionId = (msg as SDKSystemMessage).session_id;
-          if (sessionId !== undefined) {
-            config.sdkSessionId = sessionId;
-          }
-          // Title only applies to the first turn — drop it once the SDK has
-          // accepted it and emitted system/init.
-          config.pendingTitle = undefined;
-        }
-
-        yield msg;
-      }
-    } finally {
-      this.activeQueries.delete(sessionId);
-      q.close();
-    }
-  }
-
-  async getCapabilities(sessionId: string): Promise<Capabilities | null> {
-    const q = this.activeQueries.get(sessionId);
-    if (!q) return null;
-
-    try {
-      const [commands, agents] = await Promise.all([q.supportedCommands(), q.supportedAgents()]);
-      const toCommand = (c: unknown): SlashCommand => {
-        if (typeof c === "string") return { name: c, description: "", argumentHint: "" };
-        const obj = c as { name?: unknown; description?: unknown; argumentHint?: unknown };
-        return {
-          name: typeof obj.name === "string" ? obj.name : String(obj.name ?? ""),
-          description: typeof obj.description === "string" ? obj.description : "",
-          argumentHint: typeof obj.argumentHint === "string" ? obj.argumentHint : "",
-        };
-      };
-      const toAgent = (a: unknown): AgentInfo => {
-        if (typeof a === "string") return { name: a, description: "" };
-        const obj = a as { name?: unknown; description?: unknown; model?: unknown };
-        return {
-          name: typeof obj.name === "string" ? obj.name : String(obj.name ?? ""),
-          description: typeof obj.description === "string" ? obj.description : "",
-          ...(typeof obj.model === "string" ? { model: obj.model } : {}),
-        };
-      };
-      return {
-        commands: commands.map(toCommand),
-        agents: agents.map(toAgent),
-        model: this.selectedModel,
-      };
-    } catch {
-      return null;
-    }
-  }
-
-  /** Fetch models + account info from SDK initializationResult() */
-  async getInitData(sessionId: string): Promise<InitData | null> {
-    const q = this.activeQueries.get(sessionId);
-    if (!q) return null;
-
-    try {
-      const result = await q.initializationResult();
-      return {
-        models: result.models,
-        account: result.account,
-      };
-    } catch (err) {
-      console.warn("[session-manager] getInitData failed:", err);
-      return null;
-    }
-  }
-
   /**
-   * Stop a specific subagent task within an active query without aborting the
-   * parent conversation. Emits an `ErrorMessage`-shaped object via the
-   * supplied `emitError` callback when there's no active turn or the SDK
-   * rejects the stop. Never throws — UI surfaces failures through the
-   * callback.
+   * Stop a subagent task. There is no in-process turn to stop any more, so this
+   * always reports `no_active_query` through `emitError`. Never throws.
+   *
+   * TODO(#25-followup): the UI's stop button is a no-op until herdr exposes a
+   * per-task interrupt.
    */
   async stopTask(
-    sessionId: string,
-    taskId: string,
+    _sessionId: string,
+    _taskId: string,
     emitError: (code: string, message: string) => void,
   ): Promise<void> {
-    const q = this.activeQueries.get(sessionId);
-    if (!q) {
-      emitError("no_active_query", "No active turn to stop");
-      return;
-    }
-    try {
-      await q.stopTask(taskId);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`[session-manager] stopTask failed for ${sessionId}/${taskId}:`, msg);
-      emitError("stop_task_failed", msg);
-    }
+    emitError("no_active_query", "No active turn to stop");
   }
 
   destroySession(sessionId: string): void {
-    const q = this.activeQueries.get(sessionId);
-    if (q) {
-      q.close();
-      this.activeQueries.delete(sessionId);
-    }
     this.sessions.delete(sessionId);
 
     // Cleanup uploaded files for this session

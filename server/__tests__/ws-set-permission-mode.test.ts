@@ -1,14 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { CanUseTool } from "@anthropic-ai/claude-agent-sdk";
 import { SessionManager } from "../session-manager";
-
-const noopCanUseTool: CanUseTool = (async () => {
-  return { behavior: "deny", message: "test" };
-}) as unknown as CanUseTool;
 
 async function makeManagerWithSession(sessionId: string) {
   const mgr = new SessionManager({ permissionMode: "default" });
-  await mgr.createSession(sessionId, "/tmp/test", noopCanUseTool);
+  await mgr.createSession(sessionId, "/tmp/test");
   return mgr;
 }
 

@@ -81,7 +81,12 @@ describe("PromptSuggestionChip", () => {
   });
 });
 
-describe("wsService.send clears promptSuggestion (D4)", () => {
+/**
+ * D4 — sending clears the stale suggestion. It used to be `send` / `sendCommand`
+ * that cleared it; #25 removed both, so `terminalSend` (the only surviving way
+ * to send a turn) carries the behaviour now.
+ */
+describe("wsService.terminalSend clears promptSuggestion (D4)", () => {
   let fake: FakeWebSocket;
   let prevWs: WebSocket | null;
 
@@ -101,18 +106,18 @@ describe("wsService.send clears promptSuggestion (D4)", () => {
     });
   });
 
-  test("calling wsService.send when promptSuggestion is set → promptSuggestion is null after", () => {
+  test("calling wsService.terminalSend when promptSuggestion is set → promptSuggestion is null after", () => {
     setSuggestion("s1", "try this");
     expect(useAppStore.getState().sessions.get("s1")?.promptSuggestion).toBe("try this");
 
-    wsService.send("s1", "user message");
+    wsService.terminalSend("s1", "user message");
 
     expect(useAppStore.getState().sessions.get("s1")?.promptSuggestion).toBeNull();
   });
 
-  test("calling wsService.sendCommand also clears promptSuggestion", () => {
+  test("a slash command sent as a turn also clears promptSuggestion", () => {
     setSuggestion("s1", "try a command");
-    wsService.sendCommand("s1", "/help");
+    wsService.terminalSend("s1", "/help");
     expect(useAppStore.getState().sessions.get("s1")?.promptSuggestion).toBeNull();
   });
 });

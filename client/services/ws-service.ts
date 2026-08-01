@@ -1152,11 +1152,6 @@ class WsService {
     }
   }
 
-  createSession(cwd: string) {
-    if (!this.ws) return;
-    this.sendMessage({ type: "new_session", cwd });
-  }
-
   /**
    * Starts a live terminal-backed session. The client owns the id: the session
    * appears in the store immediately (not ready) so the chat is navigable while
@@ -1172,37 +1167,6 @@ class WsService {
     this.sendMessage({ type: "tmux_create", claudeUuid, cwd });
 
     return claudeUuid;
-  }
-
-  send(sessionId: string, content: string | ContentBlock[]) {
-    if (!this.ws) return;
-
-    // For display purposes, extract text from content blocks
-    let displayContent: string;
-    let contentBlocks: ContentBlock[] | undefined;
-
-    if (typeof content === "string") {
-      displayContent = content;
-    } else {
-      // Extract text blocks and join them
-      const textBlocks = content.filter((block) => block.type === "text");
-      displayContent = textBlocks.map((block) => block.text).join("\n");
-      contentBlocks = content;
-    }
-
-    useAppStore.getState().addMessage(sessionId, {
-      id: `user-${Date.now()}`,
-      role: "user",
-      content: displayContent,
-      timestamp: Date.now(),
-      contentBlocks,
-    });
-
-    this.sendMessage({ type: "send", sessionId, content });
-
-    useAppStore.getState().setStreaming(sessionId, true);
-    // Clear any pending prompt suggestion — it's stale once the user sends.
-    useAppStore.getState().setPromptSuggestion(sessionId, null);
   }
 
   /**
@@ -1223,13 +1187,19 @@ class WsService {
     this.sendMessage({ type: "tmux_send", claudeUuid: sessionId, content: prompt });
 
     useAppStore.getState().setStreaming(sessionId, true);
+    // Clear any pending prompt suggestion — it's stale once the user sends.
+    useAppStore.getState().setPromptSuggestion(sessionId, null);
   }
 
+  /**
+   * TODO(#25-followup): the server buffers this but nothing drains the buffer —
+   * the SDK turn driver that used to prepend it is gone. There is no production
+   * caller today; the method is kept so the follow-up ticket can reconnect it.
+   */
   appendUserMessage(sessionId: string, content: string | ContentBlock[]) {
     if (!this.ws) return;
 
-    // Mirror `send`'s display-text derivation so the optimistic chat bubble
-    // shows the same content the user sees while typing.
+    // Derive the display text the same way the chat bubble shows it while typing.
     let displayContent: string;
     let contentBlocks: ContentBlock[] | undefined;
 
@@ -1250,24 +1220,7 @@ class WsService {
     });
 
     this.sendMessage({ type: "append_user_message", sessionId, content });
-    // Do NOT set streaming — the SDK turn is not driven by this frame.
-  }
-
-  sendCommand(sessionId: string, command: string) {
-    if (!this.ws) return;
-
-    useAppStore.getState().addMessage(sessionId, {
-      id: `cmd-${Date.now()}`,
-      role: "user",
-      content: command,
-      timestamp: Date.now(),
-    });
-
-    this.sendMessage({ type: "command", sessionId, command });
-
-    useAppStore.getState().setStreaming(sessionId, true);
-    // Clear any pending prompt suggestion — it's stale once the user sends.
-    useAppStore.getState().setPromptSuggestion(sessionId, null);
+    // Do NOT set streaming — no turn is driven by this frame.
   }
 
   private recordPermissionAction(

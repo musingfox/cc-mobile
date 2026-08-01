@@ -1,4 +1,13 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+/**
+ * capabilities-cache.ts — read side of the on-disk slash-command / agent cache.
+ *
+ * TODO(#25-followup): read-only since #25. The writer lived on the SDK query
+ * path (the `system`/`init` message carried the lists); with that path gone
+ * nothing refreshes this file, so what is returned here is whatever a pre-#25
+ * run left on disk — and `null` on a machine that never had one.
+ */
+
+import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { AccountInfo, AgentInfo, CommandInfo, ModelInfo } from "./protocol";
@@ -58,21 +67,5 @@ export function loadCachedCapabilities(): Capabilities | null {
     return null;
   } catch {
     return null;
-  }
-}
-
-/**
- * Save capabilities to disk cache.
- * Creates directory if it doesn't exist.
- * Errors are silently caught (cache is best-effort).
- */
-export function saveCachedCapabilities(caps: Capabilities): void {
-  try {
-    if (!existsSync(CACHE_DIR)) {
-      mkdirSync(CACHE_DIR, { recursive: true });
-    }
-    writeFileSync(CACHE_FILE, JSON.stringify(caps, null, 2), "utf-8");
-  } catch {
-    // Silently fail - cache is best-effort
   }
 }

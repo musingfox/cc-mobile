@@ -2,15 +2,22 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import {
-  type Capabilities,
-  loadCachedCapabilities,
-  saveCachedCapabilities,
-} from "./capabilities-cache";
+import { type Capabilities, loadCachedCapabilities } from "./capabilities-cache";
 
 const CACHE_DIR = join(homedir(), ".claude-mobile");
 const CACHE_FILE = join(CACHE_DIR, "capabilities-cache.json");
 const BACKUP_FILE = `${CACHE_FILE}.backup`;
+
+/**
+ * Lay a cache file down by hand. Since #25 the module has no writer of its own
+ * — the cache is whatever a pre-#25 run (or an operator) left on disk.
+ */
+function writeCacheFile(caps: Capabilities): void {
+  if (!existsSync(CACHE_DIR)) {
+    mkdirSync(CACHE_DIR, { recursive: true });
+  }
+  writeFileSync(CACHE_FILE, JSON.stringify(caps, null, 2), "utf-8");
+}
 
 beforeEach(() => {
   // Backup existing cache if present
@@ -34,14 +41,14 @@ afterEach(() => {
 });
 
 describe("Capabilities cache", () => {
-  test("TC13: saveCachedCapabilities writes valid JSON, loadCachedCapabilities reads it back", () => {
+  test("TC13: loadCachedCapabilities reads back a cache file written to disk", () => {
     const input: Capabilities = {
       commands: [{ name: "/commit" }, { name: "/review" }],
       agents: [{ name: "code-reviewer" }],
       model: "claude-sonnet-4-6",
     };
 
-    saveCachedCapabilities(input);
+    writeCacheFile(input);
     const output = loadCachedCapabilities();
 
     expect(output).toEqual(input);
@@ -77,7 +84,7 @@ describe("Capabilities cache", () => {
       accountInfo: { email: "e@x" },
     };
 
-    saveCachedCapabilities(input);
+    writeCacheFile(input);
     const output = loadCachedCapabilities();
 
     expect(output).toEqual(input);
@@ -98,26 +105,14 @@ describe("Capabilities cache", () => {
     expect(result).toEqual({ commands: [], agents: [], model: "m" });
   });
 
-  test("TC16: saveCachedCapabilities creates directory if it doesn't exist", () => {
+  test("TC16: a missing cache directory reads as no cache, not as an error", () => {
     // Delete cache directory if exists
     if (existsSync(CACHE_DIR)) {
       rmSync(CACHE_DIR, { recursive: true });
     }
 
-    const input: Capabilities = {
-      commands: [{ name: "/commit" }],
-      agents: [],
-      model: "test",
-    };
-
-    saveCachedCapabilities(input);
-
-    // Verify directory and file were created
-    expect(existsSync(CACHE_DIR)).toBe(true);
-    expect(existsSync(CACHE_FILE)).toBe(true);
-
-    const result = loadCachedCapabilities();
-    expect(result).toEqual(input);
+    expect(() => loadCachedCapabilities()).not.toThrow();
+    expect(loadCachedCapabilities()).toBeNull();
   });
 
   test("T4.6: old format cache file (string arrays) loads and normalizes to object arrays", () => {

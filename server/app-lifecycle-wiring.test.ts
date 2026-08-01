@@ -1,5 +1,5 @@
 /**
- * tmux-lifecycle-wiring.test.ts — exercises the PRODUCTION composition root
+ * app-lifecycle-wiring.test.ts — exercises the PRODUCTION composition root
  * (createApp) for tmux lifecycle wiring (no real tmux, no real signals sent,
  * no port bound).
  *
@@ -30,16 +30,7 @@ const serverConfig: ServerConfig = {
 };
 
 // Minimal SessionManager stub — nothing on it is invoked during assembly.
-const sessionManagerStub = {
-  updateCanUseTool: () => {},
-} as any;
-
-const permissionBridgeFactoryStub = (() => ({
-  canUseTool: async () => ({ behavior: "allow" }),
-  updateSendToClient: () => {},
-  resumePending: () => {},
-  pausePending: () => [],
-})) as any;
+const sessionManagerStub = {} as any;
 
 function makeSpyBackend() {
   let teardownAllCalls = 0;
@@ -89,7 +80,6 @@ function makeRelayCapture() {
 function buildApp(extraDeps: Record<string, unknown>) {
   return createApp(serverConfig, {
     sessionManager: sessionManagerStub,
-    permissionBridgeFactory: permissionBridgeFactoryStub,
     ...extraDeps,
   });
 }

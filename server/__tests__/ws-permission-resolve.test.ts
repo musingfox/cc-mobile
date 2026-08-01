@@ -130,5 +130,4 @@ describe("PermissionReplyBroadcast", () => {
     relay.resolvePermission("toolu_01A", false);
     await pending;
   });
-
 });

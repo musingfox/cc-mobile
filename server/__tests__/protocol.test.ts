@@ -2,21 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { ClientMessage, ServerMessage } from "../protocol";
 
 describe("ClientMessage schema", () => {
-  test("new_session valid", () => {
-    const result = ClientMessage.safeParse({ type: "new_session", cwd: "/tmp" });
-    expect(result.success).toBe(true);
-  });
-  test("new_session accepts optional title", () => {
-    const result = ClientMessage.safeParse({
-      type: "new_session",
-      cwd: "/tmp",
-      title: "Hello",
-    });
-    expect(result.success).toBe(true);
-    if (result.success && result.data.type === "new_session") {
-      expect(result.data.title).toBe("Hello");
-    }
-  });
   test("set_session_title valid with dir", () => {
     const result = ClientMessage.safeParse({
       type: "set_session_title",
@@ -49,10 +34,6 @@ describe("ClientMessage schema", () => {
     });
     expect(result.success).toBe(false);
   });
-  test("send valid", () => {
-    const result = ClientMessage.safeParse({ type: "send", sessionId: "s1", content: "hello" });
-    expect(result.success).toBe(true);
-  });
   test("permission missing allow field", () => {
     const result = ClientMessage.safeParse({ type: "permission", requestId: "r1" });
     expect(result.success).toBe(false);
@@ -81,18 +62,6 @@ describe("ClientMessage schema", () => {
   test("PermissionMessage works without answers", () => {
     const result = ClientMessage.safeParse({ type: "permission", requestId: "r1", allow: true });
     expect(result.success).toBe(true);
-  });
-  test("command valid", () => {
-    const result = ClientMessage.safeParse({
-      type: "command",
-      sessionId: "s1",
-      command: "/commit",
-    });
-    expect(result.success).toBe(true);
-  });
-  test("command missing command field", () => {
-    const result = ClientMessage.safeParse({ type: "command", sessionId: "s1" });
-    expect(result.success).toBe(false);
   });
   test("get_server_config valid", () => {
     const result = ClientMessage.safeParse({ type: "get_server_config" });
@@ -192,15 +161,6 @@ describe("ClientMessage schema", () => {
       content: "hi",
     });
     expect(result.success).toBe(false);
-  });
-
-  test("send still parses after append_user_message added (regression)", () => {
-    const result = ClientMessage.safeParse({
-      type: "send",
-      sessionId: "s1",
-      content: "hello",
-    });
-    expect(result.success).toBe(true);
   });
 });
 

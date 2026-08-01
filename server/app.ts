@@ -2,8 +2,8 @@
  * app.ts — the composition root.
  *
  * Everything the server is made of is assembled here: the terminal backend, the
- * PTY orchestrator, the permission/response relays, the HTTP hook endpoints,
- * the WS transport plugin, and static file serving.
+ * permission/response relays, the HTTP hook endpoints, the WS transport plugin,
+ * and static file serving.
  * `createApp` returns the app *unlistened*, so wiring can be asserted without
  * binding a port; `index.ts` is reduced to parse-config → createApp → listen.
  */
@@ -17,7 +17,6 @@ import { EventBuffer } from "./event-buffer";
 import { createHerdrBackend } from "./herdr/backend";
 import type { RemountReport } from "./herdr/remount";
 import { buildUrl, stripBasePath } from "./path-utils";
-import { createPermissionHandler } from "./permission-bridge";
 import { createPtyPermissionHandler } from "./pty-permission-endpoint";
 import { createPtyPermissionRelay } from "./pty-permission-relay";
 import { createPtyResponseHandler } from "./pty-response-endpoint";
@@ -60,14 +59,12 @@ export interface AppTestDeps {
   backendRef?: { current: AppBackend | null };
   createTmuxPermissionRelay?: typeof createPtyPermissionRelay;
   sessionManager?: SessionManager;
-  permissionBridgeFactory?: typeof createPermissionHandler;
 }
 
 /** Builds the whole server. The returned app has not been listened on. */
 export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
   const sessionManager =
     deps.sessionManager ?? new SessionManager({ permissionMode: serverConfig.permissionMode });
-  const permissionBridgeFactory = deps.permissionBridgeFactory ?? createPermissionHandler;
   const makeTmuxPermissionRelay = deps.createTmuxPermissionRelay ?? createPtyPermissionRelay;
 
   const ptyPermApiPath = buildUrl(serverConfig.basePath, "/api/pty-permission");
@@ -150,7 +147,7 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
     .post(ptyPermApiPath, ({ request }) => ptyPermissionHttpHandler(request))
     .post(ptyResponseApiPath, ({ request }) => ptyResponseHttpHandler(request))
     .use(
-      createWsPlugin(sessionManager, permissionBridgeFactory, serverConfig, {
+      createWsPlugin(sessionManager, serverConfig, {
         backend,
         tmuxPermissionRelay,
         eventBuffer,

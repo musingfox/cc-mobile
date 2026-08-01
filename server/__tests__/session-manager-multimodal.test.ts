@@ -1,16 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import type { ContentBlock } from "../protocol";
 
-describe("Session manager multimodal message construction", () => {
-  test("C4-TC1: String content is passed as-is to SDK", () => {
+/**
+ * Multimodal content shapes. Written when the SessionManager translated these
+ * into SDK `query()` prompts; that translation went with #25, so what remains
+ * pinned here is the ContentBlock discriminated union itself.
+ */
+describe("Multimodal content block shapes", () => {
+  test("C4-TC1: String content is a plain string", () => {
     const content = "hello world";
 
-    // The SessionManager should pass string content directly to query({ prompt: content })
-    // This is the existing behavior and should not change
     expect(typeof content).toBe("string");
   });
 
-  test("C4-TC2: ContentBlock array is converted to SDKUserMessage format", async () => {
+  test("C4-TC2: ContentBlock array carries text and base64 image blocks", async () => {
     const content: ContentBlock[] = [
       {
         type: "text",
@@ -25,21 +28,6 @@ describe("Session manager multimodal message construction", () => {
         },
       },
     ];
-
-    // The SessionManager should convert ContentBlock[] to an async generator
-    // that yields SDKUserMessage with MessageParam structure:
-    // {
-    //   type: "user",
-    //   message: {
-    //     role: "user",
-    //     content: [
-    //       { type: "text", text: "Check this image:" },
-    //       { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "abc123==" } }
-    //     ]
-    //   },
-    //   parent_tool_use_id: null,
-    //   session_id: <sessionId>
-    // }
 
     // Verify the content blocks are properly structured
     expect(content).toHaveLength(2);

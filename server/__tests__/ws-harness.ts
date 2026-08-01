@@ -11,6 +11,7 @@
 import type { ServerConfig } from "../config";
 import { EventBuffer } from "../event-buffer";
 import type { createPtyPermissionRelay } from "../pty-permission-relay";
+import type { SessionManager } from "../session-manager";
 import { createWsPlugin, type WsBackend } from "../ws";
 
 export const testServerConfig: ServerConfig = {
@@ -22,17 +23,7 @@ export const testServerConfig: ServerConfig = {
   basePath: "",
 };
 
-const sessionManagerStub = { updateCanUseTool: () => {} } as never;
-
-const permissionBridgeFactoryStub = (() => ({
-  canUseTool: async () => ({ behavior: "allow" }),
-  updateSendToClient: () => {},
-  resumePending: () => {},
-  pausePending: () => [],
-  // The SDK bridge half of the permission broadcast; a stub missing it makes
-  // the handler throw before any relay is reached.
-  resolvePermission: () => {},
-})) as never;
+const sessionManagerStub = {} as never;
 
 const relayStub = {
   requestPtyPermission: () => new Promise(() => {}),
@@ -56,9 +47,11 @@ export interface WsHarness {
   close(): Promise<void>;
 }
 
-/** Relay overrides for tests that need an observable relay instead of the stub. */
+/** Collaborator overrides for tests that need a real one instead of the stub. */
 export interface WsHarnessOverrides {
   tmuxPermissionRelay?: ReturnType<typeof createPtyPermissionRelay>;
+  /** A real SessionManager, for the cases that assert on server-held state. */
+  sessionManager?: SessionManager;
 }
 
 export async function startWsHarness(
@@ -71,7 +64,7 @@ export async function startWsHarness(
 
   const app = new Elysia()
     .use(
-      createWsPlugin(sessionManagerStub, permissionBridgeFactoryStub, serverConfig, {
+      createWsPlugin(overrides.sessionManager ?? sessionManagerStub, serverConfig, {
         backend: backend as WsBackend,
         tmuxPermissionRelay: (overrides.tmuxPermissionRelay as never) ?? relayStub,
         eventBuffer,

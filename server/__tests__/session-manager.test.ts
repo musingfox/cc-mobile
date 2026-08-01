@@ -10,11 +10,10 @@ describe("SessionManager", () => {
     expect(() => new SessionManager({ permissionMode: "default" })).not.toThrow();
   });
 
-  test("sendMessage throws on unknown session", async () => {
+  test("createSession rejects a duplicate sessionId", async () => {
     const mgr = new SessionManager({ permissionMode: "default" });
-    await expect(mgr.sendMessage("unknown", "hi").next()).rejects.toThrow(
-      "Session unknown not found",
-    );
+    await mgr.createSession("s1", "/cwd");
+    await expect(mgr.createSession("s1", "/cwd")).rejects.toThrow("Session s1 already exists");
   });
 
   test("destroySession on unknown is no-op", () => {
