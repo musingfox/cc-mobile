@@ -16,22 +16,27 @@
  *   listLive      ← sessionSnapshot listing
  */
 
-import {
-  type CreateSessionInput,
-  createTmuxRegistry,
-  type HasSessionResult,
-  type RunResult,
-  type TeardownResult,
-} from "./tmux-registry";
-import {
-  createTmuxSendRouting,
-  type TmuxSendParams,
-  type TmuxSendRoutingOptions,
-} from "./tmux-send-routing";
+import { createTmuxRegistry, type HasSessionResult, type RunResult } from "./tmux-registry";
+import { createTmuxSendRouting, type TmuxSendRoutingOptions } from "./tmux-send-routing";
 
 // ── Port ─────────────────────────────────────────────────────────────────────
 
 export type ClientSink = (msg: Record<string, unknown>) => void;
+
+/** Everything a backend needs to obtain a routable terminal session. */
+export interface CreateSessionInput {
+  claudeUuid: string;
+  cwd: string;
+}
+
+export interface TeardownResult {
+  killed: boolean;
+}
+
+export interface TerminalSendParams {
+  claudeUuid: string;
+  content: string;
+}
 
 export interface TerminalSessionInfo {
   /** Backend-native session name (tmux: `ccm-<claudeUuid>`, herdr: the agent name). */
@@ -63,7 +68,7 @@ export interface TerminalBackend {
   teardown(claudeUuid: string): Promise<TeardownResult>;
   teardownAll(): Promise<void>;
   /** Never throws: unregistered sink is a silent no-op, send failures are reported via the sink. */
-  send(params: TmuxSendParams): Promise<void>;
+  send(params: TerminalSendParams): Promise<void>;
   registerClient(claudeUuid: string, sink: ClientSink, owner?: unknown): void;
   getClient(claudeUuid: string): ClientSink | undefined;
   /** Transient disconnect cleanup — drops the owner's sinks but keeps waiters armed. */
@@ -85,7 +90,7 @@ export interface TmuxRegistryLike {
 }
 
 export interface TmuxSendRoutingLike {
-  send(params: TmuxSendParams): Promise<void>;
+  send(params: TerminalSendParams): Promise<void>;
   registerClient(claudeUuid: string, sink: ClientSink, owner?: unknown): void;
   getClient(claudeUuid: string): ClientSink | undefined;
   teardown(claudeUuid: string): void;
