@@ -108,6 +108,27 @@ describe("runSend wiring", () => {
     expect(ptySend).toHaveBeenCalledTimes(1);
   });
 
+  test("terminal session -> terminalSend takes the built prompt, ptySend untouched", async () => {
+    const ptySend = mock(() => {});
+    const terminalSend = mock((_s: string, _p: string) => {});
+    const uploadImage = mock(async () => ({ path: "/never" }));
+    const clearInputs = mock(() => {});
+
+    await runSend({
+      ...baseArgs(),
+      text: "line1\nline2",
+      uploadImage,
+      ptySend,
+      terminalSend,
+      clearInputs,
+    });
+
+    expect(ptySend).toHaveBeenCalledTimes(0);
+    expect(terminalSend).toHaveBeenCalledTimes(1);
+    expect(terminalSend).toHaveBeenCalledWith("s1", "line1\nline2");
+    expect(clearInputs).toHaveBeenCalledTimes(1);
+  });
+
   test("EX12: file + image -> single ptySend prompt contains both absolute paths and text", async () => {
     const uploadImage = mock(async () => ({ path: "/c/img.png" }));
     const ptySend = mock(() => {});

@@ -81,6 +81,34 @@ describe("session-persistence", () => {
     expect(loaded?.messages[1].content).toBe("world");
   });
 
+  // The terminal marker drives send routing, so it has to survive a reload.
+  test("terminal marker survives the save/load roundtrip", () => {
+    const mockState: SessionState = {
+      id: "sess-term",
+      cwd: "/test",
+      sdkSessionId: null,
+      messages: [],
+      pendingPermission: null,
+      isStreaming: false,
+      currentStreamMessageId: null,
+      activeToolStatus: null,
+      activeTools: new Map(),
+      activeAgents: new Map(),
+      activeHook: null,
+      usage: null,
+      contextUsage: null,
+      promptSuggestion: null,
+      resolvedActions: [],
+      agentState: null,
+      receivedAuthoritativeState: false,
+      terminal: { ready: true },
+    };
+
+    saveSessionState("sess-term", mockState);
+
+    expect(loadSessionState("sess-term")?.terminal).toEqual({ ready: true });
+  });
+
   // TC-SP3: loadSessionState returns null for nonexistent
   test("TC-SP3: loadSessionState returns null for nonexistent session", () => {
     const loaded = loadSessionState("nonexistent");

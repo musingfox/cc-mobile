@@ -8,6 +8,9 @@ interface SendArgs {
   fileAbsPaths: string[];
   uploadImage: (sessionId: string, base64: string, mediaType: string) => Promise<{ path: string }>;
   ptySend: (sessionId: string, cwd: string, prompt: string) => void;
+  // Present only for terminal-backed (live herdr) sessions; when set it takes
+  // the prompt instead of ptySend.
+  terminalSend?: (sessionId: string, prompt: string) => void;
   clearInputs: () => void;
 }
 
@@ -19,7 +22,7 @@ let landing = false;
  *   1. If landing is already in progress, drop (re-entrancy guard).
  *   2. Upload each image to get an absolute server path.
  *   3. Build the PTY prompt (text + landed image paths + file paths).
- *   4. Call ptySend exactly once.
+ *   4. Call the session's send fn exactly once.
  *   5. Call clearInputs.
  */
 export async function runSend({
@@ -30,14 +33,20 @@ export async function runSend({
   fileAbsPaths,
   uploadImage,
   ptySend,
+  terminalSend,
   clearInputs,
 }: SendArgs): Promise<void> {
   if (landing) return;
 
+  const deliver = (prompt: string) => {
+    if (terminalSend) terminalSend(sessionId, prompt);
+    else ptySend(sessionId, cwd, prompt);
+  };
+
   if (images.length === 0) {
     // Fast path: no uploads needed.
     const prompt = buildPtyPrompt(text, [], fileAbsPaths);
-    ptySend(sessionId, cwd, prompt);
+    deliver(prompt);
     clearInputs();
     return;
   }
@@ -50,7 +59,7 @@ export async function runSend({
       landedPaths.push(result.path);
     }
     const prompt = buildPtyPrompt(text, landedPaths, fileAbsPaths);
-    ptySend(sessionId, cwd, prompt);
+    deliver(prompt);
     clearInputs();
   } finally {
     landing = false;
