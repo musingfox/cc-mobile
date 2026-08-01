@@ -4,10 +4,8 @@
  *
  * Usage: bun run e2e/start-mock-server.ts
  */
-import { Elysia } from "elysia";
+import { createApp } from "../server/app";
 import type { ServerConfig } from "../server/config";
-import { createPermissionHandler } from "../server/permission-bridge";
-import { createWsPlugin } from "../server/ws";
 import agentSequence from "./fixtures/agent-sequence.json";
 import chatSequence from "./fixtures/chat-sequence.json";
 import permissionFlow from "./fixtures/permission-flow.json";
@@ -33,16 +31,16 @@ const serverConfig: ServerConfig = {
   defaultCwd: null,
   permissionMode: "default",
   allowedRoots: null,
+  basePath: "",
 };
 
-new Elysia()
-  .use(
-    createWsPlugin(
-      mockSessionManager as Parameters<typeof createWsPlugin>[0],
-      createPermissionHandler,
-      serverConfig,
-    ),
-  )
-  .listen({ port: PORT, hostname: "localhost" });
+type AppDeps = NonNullable<Parameters<typeof createApp>[1]>;
+
+createApp(serverConfig, {
+  // MockSessionManager implements the slice of SessionManager the WS plugin
+  // calls, not the whole class — the same narrowing cast the createWsPlugin
+  // call site used before assembly moved into createApp.
+  sessionManager: mockSessionManager as unknown as AppDeps["sessionManager"],
+}).listen({ port: PORT, hostname: "localhost" });
 
 console.log(`[mock-server] listening on localhost:${PORT}`);
