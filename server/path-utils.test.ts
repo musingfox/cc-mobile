@@ -1,7 +1,10 @@
 /**
- * path-utils.test.ts — Unit tests for resolveAndValidateCwd
+ * path-utils.test.ts — Unit tests for the path validation primitives
+ * (expandPath / validateCwd / validateAllowedPath) and their composition
+ * resolveAndValidateCwd. These three primitives are the single source of
+ * truth: ws.ts used to carry a byte-identical private copy.
  *
- * Uses real FS (mkdtempSync) as required. Five cases:
+ * Uses real FS (mkdtempSync) as required. resolveAndValidateCwd cases:
  *   1. Non-existent path → invalid_cwd
  *   2. Existing dir not in root → path_not_allowed
  *   3. Existing dir inside root → ok
@@ -10,10 +13,10 @@
  */
 
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { resolveAndValidateCwd } from "./path-utils";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { expandPath, resolveAndValidateCwd, validateAllowedPath, validateCwd } from "./path-utils";
 
 // ── Temp dir tracking ─────────────────────────────────────────────────────────
 
@@ -91,5 +94,64 @@ describe("resolveAndValidateCwd — null allowedRoots → ok", () => {
     const dir = makeTmpDir("null-roots");
     const result = resolveAndValidateCwd(dir, null);
     expect(result.ok).toBe(true);
+  });
+});
+
+// ── PathValidationSingleSource: the primitives, individually ──────────────────
+
+describe("expandPath", () => {
+  it("expands a bare ~ to the absolute home directory", () => {
+    expect(expandPath("~")).toBe(resolve(homedir(), ""));
+  });
+
+  it("expands ~/sub to a path under home", () => {
+    expect(expandPath("~/sub")).toBe(join(homedir(), "sub"));
+  });
+
+  it("resolves a relative path against cwd", () => {
+    expect(expandPath("./a")).toBe(resolve("./a"));
+  });
+});
+
+describe("validateCwd", () => {
+  it("returns null for an existing directory", () => {
+    expect(validateCwd(tmpdir())).toBeNull();
+  });
+
+  it("returns the not-exist message for a missing path", () => {
+    expect(validateCwd("/nonexistent-cc-mobile-xyz")).toBe(
+      "Path does not exist: /nonexistent-cc-mobile-xyz",
+    );
+  });
+
+  it("returns the not-a-directory message for a file", () => {
+    const dir = makeTmpDir("file-check");
+    const file = join(dir, "f.txt");
+    writeFileSync(file, "x");
+    expect(validateCwd(file)).toBe(`Not a directory: ${file}`);
+  });
+});
+
+describe("validateAllowedPath", () => {
+  it("allows anything when allowedRoots is null", () => {
+    expect(validateAllowedPath("/anywhere", null)).toBe(true);
+  });
+
+  it("allows a subdirectory of an allowed root", () => {
+    const root = makeTmpDir("allow-root");
+    const sub = join(root, "sub");
+    mkdirSync(sub);
+    expect(validateAllowedPath(sub, [root])).toBe(true);
+  });
+
+  it("allows the root itself", () => {
+    const root = makeTmpDir("allow-self");
+    expect(validateAllowedPath(root, [root])).toBe(true);
+  });
+
+  it("rejects a path outside every allowed root", () => {
+    const root = makeTmpDir("allow-outside");
+    const other = makeTmpDir("other");
+    expect(validateAllowedPath(other, [root])).toBe(false);
   });
 });

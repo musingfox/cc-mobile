@@ -27,22 +27,25 @@ export function stripBasePath(pathname: string, basePath: string): string {
   return pathname;
 }
 
-// ── Internal helpers (mirroring ws.ts logic) ──────────────────────────────
+// ── Path validation primitives (single source of truth) ───────────────────
 
-function expandPath(p: string): string {
+/** Expands a leading `~` to the home directory, then resolves to an absolute path. */
+export function expandPath(p: string): string {
   if (p.startsWith("~/") || p === "~") {
     return resolve(homedir(), p.slice(2));
   }
   return resolve(p);
 }
 
-function validateCwdInternal(cwd: string): string | null {
+/** Returns an error message when `cwd` is missing or not a directory, else null. */
+export function validateCwd(cwd: string): string | null {
   if (!existsSync(cwd)) return `Path does not exist: ${cwd}`;
   if (!statSync(cwd).isDirectory()) return `Not a directory: ${cwd}`;
   return null;
 }
 
-function validateAllowedPathInternal(cwd: string, allowedRoots: string[] | null): boolean {
+/** True when `cwd` resolves inside one of `allowedRoots`; `null` roots allow everything. */
+export function validateAllowedPath(cwd: string, allowedRoots: string[] | null): boolean {
   if (allowedRoots === null) {
     return true;
   }
@@ -94,12 +97,12 @@ export function resolveAndValidateCwd(
   | { ok: false; error: { code: "invalid_cwd" | "path_not_allowed"; message: string } } {
   const expanded = expandPath(rawCwd);
 
-  const cwdError = validateCwdInternal(expanded);
+  const cwdError = validateCwd(expanded);
   if (cwdError) {
     return { ok: false, error: { code: "invalid_cwd", message: cwdError } };
   }
 
-  if (!validateAllowedPathInternal(expanded, allowedRoots)) {
+  if (!validateAllowedPath(expanded, allowedRoots)) {
     return {
       ok: false,
       error: { code: "path_not_allowed", message: "Project path is not in the allowed roots" },
