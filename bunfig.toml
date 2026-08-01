@@ -1,4 +1,5 @@
 [test]
-# e2e tests use Playwright: `bun run test:e2e`
+# server/integration holds the herdr live e2e suites: they need a running herdr
+# daemon and the `claude` binary, so they run only via `bun run test:herdr`.
 preload = ["./happy-dom.ts"]
-pathIgnorePatterns = ["e2e/**", "server/integration/**"]
+pathIgnorePatterns = ["server/integration/**"]

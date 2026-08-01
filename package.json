@@ -16,8 +16,6 @@
     "lint:fix": "bunx biome check --write .",
     "test": "bun test",
     "test:herdr": "for f in live swap restart permission; do bun --config=/dev/null test --timeout=400000 ./server/integration/herdr-$f.e2e.test.ts || exit 1; done",
-    "test:e2e": "bunx playwright test",
-    "test:e2e:ui": "bunx playwright test --ui",
     "postinstall": "git config core.hooksPath .githooks 2>/dev/null; true"
   },
   "dependencies": {
@@ -47,7 +45,6 @@
   "devDependencies": {
     "@biomejs/biome": "^2.4.7",
     "@happy-dom/global-registrator": "^20.8.4",
-    "@playwright/test": "^1.58.2",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.2",
     "@types/bun": "^1.3.10",
