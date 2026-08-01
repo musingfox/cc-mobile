@@ -255,7 +255,13 @@ export function createWsPlugin(
         await handleTmuxCreate(message, {
           backend,
           allowedRoots: serverConfig.allowedRoots,
-          send: (msg) => ws.send(msg),
+          // The success ack is buffered so a client that blinked during the
+          // create — readiness gating makes that a multi-second window — still
+          // receives it on reconnect via replay. Errors stay bare: they carry
+          // no session to key a buffer entry on, and the session they refer to
+          // does not exist to replay for.
+          send: (msg) =>
+            msg.type === "tmux_created" ? sendBuffered(ws, message.claudeUuid, msg) : ws.send(msg),
         });
         return;
       }
