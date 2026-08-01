@@ -234,6 +234,12 @@ Design principles:
 
 Add to home screen → launches as standalone app (no browser chrome).
 
+### 8. Herdr Terminal Layer ([ADR-015](docs/adr/015-herdr-terminal-layer.md))
+
+Mobile "new session" launches a real `claude` process inside a herdr workspace (`tmux_create`/`tmux_send`/`tmux_teardown` messages). The same live session can be joined from the desktop with `herdr agent attach ccm-<first-8-of-uuid>`.
+
+**Limitation — trusted directories only**: the herdr path currently only works for working directories already trusted in `~/.claude.json`. For an untrusted directory, `claude` shows its folder-trust dialog on startup; the first prompt is swallowed by that dialog, and the readiness gate cannot detect this state. Until this is handled, only create sessions in previously trusted directories. Tracked in #24.
+
 ## Implementation Phases
 
 ### Phase 1: Core Loop (MVP) ✅

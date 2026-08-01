@@ -1316,7 +1316,15 @@ class WsService {
 
   closeSession(sessionId: string) {
     if (this.ws) {
-      this.sendMessage({ type: "interrupt", sessionId });
+      // Terminal-backed sessions own a live herdr workspace: `interrupt` only
+      // reaches the SDK session manager, so without a teardown the `claude`
+      // process would be orphaned until server shutdown.
+      const isTerminal = useAppStore.getState().sessions.get(sessionId)?.terminal !== undefined;
+      if (isTerminal) {
+        this.sendMessage({ type: "tmux_teardown", claudeUuid: sessionId });
+      } else {
+        this.sendMessage({ type: "interrupt", sessionId });
+      }
     }
     useAppStore.getState().removeSession(sessionId);
   }
