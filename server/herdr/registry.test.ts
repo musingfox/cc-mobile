@@ -108,7 +108,7 @@ describe("HerdrCreateSession", () => {
       pane_id: "p1",
       args: [
         "--permission-mode",
-        "bypassPermissions",
+        "default",
         "--settings",
         result.settingsPath,
         "--session-id",
@@ -116,6 +116,25 @@ describe("HerdrCreateSession", () => {
       ],
     });
     expect(registry.hasSession(UUID)).toEqual({ present: true, paneRef: "p1" });
+  });
+
+  test("options.permissionMode overrides the argv value", async () => {
+    const fake = makeFakeClient();
+    const registry = createHerdrRegistry({
+      client: fake.client,
+      responseUrl: "http://127.0.0.1:3001/api/pty-response",
+      permissionMode: "plan",
+      sleep: async () => {},
+      now: () => 0,
+    });
+
+    const result = await registry.createSession({ claudeUuid: UUID, cwd: "/tmp" });
+    trackSettings(result.settingsPath);
+
+    const startParams = fake.calls[1]?.params as { args: string[] };
+    const pmIdx = startParams.args.indexOf("--permission-mode");
+    expect(pmIdx).toBeGreaterThanOrEqual(0);
+    expect(startParams.args[pmIdx + 1]).toBe("plan");
   });
 
   test("rejects a duplicate claudeUuid before issuing any RPC", async () => {

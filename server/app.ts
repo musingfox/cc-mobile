@@ -120,6 +120,7 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
     createHerdrBackend({
       responseUrl: tmuxResponseUrl,
       permissionUrl: tmuxPermissionUrl,
+      permissionMode: serverConfig.permissionMode,
       responseRelay: ptyResponseRelay,
     });
 

@@ -57,7 +57,7 @@ function claudeProcess(sessionId: string) {
     argv: [
       "claude",
       "--permission-mode",
-      "bypassPermissions",
+      "default",
       "--settings",
       settingsPathFor(sessionId),
       "--session-id",

@@ -25,6 +25,8 @@ export interface HerdrBackendOptions {
   responseRelay: ReturnType<typeof createPtyResponseRelay>;
   responseUrl?: string;
   permissionUrl?: string;
+  /** claude --permission-mode for launched sessions (default "default"). */
+  permissionMode?: string;
   /**
    * Injectable client. Defaults to a real one whose transport connects lazily,
    * so constructing a backend never contacts the daemon.
@@ -59,6 +61,7 @@ export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalB
     client,
     responseUrl: options.responseUrl,
     permissionUrl: options.permissionUrl,
+    permissionMode: options.permissionMode,
     readinessBudgetMs: options.readinessBudgetMs,
     readinessPollMs: options.readinessPollMs,
   });

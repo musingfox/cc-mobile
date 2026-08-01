@@ -61,6 +61,8 @@ export interface HerdrRegistryOptions {
   responseUrl?: string;
   /** Full URL for the PreToolUse hook POST target. */
   permissionUrl?: string;
+  /** claude --permission-mode value (default "default" — no more unconditional bypass). */
+  permissionMode?: string;
   /** Readiness gate tuning + test seams. */
   readinessBudgetMs?: number;
   readinessPollMs?: number;
@@ -124,6 +126,7 @@ export function createHerdrRegistry(options: HerdrRegistryOptions) {
   const { client } = options;
   const responseUrl = options.responseUrl ?? "http://127.0.0.1:3001/api/pty-response";
   const permissionUrl = options.permissionUrl ?? "http://127.0.0.1:3001/api/pty-permission";
+  const permissionMode = options.permissionMode ?? "default";
 
   // The hooks live one directory up, next to the tmux path that also uses them.
   const STOP_HOOK_PATH = join(import.meta.dir, "..", "pty-stop-hook.ts");
@@ -171,7 +174,7 @@ export function createHerdrRegistry(options: HerdrRegistryOptions) {
           pane_id: paneId,
           args: [
             "--permission-mode",
-            "bypassPermissions",
+            permissionMode,
             "--settings",
             settingsPath,
             "--session-id",

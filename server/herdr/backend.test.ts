@@ -104,6 +104,24 @@ describe("herdr backend composition", () => {
     expect(backend.listLive()).toEqual([UUID]);
   });
 
+  test("permissionMode passes through to the launched claude argv", async () => {
+    const fake = makeFakeClient();
+    const backend = createHerdrBackend({
+      client: fake.client,
+      responseRelay: createPtyResponseRelay(),
+      permissionMode: "acceptEdits",
+    });
+
+    const info = await backend.createSession({ claudeUuid: UUID, cwd: "/tmp" });
+    settingsWritten.add(info.settingsPath);
+
+    const start = fake.calls.find((call) => call.method === "agent.start");
+    const args = (start?.params as { args: string[] }).args;
+    const pmIdx = args.indexOf("--permission-mode");
+    expect(pmIdx).toBeGreaterThanOrEqual(0);
+    expect(args[pmIdx + 1]).toBe("acceptEdits");
+  });
+
   test("teardown stops the subscription, closes the workspace and deregisters", async () => {
     const fake = makeFakeClient();
     const { backend } = makeBackend(fake);
