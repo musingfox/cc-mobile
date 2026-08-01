@@ -1,24 +1,16 @@
 /**
  * send-routing.ts — HerdrPromptInjection + HerdrReplyDelivery.
  *
- * The waiter/sink semantics are ported 1:1 from tmux-send-routing (arm before
- * injecting, arm-time sink capture for E1/E3 recovery, cancel-on-failure) — see
- * that file for the reasoning behind each. Only the injection differs, and the
- * difference is the point of #22:
- *
- *   tmux: one `send-keys` with the prompt flattened to a single line, because
- *         embedded newlines submit early.
- *   herdr: `pane.send_text` lands multi-line text in the composer without
- *         submitting, then `pane.send_keys ["Enter"]` submits the whole thing
- *         as one turn (live-verified 2026-08-01). No flattening.
+ * The waiter/sink semantics (arm before injecting, arm-time sink capture for
+ * E1/E3 recovery, cancel-on-failure) were carried over 1:1 from the previous
+ * terminal adapter, which is gone as of #25. Only the injection differs, and
+ * that difference is the point of #22: `pane.send_text` lands multi-line text
+ * in the composer without submitting, then `pane.send_keys ["Enter"]` submits
+ * the whole thing as one turn (live-verified 2026-08-01). No prompt flattening.
  *
  * `agent.wait` is deliberately never called: it matches the CURRENT settled
  * state, so waiting after a second Enter resolves instantly on the previous
  * turn's `done`. The Stop-hook relay is the only reply signal.
- *
- * A sibling of tmux-send-routing rather than a refactor of it: that module is
- * frozen for deletion in #25, and cross-cutting doomed code costs more than the
- * temporary duplication (plan D10).
  */
 
 import type { createPtyResponseRelay } from "../pty-response-relay";

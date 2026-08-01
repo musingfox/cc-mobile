@@ -3,9 +3,9 @@
  * cc-mobile injects into every claude session it launches.
  *
  * Backend-neutral on purpose: the hook shape (Stop → pty-response, PreToolUse →
- * pty-permission) is one contract, not one per terminal backend. Extracted from
- * tmux-registry.ts verbatim so the tmux adapter can be deleted (#25) without the
- * herdr registry losing its hook wiring.
+ * pty-permission) is one contract, not one per terminal backend. Extracted
+ * verbatim from the retired terminal adapter (#25) so deleting that adapter
+ * could not take the herdr registry's hook wiring with it.
  */
 
 export interface BuildClaudeSettingsInput {

@@ -1,10 +1,9 @@
 /**
  * backend.ts — the herdr TerminalBackend adapter + the startup compatibility gate.
  *
- * Composes the three herdr modules into the port ws.ts and tmux-control already
- * speak: registry (lifecycle), send-routing (prompt in, reply out), status-events
- * (activity indicator). Same shape as createTmuxBackend, so swapping the default
- * at the composition root is the only wiring change.
+ * Composes the three herdr modules into the TerminalBackend port the transport
+ * layer speaks: registry (lifecycle), send-routing (prompt in, reply out),
+ * status-events (activity indicator).
  *
  * herdr is the sole default backend with no runtime fallback (plan D1): a missing
  * or incompatible daemon is a deploy-time failure via verifyHerdrStartup, not a

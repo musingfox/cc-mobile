@@ -1,9 +1,9 @@
 /**
  * claude-settings.test.ts — ClaudeSettingsHookInjection contract.
  *
- * The four SettingsInjection cases (T1/T2/T2b/T3) moved verbatim from
- * tmux-registry.test.ts when the builder was extracted to a backend-neutral
- * module (#25 Step 1). The hook shape must not change across that move.
+ * The four SettingsInjection cases (T1/T2/T2b/T3) moved verbatim from the
+ * retired terminal adapter's test file when the builder was extracted to a
+ * backend-neutral module (#25). The hook shape must not change across that move.
  */
 
 import { describe, expect, it } from "bun:test";

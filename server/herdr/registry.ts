@@ -2,13 +2,12 @@
  * registry.ts — HerdrCreateSession + HerdrTeardown: cc-mobile-owned claude
  * sessions living in herdr workspaces.
  *
- * Mirrors tmux-registry's lifecycle contract (per-uuid settings file, the exact
- * claude argv, duplicate-uuid rejection, settings unlink on teardown) with the
- * launch swapped to herdr's two-step: `workspace.create` for a pane at a shell
- * prompt, then `agent.start` into that pane. The daemon assembles argv itself
- * and passes `args` through verbatim, so the tmux argv transfers unchanged —
- * which is what keeps `--session-id` (Stop-hook keying) and `--settings` (hook
- * wiring) working identically on both backends.
+ * Lifecycle contract: per-uuid settings file, a fixed claude argv,
+ * duplicate-uuid rejection, settings unlink on teardown. Launch is herdr's
+ * two-step: `workspace.create` for a pane at a shell prompt, then `agent.start`
+ * into that pane. The daemon assembles argv itself and passes `args` through
+ * verbatim, which is what keeps `--session-id` (Stop-hook keying) and
+ * `--settings` (hook wiring) working.
  *
  * `buildClaudeSettings` is imported rather than re-implemented: the hook shape
  * is one contract, not two.
