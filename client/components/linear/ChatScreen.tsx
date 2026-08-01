@@ -95,6 +95,7 @@ export default function ChatScreen({ onNavigate }: Props) {
   const activeAgents = session.activeAgents;
   const usage = session.usage;
   const contextUsage = session.contextUsage;
+  const terminalStarting = session.terminal !== undefined && !session.terminal.ready;
   const model = capabilities?.model ?? "claude";
   const projectName = basename(session.cwd);
   const displayPath = session.cwd.replace(/^\/Users\/[^/]+/, "~");
@@ -146,7 +147,9 @@ export default function ChatScreen({ onNavigate }: Props) {
       </header>
 
       <div className="lin-chat-scroll lin-scroll" ref={scrollRef}>
-        {messages.length === 0 && !isStreaming && (
+        {terminalStarting && <div className="lin-chat-empty-inline">Starting session…</div>}
+
+        {messages.length === 0 && !isStreaming && !terminalStarting && (
           <div className="lin-chat-empty-inline">Type a message to start.</div>
         )}
 

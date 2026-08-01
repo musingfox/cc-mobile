@@ -372,6 +372,10 @@ class WsService {
   // notification `key` (globally unique per event) or `text:<text>` fallback;
   // cleared on disconnect so a fresh session starts unbiased.
   private notificationSeenKeys = new Set<string>();
+  // Terminal sessions awaiting their `tmux_created` reply. Create failures come
+  // back without a claudeUuid, so a failure clears every pending optimistic
+  // session rather than guessing which one it belongs to.
+  private pendingTerminalCreates = new Set<string>();
 
   private sendMessage(msg: Record<string, unknown>) {
     if (!this.ws) return;
@@ -538,6 +542,16 @@ class WsService {
           }
           saveProject(cwd);
         }
+        break;
+      }
+
+      case "tmux_created": {
+        const claudeUuid = msg.claudeUuid as string | undefined;
+        if (!claudeUuid) break;
+        this.pendingTerminalCreates.delete(claudeUuid);
+        const cwd = store.sessions.get(claudeUuid)?.cwd;
+        store.setTerminalReady(claudeUuid, true);
+        if (cwd) saveProject(cwd);
         break;
       }
 
@@ -968,10 +982,24 @@ class WsService {
         });
         break;
 
-      case "error":
+      case "error": {
         hapticService.error();
         // Clear directory loading state on any error
         store.setIsLoadingDirectories(false);
+
+        // Terminal create failures arrive without a sessionId, so drop the
+        // optimistic sessions still waiting for `tmux_created` — otherwise the
+        // session list keeps a ghost that can never become ready.
+        const createFailed =
+          msg.code === "invalid_cwd" ||
+          msg.code === "path_not_allowed" ||
+          msg.code === "tmux_error";
+        if (!sessionId && createFailed && this.pendingTerminalCreates.size > 0) {
+          for (const uuid of this.pendingTerminalCreates) {
+            store.removeSession(uuid);
+          }
+          this.pendingTerminalCreates.clear();
+        }
 
         // Auto-resume if server lost the session (e.g. after server restart)
         if (
@@ -1006,6 +1034,7 @@ class WsService {
           toastService.error(msg.message as string);
         }
         break;
+      }
 
       case "session_list": {
         // Store session list in app store
@@ -1090,6 +1119,23 @@ class WsService {
     this.sendMessage({ type: "new_session", cwd });
   }
 
+  /**
+   * Starts a live terminal-backed session. The client owns the id: the session
+   * appears in the store immediately (not ready) so the chat is navigable while
+   * the server takes seconds to pass its readiness gate.
+   * Returns the generated claudeUuid, or null when the socket is down.
+   */
+  createTerminalSession(cwd: string): string | null {
+    if (!this.ws) return null;
+
+    const claudeUuid = crypto.randomUUID();
+    useAppStore.getState().addSession(claudeUuid, cwd, { ready: false });
+    this.pendingTerminalCreates.add(claudeUuid);
+    this.sendMessage({ type: "tmux_create", claudeUuid, cwd });
+
+    return claudeUuid;
+  }
+
   send(sessionId: string, content: string | ContentBlock[]) {
     if (!this.ws) return;
 
@@ -1132,6 +1178,26 @@ class WsService {
     });
 
     this.sendMessage({ type: "pty_send", sessionId, cwd, prompt });
+
+    useAppStore.getState().setStreaming(sessionId, true);
+  }
+
+  /**
+   * Sends one turn to a live terminal session. The session id doubles as the
+   * claudeUuid, and the reply arrives through the usual stream_chunk/stream_end
+   * handlers.
+   */
+  terminalSend(sessionId: string, prompt: string) {
+    if (!this.ws) return;
+
+    useAppStore.getState().addMessage(sessionId, {
+      id: `user-${Date.now()}`,
+      role: "user",
+      content: prompt,
+      timestamp: Date.now(),
+    });
+
+    this.sendMessage({ type: "tmux_send", claudeUuid: sessionId, content: prompt });
 
     useAppStore.getState().setStreaming(sessionId, true);
   }

@@ -23,6 +23,9 @@ interface SerializableSessionState {
   resolvedActions: ResolvedAction[];
   agentState: "idle" | "running" | "requires_action" | null;
   receivedAuthoritativeState: boolean;
+  // Must survive a reload: send routing keys on this marker, so dropping it
+  // would silently send a live terminal session's prompt down the PTY path.
+  terminal?: { ready: boolean };
 }
 
 export function saveSessionState(sessionId: string, state: SessionState): void {
@@ -45,6 +48,7 @@ export function saveSessionState(sessionId: string, state: SessionState): void {
       resolvedActions: state.resolvedActions || [],
       agentState: state.agentState,
       receivedAuthoritativeState: state.receivedAuthoritativeState,
+      terminal: state.terminal,
     };
 
     const key = `${SESSION_KEY_PREFIX}${sessionId}`;

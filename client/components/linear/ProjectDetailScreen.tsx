@@ -121,7 +121,7 @@ export default function ProjectDetailScreen({ cwd, onNavigate, onBack }: Props) 
   }, [sessions, sessionList, cwd, activeSessionId, setActiveSession, onNavigate]);
 
   const handleNewSession = () => {
-    wsService.createSession(cwd);
+    wsService.createTerminalSession(cwd);
     onNavigate("chat");
   };
 

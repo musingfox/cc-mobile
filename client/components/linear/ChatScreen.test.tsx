@@ -52,6 +52,22 @@ describe("ChatScreen", () => {
     expect(css.includes("border-radius: 14px;")).toBe(true);
   });
 
+  test("terminal session shows the starting indicator until it is ready", () => {
+    const store = useAppStore.getState();
+    store.addSession("s1", "/tmp/project", { ready: false });
+    store.setActiveSession("s1");
+
+    const { getByText, queryByText, rerender } = render(<ChatScreen onNavigate={() => {}} />);
+    expect(getByText("Starting session…")).not.toBeNull();
+    expect(queryByText("Type a message to start.")).toBeNull();
+
+    useAppStore.getState().setTerminalReady("s1", true);
+    rerender(<ChatScreen onNavigate={() => {}} />);
+
+    expect(queryByText("Starting session…")).toBeNull();
+    expect(getByText("Type a message to start.")).not.toBeNull();
+  });
+
   test("slash button opens picker with commands", () => {
     const store = useAppStore.getState();
     store.addSession("s1", "/tmp/project");

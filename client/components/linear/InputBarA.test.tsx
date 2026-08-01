@@ -6,14 +6,16 @@ import InputBarA from "./InputBarA";
 
 describe("InputBarA", () => {
   const originalPtySend = wsService.ptySend;
+  const originalTerminalSend = wsService.terminalSend;
 
   // Seed a session with a cwd so the PTY send path has everything it needs.
-  function seed(draft: string) {
+  // `terminal` marks the session as terminal-backed (herdr live session).
+  function seed(draft: string, terminal?: { ready: boolean }) {
     useAppStore.setState({
       inputDraft: draft,
       capabilities: null,
-      // Only `.cwd` is read by the component.
-      sessions: new Map([["s1", { cwd: "/tmp/proj" }]]) as never,
+      // Only `.cwd` and `.terminal` are read by the component.
+      sessions: new Map([["s1", { cwd: "/tmp/proj", terminal }]]) as never,
       activeSessionId: "s1",
     });
   }
@@ -24,6 +26,7 @@ describe("InputBarA", () => {
 
   afterEach(() => {
     wsService.ptySend = originalPtySend;
+    wsService.terminalSend = originalTerminalSend;
     cleanup();
   });
 
@@ -105,6 +108,37 @@ describe("InputBarA", () => {
     expect(ptyMock).toHaveBeenCalledTimes(1);
     expect(ptyMock).toHaveBeenCalledWith("s1", "/tmp/proj", "do the thing");
     expect(useAppStore.getState().inputDraft).toBe("");
+  });
+
+  test("terminal session not ready: Send disabled and a click sends nothing", () => {
+    const terminalMock = mock(() => {});
+    wsService.terminalSend = terminalMock as typeof wsService.terminalSend;
+    seed("hello", { ready: false });
+
+    const { container } = render(<InputBarA sessionId="s1" />);
+    const send = container.querySelector('[aria-label="Send"]') as HTMLButtonElement;
+
+    expect(send.disabled).toBe(true);
+    fireEvent.click(send);
+    expect(terminalMock).toHaveBeenCalledTimes(0);
+  });
+
+  test("terminal session ready: Send enabled and routes to terminalSend", () => {
+    const terminalMock = mock(() => {});
+    const ptyMock = mock(() => {});
+    wsService.terminalSend = terminalMock as typeof wsService.terminalSend;
+    wsService.ptySend = ptyMock as typeof wsService.ptySend;
+    seed("hello", { ready: true });
+
+    const { container } = render(<InputBarA sessionId="s1" />);
+    const send = container.querySelector('[aria-label="Send"]') as HTMLButtonElement;
+
+    expect(send.disabled).toBe(false);
+    fireEvent.click(send);
+
+    expect(ptyMock).toHaveBeenCalledTimes(0);
+    expect(terminalMock).toHaveBeenCalledTimes(1);
+    expect(terminalMock).toHaveBeenCalledWith("s1", "hello");
   });
 
   test("PTY toggle and Append (+) buttons are gone", () => {

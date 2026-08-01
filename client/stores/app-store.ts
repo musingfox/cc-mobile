@@ -165,6 +165,9 @@ export type SessionState = {
   receivedAuthoritativeState: boolean;
   historyUnknownRoleWarned?: boolean;
   permissionMode?: string;
+  // Present only on sessions backed by a live terminal session (herdr).
+  // `ready` flips true on `tmux_created`; sends are gated until then.
+  terminal?: { ready: boolean };
 };
 
 type ConnectionState = "connecting" | "connected" | "disconnected";
@@ -191,7 +194,8 @@ interface AppState {
   sessions: Map<string, SessionState>;
   activeSessionId: string | null;
 
-  addSession: (sessionId: string, cwd: string) => void;
+  addSession: (sessionId: string, cwd: string, terminal?: { ready: boolean }) => void;
+  setTerminalReady: (sessionId: string, ready: boolean) => void;
   setSdkSessionId: (sessionId: string, sdkSessionId: string) => void;
   removeSession: (sessionId: string) => void;
   setActiveSession: (sessionId: string) => void;
@@ -326,7 +330,7 @@ export const useAppStore = create<AppState>((set) => ({
   sessions: new Map(),
   activeSessionId: null,
 
-  addSession: (sessionId, cwd) =>
+  addSession: (sessionId, cwd, terminal) =>
     set((state) => {
       const next = new Map(state.sessions);
       next.set(sessionId, {
@@ -349,12 +353,21 @@ export const useAppStore = create<AppState>((set) => ({
         receivedAuthoritativeState: false,
         historyUnknownRoleWarned: false,
         permissionMode: undefined,
+        terminal,
       });
       return {
         sessions: next,
         activeSessionId: sessionId,
       };
     }),
+
+  setTerminalReady: (sessionId, ready) =>
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (s) => ({
+        ...s,
+        terminal: { ready },
+      })),
+    })),
 
   setSdkSessionId: (sessionId, sdkSessionId) =>
     set((state) => {

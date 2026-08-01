@@ -47,6 +47,11 @@ const InputBarA = forwardRef<InputBarAHandle, Props>(function InputBarA(
   const inputDraft = useAppStore((s) => s.inputDraft);
   const setInputDraft = useAppStore((s) => s.setInputDraft);
   const sessionCwd = useAppStore((s) => (sessionId ? s.sessions.get(sessionId)?.cwd : undefined));
+  const terminal = useAppStore((s) =>
+    sessionId ? s.sessions.get(sessionId)?.terminal : undefined,
+  );
+  // A terminal session only accepts input once the server reports it ready.
+  const terminalNotReady = terminal !== undefined && !terminal.ready;
 
   const [images, setImages] = useState<ImageAttachment[]>([]);
   const [files, setFiles] = useState<FileAttachment[]>([]);
@@ -90,7 +95,13 @@ const InputBarA = forwardRef<InputBarAHandle, Props>(function InputBarA(
 
   const handleSend = () => {
     const trimmed = inputDraft.trim();
-    if ((!trimmed && images.length === 0 && files.length === 0) || disabled || isUploading) return;
+    if (
+      (!trimmed && images.length === 0 && files.length === 0) ||
+      disabled ||
+      isUploading ||
+      terminalNotReady
+    )
+      return;
     if (!sessionId || !sessionCwd) return;
 
     hapticService.tap();
@@ -111,6 +122,7 @@ const InputBarA = forwardRef<InputBarAHandle, Props>(function InputBarA(
       fileAbsPaths,
       uploadImage,
       ptySend: wsService.ptySend.bind(wsService),
+      terminalSend: terminal ? wsService.terminalSend.bind(wsService) : undefined,
       clearInputs: () => {
         setInputDraft("");
         setImages([]);
@@ -190,7 +202,8 @@ const InputBarA = forwardRef<InputBarAHandle, Props>(function InputBarA(
   };
 
   const hasAttachments = images.length > 0 || files.length > 0;
-  const canSend = !disabled && !isUploading && (inputDraft.trim() || hasAttachments);
+  const canSend =
+    !disabled && !isUploading && !terminalNotReady && (inputDraft.trim() || hasAttachments);
 
   return (
     <div className="lin-input-bar">
