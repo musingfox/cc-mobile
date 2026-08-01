@@ -160,6 +160,14 @@ const TmuxTeardownMessage = z.object({
   claudeUuid: z.string().min(1),
 });
 
+// Connection-scoped query, deliberately separate from list_sessions: that one
+// lists claude's on-disk SDK sessions, this one lists the terminal sessions
+// this server is currently routing. A reconnecting client asks for it to find
+// out which of its restored cards are still real.
+const ListTerminalSessionsMessage = z.object({
+  type: z.literal("list_terminal_sessions"),
+});
+
 export const ClientMessage = z.discriminatedUnion("type", [
   NewSessionMessage,
   SendMessage,
@@ -183,6 +191,7 @@ export const ClientMessage = z.discriminatedUnion("type", [
   TmuxSendMessage,
   TmuxCreateMessage,
   TmuxTeardownMessage,
+  ListTerminalSessionsMessage,
 ]);
 
 export type ClientMessage = z.infer<typeof ClientMessage>;
@@ -353,6 +362,12 @@ const SessionStateMessage = z.object({
   state: z.enum(["idle", "running", "requires_action"]),
 });
 
+/** Reply to list_terminal_sessions. Empty list means "none live", not "unknown". */
+const TerminalSessionsMessage = z.object({
+  type: z.literal("terminal_sessions"),
+  claudeUuids: z.array(z.string()),
+});
+
 export const ServerMessage = z.discriminatedUnion("type", [
   SessionCreatedMessage,
   StreamChunkMessage,
@@ -369,6 +384,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
   EventWrapperMessage,
   ReplayCompleteMessage,
   SessionStateMessage,
+  TerminalSessionsMessage,
 ]);
 
 export type ServerMessage = z.infer<typeof ServerMessage>;

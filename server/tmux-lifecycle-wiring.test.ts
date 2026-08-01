@@ -46,6 +46,7 @@ function makeSpyBackend() {
   const backend: AppBackend = {
     createSession: async () => ({ name: "", paneRef: "1", settingsPath: "" }),
     hasSession: () => ({ present: false }),
+    listLive: () => [],
     teardown: async () => ({ killed: false }),
     teardownAll: async () => {
       teardownAllCalls++;

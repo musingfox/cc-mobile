@@ -1,0 +1,92 @@
+/**
+ * ws-terminal-sessions.test.ts — TerminalSessionListQuery.
+ *
+ * The server's live terminal sessions are the authority a reconnecting client
+ * reconciles its restored cards against: live ones become writable again, dead
+ * ones are dropped. Before this message pair existed, a client that reloaded
+ * mid-create had no way to ask, and its card stayed stuck unwritable forever
+ * (#22).
+ */
+
+import { afterEach, describe, expect, test } from "bun:test";
+import { ClientMessage, ServerMessage } from "../protocol";
+import { startWsHarness, type WsHarness } from "./ws-harness";
+
+let harness: WsHarness | null = null;
+
+afterEach(async () => {
+  await harness?.close();
+  harness = null;
+});
+
+function backendWithLive(claudeUuids: string[]) {
+  return {
+    createSession: async () => ({ name: "n", paneRef: "p1", settingsPath: "/tmp/s" }),
+    teardown: async () => ({ killed: false }),
+    listLive: () => claudeUuids,
+    send: async () => {},
+    registerClient: () => {},
+    cleanupByOwner: () => {},
+  };
+}
+
+describe("TerminalSessionListQuery — protocol", () => {
+  test("both halves of the message pair validate", () => {
+    expect(ClientMessage.safeParse({ type: "list_terminal_sessions" }).success).toBe(true);
+    expect(
+      ServerMessage.safeParse({ type: "terminal_sessions", claudeUuids: ["u1"] }).success,
+    ).toBe(true);
+  });
+
+  test("the reply requires its list — a missing one is not an empty one", () => {
+    expect(ServerMessage.safeParse({ type: "terminal_sessions" }).success).toBe(false);
+    expect(ServerMessage.safeParse({ type: "terminal_sessions", claudeUuids: "u1" }).success).toBe(
+      false,
+    );
+  });
+});
+
+describe("TerminalSessionListQuery — handler", () => {
+  test("answers with the backend's live list, bare rather than enveloped", async () => {
+    harness = await startWsHarness(backendWithLive(["u1", "u2"]));
+
+    harness.send({ type: "list_terminal_sessions" });
+    const reply = await harness.waitFor((msg) => msg.type === "terminal_sessions");
+
+    expect(reply).toEqual({ type: "terminal_sessions", claudeUuids: ["u1", "u2"] });
+    // A connection-scoped answer must not be buffered: replaying a stale list
+    // to a later reconnect would delete cards that are alive by then.
+    expect(harness.eventBuffer.replay("u1", 0)).toEqual([]);
+    expect(harness.received.some((msg) => msg.type === "event")).toBe(false);
+  });
+
+  test("no live sessions answers with an empty list, not silence", async () => {
+    harness = await startWsHarness(backendWithLive([]));
+
+    harness.send({ type: "list_terminal_sessions" });
+    const reply = await harness.waitFor((msg) => msg.type === "terminal_sessions");
+
+    expect(reply).toEqual({ type: "terminal_sessions", claudeUuids: [] });
+  });
+
+  test("the answer is read at query time, not captured earlier", async () => {
+    const live: string[] = [];
+    harness = await startWsHarness({ ...backendWithLive([]), listLive: () => live });
+
+    harness.send({ type: "list_terminal_sessions" });
+    await harness.waitFor((msg) => msg.type === "terminal_sessions");
+
+    live.push("u3");
+    harness.send({ type: "list_terminal_sessions" });
+    const replies = await harness
+      .waitFor(
+        (msg) =>
+          msg.type === "terminal_sessions" &&
+          Array.isArray(msg.claudeUuids) &&
+          msg.claudeUuids.length === 1,
+      )
+      .then(() => harness?.received.filter((msg) => msg.type === "terminal_sessions"));
+
+    expect(replies?.map((msg) => msg.claudeUuids)).toEqual([[], ["u3"]]);
+  });
+});

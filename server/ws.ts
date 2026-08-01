@@ -111,6 +111,8 @@ export function emitCapabilitiesOnResume(
 
 /** The terminal backend surface the WS transport drives. */
 export interface WsBackend extends TmuxControlBackend {
+  /** claudeUuids with a live session — the authority a reconnecting client asks for. */
+  listLive(): string[];
   send(params: { claudeUuid: string; content: string }): Promise<void>;
   registerClient(
     claudeUuid: string,
@@ -503,6 +505,14 @@ export function createWsPlugin(
               console.error("[ws] session_list validation failed:", err);
               ws.send({ type: "session_list", sessions });
             }
+            break;
+          }
+
+          case "list_terminal_sessions": {
+            // Bare send, not sendBuffered: this is a connection-scoped question
+            // and its answer, not a session event. Buffering it would replay a
+            // stale list to the next reconnect.
+            ws.send({ type: "terminal_sessions", claudeUuids: backend.listLive() });
             break;
           }
 
