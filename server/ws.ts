@@ -407,6 +407,13 @@ export function createWsPlugin(
             handler.resolvePermission(message.requestId, message.allow, message.answers);
             // Also resolve in PTY relay (idempotent if requestId unknown to it)
             ptyRelay.resolvePermission(message.requestId, message.allow, message.answers);
+            // And in the tmux/herdr relay — same idempotent broadcast; without
+            // this the herdr path can only ever 90s-timeout-deny.
+            tmuxPermissionRelay.resolvePermission(
+              message.requestId,
+              message.allow,
+              message.answers,
+            );
             break;
           }
 
