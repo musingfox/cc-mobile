@@ -108,6 +108,25 @@ export function buildClaudeSettings(input: BuildClaudeSettingsInput): {
     },
   };
 
+  // PreToolUse gate: only the tools claude's default mode would prompt for.
+  // Read-class tools (Read/Glob/Grep) stay out so a 90s unattended deny cannot
+  // stall a whole turn of lookups (plan D1). Injected only when both permission
+  // inputs are present (plan D5) — production registries always pass both.
+  if (input.permissionUrl && input.permissionHookPath) {
+    const permissionCommand = `CC_MOBILE_PERMISSION_URL='${input.permissionUrl}' bun '${input.permissionHookPath}'`;
+    result.hooks.PreToolUse = [
+      {
+        matcher: "Bash|Write|Edit|NotebookEdit",
+        hooks: [
+          {
+            type: "command",
+            command: permissionCommand,
+          },
+        ],
+      },
+    ];
+  }
+
   return result;
 }
 

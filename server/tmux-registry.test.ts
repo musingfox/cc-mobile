@@ -103,12 +103,29 @@ describe("SettingsInjection (pure)", () => {
     );
   });
 
-  it("T2: does NOT wire PreToolUse even when permissionUrl + permissionHookPath given; Stop still present", () => {
+  it("T2: wires PreToolUse (matcher Bash|Write|Edit|NotebookEdit) when permissionUrl + permissionHookPath given; Stop unchanged", () => {
     const settings = buildClaudeSettings({
       responseUrl: "http://127.0.0.1:3001/cc/api/pty-response",
       stopHookPath: "/r/server/pty-stop-hook.ts",
       permissionUrl: "http://127.0.0.1:3001/cc/api/pty-permission",
       permissionHookPath: "/r/server/pty-permission-hook.ts",
+    });
+    expect(settings.hooks.PreToolUse).toBeDefined();
+    expect(settings.hooks.PreToolUse![0].matcher).toBe("Bash|Write|Edit|NotebookEdit");
+    expect(settings.hooks.PreToolUse![0].hooks[0].type).toBe("command");
+    expect(settings.hooks.PreToolUse![0].hooks[0].command).toBe(
+      "CC_MOBILE_PERMISSION_URL='http://127.0.0.1:3001/cc/api/pty-permission' bun '/r/server/pty-permission-hook.ts'",
+    );
+    expect(settings.hooks.Stop).toBeDefined();
+    expect(settings.hooks.Stop[0].hooks[0].command).toBe(
+      "CC_MOBILE_RESPONSE_URL='http://127.0.0.1:3001/cc/api/pty-response' bun '/r/server/pty-stop-hook.ts'",
+    );
+  });
+
+  it("T2b: omitting permissionUrl/permissionHookPath leaves PreToolUse undefined; Stop still present", () => {
+    const settings = buildClaudeSettings({
+      responseUrl: "http://127.0.0.1:3001/cc/api/pty-response",
+      stopHookPath: "/r/server/pty-stop-hook.ts",
     });
     expect(settings.hooks.PreToolUse).toBeUndefined();
     expect(settings.hooks.Stop).toBeDefined();
