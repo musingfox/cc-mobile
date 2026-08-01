@@ -38,6 +38,8 @@ export interface TmuxRegistryOptions {
   responseUrl?: string;
   /** Full URL for PreToolUse hook POST target. */
   permissionUrl?: string;
+  /** claude --permission-mode value (default "default" — no more unconditional bypass). */
+  permissionMode?: string;
 }
 
 export interface RunResult {
@@ -156,6 +158,7 @@ export function createTmuxRegistry(options: TmuxRegistryOptions = {}) {
   const claudeBin = options.claudeBin ?? (Bun.which("claude") || "claude");
   const responseUrl = options.responseUrl ?? "http://127.0.0.1:3001/api/pty-response";
   const permissionUrl = options.permissionUrl ?? "http://127.0.0.1:3001/api/pty-permission";
+  const permissionMode = options.permissionMode ?? "default";
 
   const STOP_HOOK_PATH = join(import.meta.dir, "pty-stop-hook.ts");
   const PERM_HOOK_PATH = join(import.meta.dir, "pty-permission-hook.ts");
@@ -191,7 +194,7 @@ export function createTmuxRegistry(options: TmuxRegistryOptions = {}) {
         : [
             claudeBin,
             "--permission-mode",
-            "bypassPermissions",
+            permissionMode,
             "--settings",
             settingsPath,
             "--session-id",

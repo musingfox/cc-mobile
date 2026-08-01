@@ -203,10 +203,10 @@ describe("CreateSession", () => {
   });
 });
 
-// ── bypassPermissions inner args (C2) ────────────────────────────────────────
+// ── permission-mode inner args (C2) ──────────────────────────────────────────
 
-describe("CreateSession inner args (bypassPermissions)", () => {
-  it("C2: real claudeBin inner args carry adjacent --permission-mode bypassPermissions before --settings", async () => {
+describe("CreateSession inner args (permission mode)", () => {
+  it("C2: real claudeBin inner args carry adjacent --permission-mode default before --settings", async () => {
     let capturedNew: string[] | undefined;
     const runner = async (cmd: string, args: string[]) => {
       if (cmd === "tmux" && args[0] === "new-session") {
@@ -231,10 +231,37 @@ describe("CreateSession inner args (bypassPermissions)", () => {
     const inner = capturedNew!.slice(dashIdx + 1);
     const pmIdx = inner.indexOf("--permission-mode");
     expect(pmIdx).toBeGreaterThanOrEqual(0);
-    expect(inner[pmIdx + 1]).toBe("bypassPermissions");
+    expect(inner[pmIdx + 1]).toBe("default");
     // --permission-mode comes before --settings
     expect(pmIdx).toBeLessThan(inner.indexOf("--settings"));
     expect(inner[0]).toBe("/usr/local/bin/claude");
+  });
+
+  it("C2b: options.permissionMode overrides the argv value", async () => {
+    let capturedNew: string[] | undefined;
+    const runner = async (cmd: string, args: string[]) => {
+      if (cmd === "tmux" && args[0] === "new-session") {
+        capturedNew = args;
+        return { code: 0, stdout: "", stderr: "" };
+      }
+      if (cmd === "tmux" && args[0] === "list-panes") {
+        return { code: 0, stdout: "4242", stderr: "" };
+      }
+      return { code: 0, stdout: "", stderr: "" };
+    };
+    const reg = createTmuxRegistry({
+      runCommand: runner,
+      claudeBin: "/usr/local/bin/claude",
+      responseUrl: "http://127.0.0.1:3001/cc/api/pty-response",
+      permissionMode: "plan",
+    });
+    const res = await reg.createSession({ claudeUuid: "plan-uuid", cwd: "/tmp" });
+    trackSettings(res.settingsPath);
+
+    const dashIdx = capturedNew!.indexOf("--");
+    const inner = capturedNew!.slice(dashIdx + 1);
+    const pmIdx = inner.indexOf("--permission-mode");
+    expect(inner[pmIdx + 1]).toBe("plan");
   });
 
   it("C2: claudeBin='sleep' inner args remain sleep 300 (no permission-mode)", async () => {
