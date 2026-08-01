@@ -2,7 +2,7 @@
  * ws-permission-resolve.test.ts — PermissionReplyBroadcast.
  *
  * A permission reply from the phone has to reach whichever relay is holding the
- * request. The tmux/herdr relay was missing from that broadcast, so a hook
+ * request. The herdr relay was missing from that broadcast, so a hook
  * waiting on the herdr path could only ever be released by its own 90s
  * timeout-deny — Allow was unreachable no matter what the user tapped.
  *
@@ -49,9 +49,9 @@ async function settle() {
 }
 
 describe("PermissionReplyBroadcast", () => {
-  test("an allow reply resolves the tmux/herdr relay's pending request", async () => {
+  test("an allow reply resolves the herdr relay's pending request", async () => {
     const { relay, sent } = makeRelay();
-    harness = await startWsHarness(backendStub, undefined, { tmuxPermissionRelay: relay });
+    harness = await startWsHarness(backendStub, undefined, { terminalPermissionRelay: relay });
 
     const pending = relay.requestPtyPermission({
       sessionId: "u1",
@@ -70,7 +70,7 @@ describe("PermissionReplyBroadcast", () => {
 
   test("a deny reply resolves the same pending request with allow:false", async () => {
     const { relay } = makeRelay();
-    harness = await startWsHarness(backendStub, undefined, { tmuxPermissionRelay: relay });
+    harness = await startWsHarness(backendStub, undefined, { terminalPermissionRelay: relay });
 
     const pending = relay.requestPtyPermission({
       sessionId: "u1",
@@ -85,9 +85,9 @@ describe("PermissionReplyBroadcast", () => {
     expect(relay.getPendingCount()).toBe(0);
   });
 
-  test("answers ride along to the tmux/herdr relay", async () => {
+  test("answers ride along to the herdr relay", async () => {
     const { relay } = makeRelay();
-    harness = await startWsHarness(backendStub, undefined, { tmuxPermissionRelay: relay });
+    harness = await startWsHarness(backendStub, undefined, { terminalPermissionRelay: relay });
 
     const pending = relay.requestPtyPermission({
       sessionId: "u1",
@@ -108,7 +108,7 @@ describe("PermissionReplyBroadcast", () => {
 
   test("an unknown requestId is a silent no-op — no pending is mis-resolved", async () => {
     const { relay } = makeRelay();
-    harness = await startWsHarness(backendStub, undefined, { tmuxPermissionRelay: relay });
+    harness = await startWsHarness(backendStub, undefined, { terminalPermissionRelay: relay });
 
     let settled = false;
     const pending = relay.requestPtyPermission({

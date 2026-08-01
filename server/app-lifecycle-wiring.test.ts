@@ -1,9 +1,9 @@
 /**
  * app-lifecycle-wiring.test.ts — exercises the PRODUCTION composition root
- * (createApp) for tmux lifecycle wiring (no real tmux, no real signals sent,
+ * (createApp) for terminal lifecycle wiring (no real pane, no real signals sent,
  * no port bound).
  *
- *   EX-A2 (wiring): the tmuxPermissionRelay is constructed with timeoutMs=90000
+ *   EX-A2 (wiring): the terminalPermissionRelay is constructed with timeoutMs=90000
  *                   (the unattended default), not the relay's 600000 fallback.
  *   EX-B2:          createApp registers NO shutdown signal handler and never
  *                   calls backend.teardownAll() — panes outlive a SIGTERM so the
@@ -55,7 +55,7 @@ function makeSpyBackend() {
   };
 }
 
-// Capture the timeoutMs the production wiring passes into the tmux permission relay.
+// Capture the timeoutMs the production wiring passes into the terminal permission relay.
 function makeRelayCapture() {
   let captured: number | undefined;
   const factory = (_send: any, opts: any = {}) => {
@@ -130,10 +130,13 @@ describe("EX-B2: shutdown signals do not tear down panes", () => {
 
 // ── EX-A2 (wiring) ─────────────────────────────────────────────────────────────
 
-describe("EX-A2 wiring: tmux permission relay timeout", () => {
-  it("production wiring constructs the tmux permission relay with timeoutMs=90000 (not 600000)", () => {
+describe("EX-A2 wiring: terminal permission relay timeout", () => {
+  it("production wiring constructs the terminal permission relay with timeoutMs=90000 (not 600000)", () => {
     const relayCap = makeRelayCapture();
-    buildApp({ backend: makeSpyBackend().backend, createTmuxPermissionRelay: relayCap.factory });
+    buildApp({
+      backend: makeSpyBackend().backend,
+      createTerminalPermissionRelay: relayCap.factory,
+    });
     expect(relayCap.timeoutMs).toBe(90000);
     expect(relayCap.timeoutMs).not.toBe(600000);
   });

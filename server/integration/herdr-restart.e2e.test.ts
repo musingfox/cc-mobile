@@ -116,7 +116,7 @@ type ServerMsg = Record<string, unknown>;
 /**
  * Ordered consumer over the raw WebSocket. Buffered replies arrive wrapped in
  * the `{type:"event", eventId, sessionId, payload}` envelope; connection-scoped
- * replies (terminal_sessions, tmux_teardown_result, error) arrive raw — both
+ * replies (terminal_sessions, terminal_teardown_result, error) arrive raw — both
  * are flattened to their payload. `next` consumes messages in arrival order,
  * discarding non-matches, and fails with the step label on deadline.
  */
@@ -185,7 +185,7 @@ async function runTurn(
   label: string,
 ): Promise<void> {
   const t = Date.now();
-  ws.send(JSON.stringify({ type: "tmux_send", claudeUuid, content: prompt }));
+  ws.send(JSON.stringify({ type: "terminal_send", claudeUuid, content: prompt }));
   const reply = await collector.next(
     (msg) => (msg.type === "stream_chunk" || msg.type === "error") && msg.sessionId === claudeUuid,
     TURN_DEADLINE_MS,
@@ -225,16 +225,16 @@ it.skipIf(!existsSync(socketPath))(
       wsA = await openWs(port);
       const collectorA = createMessageCollector(wsA);
       const t2 = Date.now();
-      wsA.send(JSON.stringify({ type: "tmux_create", claudeUuid, cwd: REPO_ROOT }));
+      wsA.send(JSON.stringify({ type: "terminal_create", claudeUuid, cwd: REPO_ROOT }));
       const created = await collectorA.next(
-        (msg) => msg.type === "tmux_created" || msg.type === "error",
+        (msg) => msg.type === "terminal_created" || msg.type === "error",
         CREATE_DEADLINE_MS,
-        "step 2 tmux_created",
+        "step 2 terminal_created",
       );
-      expect(created.type).toBe("tmux_created");
+      expect(created.type).toBe("terminal_created");
       expect(created.claudeUuid).toBe(claudeUuid);
       const paneRef = created.paneRef as string;
-      console.log(`[e2e] step 2 tmux_created paneRef=${paneRef} in ${Date.now() - t2}ms`);
+      console.log(`[e2e] step 2 terminal_created paneRef=${paneRef} in ${Date.now() - t2}ms`);
 
       // Record the workspace for the post-teardown assertion + finally cleanup.
       const panesBefore = await client.call("pane.list", {}, PaneListResultSchema);
@@ -282,13 +282,13 @@ it.skipIf(!existsSync(socketPath))(
       await runTurn(wsB, collectorB, claudeUuid, PROMPT_TURN_3, CODEWORD, "step 8 turn 3");
 
       // Teardown through the mobile protocol; the daemon keeps no residue.
-      wsB.send(JSON.stringify({ type: "tmux_teardown", claudeUuid }));
+      wsB.send(JSON.stringify({ type: "terminal_teardown", claudeUuid }));
       const teardownResult = await collectorB.next(
-        (msg) => msg.type === "tmux_teardown_result" || msg.type === "error",
+        (msg) => msg.type === "terminal_teardown_result" || msg.type === "error",
         CREATE_DEADLINE_MS,
-        "teardown tmux_teardown_result",
+        "teardown terminal_teardown_result",
       );
-      expect(teardownResult.type).toBe("tmux_teardown_result");
+      expect(teardownResult.type).toBe("terminal_teardown_result");
       expect(teardownResult.killed).toBe(true);
       tornDown = true;
       const panesAfter = await client.call("pane.list", {}, PaneListResultSchema);

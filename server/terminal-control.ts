@@ -1,5 +1,5 @@
 /**
- * tmux-control.ts — handlers for the tmux_create / tmux_teardown WS messages.
+ * terminal-control.ts — handlers for the terminal_create / terminal_teardown WS messages.
  *
  * These used to live inline in ws.ts behind a hand-rolled parser that ran ahead
  * of the Zod gate. Both messages are now ClientMessage union members, so ws.ts
@@ -14,7 +14,7 @@
 import { expandPath, validateAllowedPath, validateCwd } from "./path-utils";
 
 /** The slice of the terminal backend these handlers need. */
-export interface TmuxControlBackend {
+export interface TerminalControlBackend {
   createSession(params: {
     claudeUuid: string;
     cwd: string;
@@ -23,21 +23,21 @@ export interface TmuxControlBackend {
   teardown(claudeUuid: string): Promise<{ killed: boolean }>;
 }
 
-export interface TmuxControlDeps {
-  backend: TmuxControlBackend;
+export interface TerminalControlDeps {
+  backend: TerminalControlBackend;
   allowedRoots: string[] | null;
   send: (msg: Record<string, unknown>) => void;
 }
 
 /**
- * Creates a tmux session for an already-validated `{claudeUuid, cwd}`.
+ * Creates a terminal session for an already-validated `{claudeUuid, cwd}`.
  *
- * Replies `tmux_created`, or an error carrying one of invalid_cwd /
- * path_not_allowed / tmux_error.
+ * Replies `terminal_created`, or an error carrying one of invalid_cwd /
+ * path_not_allowed / terminal_error.
  */
-export async function handleTmuxCreate(
+export async function handleTerminalCreate(
   msg: { claudeUuid: string; cwd: string },
-  deps: TmuxControlDeps,
+  deps: TerminalControlDeps,
 ): Promise<void> {
   const { backend, allowedRoots, send } = deps;
   try {
@@ -60,41 +60,41 @@ export async function handleTmuxCreate(
 
     const info = await backend.createSession({ claudeUuid: msg.claudeUuid, cwd });
     send({
-      type: "tmux_created",
+      type: "terminal_created",
       claudeUuid: msg.claudeUuid,
-      tmuxName: info.name,
+      terminalName: info.name,
       paneRef: info.paneRef,
     });
   } catch (error) {
     send({
       type: "error",
-      code: "tmux_error",
+      code: "terminal_error",
       message: error instanceof Error ? error.message : String(error),
     });
   }
 }
 
 /**
- * Tears down the tmux session for `claudeUuid`, replying with
- * `tmux_teardown_result`. An unknown uuid is not an error — it reports
+ * Tears down the terminal session for `claudeUuid`, replying with
+ * `terminal_teardown_result`. An unknown uuid is not an error — it reports
  * `killed:false`.
  */
-export async function handleTmuxTeardown(
+export async function handleTerminalTeardown(
   msg: { claudeUuid: string },
-  deps: Pick<TmuxControlDeps, "backend" | "send">,
+  deps: Pick<TerminalControlDeps, "backend" | "send">,
 ): Promise<void> {
   const { backend, send } = deps;
   try {
     const result = await backend.teardown(msg.claudeUuid);
     send({
-      type: "tmux_teardown_result",
+      type: "terminal_teardown_result",
       claudeUuid: msg.claudeUuid,
       killed: result.killed,
     });
   } catch (error) {
     send({
       type: "error",
-      code: "tmux_error",
+      code: "terminal_error",
       message: error instanceof Error ? error.message : String(error),
     });
   }

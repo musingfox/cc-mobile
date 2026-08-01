@@ -158,16 +158,16 @@ it.skipIf(!existsSync(socketPath))(
 
       // Step 1: create the session in the trusted repo root.
       const t1 = Date.now();
-      ws.send(JSON.stringify({ type: "tmux_create", claudeUuid, cwd: REPO_ROOT }));
+      ws.send(JSON.stringify({ type: "terminal_create", claudeUuid, cwd: REPO_ROOT }));
       const created = await collector.next(
-        (msg) => msg.type === "tmux_created" || msg.type === "error",
+        (msg) => msg.type === "terminal_created" || msg.type === "error",
         CREATE_DEADLINE_MS,
-        "step 1 tmux_created",
+        "step 1 terminal_created",
       );
-      expect(created.type).toBe("tmux_created");
+      expect(created.type).toBe("terminal_created");
       const paneRef = created.paneRef as string;
       expect(typeof paneRef).toBe("string");
-      console.log(`[e2e] step 1 tmux_created paneRef=${paneRef} in ${Date.now() - t1}ms`);
+      console.log(`[e2e] step 1 terminal_created paneRef=${paneRef} in ${Date.now() - t1}ms`);
 
       const panesBefore = await client.call("pane.list", {}, PaneListResultSchema);
       workspaceId = panesBefore.panes.find((pane) => pane.pane_id === paneRef)?.workspace_id;
@@ -198,7 +198,7 @@ it.skipIf(!existsSync(socketPath))(
       const t2 = Date.now();
       ws.send(
         JSON.stringify({
-          type: "tmux_send",
+          type: "terminal_send",
           claudeUuid,
           content: `Run this bash command and show me its output: echo ${allowCanary}`,
         }),
@@ -248,7 +248,7 @@ it.skipIf(!existsSync(socketPath))(
       const denyResponder = autoReply(ws, false);
       ws.send(
         JSON.stringify({
-          type: "tmux_send",
+          type: "terminal_send",
           claudeUuid,
           content: `Run this bash command: touch ${denyCanaryPath}`,
         }),
@@ -282,13 +282,13 @@ it.skipIf(!existsSync(socketPath))(
       );
 
       // Step 4: teardown leaves no pane behind.
-      ws.send(JSON.stringify({ type: "tmux_teardown", claudeUuid }));
+      ws.send(JSON.stringify({ type: "terminal_teardown", claudeUuid }));
       const teardownResult = await collector.next(
-        (msg) => msg.type === "tmux_teardown_result" || msg.type === "error",
+        (msg) => msg.type === "terminal_teardown_result" || msg.type === "error",
         CREATE_DEADLINE_MS,
-        "step 4 tmux_teardown_result",
+        "step 4 terminal_teardown_result",
       );
-      expect(teardownResult.type).toBe("tmux_teardown_result");
+      expect(teardownResult.type).toBe("terminal_teardown_result");
       expect(teardownResult.killed).toBe(true);
       tornDown = true;
     } finally {

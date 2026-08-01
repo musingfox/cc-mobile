@@ -93,7 +93,7 @@ export function createHerdrSendRouting(options: HerdrSendRoutingOptions) {
       failSink?.({
         type: "error",
         sessionId: claudeUuid,
-        code: "tmux_send_failed",
+        code: "terminal_send_failed",
         message: `Terminal session ${claudeUuid} is not reachable (${
           error instanceof Error ? error.message : String(error)
         }). The paired terminal session may have closed.`,

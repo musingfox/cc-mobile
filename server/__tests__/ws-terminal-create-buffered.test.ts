@@ -34,14 +34,14 @@ describe("BufferedCreateAck", () => {
   test("the success ack arrives enveloped and is recoverable from the buffer", async () => {
     harness = await startWsHarness(backend());
 
-    harness.send({ type: "tmux_create", claudeUuid: "u1", cwd: "/tmp" });
+    harness.send({ type: "terminal_create", claudeUuid: "u1", cwd: "/tmp" });
     const envelope = await harness.waitFor((msg) => msg.type === "event");
 
     expect(envelope.sessionId).toBe("u1");
     expect(envelope.payload).toMatchObject({
-      type: "tmux_created",
+      type: "terminal_created",
       claudeUuid: "u1",
-      tmuxName: "ccm-u1",
+      terminalName: "ccm-u1",
       paneRef: "pn-1",
     });
 
@@ -49,13 +49,13 @@ describe("BufferedCreateAck", () => {
     // ack by replaying from before it.
     const buffered = harness.eventBuffer.replay("u1", 0);
     expect(buffered.length).toBe(1);
-    expect(buffered[0]?.message).toMatchObject({ type: "tmux_created", claudeUuid: "u1" });
+    expect(buffered[0]?.message).toMatchObject({ type: "terminal_created", claudeUuid: "u1" });
   });
 
   test("a reconnecting client replays the ack it missed", async () => {
     harness = await startWsHarness(backend());
 
-    harness.send({ type: "tmux_create", claudeUuid: "u1", cwd: "/tmp" });
+    harness.send({ type: "terminal_create", claudeUuid: "u1", cwd: "/tmp" });
     await harness.waitFor((msg) => msg.type === "event");
 
     // Same buffer, fresh cursor — exactly what a reconnect asks for.
@@ -75,7 +75,7 @@ describe("BufferedCreateAck", () => {
       basePath: "",
     });
 
-    harness.send({ type: "tmux_create", claudeUuid: "u1", cwd: "/tmp" });
+    harness.send({ type: "terminal_create", claudeUuid: "u1", cwd: "/tmp" });
     const error = await harness.waitFor((msg) => msg.type === "error");
 
     expect(error).toMatchObject({ code: "path_not_allowed" });
@@ -94,10 +94,10 @@ describe("BufferedCreateAck", () => {
       }),
     );
 
-    harness.send({ type: "tmux_create", claudeUuid: "u1", cwd: "/tmp" });
+    harness.send({ type: "terminal_create", claudeUuid: "u1", cwd: "/tmp" });
     const error = await harness.waitFor((msg) => msg.type === "error");
 
-    expect(error).toMatchObject({ code: "tmux_error" });
+    expect(error).toMatchObject({ code: "terminal_error" });
     expect(harness.eventBuffer.replay("u1", 0)).toEqual([]);
   });
 });

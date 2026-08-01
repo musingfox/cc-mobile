@@ -6,7 +6,7 @@ import { useAppStore } from "../stores/app-store";
 /**
  * ClientSessionCreate — mobile "new session" starts a live terminal session:
  * the client owns the uuid, the session appears immediately as not-ready
- * (Loading), `tmux_created` flips it ready (Success), and a create error drops
+ * (Loading), `terminal_created` flips it ready (Success), and a create error drops
  * the optimistic session with a toast (Error).
  */
 
@@ -43,7 +43,7 @@ describe("wsService terminal session create", () => {
     toastService.error = originalToastError;
   });
 
-  test("createTerminalSession emits one tmux_create and adds a not-ready session", () => {
+  test("createTerminalSession emits one terminal_create and adds a not-ready session", () => {
     const claudeUuid = wsService.createTerminalSession("/tmp");
 
     expect(claudeUuid).not.toBeNull();
@@ -51,7 +51,7 @@ describe("wsService terminal session create", () => {
 
     expect(fake.send).toHaveBeenCalledTimes(1);
     const payload = JSON.parse(fake.send.mock.calls[0][0] as string);
-    expect(payload).toEqual({ type: "tmux_create", claudeUuid, cwd: "/tmp" });
+    expect(payload).toEqual({ type: "terminal_create", claudeUuid, cwd: "/tmp" });
 
     const session = useAppStore.getState().sessions.get(claudeUuid as string);
     expect(session).toBeDefined();
@@ -59,13 +59,13 @@ describe("wsService terminal session create", () => {
     expect(session?.terminal?.ready).toBe(false);
   });
 
-  test("tmux_created flips the session to ready", () => {
+  test("terminal_created flips the session to ready", () => {
     const claudeUuid = wsService.createTerminalSession("/tmp") as string;
 
     getInternal().handleMessage({
-      type: "tmux_created",
+      type: "terminal_created",
       claudeUuid,
-      tmuxName: "ccm-xxxx",
+      terminalName: "ccm-xxxx",
       paneRef: "p1",
     });
 
@@ -78,7 +78,7 @@ describe("wsService terminal session create", () => {
 
     const claudeUuid = wsService.createTerminalSession("/tmp") as string;
 
-    getInternal().handleMessage({ type: "error", code: "tmux_error", message: "boom" });
+    getInternal().handleMessage({ type: "error", code: "terminal_error", message: "boom" });
 
     expect(useAppStore.getState().sessions.has(claudeUuid)).toBe(false);
     expect(errorToast).toHaveBeenCalledTimes(1);

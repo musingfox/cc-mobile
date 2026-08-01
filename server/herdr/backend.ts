@@ -41,7 +41,7 @@ export interface HerdrBackendOptions {
 /**
  * The port plus the one capability only herdr has: because the daemon keeps
  * panes alive across a server restart, this backend can rediscover its own
- * sessions at startup. tmux never could, so this stays off the neutral port.
+ * sessions at startup. Not every backend can, so this stays off the neutral port.
  */
 export interface HerdrTerminalBackend extends TerminalBackend {
   remountLiveSessions(): Promise<RemountReport>;
@@ -83,7 +83,7 @@ export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalB
 
   async function teardown(claudeUuid: string) {
     statusEvents.stop(claudeUuid);
-    // Kill first, then cancel the waiter — the order the tmux backend used.
+    // Kill first, then cancel the waiter.
     const result = await registry.teardown(claudeUuid);
     routing.teardown(claudeUuid);
     return result;

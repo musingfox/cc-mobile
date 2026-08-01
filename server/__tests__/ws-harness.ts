@@ -49,7 +49,7 @@ export interface WsHarness {
 
 /** Collaborator overrides for tests that need a real one instead of the stub. */
 export interface WsHarnessOverrides {
-  tmuxPermissionRelay?: ReturnType<typeof createPtyPermissionRelay>;
+  terminalPermissionRelay?: ReturnType<typeof createPtyPermissionRelay>;
   /** A real SessionManager, for the cases that assert on server-held state. */
   sessionManager?: SessionManager;
 }
@@ -66,7 +66,7 @@ export async function startWsHarness(
     .use(
       createWsPlugin(overrides.sessionManager ?? sessionManagerStub, serverConfig, {
         backend: backend as WsBackend,
-        tmuxPermissionRelay: (overrides.tmuxPermissionRelay as never) ?? relayStub,
+        terminalPermissionRelay: (overrides.terminalPermissionRelay as never) ?? relayStub,
         eventBuffer,
         clientSink: { current: null },
       }),

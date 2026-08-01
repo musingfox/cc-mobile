@@ -32,7 +32,7 @@ describe("ws.ts is a pure transport module", () => {
 
   it("validates every client message through the single Zod entry point", () => {
     expect(wsSource).toContain("ClientMessage.safeParse");
-    // The hand-rolled tmux_create/tmux_teardown branch read the raw payload
+    // The hand-rolled terminal_create/terminal_teardown branch read the raw payload
     // ahead of the Zod gate. Nothing may parse before safeParse again.
     expect(wsSource).not.toContain("raw.type ===");
   });

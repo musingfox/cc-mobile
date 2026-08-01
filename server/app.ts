@@ -40,13 +40,13 @@ export interface AppBackend extends WsBackend {
   hasSession(claudeUuid: string): { present: boolean; paneRef?: string };
   getClient(claudeUuid: string): ((msg: Record<string, unknown>) => void) | undefined;
   teardownAll(): Promise<void>;
-  /** herdr only — a tmux backend has no panes to rediscover. */
+  /** herdr only — a backend without persistent panes has nothing to rediscover. */
   remountLiveSessions?(): Promise<RemountReport>;
 }
 
 /**
  * Injection seam for tests (additive; production passes nothing). Substituting
- * a spy backend or relay factory exercises the wiring without spawning tmux or
+ * a spy backend or relay factory exercises the wiring without spawning a pane or
  * binding a port.
  *
  * `backendRef` is the exception — production passes it. `createApp` returns the
@@ -57,7 +57,7 @@ export interface AppBackend extends WsBackend {
 export interface AppTestDeps {
   backend?: AppBackend;
   backendRef?: { current: AppBackend | null };
-  createTmuxPermissionRelay?: typeof createPtyPermissionRelay;
+  createTerminalPermissionRelay?: typeof createPtyPermissionRelay;
   sessionManager?: SessionManager;
 }
 
@@ -65,7 +65,8 @@ export interface AppTestDeps {
 export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
   const sessionManager =
     deps.sessionManager ?? new SessionManager({ permissionMode: serverConfig.permissionMode });
-  const makeTmuxPermissionRelay = deps.createTmuxPermissionRelay ?? createPtyPermissionRelay;
+  const makeTerminalPermissionRelay =
+    deps.createTerminalPermissionRelay ?? createPtyPermissionRelay;
 
   const ptyPermApiPath = buildUrl(serverConfig.basePath, "/api/pty-permission");
   const ptyResponseApiPath = buildUrl(serverConfig.basePath, "/api/pty-response");
@@ -84,9 +85,9 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
   const ptyResponseHttpHandler = createPtyResponseHandler({ relay: ptyResponseRelay });
 
   // Hook URLs point at this server's own port + basePath, so a hook fired from
-  // inside a tmux pane reaches the live process.
-  const tmuxResponseUrl = `http://127.0.0.1:${serverConfig.port}${ptyResponseApiPath}`;
-  const tmuxPermissionUrl = `http://127.0.0.1:${serverConfig.port}${ptyPermApiPath}`;
+  // inside a terminal pane reaches the live process.
+  const terminalResponseUrl = `http://127.0.0.1:${serverConfig.port}${ptyResponseApiPath}`;
+  const terminalPermissionUrl = `http://127.0.0.1:${serverConfig.port}${ptyPermApiPath}`;
 
   // herdr is the only default backend (ADR-015 / plan D1). Its transport
   // connects lazily, so constructing the app here contacts no daemon —
@@ -94,8 +95,8 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
   const backend: AppBackend =
     deps.backend ??
     createHerdrBackend({
-      responseUrl: tmuxResponseUrl,
-      permissionUrl: tmuxPermissionUrl,
+      responseUrl: terminalResponseUrl,
+      permissionUrl: terminalPermissionUrl,
       permissionMode: serverConfig.permissionMode,
       responseRelay: ptyResponseRelay,
     });
@@ -109,11 +110,11 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
   // signal wiring is gone. Panes whose claude did die are collected by the
   // startup orphan scan instead.
 
-  // Independent tmux permission relay; sendToClient goes through the
+  // Independent terminal permission relay; sendToClient goes through the
   // claudeUuid→sink map so a permission_request only reaches the originating
-  // client. 90s rather than the relay's 600s default: an unattended tmux prompt
+  // client. 90s rather than the relay's 600s default: an unattended terminal prompt
   // should not hold a turn open for ten minutes.
-  const tmuxPermissionRelay = makeTmuxPermissionRelay(
+  const terminalPermissionRelay = makeTerminalPermissionRelay(
     (sessionId, requestId, tool) => {
       const sink = backend.getClient(sessionId);
       if (sink) {
@@ -134,7 +135,7 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
   // the only session owner left (#25), so there is nothing to route between:
   // an unknown session is a 404, never a second relay.
   const ptyPermissionHttpHandler = createPtyPermissionHandler({
-    relay: tmuxPermissionRelay,
+    relay: terminalPermissionRelay,
     hasSession: (sessionId: string) => backend.hasSession(sessionId).present,
   });
 
@@ -149,7 +150,7 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
     .use(
       createWsPlugin(sessionManager, serverConfig, {
         backend,
-        tmuxPermissionRelay,
+        terminalPermissionRelay,
         eventBuffer,
         clientSink,
       }),

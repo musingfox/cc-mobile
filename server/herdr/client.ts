@@ -151,7 +151,7 @@ export function createHerdrClient(options: HerdrClientOptions = {}) {
     return result.read;
   }
 
-  /** Presses named keys (tmux-style, e.g. "Enter") in the target pane. */
+  /** Presses named keys (e.g. "Enter") in the target pane. */
   async function paneSendKeys(pane_id: string, keys: string[]): Promise<void> {
     await call("pane.send_keys", { pane_id, keys }, OkResultSchema);
   }

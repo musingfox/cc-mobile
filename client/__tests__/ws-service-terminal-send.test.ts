@@ -3,10 +3,10 @@ import { wsService } from "../services/ws-service";
 import { useAppStore } from "../stores/app-store";
 
 /**
- * ClientPromptSend — a prompt on a terminal session goes out as `tmux_send`
+ * ClientPromptSend — a prompt on a terminal session goes out as `terminal_send`
  * (newlines verbatim), shows an optimistic user bubble + spinner (Loading), and
  * the reply lands through the existing stream_chunk/stream_end handlers
- * (Success) or the error handler (Error). A second send is another `tmux_send`
+ * (Success) or the error handler (Error). A second send is another `terminal_send`
  * with no create — multi-turn.
  */
 
@@ -41,12 +41,12 @@ describe("wsService.terminalSend", () => {
     getInternal().ws = prevWs;
   });
 
-  test("emits tmux_send with the prompt verbatim + optimistic bubble and spinner", () => {
+  test("emits terminal_send with the prompt verbatim + optimistic bubble and spinner", () => {
     wsService.terminalSend("s1", "line1\nline2");
 
     expect(fake.send).toHaveBeenCalledTimes(1);
     expect(sentPayloads(fake)[0]).toEqual({
-      type: "tmux_send",
+      type: "terminal_send",
       claudeUuid: "s1",
       content: "line1\nline2",
     });
@@ -78,13 +78,13 @@ describe("wsService.terminalSend", () => {
     expect(session?.isStreaming).toBe(false);
   });
 
-  test("tmux_send_failed renders an error bubble and stops the spinner", () => {
+  test("terminal_send_failed renders an error bubble and stops the spinner", () => {
     wsService.terminalSend("s1", "hey");
 
     getInternal().handleMessage({
       type: "error",
       sessionId: "s1",
-      code: "tmux_send_failed",
+      code: "terminal_send_failed",
       message: "gone",
     });
 
@@ -94,14 +94,14 @@ describe("wsService.terminalSend", () => {
     expect(session?.isStreaming).toBe(false);
   });
 
-  test("a second turn emits another tmux_send and never a tmux_create", () => {
+  test("a second turn emits another terminal_send and never a terminal_create", () => {
     wsService.terminalSend("s1", "first");
     getInternal().handleMessage({ type: "stream_end", sessionId: "s1" });
     wsService.terminalSend("s1", "again");
 
     const payloads = sentPayloads(fake);
-    expect(payloads.map((p) => p.type)).toEqual(["tmux_send", "tmux_send"]);
+    expect(payloads.map((p) => p.type)).toEqual(["terminal_send", "terminal_send"]);
     expect(payloads[1].content).toBe("again");
-    expect(payloads.some((p) => p.type === "tmux_create")).toBe(false);
+    expect(payloads.some((p) => p.type === "terminal_create")).toBe(false);
   });
 });

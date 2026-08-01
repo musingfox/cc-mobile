@@ -3,7 +3,7 @@
  *
  * The port is the neutral seam between the WS transport layer and whatever drives a
  * persistent terminal session. Since #25 the only implementation is the herdr adapter
- * (server/herdr/backend.ts); the tmux adapter that used to live here is gone.
+ * (server/herdr/backend.ts); the adapter that used to live here is gone.
  *
  * Capability surface is deliberately limited (ADR-015): there is no subscribe/read —
  * replies arrive out-of-band via the Stop hook POSTing to pty-response, which the
@@ -49,7 +49,7 @@ export interface TerminalHasSessionResult {
 export interface TerminalBackend {
   /**
    * Obtain a routable terminal session for claudeUuid. Rejects with the backend's
-   * original Error (duplicate uuid, spawn failure) — callers translate to `tmux_error`.
+   * original Error (duplicate uuid, spawn failure) — callers translate to `terminal_error`.
    */
   createSession(input: CreateSessionInput): Promise<TerminalSessionInfo>;
   hasSession(claudeUuid: string): TerminalHasSessionResult;

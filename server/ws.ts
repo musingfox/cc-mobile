@@ -10,7 +10,11 @@ import type { createPtyPermissionRelay, PtyRelaySnapshot } from "./pty-permissio
 import { loadSessionHistory } from "./session-history";
 import { listClaudeSessions, renameClaudeSession } from "./session-listing";
 import type { SessionManager } from "./session-manager";
-import { handleTmuxCreate, handleTmuxTeardown, type TmuxControlBackend } from "./tmux-control";
+import {
+  handleTerminalCreate,
+  handleTerminalTeardown,
+  type TerminalControlBackend,
+} from "./terminal-control";
 
 type PtyPermissionRelay = ReturnType<typeof createPtyPermissionRelay>;
 
@@ -56,7 +60,7 @@ export function emitCapabilitiesOnResume(
 }
 
 /** The terminal backend surface the WS transport drives. */
-export interface WsBackend extends TmuxControlBackend {
+export interface WsBackend extends TerminalControlBackend {
   /** claudeUuids with a live session — the authority a reconnecting client asks for. */
   listLive(): string[];
   /**
@@ -85,7 +89,7 @@ export interface ClientSink {
 /** Everything the transport needs but does not build. Assembled in app.ts. */
 export interface WsCollaborators {
   backend: WsBackend;
-  tmuxPermissionRelay: PtyPermissionRelay;
+  terminalPermissionRelay: PtyPermissionRelay;
   eventBuffer: EventBuffer;
   clientSink: ClientSink;
 }
@@ -95,13 +99,13 @@ export function createWsPlugin(
   serverConfig: ServerConfig,
   collaborators: WsCollaborators,
 ) {
-  const { backend, tmuxPermissionRelay, eventBuffer, clientSink } = collaborators;
+  const { backend, terminalPermissionRelay, eventBuffer, clientSink } = collaborators;
   const cachedCapabilities: Capabilities | null = loadCachedCapabilities();
   const wsPath = buildUrl(serverConfig.basePath, "/ws");
 
   // Persistent state across reconnects
   const persistentState = {
-    pausedTmuxPermissions: [] as PtyRelaySnapshot[],
+    pausedTerminalPermissions: [] as PtyRelaySnapshot[],
   };
 
   // Helper to send buffered messages
@@ -144,11 +148,10 @@ export function createWsPlugin(
 
       const message = parsed.data;
 
-      // tmux session control needs no permission handler and owns its own error
-      // mapping, so it dispatches ahead of the handler guard — as it did when
-      // it was parsed by hand ahead of the Zod gate.
-      if (message.type === "tmux_create") {
-        await handleTmuxCreate(message, {
+      // Terminal session control owns its own error mapping and reply shapes,
+      // so it dispatches ahead of the main switch rather than inside it.
+      if (message.type === "terminal_create") {
+        await handleTerminalCreate(message, {
           backend,
           allowedRoots: serverConfig.allowedRoots,
           // The success ack is buffered so a client that blinked during the
@@ -157,12 +160,14 @@ export function createWsPlugin(
           // no session to key a buffer entry on, and the session they refer to
           // does not exist to replay for.
           send: (msg) =>
-            msg.type === "tmux_created" ? sendBuffered(ws, message.claudeUuid, msg) : ws.send(msg),
+            msg.type === "terminal_created"
+              ? sendBuffered(ws, message.claudeUuid, msg)
+              : ws.send(msg),
         });
         return;
       }
-      if (message.type === "tmux_teardown") {
-        await handleTmuxTeardown(message, { backend, send: (msg) => ws.send(msg) });
+      if (message.type === "terminal_teardown") {
+        await handleTerminalTeardown(message, { backend, send: (msg) => ws.send(msg) });
         return;
       }
 
@@ -205,9 +210,9 @@ export function createWsPlugin(
           }
 
           case "permission": {
-            // The tmux/herdr relay is the only holder of in-flight permission
+            // The herdr relay is the only holder of in-flight permission
             // requests; resolving an unknown requestId is a silent no-op.
-            tmuxPermissionRelay.resolvePermission(
+            terminalPermissionRelay.resolvePermission(
               message.requestId,
               message.allow,
               message.answers,
@@ -457,8 +462,8 @@ export function createWsPlugin(
             break;
           }
 
-          case "tmux_send": {
-            // TMUX happy-path (C-hybrid): use send-keys to inject prompt into owned tmux+claude session.
+          case "terminal_send": {
+            // Terminal happy-path (C-hybrid): inject the prompt into the owned pane's claude.
             // Arms one-per-turn waiter via shared response relay; delivers via independent sink map.
             // Does not touch SessionManager.
             const { claudeUuid, content } = message;
@@ -468,11 +473,11 @@ export function createWsPlugin(
               (msg: Record<string, unknown>) => sendBuffered(ws, claudeUuid, msg),
               ws,
             );
-            // Resume any tmux permission requests paused on the prior disconnect:
+            // Resume any terminal permission requests paused on the prior disconnect:
             // re-fires permission_request to the freshly-rebound sink (frozen-countdown).
-            if (persistentState.pausedTmuxPermissions.length > 0) {
-              tmuxPermissionRelay.resumePending(persistentState.pausedTmuxPermissions);
-              persistentState.pausedTmuxPermissions = [];
+            if (persistentState.pausedTerminalPermissions.length > 0) {
+              terminalPermissionRelay.resumePending(persistentState.pausedTerminalPermissions);
+              persistentState.pausedTerminalPermissions = [];
             }
             await backend.send({ claudeUuid, content });
             break;
@@ -491,9 +496,9 @@ export function createWsPlugin(
 
     close(ws) {
       // Pause pending permissions for potential reconnect
-      persistentState.pausedTmuxPermissions = tmuxPermissionRelay.pausePending();
+      persistentState.pausedTerminalPermissions = terminalPermissionRelay.pausePending();
 
-      // Remove this connection's tmux uuid->sink bindings (baton map §cleanup).
+      // Remove this connection's uuid->sink bindings (baton map §cleanup).
       // Dead-binding leak prevention only; no rebind/replay to a new connection.
       backend.cleanupByOwner(ws);
 

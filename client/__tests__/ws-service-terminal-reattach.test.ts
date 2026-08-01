@@ -9,7 +9,7 @@ import { useAppStore } from "../stores/app-store";
  * terminal sessions are alive and converges every card to that answer: live
  * ones become ready again (curing the permanent ready:false after a reload),
  * dead ones leave the list with a single toast, and creates still in flight are
- * left alone until their `tmux_created` arrives.
+ * left alone until their `terminal_created` arrives.
  */
 
 class FakeWebSocket {

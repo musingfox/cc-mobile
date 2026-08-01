@@ -13,10 +13,10 @@
  *          permission_request to ws2 (same toolUseId); advancing the remaining time denies.
  *          An already-expired snapshot is not re-fired and is denied immediately.
  *
- * These are the #24 permission-gate safety contracts. Migrated from
- * tmux-unattended-relay.test.ts in #25: the sink map is now supplied by herdr's
- * send routing (the only surviving backend), the relay behaviour under test is
- * unchanged. Does NOT modify relay/routing impls.
+ * These are the #24 permission-gate safety contracts. Migrated in #25 from the
+ * test that belonged to the deleted terminal adapter: the sink map is now
+ * supplied by herdr's send routing (the only surviving backend), and the relay
+ * behaviour under test is unchanged. Does NOT modify relay/routing impls.
  */
 
 import { describe, expect, it } from "bun:test";

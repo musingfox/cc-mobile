@@ -80,7 +80,7 @@ describe("terminal marker written by the real session landings", () => {
     // Present but not yet ready: the composer shows "starting", not read-only.
     expect(session.terminal).toEqual({ ready: false });
 
-    getInternal().handleMessage({ type: "tmux_created", claudeUuid: uuid });
+    getInternal().handleMessage({ type: "terminal_created", claudeUuid: uuid });
     expect(useAppStore.getState().sessions.get(uuid)?.terminal?.ready).toBe(true);
   });
 });

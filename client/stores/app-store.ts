@@ -166,7 +166,7 @@ export type SessionState = {
   historyUnknownRoleWarned?: boolean;
   permissionMode?: string;
   // Present only on sessions backed by a live terminal session (herdr).
-  // `ready` flips true on `tmux_created`; sends are gated until then.
+  // `ready` flips true on `terminal_created`; sends are gated until then.
   terminal?: { ready: boolean };
 };
 

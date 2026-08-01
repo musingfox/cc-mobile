@@ -372,7 +372,7 @@ class WsService {
   // notification `key` (globally unique per event) or `text:<text>` fallback;
   // cleared on disconnect so a fresh session starts unbiased.
   private notificationSeenKeys = new Set<string>();
-  // Terminal sessions awaiting their `tmux_created` reply. Create failures come
+  // Terminal sessions awaiting their `terminal_created` reply. Create failures come
   // back without a claudeUuid, so a failure clears every pending optimistic
   // session rather than guessing which one it belongs to.
   private pendingTerminalCreates = new Set<string>();
@@ -551,7 +551,7 @@ class WsService {
         break;
       }
 
-      case "tmux_created": {
+      case "terminal_created": {
         const claudeUuid = msg.claudeUuid as string | undefined;
         if (!claudeUuid) break;
         this.pendingTerminalCreates.delete(claudeUuid);
@@ -1026,12 +1026,12 @@ class WsService {
         store.setIsLoadingDirectories(false);
 
         // Terminal create failures arrive without a sessionId, so drop the
-        // optimistic sessions still waiting for `tmux_created` — otherwise the
+        // optimistic sessions still waiting for `terminal_created` — otherwise the
         // session list keeps a ghost that can never become ready.
         const createFailed =
           msg.code === "invalid_cwd" ||
           msg.code === "path_not_allowed" ||
-          msg.code === "tmux_error";
+          msg.code === "terminal_error";
         if (!sessionId && createFailed && this.pendingTerminalCreates.size > 0) {
           for (const uuid of this.pendingTerminalCreates) {
             store.removeSession(uuid);
@@ -1164,7 +1164,7 @@ class WsService {
     const claudeUuid = crypto.randomUUID();
     useAppStore.getState().addSession(claudeUuid, cwd, { ready: false });
     this.pendingTerminalCreates.add(claudeUuid);
-    this.sendMessage({ type: "tmux_create", claudeUuid, cwd });
+    this.sendMessage({ type: "terminal_create", claudeUuid, cwd });
 
     return claudeUuid;
   }
@@ -1184,7 +1184,7 @@ class WsService {
       timestamp: Date.now(),
     });
 
-    this.sendMessage({ type: "tmux_send", claudeUuid: sessionId, content: prompt });
+    this.sendMessage({ type: "terminal_send", claudeUuid: sessionId, content: prompt });
 
     useAppStore.getState().setStreaming(sessionId, true);
     // Clear any pending prompt suggestion — it's stale once the user sends.
@@ -1297,7 +1297,7 @@ class WsService {
       // process would be orphaned until server shutdown.
       const isTerminal = useAppStore.getState().sessions.get(sessionId)?.terminal !== undefined;
       if (isTerminal) {
-        this.sendMessage({ type: "tmux_teardown", claudeUuid: sessionId });
+        this.sendMessage({ type: "terminal_teardown", claudeUuid: sessionId });
       } else {
         this.sendMessage({ type: "interrupt", sessionId });
       }

@@ -90,7 +90,7 @@ describe("HerdrPromptInjection", () => {
     expect(harness.relay.hasPending("u2")).toBe(false);
   });
 
-  test("a failed injection cancels the waiter and reports tmux_send_failed", async () => {
+  test("a failed injection cancels the waiter and reports terminal_send_failed", async () => {
     const harness = makeHarness(
       { u1: "p1" },
       {
@@ -109,7 +109,7 @@ describe("HerdrPromptInjection", () => {
     expect(seen[0]).toMatchObject({
       type: "error",
       sessionId: "u1",
-      code: "tmux_send_failed",
+      code: "terminal_send_failed",
     });
     expect(String(seen[0]?.message)).toContain("not reachable");
     expect(harness.relay.hasPending("u1")).toBe(false);
@@ -123,7 +123,7 @@ describe("HerdrPromptInjection", () => {
 
     await harness.routing.send({ claudeUuid: "u1", content: "x" });
 
-    expect(seen[0]).toMatchObject({ code: "tmux_send_failed" });
+    expect(seen[0]).toMatchObject({ code: "terminal_send_failed" });
     expect(harness.relay.hasPending("u1")).toBe(false);
     await flush();
   });

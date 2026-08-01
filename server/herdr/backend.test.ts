@@ -213,7 +213,7 @@ describe("herdr backend composition", () => {
     expect(fake.subscriptions[0]).toEqual([{ type: "pane.agent_status_changed", pane_id: "pn-1" }]);
 
     // A prompt now reaches the adopted pane with no create in between. The sink
-    // is bound the way ws.ts binds it — on the first tmux_send of the reconnected
+    // is bound the way ws.ts binds it — on the first terminal_send of the reconnected
     // client — which is exactly what a remounted session depends on.
     backend.registerClient(uuid, () => {});
     await backend.send({ claudeUuid: uuid, content: "hi" });

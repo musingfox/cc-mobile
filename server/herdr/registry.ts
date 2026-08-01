@@ -127,7 +127,7 @@ export function createHerdrRegistry(options: HerdrRegistryOptions) {
   const permissionUrl = options.permissionUrl ?? "http://127.0.0.1:3001/api/pty-permission";
   const permissionMode = options.permissionMode ?? "default";
 
-  // The hooks live one directory up, next to the tmux path that also uses them.
+  // The hooks live one directory up, next to the endpoints that receive them.
   const STOP_HOOK_PATH = join(import.meta.dir, "..", "pty-stop-hook.ts");
   const PERM_HOOK_PATH = join(import.meta.dir, "..", "pty-permission-hook.ts");
 
@@ -154,7 +154,7 @@ export function createHerdrRegistry(options: HerdrRegistryOptions) {
 
     let workspaceId: string | undefined;
     try {
-      // Caller (tmux-control) has already checked that cwd exists — required,
+      // Caller (terminal-control) has already checked that cwd exists — required,
       // because workspace.create silently falls back to $HOME otherwise.
       const created = await client.call(
         "workspace.create",
@@ -164,7 +164,7 @@ export function createHerdrRegistry(options: HerdrRegistryOptions) {
       workspaceId = created.workspace.workspace_id;
       const paneId = created.root_pane.pane_id;
 
-      // argv is passed through verbatim by the daemon — identical to tmux's.
+      // argv is passed through verbatim by the daemon.
       await client.call(
         "agent.start",
         {
@@ -225,7 +225,7 @@ export function createHerdrRegistry(options: HerdrRegistryOptions) {
     try {
       await client.call("workspace.close", { workspace_id: workspaceId }, OkSchema);
     } catch {
-      // best-effort, mirroring tmux kill-session
+      // best-effort: killing an already-dead pane is not an error
     }
   }
 

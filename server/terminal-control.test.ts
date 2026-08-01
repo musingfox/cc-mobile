@@ -1,6 +1,6 @@
 /**
- * tmux-control.test.ts — the tmux_create / tmux_teardown reply shapes and error
- * mapping, pinned against a fake backend (no real tmux, no WS).
+ * terminal-control.test.ts — the terminal_create / terminal_teardown reply shapes and error
+ * mapping, pinned against a fake backend (no real pane, no WS).
  *
  * These assertions are the behaviour-preservation net for lifting the handlers
  * out of ws.ts: every reply and every error code below is what the inline
@@ -11,11 +11,15 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { handleTmuxCreate, handleTmuxTeardown, type TmuxControlBackend } from "./tmux-control";
+import {
+  handleTerminalCreate,
+  handleTerminalTeardown,
+  type TerminalControlBackend,
+} from "./terminal-control";
 
 // ── fixtures ─────────────────────────────────────────────────────────────────
 
-const testRoot = join(realpathSync(tmpdir()), `tmux-control-test-${Date.now()}`);
+const testRoot = join(realpathSync(tmpdir()), `terminal-control-test-${Date.now()}`);
 
 beforeAll(() => {
   mkdirSync(testRoot, { recursive: true });
@@ -29,11 +33,11 @@ afterAll(() => {
   }
 });
 
-function makeFakeBackend(overrides: Partial<TmuxControlBackend> = {}) {
+function makeFakeBackend(overrides: Partial<TerminalControlBackend> = {}) {
   const createSessionCalls: Array<{ claudeUuid: string; cwd: string }> = [];
   const teardownCalls: string[] = [];
 
-  const backend: TmuxControlBackend = {
+  const backend: TerminalControlBackend = {
     createSession: async (params) => {
       createSessionCalls.push(params);
       return { name: "cc-u1", paneRef: "7", settingsPath: "/s" };
@@ -53,21 +57,21 @@ function makeSendSpy() {
   return { send: (msg: Record<string, unknown>) => sent.push(msg), sent };
 }
 
-// ── handleTmuxCreate ─────────────────────────────────────────────────────────
+// ── handleTerminalCreate ─────────────────────────────────────────────────────────
 
-describe("handleTmuxCreate — happy path", () => {
-  it("creates the session and replies tmux_created with the backend name as tmuxName", async () => {
+describe("handleTerminalCreate — happy path", () => {
+  it("creates the session and replies terminal_created with the backend name as terminalName", async () => {
     const { backend, createSessionCalls } = makeFakeBackend();
     const { send, sent } = makeSendSpy();
 
-    await handleTmuxCreate(
+    await handleTerminalCreate(
       { claudeUuid: "u1", cwd: testRoot },
       { backend, allowedRoots: null, send },
     );
 
     expect(createSessionCalls).toEqual([{ claudeUuid: "u1", cwd: testRoot }]);
     expect(sent).toEqual([
-      { type: "tmux_created", claudeUuid: "u1", tmuxName: "cc-u1", paneRef: "7" },
+      { type: "terminal_created", claudeUuid: "u1", terminalName: "cc-u1", paneRef: "7" },
     ]);
   });
 
@@ -75,19 +79,22 @@ describe("handleTmuxCreate — happy path", () => {
     const { backend, createSessionCalls } = makeFakeBackend();
     const { send } = makeSendSpy();
 
-    await handleTmuxCreate({ claudeUuid: "u1", cwd: "~" }, { backend, allowedRoots: null, send });
+    await handleTerminalCreate(
+      { claudeUuid: "u1", cwd: "~" },
+      { backend, allowedRoots: null, send },
+    );
 
     expect(createSessionCalls[0]?.cwd).not.toBe("~");
     expect(createSessionCalls[0]?.cwd.startsWith("/")).toBe(true);
   });
 });
 
-describe("handleTmuxCreate — error mapping", () => {
+describe("handleTerminalCreate — error mapping", () => {
   it("replies invalid_cwd and never reaches the backend for a missing path", async () => {
     const { backend, createSessionCalls } = makeFakeBackend();
     const { send, sent } = makeSendSpy();
 
-    await handleTmuxCreate(
+    await handleTerminalCreate(
       { claudeUuid: "u1", cwd: "/nonexistent-cc-mobile-xyz" },
       { backend, allowedRoots: null, send },
     );
@@ -106,7 +113,7 @@ describe("handleTmuxCreate — error mapping", () => {
     const { backend, createSessionCalls } = makeFakeBackend();
     const { send, sent } = makeSendSpy();
 
-    await handleTmuxCreate(
+    await handleTerminalCreate(
       { claudeUuid: "u1", cwd: testRoot },
       { backend, allowedRoots: ["/somewhere/else"], send },
     );
@@ -121,7 +128,7 @@ describe("handleTmuxCreate — error mapping", () => {
     expect(createSessionCalls).toEqual([]);
   });
 
-  it("maps a backend rejection to tmux_error carrying the original message", async () => {
+  it("maps a backend rejection to terminal_error carrying the original message", async () => {
     const { backend } = makeFakeBackend({
       createSession: async () => {
         throw new Error("boom");
@@ -129,38 +136,40 @@ describe("handleTmuxCreate — error mapping", () => {
     });
     const { send, sent } = makeSendSpy();
 
-    await handleTmuxCreate(
+    await handleTerminalCreate(
       { claudeUuid: "u1", cwd: testRoot },
       { backend, allowedRoots: null, send },
     );
 
-    expect(sent).toEqual([{ type: "error", code: "tmux_error", message: "boom" }]);
+    expect(sent).toEqual([{ type: "error", code: "terminal_error", message: "boom" }]);
   });
 });
 
-// ── handleTmuxTeardown ───────────────────────────────────────────────────────
+// ── handleTerminalTeardown ───────────────────────────────────────────────────────
 
-describe("handleTmuxTeardown", () => {
-  it("replies tmux_teardown_result with killed:true", async () => {
+describe("handleTerminalTeardown", () => {
+  it("replies terminal_teardown_result with killed:true", async () => {
     const { backend, teardownCalls } = makeFakeBackend();
     const { send, sent } = makeSendSpy();
 
-    await handleTmuxTeardown({ claudeUuid: "u1" }, { backend, send });
+    await handleTerminalTeardown({ claudeUuid: "u1" }, { backend, send });
 
     expect(teardownCalls).toEqual(["u1"]);
-    expect(sent).toEqual([{ type: "tmux_teardown_result", claudeUuid: "u1", killed: true }]);
+    expect(sent).toEqual([{ type: "terminal_teardown_result", claudeUuid: "u1", killed: true }]);
   });
 
   it("reports killed:false for an unknown uuid without throwing", async () => {
     const { backend } = makeFakeBackend({ teardown: async () => ({ killed: false }) });
     const { send, sent } = makeSendSpy();
 
-    await handleTmuxTeardown({ claudeUuid: "ghost" }, { backend, send });
+    await handleTerminalTeardown({ claudeUuid: "ghost" }, { backend, send });
 
-    expect(sent).toEqual([{ type: "tmux_teardown_result", claudeUuid: "ghost", killed: false }]);
+    expect(sent).toEqual([
+      { type: "terminal_teardown_result", claudeUuid: "ghost", killed: false },
+    ]);
   });
 
-  it("maps a backend rejection to tmux_error", async () => {
+  it("maps a backend rejection to terminal_error", async () => {
     const { backend } = makeFakeBackend({
       teardown: async () => {
         throw new Error("kill failed");
@@ -168,8 +177,8 @@ describe("handleTmuxTeardown", () => {
     });
     const { send, sent } = makeSendSpy();
 
-    await handleTmuxTeardown({ claudeUuid: "u1" }, { backend, send });
+    await handleTerminalTeardown({ claudeUuid: "u1" }, { backend, send });
 
-    expect(sent).toEqual([{ type: "error", code: "tmux_error", message: "kill failed" }]);
+    expect(sent).toEqual([{ type: "error", code: "terminal_error", message: "kill failed" }]);
   });
 });
