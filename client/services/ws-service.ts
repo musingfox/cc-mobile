@@ -1205,21 +1205,6 @@ class WsService {
     useAppStore.getState().setPromptSuggestion(sessionId, null);
   }
 
-  ptySend(sessionId: string, cwd: string, prompt: string) {
-    if (!this.ws) return;
-
-    useAppStore.getState().addMessage(sessionId, {
-      id: `user-${Date.now()}`,
-      role: "user",
-      content: prompt,
-      timestamp: Date.now(),
-    });
-
-    this.sendMessage({ type: "pty_send", sessionId, cwd, prompt });
-
-    useAppStore.getState().setStreaming(sessionId, true);
-  }
-
   /**
    * Sends one turn to a live terminal session. The session id doubles as the
    * claudeUuid, and the reply arrives through the usual stream_chunk/stream_end

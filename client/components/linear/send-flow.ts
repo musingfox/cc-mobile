@@ -7,9 +7,11 @@ interface SendArgs {
   images: Array<{ base64: string; mediaType: string }>;
   fileAbsPaths: string[];
   uploadImage: (sessionId: string, base64: string, mediaType: string) => Promise<{ path: string }>;
-  ptySend: (sessionId: string, cwd: string, prompt: string) => void;
-  // Present only for terminal-backed (live herdr) sessions; when set it takes
-  // the prompt instead of ptySend.
+  /**
+   * Present only for terminal-backed (live herdr) sessions. Absent means the
+   * session is a read-only history view (#25 D1): nothing is sent, nothing is
+   * uploaded, and the composer keeps whatever the user typed.
+   */
   terminalSend?: (sessionId: string, prompt: string) => void;
   clearInputs: () => void;
 }
@@ -19,34 +21,31 @@ let landing = false;
 
 /**
  * Orchestrates the send flow:
- *   1. If landing is already in progress, drop (re-entrancy guard).
- *   2. Upload each image to get an absolute server path.
- *   3. Build the PTY prompt (text + landed image paths + file paths).
- *   4. Call the session's send fn exactly once.
- *   5. Call clearInputs.
+ *   1. If the session has no terminal, drop (read-only history view).
+ *   2. If landing is already in progress, drop (re-entrancy guard).
+ *   3. Upload each image to get an absolute server path.
+ *   4. Build the prompt (text + landed image paths + file paths).
+ *   5. Call terminalSend exactly once.
+ *   6. Call clearInputs.
  */
 export async function runSend({
   sessionId,
-  cwd,
   text,
   images,
   fileAbsPaths,
   uploadImage,
-  ptySend,
   terminalSend,
   clearInputs,
 }: SendArgs): Promise<void> {
+  // Read-only session: refuse silently. Uploads are skipped too — landing an
+  // image for a prompt that can never be sent just litters the upload dir.
+  if (!terminalSend) return;
   if (landing) return;
-
-  const deliver = (prompt: string) => {
-    if (terminalSend) terminalSend(sessionId, prompt);
-    else ptySend(sessionId, cwd, prompt);
-  };
 
   if (images.length === 0) {
     // Fast path: no uploads needed.
     const prompt = buildPtyPrompt(text, [], fileAbsPaths);
-    deliver(prompt);
+    terminalSend(sessionId, prompt);
     clearInputs();
     return;
   }
@@ -59,7 +58,7 @@ export async function runSend({
       landedPaths.push(result.path);
     }
     const prompt = buildPtyPrompt(text, landedPaths, fileAbsPaths);
-    deliver(prompt);
+    terminalSend(sessionId, prompt);
     clearInputs();
   } finally {
     landing = false;
