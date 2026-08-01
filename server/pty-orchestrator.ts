@@ -17,7 +17,7 @@ import { join } from "node:path";
 import type { SpawnerFn } from "./pty-driver";
 import type { GetMessagesFn } from "./pty-reader";
 import { runPtySession } from "./pty-reader";
-import { buildClaudeSettings } from "./tmux-registry";
+import { buildClaudeSettings } from "./claude-settings";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 

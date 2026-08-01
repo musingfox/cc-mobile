@@ -20,7 +20,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ZodType } from "zod";
 import { z } from "zod";
-import { buildClaudeSettings } from "../tmux-registry";
+import { buildClaudeSettings } from "../claude-settings";
 import type { AgentGetFn } from "./readiness";
 import { waitForInteractiveReady } from "./readiness";
 

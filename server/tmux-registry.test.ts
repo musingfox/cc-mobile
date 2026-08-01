@@ -2,7 +2,7 @@
  * tmux-registry.test.ts — Unit tests for C-hybrid TmuxRegistry (server/tmux-registry.ts)
  *
  * Per contracts in implement-brief:
- *   - SettingsInjection (pure, always)
+ *   - SettingsInjection cases moved to claude-settings.test.ts (#25 Step 1)
  *   - CreateSession, HasSession, Teardown (tmux cases use it.skipIf(!hasTmux) + dummy sleep-300)
  *
  * Reuses pty-*-hook.ts paths + pty-response-relay/endpoint verbatim (via url wiring).
@@ -13,7 +13,7 @@ import { afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { existsSync, readFileSync, rmSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildClaudeSettings, createTmuxRegistry } from "./tmux-registry";
+import { createTmuxRegistry } from "./tmux-registry";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -87,62 +87,6 @@ function trackSettings(p: string) {
 function trackTmux(name: string) {
   toKillTmux.push(name);
 }
-
-// ── SettingsInjection contract ───────────────────────────────────────────────
-
-describe("SettingsInjection (pure)", () => {
-  it("T1: wires Stop hook with empty matcher and CC_MOBILE_RESPONSE_URL + bun + quoted path", () => {
-    const settings = buildClaudeSettings({
-      responseUrl: "http://127.0.0.1:3001/cc/api/pty-response",
-      stopHookPath: "/r/server/pty-stop-hook.ts",
-    });
-    expect(settings.hooks.Stop[0].matcher).toBe("");
-    const cmd = settings.hooks.Stop[0].hooks[0].command;
-    expect(cmd).toBe(
-      "CC_MOBILE_RESPONSE_URL='http://127.0.0.1:3001/cc/api/pty-response' bun '/r/server/pty-stop-hook.ts'",
-    );
-  });
-
-  it("T2: wires PreToolUse (matcher Bash|Write|Edit|NotebookEdit) when permissionUrl + permissionHookPath given; Stop unchanged", () => {
-    const settings = buildClaudeSettings({
-      responseUrl: "http://127.0.0.1:3001/cc/api/pty-response",
-      stopHookPath: "/r/server/pty-stop-hook.ts",
-      permissionUrl: "http://127.0.0.1:3001/cc/api/pty-permission",
-      permissionHookPath: "/r/server/pty-permission-hook.ts",
-    });
-    expect(settings.hooks.PreToolUse).toBeDefined();
-    expect(settings.hooks.PreToolUse![0].matcher).toBe("Bash|Write|Edit|NotebookEdit");
-    expect(settings.hooks.PreToolUse![0].hooks[0].type).toBe("command");
-    expect(settings.hooks.PreToolUse![0].hooks[0].command).toBe(
-      "CC_MOBILE_PERMISSION_URL='http://127.0.0.1:3001/cc/api/pty-permission' bun '/r/server/pty-permission-hook.ts'",
-    );
-    expect(settings.hooks.Stop).toBeDefined();
-    expect(settings.hooks.Stop[0].hooks[0].command).toBe(
-      "CC_MOBILE_RESPONSE_URL='http://127.0.0.1:3001/cc/api/pty-response' bun '/r/server/pty-stop-hook.ts'",
-    );
-  });
-
-  it("T2b: omitting permissionUrl/permissionHookPath leaves PreToolUse undefined; Stop still present", () => {
-    const settings = buildClaudeSettings({
-      responseUrl: "http://127.0.0.1:3001/cc/api/pty-response",
-      stopHookPath: "/r/server/pty-stop-hook.ts",
-    });
-    expect(settings.hooks.PreToolUse).toBeUndefined();
-    expect(settings.hooks.Stop).toBeDefined();
-    expect(settings.hooks.Stop[0].hooks[0].command).toBe(
-      "CC_MOBILE_RESPONSE_URL='http://127.0.0.1:3001/cc/api/pty-response' bun '/r/server/pty-stop-hook.ts'",
-    );
-  });
-
-  it("T3: throws when responseUrl is empty", () => {
-    expect(() =>
-      buildClaudeSettings({
-        responseUrl: "",
-        stopHookPath: "/r/server/pty-stop-hook.ts",
-      }),
-    ).toThrow();
-  });
-});
 
 // ── CreateSession contract (tmux cases) ──────────────────────────────────────
 
