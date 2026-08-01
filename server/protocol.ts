@@ -146,6 +146,20 @@ const TmuxSendMessage = z.object({
   content: z.string(),
 });
 
+// claudeUuid stays a loose string (matching TmuxSendMessage) rather than .uuid().
+// .min(1) preserves the empty-string rejection the hand-rolled ws.ts parser did
+// before these two joined the union.
+const TmuxCreateMessage = z.object({
+  type: z.literal("tmux_create"),
+  claudeUuid: z.string().min(1),
+  cwd: z.string().min(1),
+});
+
+const TmuxTeardownMessage = z.object({
+  type: z.literal("tmux_teardown"),
+  claudeUuid: z.string().min(1),
+});
+
 export const ClientMessage = z.discriminatedUnion("type", [
   NewSessionMessage,
   SendMessage,
@@ -167,6 +181,8 @@ export const ClientMessage = z.discriminatedUnion("type", [
   StopTaskMessage,
   PtySendMessage,
   TmuxSendMessage,
+  TmuxCreateMessage,
+  TmuxTeardownMessage,
 ]);
 
 export type ClientMessage = z.infer<typeof ClientMessage>;
