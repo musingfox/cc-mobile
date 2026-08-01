@@ -440,6 +440,12 @@ class WsService {
         });
       }
 
+      // Always ask for the live terminal sessions: the server's list is the
+      // authority that flips restored cards back to ready and drops the dead
+      // ones. Sent unconditionally — an empty local list still needs the answer
+      // (localStorage may have been cleared while sessions kept running).
+      this.sendMessage({ type: "list_terminal_sessions" });
+
       // If we have restored sessions, don't auto-create a new one
       // User already has sessions from persistence
       if (store.sessions.size === 0) {
@@ -552,6 +558,30 @@ class WsService {
         const cwd = store.sessions.get(claudeUuid)?.cwd;
         store.setTerminalReady(claudeUuid, true);
         if (cwd) saveProject(cwd);
+        break;
+      }
+
+      case "terminal_sessions": {
+        // Server-authoritative live list. A malformed payload must not tear
+        // down local state, so anything but an array is ignored.
+        if (!Array.isArray(msg.claudeUuids)) break;
+        const live = new Set(msg.claudeUuids as string[]);
+        // Materialise before mutating: removeSession replaces the sessions Map.
+        const terminalSessions = [...store.sessions.entries()].filter(
+          ([, s]) => s.terminal !== undefined,
+        );
+        const dead: string[] = [];
+        for (const [id] of terminalSessions) {
+          if (live.has(id)) {
+            this.pendingTerminalCreates.delete(id);
+            store.setTerminalReady(id, true);
+          } else if (!this.pendingTerminalCreates.has(id)) {
+            // Not live and not awaiting a create ack — the session is gone.
+            dead.push(id);
+          }
+        }
+        for (const id of dead) store.removeSession(id);
+        if (dead.length > 0) toastService.info("Terminal session ended");
         break;
       }
 
