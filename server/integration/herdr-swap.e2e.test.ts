@@ -177,7 +177,8 @@ it.skipIf(!existsSync(socketPath))(
       // prompt (same live session observable from the desktop side).
       const t3 = Date.now();
       const agentInfo = await client.agentGet(paneRef);
-      expect(agentInfo.agent).toBe(`ccm-${uuid8}`);
+      // AgentInfo.agent is the kind label ("claude"); the attach target is .name.
+      expect(agentInfo.name).toBe(`ccm-${uuid8}`);
       const read = await client.paneRead({ pane_id: paneRef, source: "visible", strip_ansi: true });
       expect(read.text).toContain(PROMPT_TURN_1_FRAGMENT);
       console.log(`[e2e] step 3 attach identity ccm-${uuid8} in ${Date.now() - t3}ms`);
@@ -227,7 +228,10 @@ it.skipIf(!existsSync(socketPath))(
           .call("workspace.close", { workspace_id: workspaceId }, OkResultSchema)
           .catch(() => {});
       }
-      await app.stop();
+      // force-close: default stop() awaits lingering keep-alive connections
+      // (observed 300s hang after a full herdr lifecycle); production shutdown
+      // is SIGTERM + process exit, so graceful drain is not what we verify here.
+      await app.stop(true);
     }
   },
   TEST_TIMEOUT_MS,

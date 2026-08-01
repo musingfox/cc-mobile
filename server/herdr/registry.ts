@@ -36,6 +36,10 @@ const WorkspaceCreatedResultSchema = z
 
 const OkSchema = z.object({ type: z.literal("ok") }).passthrough();
 
+// Live wire fact (probe 2026-08-01): agent.start acks with type:"agent_started",
+// not "ok" — validating it as OkSchema kills every createSession.
+const AgentStartedResultSchema = z.object({ type: z.literal("agent_started") }).passthrough();
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 /** The client slice this registry needs; the real HerdrClient satisfies it. */
@@ -143,7 +147,7 @@ export function createHerdrRegistry(options: HerdrRegistryOptions) {
             claudeUuid,
           ],
         },
-        OkSchema,
+        AgentStartedResultSchema,
       );
 
       await waitForInteractiveReady({

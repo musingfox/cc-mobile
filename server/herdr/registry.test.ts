@@ -41,6 +41,10 @@ function makeFakeClient(
             workspace: { workspace_id: "w1" },
             root_pane: { pane_id: "p1" },
           };
+        // Real wire shape (probe 2026-08-01): agent.start acks "agent_started".
+        // The fake must speak the daemon's dialect or schema bugs slip through.
+        case "agent.start":
+          return { type: "agent_started" };
         default:
           return { type: "ok" };
       }
