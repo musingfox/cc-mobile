@@ -102,11 +102,11 @@ describe("BackendSessionLifecycle", () => {
     expect(registrySpy.calls.createSession).toEqual([{ claudeUuid: "u1", cwd: "/tmp" }]);
     expect(result).toEqual({
       name: "ccm-u1",
-      panePid: 42,
+      paneRef: "42",
       settingsPath: "/tmp/ccm-settings-u1.json",
     });
     // The rename is the port's only shape change — tmuxName must not leak through.
-    expect(Object.keys(result).sort()).toEqual(["name", "panePid", "settingsPath"]);
+    expect(Object.keys(result).sort()).toEqual(["name", "paneRef", "settingsPath"]);
   });
 
   test("createSession rejects with the registry's original Error, unwrapped", async () => {
@@ -128,13 +128,24 @@ describe("BackendSessionLifecycle", () => {
     expect((caught as Error).message).toBe("duplicate session");
   });
 
-  test("hasSession passes through the registry result", () => {
+  test("hasSession maps the registry pane pid to a string paneRef", () => {
     const registrySpy = makeRegistrySpy();
     const routingSpy = makeRoutingSpy();
     const backend = makeBackend(registrySpy, routingSpy);
 
-    expect(backend.hasSession("u1")).toEqual({ present: true, panePid: 42 });
+    expect(backend.hasSession("u1")).toEqual({ present: true, paneRef: "42" });
     expect(registrySpy.calls.hasSession).toEqual(["u1"]);
+  });
+
+  test("hasSession of an absent session carries no paneRef key", () => {
+    const registrySpy = makeRegistrySpy({ hasSession: () => ({ present: false }) });
+    const routingSpy = makeRoutingSpy();
+    const backend = makeBackend(registrySpy, routingSpy);
+
+    const result = backend.hasSession("nobody");
+
+    expect(result).toEqual({ present: false });
+    expect(Object.keys(result)).toEqual(["present"]);
   });
 
   test("listLive returns the registry's live uuids", () => {

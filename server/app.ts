@@ -38,7 +38,7 @@ export const DIST_DIR = join(__dirname, "..", "dist", "client");
  * handlers drive.
  */
 export interface AppBackend extends WsBackend {
-  hasSession(claudeUuid: string): { present: boolean; panePid?: number };
+  hasSession(claudeUuid: string): { present: boolean; paneRef?: string };
   getClient(claudeUuid: string): ((msg: Record<string, unknown>) => void) | undefined;
   teardownAll(): Promise<void>;
 }

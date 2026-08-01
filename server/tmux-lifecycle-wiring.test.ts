@@ -43,7 +43,7 @@ const permissionBridgeFactoryStub = (() => ({
 function makeSpyBackend() {
   let teardownAllCalls = 0;
   const backend: AppBackend = {
-    createSession: async () => ({ name: "", panePid: 1, settingsPath: "" }),
+    createSession: async () => ({ name: "", paneRef: "1", settingsPath: "" }),
     hasSession: () => ({ present: false }),
     teardown: async () => ({ killed: false }),
     teardownAll: async () => {

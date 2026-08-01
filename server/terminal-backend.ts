@@ -34,10 +34,20 @@ import {
 export type ClientSink = (msg: Record<string, unknown>) => void;
 
 export interface TerminalSessionInfo {
-  /** Backend-native session name (tmux: `ccm-<claudeUuid>`). */
+  /** Backend-native session name (tmux: `ccm-<claudeUuid>`, herdr: the agent name). */
   name: string;
-  panePid: number;
+  /**
+   * Backend-native pane handle, kept as an opaque string so both backends fit:
+   * tmux stringifies its numeric pane pid, herdr passes its `pane_id` through.
+   */
+  paneRef: string;
   settingsPath: string;
+}
+
+export interface TerminalHasSessionResult {
+  present: boolean;
+  /** Omitted entirely when no session is present. */
+  paneRef?: string;
 }
 
 export interface TerminalBackend {
@@ -46,7 +56,7 @@ export interface TerminalBackend {
    * original Error (duplicate uuid, spawn failure) — callers translate to `tmux_error`.
    */
   createSession(input: CreateSessionInput): Promise<TerminalSessionInfo>;
-  hasSession(claudeUuid: string): HasSessionResult;
+  hasSession(claudeUuid: string): TerminalHasSessionResult;
   /** claudeUuids with a live session. */
   listLive(): string[];
   /** Terminal removal: kills the session AND cancels its pending reply waiter. Idempotent. */
@@ -126,9 +136,19 @@ export function createTmuxBackend(options: TmuxBackendOptions = {}): TerminalBac
   return {
     async createSession(input) {
       const info = await registry.createSession(input);
-      return { name: info.tmuxName, panePid: info.panePid, settingsPath: info.settingsPath };
+      return {
+        name: info.tmuxName,
+        paneRef: String(info.panePid),
+        settingsPath: info.settingsPath,
+      };
     },
-    hasSession: (claudeUuid) => registry.hasSession(claudeUuid),
+    hasSession: (claudeUuid) => {
+      const result = registry.hasSession(claudeUuid);
+      // paneRef stays absent (not undefined-valued) when there is no session.
+      return result.panePid === undefined
+        ? { present: result.present }
+        : { present: result.present, paneRef: String(result.panePid) };
+    },
     listLive: () => registry.listSessions(),
     async teardown(claudeUuid) {
       // Order preserved from the pre-port ws.ts handler: kill first, then cancel the waiter.

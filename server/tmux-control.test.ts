@@ -36,7 +36,7 @@ function makeFakeBackend(overrides: Partial<TmuxControlBackend> = {}) {
   const backend: TmuxControlBackend = {
     createSession: async (params) => {
       createSessionCalls.push(params);
-      return { name: "cc-u1", panePid: 7, settingsPath: "/s" };
+      return { name: "cc-u1", paneRef: "7", settingsPath: "/s" };
     },
     teardown: async (claudeUuid) => {
       teardownCalls.push(claudeUuid);
@@ -67,7 +67,7 @@ describe("handleTmuxCreate — happy path", () => {
 
     expect(createSessionCalls).toEqual([{ claudeUuid: "u1", cwd: testRoot }]);
     expect(sent).toEqual([
-      { type: "tmux_created", claudeUuid: "u1", tmuxName: "cc-u1", panePid: 7 },
+      { type: "tmux_created", claudeUuid: "u1", tmuxName: "cc-u1", paneRef: "7" },
     ]);
   });
 

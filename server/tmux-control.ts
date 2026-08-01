@@ -18,7 +18,7 @@ export interface TmuxControlBackend {
   createSession(params: {
     claudeUuid: string;
     cwd: string;
-  }): Promise<{ name: string; panePid: number; settingsPath: string }>;
+  }): Promise<{ name: string; paneRef: string; settingsPath: string }>;
   /** Idempotent: an unknown uuid resolves to `{killed:false}` rather than throwing. */
   teardown(claudeUuid: string): Promise<{ killed: boolean }>;
 }
@@ -63,7 +63,7 @@ export async function handleTmuxCreate(
       type: "tmux_created",
       claudeUuid: msg.claudeUuid,
       tmuxName: info.name,
-      panePid: info.panePid,
+      paneRef: info.paneRef,
     });
   } catch (error) {
     send({
