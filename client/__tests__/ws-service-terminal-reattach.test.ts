@@ -91,6 +91,65 @@ describe("wsService terminal reattach reconcile", () => {
     expect(infoToast).toHaveBeenCalledTimes(1);
   });
 
+  test("a session the server marks unknown is left untouched — kept, not readied, not removed", () => {
+    useAppStore.getState().addSession("u6", "/tmp", { ready: false });
+    const persisted = useAppStore.getState().sessions.get("u6");
+    if (!persisted) throw new Error("session not added");
+    saveSessionState("u6", persisted);
+
+    getInternal().handleMessage({
+      type: "terminal_sessions",
+      claudeUuids: [],
+      unknownUuids: ["u6"],
+    });
+
+    // Skipped-at-remount is "leave alone": the card and its persisted state
+    // survive so the next restart can re-adopt the still-running session.
+    expect(useAppStore.getState().sessions.has("u6")).toBe(true);
+    expect(useAppStore.getState().sessions.get("u6")?.terminal?.ready).toBe(false);
+    expect(getAllSessionIds()).toContain("u6");
+    expect(localStorage.getItem("ccm:session:u6")).not.toBeNull();
+    expect(infoToast).not.toHaveBeenCalled();
+  });
+
+  test("an unknown card does not shield a genuinely dead one", () => {
+    useAppStore.getState().addSession("u6", "/tmp", { ready: false });
+    useAppStore.getState().addSession("u2", "/tmp", { ready: true });
+
+    getInternal().handleMessage({
+      type: "terminal_sessions",
+      claudeUuids: [],
+      unknownUuids: ["u6"],
+    });
+
+    expect(sessionIds()).toEqual(["u6"]);
+    expect(infoToast).toHaveBeenCalledTimes(1);
+  });
+
+  test("live wins when a uuid appears in both lists", () => {
+    useAppStore.getState().addSession("u1", "/tmp", { ready: false });
+
+    getInternal().handleMessage({
+      type: "terminal_sessions",
+      claudeUuids: ["u1"],
+      unknownUuids: ["u1"],
+    });
+
+    expect(useAppStore.getState().sessions.get("u1")?.terminal?.ready).toBe(true);
+  });
+
+  test("a malformed unknownUuids degrades to empty rather than breaking the reconcile", () => {
+    useAppStore.getState().addSession("u1", "/tmp", { ready: false });
+
+    getInternal().handleMessage({
+      type: "terminal_sessions",
+      claudeUuids: ["u1"],
+      unknownUuids: "u9",
+    });
+
+    expect(useAppStore.getState().sessions.get("u1")?.terminal?.ready).toBe(true);
+  });
+
   test("a create still in flight is left alone", () => {
     useAppStore.getState().addSession("u3", "/tmp", { ready: false });
     getInternal().pendingTerminalCreates.add("u3");

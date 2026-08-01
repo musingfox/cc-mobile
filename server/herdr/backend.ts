@@ -44,6 +44,12 @@ export interface HerdrBackendOptions {
  */
 export interface HerdrTerminalBackend extends TerminalBackend {
   remountLiveSessions(): Promise<RemountReport>;
+  /**
+   * claudeUuids the last remount skipped rather than adopted or reaped —
+   * possibly alive but not routable. Carried into the terminal_sessions reply
+   * so a reconciling client leaves their cards alone instead of deleting them.
+   */
+  listUnknown(): string[];
 }
 
 export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalBackend {
@@ -68,6 +74,10 @@ export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalB
     // Late-bound: a reconnect rebinds the uuid to a fresh sink.
     getSink: (claudeUuid) => routing.getClient(claudeUuid),
   });
+
+  // Filled by remountLiveSessions; a uuid both adopted and skipped (duplicate
+  // workspaces) counts as adopted, so the two lists start disjoint.
+  let unknownUuids: string[] = [];
 
   async function teardown(claudeUuid: string) {
     statusEvents.stop(claudeUuid);
@@ -94,12 +104,21 @@ export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalB
      * Mirrors createSession's composition order — register, then subscribe —
      * so an adopted session is indistinguishable from one this process built.
      */
-    remountLiveSessions: () =>
-      remountLiveSessions({
+    remountLiveSessions: async () => {
+      const report = await remountLiveSessions({
         client,
         adopt: (entry) => registry.adoptSession(entry),
         subscribeStatus: (claudeUuid, paneId) => statusEvents.start(claudeUuid, paneId),
-      }),
+      });
+      const adopted = new Set(report.adopted);
+      unknownUuids = [...new Set(report.skipped.map((entry) => entry.uuid))].filter(
+        (uuid) => !adopted.has(uuid),
+      );
+      return report;
+    },
+    // Filtered at query time: a uuid that has become routable since the scan
+    // must answer as live, never as unknown.
+    listUnknown: () => unknownUuids.filter((uuid) => !registry.hasSession(uuid).present),
     teardown,
     async teardownAll() {
       // Routed through the composed teardown so subscriptions and waiters are

@@ -30,7 +30,10 @@ afterEach(async () => {
   settingsWritten.clear();
 });
 
-function makeFakeClient(results: Record<string, unknown> = {}) {
+/** A per-method result, or a function of the params for pane-dependent replies. */
+type FakeResult = unknown | ((params: unknown) => unknown);
+
+function makeFakeClient(results: Record<string, FakeResult> = {}) {
   const calls: Array<{ method: string; params: unknown }> = [];
   const subscriptions: unknown[] = [];
   const injected: Array<[string, unknown]> = [];
@@ -41,7 +44,10 @@ function makeFakeClient(results: Record<string, unknown> = {}) {
   const client = {
     call: async (method: string, params: unknown) => {
       calls.push({ method, params });
-      if (method in results) return results[method];
+      if (method in results) {
+        const result = results[method];
+        return typeof result === "function" ? result(params) : result;
+      }
       if (method === "workspace.create") {
         return {
           type: "workspace_created",
@@ -194,6 +200,76 @@ describe("herdr backend composition", () => {
     backend.registerClient(uuid, () => {});
     await backend.send({ claudeUuid: uuid, content: "hi" });
     expect(fake.injected[0]).toEqual(["pn-1", "hi"]);
+  });
+
+  test("listUnknown carries remount skips and stays disjoint from listLive", async () => {
+    const adoptedUuid = "3f2b8c1d-9e4a-4b6f-8c2d-1a5e7f9b0c3d";
+    const skippedUuid = "7c4d5e02-2222-4333-8444-555566667777";
+    const makeWorkspace = (id: string, uuid: string) => ({
+      workspace_id: id,
+      label: `ccm-${uuid}`,
+      number: 1,
+      focused: false,
+      active_tab_id: `${id}:t1`,
+      tab_count: 1,
+      pane_count: 1,
+      agent_status: "idle",
+    });
+    const makePane = (id: string, workspaceId: string) => ({
+      pane_id: id,
+      terminal_id: `term-${id}`,
+      workspace_id: workspaceId,
+      tab_id: `${workspaceId}:t1`,
+      focused: false,
+      agent_status: "working",
+      revision: 4,
+      agent: "claude",
+    });
+    const fake = makeFakeClient({
+      "session.snapshot": {
+        type: "session_snapshot",
+        snapshot: {
+          version: "0.7.5",
+          protocol: 17,
+          workspaces: [makeWorkspace("ws-1", adoptedUuid), makeWorkspace("ws-2", skippedUuid)],
+          tabs: [],
+          panes: [makePane("pn-1", "ws-1"), makePane("pn-2", "ws-2")],
+          layouts: [],
+          agents: [],
+        },
+      },
+      "pane.process_info": (params: unknown) => {
+        const paneId = (params as { pane_id: string }).pane_id;
+        // pn-2 is unreachable on both the probe and its retry → skipped.
+        if (paneId === "pn-2") throw new Error("daemon busy");
+        return {
+          type: "pane_process_info",
+          process_info: {
+            pane_id: paneId,
+            foreground_processes: [
+              { pid: 1, argv0: "claude", argv: ["claude", "--session-id", adoptedUuid] },
+            ],
+          },
+        };
+      },
+    });
+    const { backend } = makeBackend(fake);
+
+    expect(backend.listUnknown()).toEqual([]);
+
+    const report = await backend.remountLiveSessions();
+
+    // The split the client will see: adopted answers as live, skipped answers
+    // as unknown — never as dead, never in both lists.
+    expect(report.adopted).toEqual([adoptedUuid]);
+    expect(report.skipped.map((entry) => entry.uuid)).toEqual([skippedUuid]);
+    expect(backend.listLive()).toEqual([adoptedUuid]);
+    expect(backend.listUnknown()).toEqual([skippedUuid]);
+
+    // A uuid that becomes routable after the scan answers as live, not unknown.
+    const info = await backend.createSession({ claudeUuid: skippedUuid, cwd: "/tmp" });
+    settingsWritten.add(info.settingsPath);
+    expect(backend.listUnknown()).toEqual([]);
   });
 
   test("a prompt reaches the created pane and its reply comes back on the shared relay", async () => {

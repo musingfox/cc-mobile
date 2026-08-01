@@ -566,6 +566,11 @@ class WsService {
         // down local state, so anything but an array is ignored.
         if (!Array.isArray(msg.claudeUuids)) break;
         const live = new Set(msg.claudeUuids as string[]);
+        // Sessions the server's remount skipped rather than adopted: possibly
+        // alive but not routable. Lenient parse — an older server sends none.
+        const unknown = new Set(
+          Array.isArray(msg.unknownUuids) ? (msg.unknownUuids as string[]) : [],
+        );
         // Materialise before mutating: removeSession replaces the sessions Map.
         const terminalSessions = [...store.sessions.entries()].filter(
           ([, s]) => s.terminal !== undefined,
@@ -575,6 +580,9 @@ class WsService {
           if (live.has(id)) {
             this.pendingTerminalCreates.delete(id);
             store.setTerminalReady(id, true);
+          } else if (unknown.has(id)) {
+            // Skipped, not declared dead — leave the card (and its persisted
+            // state) exactly as it is; the next restart may re-adopt it.
           } else if (!this.pendingTerminalCreates.has(id)) {
             // Not live and not awaiting a create ack — the session is gone.
             dead.push(id);

@@ -366,6 +366,12 @@ const SessionStateMessage = z.object({
 const TerminalSessionsMessage = z.object({
   type: z.literal("terminal_sessions"),
   claudeUuids: z.array(z.string()),
+  /**
+   * Sessions the startup remount skipped (transient RPC failure, ambiguous
+   * pane): possibly alive but not routable. Clients must leave their cards
+   * alone — neither ready nor removed.
+   */
+  unknownUuids: z.array(z.string()),
 });
 
 export const ServerMessage = z.discriminatedUnion("type", [

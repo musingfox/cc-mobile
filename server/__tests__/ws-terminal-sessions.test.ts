@@ -34,15 +34,29 @@ describe("TerminalSessionListQuery — protocol", () => {
   test("both halves of the message pair validate", () => {
     expect(ClientMessage.safeParse({ type: "list_terminal_sessions" }).success).toBe(true);
     expect(
-      ServerMessage.safeParse({ type: "terminal_sessions", claudeUuids: ["u1"] }).success,
+      ServerMessage.safeParse({
+        type: "terminal_sessions",
+        claudeUuids: ["u1"],
+        unknownUuids: ["u9"],
+      }).success,
     ).toBe(true);
   });
 
-  test("the reply requires its list — a missing one is not an empty one", () => {
+  test("the reply requires both lists — a missing one is not an empty one", () => {
     expect(ServerMessage.safeParse({ type: "terminal_sessions" }).success).toBe(false);
-    expect(ServerMessage.safeParse({ type: "terminal_sessions", claudeUuids: "u1" }).success).toBe(
-      false,
-    );
+    expect(
+      ServerMessage.safeParse({ type: "terminal_sessions", claudeUuids: "u1", unknownUuids: [] })
+        .success,
+    ).toBe(false);
+    // unknownUuids is how the remount's "leave it alone" verdict travels; a
+    // reply without it would let the client mistake skipped for dead.
+    expect(
+      ServerMessage.safeParse({ type: "terminal_sessions", claudeUuids: ["u1"] }).success,
+    ).toBe(false);
+    expect(
+      ServerMessage.safeParse({ type: "terminal_sessions", claudeUuids: [], unknownUuids: "u9" })
+        .success,
+    ).toBe(false);
   });
 });
 
@@ -53,7 +67,11 @@ describe("TerminalSessionListQuery — handler", () => {
     harness.send({ type: "list_terminal_sessions" });
     const reply = await harness.waitFor((msg) => msg.type === "terminal_sessions");
 
-    expect(reply).toEqual({ type: "terminal_sessions", claudeUuids: ["u1", "u2"] });
+    expect(reply).toEqual({
+      type: "terminal_sessions",
+      claudeUuids: ["u1", "u2"],
+      unknownUuids: [],
+    });
     // A connection-scoped answer must not be buffered: replaying a stale list
     // to a later reconnect would delete cards that are alive by then.
     expect(harness.eventBuffer.replay("u1", 0)).toEqual([]);
@@ -66,7 +84,21 @@ describe("TerminalSessionListQuery — handler", () => {
     harness.send({ type: "list_terminal_sessions" });
     const reply = await harness.waitFor((msg) => msg.type === "terminal_sessions");
 
-    expect(reply).toEqual({ type: "terminal_sessions", claudeUuids: [] });
+    expect(reply).toEqual({ type: "terminal_sessions", claudeUuids: [], unknownUuids: [] });
+  });
+
+  test("a backend that reports remount skips carries them as unknownUuids", async () => {
+    harness = await startWsHarness({
+      ...backendWithLive(["u1"]),
+      listUnknown: () => ["u7"],
+    });
+
+    harness.send({ type: "list_terminal_sessions" });
+    const reply = await harness.waitFor((msg) => msg.type === "terminal_sessions");
+
+    // The remount's conservatism reaches the client: u7 was skipped, not
+    // declared dead, so the reply must not lump it in with the missing.
+    expect(reply).toEqual({ type: "terminal_sessions", claudeUuids: ["u1"], unknownUuids: ["u7"] });
   });
 
   test("the answer is read at query time, not captured earlier", async () => {

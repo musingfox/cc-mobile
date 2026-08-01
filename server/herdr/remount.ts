@@ -13,15 +13,21 @@
  *   adopt — a claude is running in the pane AND its argv carries the same
  *           `--session-id` the label claims. Only then is the session ours and
  *           still alive, so routing can be restored.
- *   reap  — process_info answered and no claude is running there at all. The
- *           conversation lived inside that process, so the pane has nothing
- *           left to recover; close it and drop its settings file.
- *   skip  — anything else: the RPC failed, the pane is ambiguous, or a claude
+ *   reap  — process_info answered, at least one foreground argv was readable,
+ *           and none of them is a claude. The conversation lived inside that
+ *           process, so the pane has nothing left to recover; close it and
+ *           drop its settings file.
+ *   skip  — anything else: the RPC failed twice, the pane is ambiguous, every
+ *           argv was unreadable (a daemon that cannot read a process it does
+ *           not own would report a live claude exactly like this), or a claude
  *           is alive but is not the one the label names (someone's own
  *           `claude -c` in a workspace we would otherwise have reaped).
  *
  * Reaping is the only destructive branch, so it requires a positive "no claude
- * here" answer — never merely the absence of a matching session-id.
+ * here" answer — never merely the absence of a matching session-id, and never
+ * an answer built entirely out of processes whose argv could not be read.
+ * `pane.process_info` gets one retry before a candidate is skipped, so a single
+ * transient RPC blip does not demote a live session to "unknown".
  */
 
 import { existsSync } from "node:fs";
@@ -62,6 +68,15 @@ export interface RemountDeps {
 function isClaudeProcess(process: PaneProcess): boolean {
   const names = [process.argv0, process.argv?.[0]];
   return names.some((name) => typeof name === "string" && basename(name) === "claude");
+}
+
+/**
+ * True when the daemon could actually read what this process is. A process
+ * with neither argv0 nor argv proves nothing — it could be a claude the
+ * daemon lacks permission to inspect.
+ */
+function hasReadableArgv(process: PaneProcess): boolean {
+  return typeof process.argv0 === "string" || Array.isArray(process.argv);
 }
 
 /** The `--session-id <uuid>` this process was launched with, if any. */
@@ -127,22 +142,40 @@ export async function remountLiveSessions(deps: RemountDeps): Promise<RemountRep
       continue;
     }
 
-    let processes: PaneProcess[];
-    try {
-      const info = await client.call(
-        "pane.process_info",
-        { pane_id: pane.pane_id },
-        PaneProcessInfoResultSchema,
-      );
-      processes = info.process_info.foreground_processes ?? [];
-    } catch (error) {
-      skip(claudeUuid, `pane.process_info failed: ${describe(error)}`);
+    // One retry: a transient RPC blip must not skip a live session — a skipped
+    // uuid reaches the client as "unknown" and its card goes unwritable until
+    // the next restart.
+    let processes: PaneProcess[] | undefined;
+    let processInfoError: unknown;
+    for (let attempt = 0; attempt < 2 && processes === undefined; attempt++) {
+      try {
+        const info = await client.call(
+          "pane.process_info",
+          { pane_id: pane.pane_id },
+          PaneProcessInfoResultSchema,
+        );
+        processes = info.process_info.foreground_processes ?? [];
+      } catch (error) {
+        processInfoError = error;
+      }
+    }
+    if (processes === undefined) {
+      skip(claudeUuid, `pane.process_info failed twice: ${describe(processInfoError)}`);
       continue;
     }
 
     const claudeProcesses = processes.filter(isClaudeProcess);
 
     if (claudeProcesses.length === 0) {
+      if (!processes.some(hasReadableArgv)) {
+        // "No claude" built entirely out of unreadable processes is not a
+        // verdict — one of them could be the claude itself.
+        skip(
+          claudeUuid,
+          "no readable argv among foreground processes; cannot prove claude is gone",
+        );
+        continue;
+      }
       await reap(claudeUuid, workspace.workspace_id);
       continue;
     }

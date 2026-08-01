@@ -99,6 +99,12 @@ interface FakeOptions {
   panes: unknown[];
   /** pane_id → the foreground_processes that pane reports, or a thrown error. */
   processes: Record<string, unknown[] | Error>;
+  /**
+   * pane_id → per-call responses, consumed one per process_info call before
+   * falling back to `processes`. Lets a test make the first call fail and the
+   * retry succeed.
+   */
+  processSequence?: Record<string, (unknown[] | Error)[]>;
   closeFails?: boolean;
   snapshotFails?: boolean;
 }
@@ -115,7 +121,8 @@ function makeFakeClient(options: FakeOptions) {
       }
       if (method === "pane.process_info") {
         const paneId = (params as { pane_id: string }).pane_id;
-        const entry = options.processes[paneId];
+        const queued = options.processSequence?.[paneId];
+        const entry = queued?.length ? queued.shift() : options.processes[paneId];
         if (entry instanceof Error) throw entry;
         return parse(schema, {
           type: "pane_process_info",
@@ -301,7 +308,7 @@ describe("StartupRemount", () => {
     expect(harness.warnings.length).toBe(1);
   });
 
-  test("skips a candidate whose pane.process_info rejects", async () => {
+  test("skips a candidate only after pane.process_info rejects twice", async () => {
     const fake = makeFakeClient({
       workspaces: [workspace("ws-1", workspaceLabelFor(UUID))],
       panes: [pane("pn-1", "ws-1", "claude")],
@@ -316,6 +323,26 @@ describe("StartupRemount", () => {
     expect(report.skipped[0]?.uuid).toBe(UUID);
     expect(report.skipped[0]?.reason).toContain("pane vanished");
     expect(fake.closed()).toEqual([]);
+    // The retry happened: a skip costs two probes, never one.
+    expect(fake.processInfoPanes()).toEqual(["pn-1", "pn-1"]);
+  });
+
+  test("adopts when a transient process_info failure clears on the retry", async () => {
+    const fake = makeFakeClient({
+      workspaces: [workspace("ws-1", workspaceLabelFor(UUID))],
+      panes: [pane("pn-1", "ws-1", "claude")],
+      processes: {},
+      processSequence: { "pn-1": [new Error("daemon busy"), [claudeProcess(UUID)]] },
+    });
+    const harness = makeDeps(fake);
+
+    const report = await remountLiveSessions(harness.deps);
+
+    // One blip does not demote a live session to "unknown".
+    expect(report.adopted).toEqual([UUID]);
+    expect(report.skipped).toEqual([]);
+    expect(fake.processInfoPanes()).toEqual(["pn-1", "pn-1"]);
+    expect(harness.registered.get(UUID)?.paneId).toBe("pn-1");
   });
 
   test("adopts the first of two workspaces claiming one uuid and skips the duplicate", async () => {
@@ -408,21 +435,27 @@ describe("OrphanPaneReap", () => {
     expect(harness.registered.get(UUID2)?.paneId).toBe("pn-1");
   });
 
-  test("treats null argv as no claude and reaps without crashing", async () => {
+  test("skips rather than reaps when every argv is unreadable", async () => {
+    const settingsPath = await writeSettingsFile(UUID);
     const fake = makeFakeClient({
       workspaces: [workspace("ws-2", workspaceLabelFor(UUID))],
       panes: [pane("pn-2", "ws-2")],
+      // A daemon that cannot inspect a process it does not own reports a live
+      // claude exactly like this — reaping here would kill the conversation.
       processes: { "pn-2": [{ pid: 9, name: "?", argv: null, argv0: null }] },
     });
     const harness = makeDeps(fake);
 
     const report = await remountLiveSessions(harness.deps);
 
-    expect(report.reaped).toEqual([UUID]);
-    expect(fake.closed()).toEqual([{ workspace_id: "ws-2" }]);
+    expect(report.reaped).toEqual([]);
+    expect(report.skipped[0]?.uuid).toBe(UUID);
+    expect(report.skipped[0]?.reason).toContain("no readable argv");
+    expect(fake.closed()).toEqual([]);
+    expect(existsSync(settingsPath)).toBe(true);
   });
 
-  test("an empty foreground_processes list is a dead pane, not an error", async () => {
+  test("an empty foreground_processes list is no proof either — skip, not reap", async () => {
     const fake = makeFakeClient({
       workspaces: [workspace("ws-2", workspaceLabelFor(UUID))],
       panes: [pane("pn-2", "ws-2")],
@@ -432,7 +465,25 @@ describe("OrphanPaneReap", () => {
 
     const report = await remountLiveSessions(harness.deps);
 
+    expect(report.reaped).toEqual([]);
+    expect(report.skipped[0]?.uuid).toBe(UUID);
+    expect(fake.closed()).toEqual([]);
+  });
+
+  test("one readable non-claude argv beside an unreadable one still reaps", async () => {
+    const fake = makeFakeClient({
+      workspaces: [workspace("ws-2", workspaceLabelFor(UUID))],
+      panes: [pane("pn-2", "ws-2")],
+      // The shell is readable and is not claude: positive evidence the claude
+      // exited, so the unreadable straggler does not block the reap.
+      processes: { "pn-2": [{ pid: 9, name: "?", argv: null, argv0: null }, shellProcess] },
+    });
+    const harness = makeDeps(fake);
+
+    const report = await remountLiveSessions(harness.deps);
+
     expect(report.reaped).toEqual([UUID]);
+    expect(fake.closed()).toEqual([{ workspace_id: "ws-2" }]);
   });
 
   test("reaps a claude launched by absolute path only when its session-id matches", async () => {

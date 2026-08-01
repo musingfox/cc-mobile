@@ -113,6 +113,11 @@ export function emitCapabilitiesOnResume(
 export interface WsBackend extends TmuxControlBackend {
   /** claudeUuids with a live session — the authority a reconnecting client asks for. */
   listLive(): string[];
+  /**
+   * claudeUuids the startup remount skipped — possibly alive but not routable.
+   * Optional: only a backend that remounts (herdr) can have any.
+   */
+  listUnknown?(): string[];
   send(params: { claudeUuid: string; content: string }): Promise<void>;
   registerClient(
     claudeUuid: string,
@@ -518,7 +523,13 @@ export function createWsPlugin(
             // Bare send, not sendBuffered: this is a connection-scoped question
             // and its answer, not a session event. Buffering it would replay a
             // stale list to the next reconnect.
-            ws.send({ type: "terminal_sessions", claudeUuids: backend.listLive() });
+            // unknownUuids carries the remount's conservatism to the client: a
+            // skipped session is "leave the card alone", not "dead, delete it".
+            ws.send({
+              type: "terminal_sessions",
+              claudeUuids: backend.listLive(),
+              unknownUuids: backend.listUnknown?.() ?? [],
+            });
             break;
           }
 
