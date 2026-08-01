@@ -68,6 +68,34 @@ function claudeProcess(sessionId: string) {
   };
 }
 
+/**
+ * The argv a pane created *before* the permission gate carries: bypass mode and
+ * a settings file with no PreToolUse hook. Such a pane survives a deploy.
+ */
+function ungatedClaudeProcess(sessionId: string, inlineFlag = false) {
+  return {
+    ...claudeProcess(sessionId),
+    argv: inlineFlag
+      ? [
+          "claude",
+          "--permission-mode=bypassPermissions",
+          "--settings",
+          settingsPathFor(sessionId),
+          "--session-id",
+          sessionId,
+        ]
+      : [
+          "claude",
+          "--permission-mode",
+          "bypassPermissions",
+          "--settings",
+          settingsPathFor(sessionId),
+          "--session-id",
+          sessionId,
+        ],
+  };
+}
+
 const shellProcess = {
   pid: 4200,
   name: "fish",
@@ -306,6 +334,82 @@ describe("StartupRemount", () => {
     // The decisive assertion: a live claude is never closed, whoever owns it.
     expect(fake.closed()).toEqual([]);
     expect(harness.warnings.length).toBe(1);
+  });
+
+  test("refuses to adopt an ungated pane, and does not reap it", async () => {
+    const fake = makeFakeClient({
+      workspaces: [workspace("ws-1", workspaceLabelFor(UUID))],
+      panes: [pane("pn-1", "ws-1", "claude")],
+      // Ours by --session-id, but launched before the gate existed.
+      processes: { "pn-1": [ungatedClaudeProcess(UUID)] },
+    });
+    const harness = makeDeps(fake);
+
+    const report = await remountLiveSessions(harness.deps);
+
+    expect(report.adopted).toEqual([]);
+    // Never reaped: it is the user's live conversation, only an ungated one.
+    expect(report.reaped).toEqual([]);
+    expect(fake.closed()).toEqual([]);
+    expect(report.skipped.map((entry) => entry.uuid)).toEqual([UUID]);
+    expect(report.skipped[0]?.reason).toContain("ungated pane not adopted");
+    // Not routable and not subscribed: an ungated session must not look live.
+    expect(harness.registered.size).toBe(0);
+    expect(harness.subscribed).toEqual([]);
+    expect(harness.warnings.join("\n")).toContain("bypassPermissions");
+  });
+
+  test("refuses the --permission-mode=bypassPermissions spelling too", async () => {
+    const fake = makeFakeClient({
+      workspaces: [workspace("ws-1", workspaceLabelFor(UUID))],
+      panes: [pane("pn-1", "ws-1", "claude")],
+      processes: { "pn-1": [ungatedClaudeProcess(UUID, true)] },
+    });
+    const harness = makeDeps(fake);
+
+    const report = await remountLiveSessions(harness.deps);
+
+    expect(report.adopted).toEqual([]);
+    expect(report.reaped).toEqual([]);
+    expect(report.skipped[0]?.reason).toContain("ungated pane not adopted");
+    expect(harness.registered.size).toBe(0);
+  });
+
+  test("adopts when the mode is gated, or absent altogether", async () => {
+    // claudeProcess() carries `--permission-mode default`; UUID2's pane carries
+    // no mode flag at all, which is claude's own (gated) default.
+    const bare = { ...claudeProcess(UUID2), argv: ["claude", "--session-id", UUID2] };
+    const fake = makeFakeClient({
+      workspaces: [
+        workspace("ws-1", workspaceLabelFor(UUID)),
+        workspace("ws-2", workspaceLabelFor(UUID2)),
+      ],
+      panes: [pane("pn-1", "ws-1", "claude"), pane("pn-2", "ws-2", "claude")],
+      processes: { "pn-1": [claudeProcess(UUID)], "pn-2": [bare] },
+    });
+    const harness = makeDeps(fake);
+
+    const report = await remountLiveSessions(harness.deps);
+
+    expect(report.adopted).toEqual([UUID, UUID2]);
+    expect(report.skipped).toEqual([]);
+  });
+
+  test("an ungated bystander claude does not veto adoption of ours", async () => {
+    // Two claudes in one pane: someone's own bypass session beside ours. The
+    // mode is read off the process whose --session-id matches, not the pane.
+    const fake = makeFakeClient({
+      workspaces: [workspace("ws-1", workspaceLabelFor(UUID))],
+      panes: [pane("pn-1", "ws-1", "claude")],
+      processes: { "pn-1": [ungatedClaudeProcess(UUID2), claudeProcess(UUID)] },
+    });
+    const harness = makeDeps(fake);
+
+    const report = await remountLiveSessions(harness.deps);
+
+    expect(report.adopted).toEqual([UUID]);
+    expect(report.skipped).toEqual([]);
+    expect(fake.closed()).toEqual([]);
   });
 
   test("skips a candidate only after pane.process_info rejects twice", async () => {

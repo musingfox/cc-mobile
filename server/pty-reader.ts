@@ -527,7 +527,12 @@ export async function runPtySession(
         "--session-id",
         sessionId,
       ]
-    : ["claude", "--permission-mode", "bypassPermissions", "--session-id", sessionId];
+    : // No settings file means no PreToolUse hook, so nothing would gate this
+      // process: it must fall back to claude's own permission decision rather
+      // than announcing bypass. (Unreachable from the server — app.ts always
+      // constructs PtyOrchestrator with settings — but this is the branch that
+      // would be ungated if that ever changed.)
+      ["claude", "--session-id", sessionId];
   const proc = effectiveSpawner(args, cwd);
 
   const handle = {

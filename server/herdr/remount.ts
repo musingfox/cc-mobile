@@ -11,17 +11,21 @@
  * Three outcomes, and the split between them is deliberately conservative:
  *
  *   adopt — a claude is running in the pane AND its argv carries the same
- *           `--session-id` the label claims. Only then is the session ours and
- *           still alive, so routing can be restored.
+ *           `--session-id` the label claims AND it was not launched with
+ *           `--permission-mode bypassPermissions`. Only then is the session
+ *           ours, still alive, and still behind the permission gate, so
+ *           routing can be restored.
  *   reap  — process_info answered, at least one foreground argv was readable,
  *           and none of them is a claude. The conversation lived inside that
  *           process, so the pane has nothing left to recover; close it and
  *           drop its settings file.
  *   skip  — anything else: the RPC failed twice, the pane is ambiguous, every
  *           argv was unreadable (a daemon that cannot read a process it does
- *           not own would report a live claude exactly like this), or a claude
+ *           not own would report a live claude exactly like this), a claude
  *           is alive but is not the one the label names (someone's own
- *           `claude -c` in a workspace we would otherwise have reaped).
+ *           `claude -c` in a workspace we would otherwise have reaped), or it
+ *           is ours but ungated (`--permission-mode bypassPermissions`, i.e.
+ *           a pane predating the gate).
  *
  * Reaping is the only destructive branch, so it requires a positive "no claude
  * here" answer — never merely the absence of a matching session-id, and never
@@ -86,6 +90,22 @@ function sessionIdFromArgv(process: PaneProcess): string | undefined {
   const flagIndex = argv.lastIndexOf("--session-id");
   if (flagIndex === -1) return undefined;
   return argv[flagIndex + 1]?.toLowerCase();
+}
+
+/**
+ * The `--permission-mode <mode>` this process was launched with, if any.
+ * Both spellings are read: a pane created before this change is an argv we
+ * never observed, so the `=` form must not slip through as "no mode".
+ * An absent flag means claude's own default, which is gated.
+ */
+function permissionModeFromArgv(process: PaneProcess): string | undefined {
+  const argv = process.argv;
+  if (!argv) return undefined;
+  const inlineIndex = argv.findLastIndex((arg) => arg.startsWith("--permission-mode="));
+  const flagIndex = argv.lastIndexOf("--permission-mode");
+  if (inlineIndex > flagIndex) return argv[inlineIndex]?.slice("--permission-mode=".length);
+  if (flagIndex === -1) return undefined;
+  return argv[flagIndex + 1];
 }
 
 /**
@@ -180,13 +200,29 @@ export async function remountLiveSessions(deps: RemountDeps): Promise<RemountRep
       continue;
     }
 
-    const identified = claudeProcesses.some(
+    const identified = claudeProcesses.find(
       (process) => sessionIdFromArgv(process) === claudeUuid.toLowerCase(),
     );
     if (!identified) {
       // A claude is alive in there, just not the one this label names. Reaping
       // it would kill someone's live conversation.
       skip(claudeUuid, "a claude is running but its --session-id does not match the label");
+      continue;
+    }
+
+    // The permission gate is argv-deep: a pane launched before the gate existed
+    // carries `--permission-mode bypassPermissions` and a settings file with no
+    // PreToolUse hook. Adopting it would put an ungated session on the phone
+    // that looks exactly like a gated one. Skip — never reap: the conversation
+    // in there is alive and belongs to the user, who can close it themselves.
+    // The mode is read off the matched process only; another claude's argv in
+    // the same pane says nothing about ours.
+    if (permissionModeFromArgv(identified) === "bypassPermissions") {
+      skip(
+        claudeUuid,
+        "ungated pane not adopted: launched with --permission-mode bypassPermissions, " +
+          "so its tools bypass the mobile permission gate; close the pane and start a new session",
+      );
       continue;
     }
 

@@ -351,7 +351,7 @@ describe("runPtySession", () => {
     expect(capturedArgs[0]).toContain("target-sess-id");
   });
 
-  it("C1: spawner args carry adjacent --permission-mode bypassPermissions (no settingsPath)", async () => {
+  it("C1: spawner args carry no permission mode at all (no settingsPath)", async () => {
     let pollCount = 0;
     const capturedArgs: string[][] = [];
     const spawner: SpawnerFn = (args, _cwd) => {
@@ -371,10 +371,11 @@ describe("runPtySession", () => {
       interval: 10,
     });
 
+    // Without a settings file there is no PreToolUse hook, so bypass here would
+    // be an ungated process. Fall back to claude's own permission decision.
     const args = capturedArgs[0];
-    const pmIdx = args.indexOf("--permission-mode");
-    expect(pmIdx).toBeGreaterThanOrEqual(0);
-    expect(args[pmIdx + 1]).toBe("bypassPermissions");
+    expect(args).not.toContain("--permission-mode");
+    expect(args).not.toContain("bypassPermissions");
     expect(args).not.toContain("--settings");
   });
 
