@@ -1,8 +1,8 @@
-import { describe, expect, mock, test } from "bun:test";
-import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
-import { getInitialBrowsePath } from "../ws";
+import { dirname, join, sep } from "node:path";
+import { getInitialBrowsePath, listDirectories } from "../directory-listing";
 
 describe("getInitialBrowsePath", () => {
   test("returns first allowed root when array is non-empty", () => {
@@ -21,71 +21,96 @@ describe("getInitialBrowsePath", () => {
   });
 });
 
-describe("list_directories handler", () => {
-  // Create a temporary test directory structure
-  const testRoot = join(tmpdir(), `cc-mobile-test-${Date.now()}`);
-  const testWorkspace = join(testRoot, "workspace");
+describe("listDirectories", () => {
+  // realpathSync normalizes macOS /tmp → /private/tmp so asserted paths match
+  // what the symlink-resolving allowed-roots check produces.
+  const testRoot = join(realpathSync(tmpdir()), `cc-mobile-test-${Date.now()}`);
+  const workspace = join(testRoot, "workspace");
 
-  // Setup test directory structure
-  function setupTestDir() {
-    mkdirSync(testRoot, { recursive: true });
-    mkdirSync(testWorkspace, { recursive: true });
-    mkdirSync(join(testWorkspace, "project-a"), { recursive: true });
-    mkdirSync(join(testWorkspace, "project-b"), { recursive: true });
-    writeFileSync(join(testWorkspace, "README.md"), "test file");
-  }
+  beforeAll(() => {
+    mkdirSync(workspace, { recursive: true });
+    mkdirSync(join(workspace, "project-b"), { recursive: true });
+    mkdirSync(join(workspace, "project-a"), { recursive: true });
+    writeFileSync(join(workspace, "README.md"), "test file");
+  });
 
-  // Cleanup test directory
-  function cleanupTestDir() {
+  afterAll(() => {
     try {
       rmSync(testRoot, { recursive: true, force: true });
     } catch {
       // Ignore cleanup errors
     }
-  }
-
-  // Mock WebSocket server
-  function createMockWs() {
-    const messages: unknown[] = [];
-    return {
-      send: mock((msg: unknown) => messages.push(msg)),
-      data: { permissionHandler: { canUseTool: () => {} } },
-      messages,
-    };
-  }
-
-  // Since we can't easily test the actual WebSocket handler without setting up the full server,
-  // we'll test the logic components (expandPath, validateCwd, validateAllowedPath) separately
-  // and verify the integration through the existing ws.ts exports.
-
-  test("list directory with mixed content filters to directories only", async () => {
-    setupTestDir();
-    const { createWsPlugin } = await import("../ws");
-
-    // We can't directly test the handler, but we verify the logic exists
-    // by checking the function is exported and structure is correct
-    expect(typeof createWsPlugin).toBe("function");
-
-    cleanupTestDir();
   });
 
-  test("tilde expansion works", () => {
-    const home = homedir();
-    // Test that ~ expands to home directory
-    // This is tested implicitly through expandPath in ws.ts
-    expect(home).toBeTruthy();
+  test("returns only directories, sorted, with files filtered out", () => {
+    const result = listDirectories(workspace, null);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.listing.entries).toEqual([
+      { name: "project-a", path: join(workspace, "project-a") },
+      { name: "project-b", path: join(workspace, "project-b") },
+    ]);
   });
 
-  test("parent of root returns null", () => {
-    const { sep } = require("node:path");
-    const { dirname } = require("node:path");
-    const parent = sep === "/" ? null : dirname(sep);
-    expect(parent === null || parent === sep).toBe(true);
+  test("reports the expanded path and its parent", () => {
+    const result = listDirectories(workspace, null);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.listing.path).toBe(workspace);
+    expect(result.listing.parent).toBe(dirname(workspace));
   });
 
-  test("parent of nested path returns parent directory", () => {
-    const { dirname } = require("node:path");
-    const parent = dirname("/Users/test/workspace");
-    expect(parent).toBe("/Users/test");
+  test("returns a null parent at the filesystem root", () => {
+    const result = listDirectories(sep, null);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.listing.parent).toBeNull();
+  });
+
+  test("returns an empty entry list for a directory holding only files", () => {
+    const onlyFiles = join(testRoot, "only-files");
+    mkdirSync(onlyFiles, { recursive: true });
+    writeFileSync(join(onlyFiles, "a.txt"), "x");
+
+    const result = listDirectories(onlyFiles, null);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.listing.entries).toEqual([]);
+  });
+
+  test("expands a leading tilde before listing", () => {
+    const result = listDirectories("~", null);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.listing.path).toBe(homedir());
+  });
+
+  test("rejects a non-existent path with invalid_path", () => {
+    const result = listDirectories("/nonexistent-cc-mobile-xyz", null);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toEqual({
+      code: "invalid_path",
+      message: "Path does not exist: /nonexistent-cc-mobile-xyz",
+    });
+  });
+
+  test("rejects a file with invalid_path", () => {
+    const file = join(workspace, "README.md");
+    const result = listDirectories(file, null);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("invalid_path");
+    expect(result.error.message).toBe(`Not a directory: ${file}`);
+  });
+
+  test("rejects a path outside the allowed roots", () => {
+    const result = listDirectories(workspace, ["/somewhere/else"]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toEqual({
+      code: "path_not_allowed",
+      message: "Path is not in the allowed roots",
+    });
   });
 });

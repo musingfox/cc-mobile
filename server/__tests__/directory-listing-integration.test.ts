@@ -1,13 +1,16 @@
-import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
-import { existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, sep } from "node:path";
-import { getInitialBrowsePath } from "../ws";
+import { getInitialBrowsePath, listDirectories } from "../directory-listing";
 
 describe("Directory Listing Integration Tests", () => {
-  const testRoot = join(tmpdir(), `cc-mobile-integration-${Date.now()}`);
+  // realpathSync normalizes macOS /tmp → /private/tmp; the allowed-roots check
+  // resolves symlinks, so the fixture paths must already be resolved to match.
+  const tmpRoot = realpathSync(tmpdir());
+  const testRoot = join(tmpRoot, `cc-mobile-integration-${Date.now()}`);
   const workspace = join(testRoot, "workspace");
-  const outsideRoot = join(tmpdir(), `outside-${Date.now()}`);
+  const outsideRoot = join(tmpRoot, `outside-${Date.now()}`);
 
   beforeAll(() => {
     // Setup test directories
@@ -48,39 +51,82 @@ describe("Directory Listing Integration Tests", () => {
 
   describe("Contract 1: listDirectories handler", () => {
     test("lists only directories, sorted alphabetically", () => {
-      // This test verifies the logic would filter files and sort
-      const expectedDirs = ["project-a", "project-b", "project-c"];
-      expect(expectedDirs).toEqual(expectedDirs.sort());
+      const result = listDirectories(workspace, null);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const names = result.listing.entries.map((e) => e.name);
+      expect(names.slice(0, 3)).toEqual(["project-a", "project-b", "project-c"]);
+      expect(names).not.toContain("README.md");
+      expect(names).not.toContain("package.json");
     });
 
     test("tilde expansion works for home directory", () => {
-      const home = homedir();
-      expect(home).toMatch(/\//);
-      expect(existsSync(home)).toBe(true);
+      const result = listDirectories("~", null);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.listing.path).toBe(homedir());
+      expect(existsSync(result.listing.path)).toBe(true);
     });
 
     test("returns parent directory for nested paths", () => {
-      const path = join(workspace, "project-a");
-      const parent = dirname(path);
-      expect(parent).toBe(workspace);
+      const result = listDirectories(join(workspace, "project-a"), null);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.listing.parent).toBe(workspace);
+      expect(result.listing.parent).toBe(dirname(join(workspace, "project-a")));
     });
 
     test("returns null parent for root directory", () => {
-      const root = sep;
-      const parent = root === sep ? null : dirname(root);
-      expect(parent === null || parent === root).toBe(true);
+      const result = listDirectories(sep, null);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.listing.parent).toBeNull();
     });
 
     test("path validation detects non-existent paths", () => {
       const fakePath = join(testRoot, "non-existent");
       expect(existsSync(fakePath)).toBe(false);
+      const result = listDirectories(fakePath, null);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe("invalid_path");
+      expect(result.error.message).toBe(`Path does not exist: ${fakePath}`);
     });
 
     test("path validation detects file (not directory)", () => {
       const filePath = join(workspace, "README.md");
-      expect(existsSync(filePath)).toBe(true);
-      const fs = require("node:fs");
-      expect(fs.statSync(filePath).isDirectory()).toBe(false);
+      const result = listDirectories(filePath, null);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe("invalid_path");
+      expect(result.error.message).toBe(`Not a directory: ${filePath}`);
+    });
+
+    test("includes a symlink whose target stays inside the allowed roots", () => {
+      const result = listDirectories(workspace, [testRoot]);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.listing.entries.map((e) => e.name)).toContain("symlink-inside");
+    });
+
+    test("excludes a symlink whose target escapes the allowed roots", () => {
+      // The allowed-roots check runs against the resolved target, not the link
+      // path — otherwise a link inside the root would smuggle callers outside it.
+      // Guard against a vacuous pass if the fixture symlink was never created.
+      expect(existsSync(join(workspace, "symlink-outside"))).toBe(true);
+
+      const result = listDirectories(workspace, [testRoot]);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.listing.entries.map((e) => e.name)).not.toContain("symlink-outside");
+    });
+
+    test("rejects a workspace outside the allowed roots", () => {
+      const result = listDirectories(workspace, [outsideRoot]);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe("path_not_allowed");
+      expect(result.error.message).toBe("Path is not in the allowed roots");
     });
   });
 
