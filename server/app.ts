@@ -22,8 +22,7 @@ import { createPtyPermissionRelay } from "./pty-permission-relay";
 import { createPtyResponseHandler } from "./pty-response-endpoint";
 import { createPtyResponseRelay } from "./pty-response-relay";
 import { SessionManager } from "./session-manager";
-import { createTmuxRegistry } from "./tmux-registry";
-import { createTmuxSendRouting } from "./tmux-send-routing";
+import { createTmuxBackend } from "./terminal-backend";
 import { createUploadPlugin } from "./upload";
 import { createUploadImagePlugin } from "./upload-image";
 import { type ClientSink, createWsPlugin, type WsBackend } from "./ws";
@@ -108,39 +107,13 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
   const tmuxResponseUrl = `http://127.0.0.1:${serverConfig.port}${ptyResponseApiPath}`;
   const tmuxPermissionUrl = `http://127.0.0.1:${serverConfig.port}${ptyPermApiPath}`;
 
-  // #21 shard-B seam: this literal is the tmux TerminalBackend adapter. When
-  // server/terminal-backend.ts lands, replace the whole block with
-  // `createTmuxBackend({ responseUrl, permissionUrl, responseRelay })`.
   const backend: AppBackend =
     deps.backend ??
-    (() => {
-      const registry = createTmuxRegistry({
-        responseUrl: tmuxResponseUrl,
-        permissionUrl: tmuxPermissionUrl,
-      });
-      const routing = createTmuxSendRouting({ responseRelay: ptyResponseRelay });
-
-      return {
-        createSession: async ({ claudeUuid, cwd }) => {
-          const info = await registry.createSession({ claudeUuid, cwd });
-          return { name: info.tmuxName, panePid: info.panePid, settingsPath: info.settingsPath };
-        },
-        hasSession: (claudeUuid) => registry.hasSession(claudeUuid),
-        // Killing the session and cancelling its send waiter are one operation:
-        // callers must not have to remember to pair them.
-        teardown: async (claudeUuid) => {
-          const result = await registry.teardown(claudeUuid);
-          routing.teardown(claudeUuid);
-          return result;
-        },
-        teardownAll: () => registry.teardownAll(),
-        send: (params) => routing.send(params),
-        registerClient: (claudeUuid, sink, owner) =>
-          routing.registerClient(claudeUuid, sink, owner),
-        getClient: (claudeUuid) => routing.getClient(claudeUuid),
-        cleanupByOwner: (owner) => routing.cleanupByOwner(owner),
-      };
-    })();
+    createTmuxBackend({
+      responseUrl: tmuxResponseUrl,
+      permissionUrl: tmuxPermissionUrl,
+      responseRelay: ptyResponseRelay,
+    });
 
   // PTY orchestrator — per-session --settings injection (ADR-014) reuses the same
   // loopback hook URLs as tmux, so PTY readback/permissions do not depend on the
