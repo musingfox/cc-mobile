@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { createPtyPermissionHandler } from "./pty-permission-endpoint";
 import { createPtyPermissionRelay } from "./pty-permission-relay";
-import { createTmuxSendRouting } from "./tmux-send-routing";
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 

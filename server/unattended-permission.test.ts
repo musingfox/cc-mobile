@@ -1,6 +1,6 @@
 /**
- * tmux-unattended-relay.test.ts — unattended-safety behavior of the tmux permission
- * relay + sink-rebind interaction, with an injected fake clock (no real timers, no tmux).
+ * unattended-permission.test.ts — unattended-safety behavior of the permission
+ * relay + sink-rebind interaction, with an injected fake clock (no real timers).
  *
  *   EX-A0: when the sink is missing (getClient -> undefined), the relay never resolves
  *          {allow:true}; advancing to the timeout resolves {allow:false}.
@@ -13,13 +13,34 @@
  *          permission_request to ws2 (same toolUseId); advancing the remaining time denies.
  *          An already-expired snapshot is not re-fired and is denied immediately.
  *
- * Mirrors tmux-permission-routing.test.ts style. Does NOT modify relay/routing impls.
+ * These are the #24 permission-gate safety contracts. Migrated from
+ * tmux-unattended-relay.test.ts in #25: the sink map is now supplied by herdr's
+ * send routing (the only surviving backend), the relay behaviour under test is
+ * unchanged. Does NOT modify relay/routing impls.
  */
 
 import { describe, expect, it } from "bun:test";
+import { createHerdrSendRouting } from "./herdr/send-routing";
 import { createPtyPermissionRelay } from "./pty-permission-relay";
 import { createPtyResponseRelay } from "./pty-response-relay";
-import { createTmuxSendRouting } from "./tmux-send-routing";
+
+// ── herdr routing stub ─────────────────────────────────────────────────────────
+
+/**
+ * A send routing whose pane injection is inert. `resolvePane` must return a
+ * defined pane id: an undefined pane makes send() take the failure branch,
+ * which cancels the waiter and would make EX-C1 red for the wrong reason.
+ */
+function makeRouting(responseRelay = createPtyResponseRelay()) {
+  return createHerdrSendRouting({
+    client: {
+      paneSendText: async () => {},
+      paneSendKeys: async () => {},
+    },
+    resolvePane: (claudeUuid) => claudeUuid,
+    responseRelay,
+  });
+}
 
 // ── fake clock ─────────────────────────────────────────────────────────────────
 
@@ -72,7 +93,7 @@ describe("EX-A0: missing sink never auto-allows", () => {
   it("when getClient->undefined the relay never resolves {allow:true}; timeout denies", async () => {
     const clock = makeFakeClock();
     // routing with no registered client => getClient returns undefined
-    const routing = createTmuxSendRouting({ responseRelay: createPtyResponseRelay() });
+    const routing = makeRouting();
 
     let sendCalls = 0;
     const relay = createPtyPermissionRelay(
@@ -186,11 +207,7 @@ describe("EX-A2 relay: 90000ms timeout boundary", () => {
 describe("EX-C1: response routes only to the current (rebound) sink", () => {
   it("register(ws1) -> cleanup(ws1) -> register(ws2); resolved response reaches only ws2", async () => {
     const responseRelay = createPtyResponseRelay();
-    const routing = createTmuxSendRouting({
-      responseRelay,
-      // no real tmux: stub runCommand
-      runCommand: async () => ({ code: 0, stdout: "", stderr: "" }),
-    });
+    const routing = makeRouting(responseRelay);
 
     const ws1 = { id: "ws1" };
     const ws2 = { id: "ws2" };
@@ -201,7 +218,7 @@ describe("EX-C1: response routes only to the current (rebound) sink", () => {
     routing.cleanupByOwner(ws1);
     routing.registerClient("uuidC", rec2.sink, ws2);
 
-    // arm + send (send-keys stubbed); response relay now has a pending waiter
+    // arm + send (pane injection stubbed); response relay now has a pending waiter
     await routing.send({ claudeUuid: "uuidC", content: "hello" });
     expect(responseRelay.hasPending("uuidC")).toBe(true);
 
@@ -223,7 +240,7 @@ describe("EX-C1: response routes only to the current (rebound) sink", () => {
 describe("EX-C2: frozen countdown re-fires to rebound sink", () => {
   it("pause -> rebind ws2 -> resume re-fires permission_request to ws2 (same toolUseId); remaining-time deny", async () => {
     const clock = makeFakeClock();
-    const routing = createTmuxSendRouting({ responseRelay: createPtyResponseRelay() });
+    const routing = makeRouting();
 
     const ws1 = { id: "ws1" };
     const ws2 = { id: "ws2" };
@@ -275,7 +292,7 @@ describe("EX-C2: frozen countdown re-fires to rebound sink", () => {
 
   it("an already-expired snapshot is not re-fired and is denied immediately on resume", async () => {
     const clock = makeFakeClock();
-    const routing = createTmuxSendRouting({ responseRelay: createPtyResponseRelay() });
+    const routing = makeRouting();
     const ws2 = { id: "ws2" };
     const rec2 = makeRecorder();
 
