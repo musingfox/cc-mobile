@@ -58,7 +58,6 @@ export interface WsHarness {
 
 /** Relay overrides for tests that need an observable relay instead of the stub. */
 export interface WsHarnessOverrides {
-  ptyRelay?: ReturnType<typeof createPtyPermissionRelay>;
   tmuxPermissionRelay?: ReturnType<typeof createPtyPermissionRelay>;
 }
 
@@ -74,10 +73,7 @@ export async function startWsHarness(
     .use(
       createWsPlugin(sessionManagerStub, permissionBridgeFactoryStub, serverConfig, {
         backend: backend as WsBackend,
-        ptyOrchestrator: {} as never,
-        ptyRelay: (overrides.ptyRelay as never) ?? relayStub,
         tmuxPermissionRelay: (overrides.tmuxPermissionRelay as never) ?? relayStub,
-        ptyResponseRelay: {} as never,
         eventBuffer,
         clientSink: { current: null },
       }),

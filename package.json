@@ -15,15 +15,13 @@
     "lint": "bunx biome check .",
     "lint:fix": "bunx biome check --write .",
     "test": "bun test",
-    "test:integration": "bun --config=/dev/null test --timeout=130000 ./server/integration/pty-live.e2e.test.ts",
     "test:herdr": "for f in live swap restart permission; do bun --config=/dev/null test --timeout=400000 ./server/integration/herdr-$f.e2e.test.ts || exit 1; done",
     "test:e2e": "bunx playwright test",
     "test:e2e:ui": "bunx playwright test --ui",
-    "postinstall": "chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null; git config core.hooksPath .githooks 2>/dev/null; true"
+    "postinstall": "git config core.hooksPath .githooks 2>/dev/null; true"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.148",
-    "node-pty": "1.1.0",
     "@fontsource/fira-code": "^5.2.7",
     "@fontsource/ibm-plex-mono": "^5.2.7",
     "@fontsource/ibm-plex-sans": "^5.2.8",

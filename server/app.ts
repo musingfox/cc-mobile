@@ -18,7 +18,6 @@ import { createHerdrBackend } from "./herdr/backend";
 import type { RemountReport } from "./herdr/remount";
 import { buildUrl, stripBasePath } from "./path-utils";
 import { createPermissionHandler } from "./permission-bridge";
-import { PtyOrchestrator } from "./pty-orchestrator";
 import { createPtyPermissionHandler } from "./pty-permission-endpoint";
 import { createPtyPermissionRelay } from "./pty-permission-relay";
 import { createPtyResponseHandler } from "./pty-response-endpoint";
@@ -82,26 +81,6 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
   // that does not exist yet.
   const clientSink: ClientSink = { current: null };
 
-  // PTY permission relay. Note this deliberately does NOT buffer when no socket
-  // is attached — unlike sendBuffered, which always appends first. Appending
-  // here on a dead socket would replay a permission prompt the client never saw.
-  const ptyRelay = createPtyPermissionRelay((sessionId, requestId, tool) => {
-    if (clientSink.current) {
-      const eventId = eventBuffer.append(sessionId, {
-        type: "permission_request",
-        sessionId,
-        requestId,
-        tool,
-      });
-      clientSink.current({
-        type: "event",
-        eventId,
-        sessionId,
-        payload: { type: "permission_request", sessionId, requestId, tool },
-      });
-    }
-  });
-
   // PTY response relay + HTTP handler — the Stop hook delivers the assistant
   // reply here, resolving the in-flight drive() (ADR-011 readback).
   const ptyResponseRelay = createPtyResponseRelay();
@@ -125,13 +104,6 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
     });
 
   if (deps.backendRef) deps.backendRef.current = backend;
-
-  // PTY orchestrator — per-session --settings injection (ADR-014) reuses the same
-  // loopback hook URLs as tmux, so PTY readback/permissions do not depend on the
-  // global ~/.claude/settings.json.
-  const ptyOrchestrator = new PtyOrchestrator({
-    settings: { responseUrl: tmuxResponseUrl, permissionUrl: tmuxPermissionUrl },
-  });
 
   // No shutdown signal handler: pane survival across a stop is the persistence
   // default (plan D2). A SIGTERM from pm2 or a deploy must leave the panes — and
@@ -161,19 +133,12 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
     { timeoutMs: 90000 },
   );
 
-  // Permission requests arrive over HTTP from the hook; route tmux-owned
-  // sessions to the tmux relay and everything else to the PTY relay.
+  // Permission requests arrive over HTTP from the hook. The terminal backend is
+  // the only session owner left (#25), so there is nothing to route between:
+  // an unknown session is a 404, never a second relay.
   const ptyPermissionHttpHandler = createPtyPermissionHandler({
-    relay: {
-      requestPtyPermission: (params: any) => {
-        if (backend.hasSession(params.sessionId).present) {
-          return tmuxPermissionRelay.requestPtyPermission(params);
-        }
-        return ptyRelay.requestPtyPermission(params);
-      },
-    } as any,
-    hasSession: (sessionId: string) =>
-      ptyOrchestrator.hasSession(sessionId) || backend.hasSession(sessionId).present,
+    relay: tmuxPermissionRelay,
+    hasSession: (sessionId: string) => backend.hasSession(sessionId).present,
   });
 
   return new Elysia({
@@ -187,10 +152,7 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
     .use(
       createWsPlugin(sessionManager, permissionBridgeFactory, serverConfig, {
         backend,
-        ptyOrchestrator,
-        ptyRelay,
         tmuxPermissionRelay,
-        ptyResponseRelay,
         eventBuffer,
         clientSink,
       }),

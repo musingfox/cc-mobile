@@ -8,18 +8,10 @@ import {
 import type { ServerConfig } from "./config";
 import { listDirectories } from "./directory-listing";
 import type { EventBuffer } from "./event-buffer";
-import {
-  buildUrl,
-  expandPath,
-  resolveAndValidateCwd,
-  validateAllowedPath,
-  validateCwd,
-} from "./path-utils";
+import { buildUrl, expandPath, validateAllowedPath, validateCwd } from "./path-utils";
 import type { createPermissionHandler, PendingPermissionSnapshot } from "./permission-bridge";
 import { ClientMessage, ServerMessage } from "./protocol";
-import type { PtyOrchestrator } from "./pty-orchestrator";
 import type { createPtyPermissionRelay, PtyRelaySnapshot } from "./pty-permission-relay";
-import type { PtyResponseRelay } from "./pty-response-relay";
 import { loadSessionHistory } from "./session-history";
 import { getClaudeSessionInfo, listClaudeSessions, renameClaudeSession } from "./session-listing";
 import type { InitData, SessionManager } from "./session-manager";
@@ -139,10 +131,7 @@ export interface ClientSink {
 /** Everything the transport needs but does not build. Assembled in app.ts. */
 export interface WsCollaborators {
   backend: WsBackend;
-  ptyOrchestrator: PtyOrchestrator;
-  ptyRelay: PtyPermissionRelay;
   tmuxPermissionRelay: PtyPermissionRelay;
-  ptyResponseRelay: PtyResponseRelay;
   eventBuffer: EventBuffer;
   clientSink: ClientSink;
 }
@@ -155,10 +144,7 @@ export function createWsPlugin(
 ) {
   const {
     backend,
-    ptyOrchestrator,
-    ptyRelay,
     tmuxPermissionRelay,
-    ptyResponseRelay,
     eventBuffer,
     clientSink,
   } = collaborators;
@@ -169,7 +155,6 @@ export function createWsPlugin(
   const persistentState = {
     permissionHandler: null as PermissionHandler | null,
     pausedPermissions: [] as PendingPermissionSnapshot[],
-    pausedPtyPermissions: [] as PtyRelaySnapshot[],
     pausedTmuxPermissions: [] as PtyRelaySnapshot[],
   };
 
@@ -225,12 +210,6 @@ export function createWsPlugin(
       if (persistentState.pausedPermissions.length > 0) {
         persistentState.permissionHandler.resumePending(persistentState.pausedPermissions);
         persistentState.pausedPermissions = [];
-      }
-
-      // Resume paused PTY permissions if any
-      if (persistentState.pausedPtyPermissions.length > 0) {
-        ptyRelay.resumePending(persistentState.pausedPtyPermissions);
-        persistentState.pausedPtyPermissions = [];
       }
 
       // Send cached capabilities on reconnect
@@ -405,8 +384,6 @@ export function createWsPlugin(
 
           case "permission": {
             handler.resolvePermission(message.requestId, message.allow, message.answers);
-            // Also resolve in PTY relay (idempotent if requestId unknown to it)
-            ptyRelay.resolvePermission(message.requestId, message.allow, message.answers);
             // And in the tmux/herdr relay — same idempotent broadcast; without
             // this the herdr path can only ever 90s-timeout-deny.
             tmuxPermissionRelay.resolvePermission(
@@ -665,7 +642,7 @@ export function createWsPlugin(
           case "tmux_send": {
             // TMUX happy-path (C-hybrid): use send-keys to inject prompt into owned tmux+claude session.
             // Arms one-per-turn waiter via shared response relay; delivers via independent sink map.
-            // Does not touch PtyOrchestrator or SessionManager.
+            // Does not touch SessionManager.
             const { claudeUuid, content } = message;
             // Register (or rebind) this ws as the owner for replies/perms for this claudeUuid
             backend.registerClient(
@@ -683,35 +660,6 @@ export function createWsPlugin(
             break;
           }
 
-          case "pty_send": {
-            // PTY happy-path: drive prompt via PTY, forward stream_chunk + stream_end to client.
-            // Existing query() path is not touched. No permission handling (happy-path only).
-            const { sessionId, cwd, prompt } = message;
-            (ws.data as WsData).currentSessionId = sessionId;
-
-            // H1 security: validate cwd before driving
-            const cwdResult = resolveAndValidateCwd(cwd, serverConfig.allowedRoots);
-            if (!cwdResult.ok) {
-              ws.send({
-                type: "error",
-                code: cwdResult.error.code,
-                message: cwdResult.error.message,
-              });
-              break;
-            }
-
-            await ptyOrchestrator.drive(
-              sessionId,
-              cwdResult.path,
-              prompt,
-              (msg) => sendBuffered(ws, sessionId, msg as Record<string, unknown>),
-              {
-                isPermissionPending: () => ptyRelay.hasPendingForSession(sessionId),
-                awaitResponseFn: (sid) => ptyResponseRelay.awaitResponse(sid),
-              },
-            );
-            break;
-          }
         }
       } catch (error) {
         console.error("[ws] error handling message:", error);
@@ -732,16 +680,7 @@ export function createWsPlugin(
       if (persistentState.permissionHandler) {
         persistentState.pausedPermissions = persistentState.permissionHandler.pausePending();
       }
-      persistentState.pausedPtyPermissions = ptyRelay.pausePending();
       persistentState.pausedTmuxPermissions = tmuxPermissionRelay.pausePending();
-
-      // Do NOT cancel in-flight PTY drives on disconnect: a transient reconnect
-      // would otherwise abort the turn and suppress its stream_end, leaving the
-      // reconnected client's spinner stuck. Let the drive finish — it buffers
-      // stream_chunk + stream_end (sendBuffered appends regardless of socket
-      // state) so the reconnecting client recovers them via per-session replay,
-      // and the drive self-cleans its PTY handle on resolve. Explicit user
-      // interrupts still cancel via the interrupt path, not here.
 
       // Remove this connection's tmux uuid->sink bindings (baton map §cleanup).
       // Dead-binding leak prevention only; no rebind/replay to a new connection.

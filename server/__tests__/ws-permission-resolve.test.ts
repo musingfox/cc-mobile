@@ -131,31 +131,4 @@ describe("PermissionReplyBroadcast", () => {
     await pending;
   });
 
-  test("both relays are broadcast to — the PTY relay keeps working", async () => {
-    const ptyRelay = makeRelay();
-    const tmuxRelay = makeRelay();
-    harness = await startWsHarness(backendStub, undefined, {
-      ptyRelay: ptyRelay.relay,
-      tmuxPermissionRelay: tmuxRelay.relay,
-    });
-
-    const ptyPending = ptyRelay.relay.requestPtyPermission({
-      sessionId: "pty-session",
-      toolUseId: "toolu_pty",
-      toolName: "Bash",
-      toolInput: {},
-    });
-    const tmuxPending = tmuxRelay.relay.requestPtyPermission({
-      sessionId: "herdr-session",
-      toolUseId: "toolu_herdr",
-      toolName: "Bash",
-      toolInput: {},
-    });
-
-    harness.send({ type: "permission", requestId: "toolu_pty", allow: true });
-    harness.send({ type: "permission", requestId: "toolu_herdr", allow: false });
-
-    expect(await ptyPending).toEqual({ allow: true, answers: undefined });
-    expect(await tmuxPending).toEqual({ allow: false, answers: undefined });
-  });
 });

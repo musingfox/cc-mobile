@@ -133,13 +133,6 @@ const ReconnectMessage = z.object({
   sessionIds: z.array(z.string()),
 });
 
-const PtySendMessage = z.object({
-  type: z.literal("pty_send"),
-  sessionId: z.string().uuid(),
-  cwd: z.string(),
-  prompt: z.string(),
-});
-
 const TmuxSendMessage = z.object({
   type: z.literal("tmux_send"),
   claudeUuid: z.string(),
@@ -187,7 +180,6 @@ export const ClientMessage = z.discriminatedUnion("type", [
   SetSessionTitleMessage,
   AppendUserMessageSchema,
   StopTaskMessage,
-  PtySendMessage,
   TmuxSendMessage,
   TmuxCreateMessage,
   TmuxTeardownMessage,
