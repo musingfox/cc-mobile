@@ -89,6 +89,37 @@ export function agentNameFor(claudeUuid: string): string {
   return `ccm-${claudeUuid.slice(0, 8).toLowerCase()}`;
 }
 
+/**
+ * Workspace label — unlike the agent name this carries the FULL uuid, because
+ * it is the persistence key: the registry Map dies with the process, so a
+ * restart rediscovers its sessions by reading these labels back out of the
+ * daemon's snapshot (plan D1). 40 chars, verified round-trip on live herdr.
+ */
+export function workspaceLabelFor(claudeUuid: string): string {
+  return `ccm-${claudeUuid.toLowerCase()}`;
+}
+
+/**
+ * Full-uuid labels only. Panes created before this format (`ccm-<uuid8>`) do
+ * not match and are therefore neither adopted nor reaped — the restart scan
+ * leaves anything it cannot identify with certainty alone.
+ */
+export const WORKSPACE_LABEL_PATTERN =
+  /^ccm-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+
+/** Inverse of `workspaceLabelFor`; undefined for any label this server did not write. */
+export function claudeUuidFromWorkspaceLabel(label: string): string | undefined {
+  return WORKSPACE_LABEL_PATTERN.exec(label)?.[1];
+}
+
+/**
+ * Rebuilt by formula rather than persisted: the path is a pure function of the
+ * uuid, so a restart needs nothing on disk to find the settings file again.
+ */
+export function settingsPathFor(claudeUuid: string): string {
+  return join(tmpdir(), `ccm-settings-${claudeUuid}.json`);
+}
+
 export function createHerdrRegistry(options: HerdrRegistryOptions) {
   const { client } = options;
   const responseUrl = options.responseUrl ?? "http://127.0.0.1:3001/api/pty-response";
@@ -108,7 +139,7 @@ export function createHerdrRegistry(options: HerdrRegistryOptions) {
     }
 
     const agentName = agentNameFor(claudeUuid);
-    const settingsPath = join(tmpdir(), `ccm-settings-${claudeUuid}.json`);
+    const settingsPath = settingsPathFor(claudeUuid);
 
     const settingsObj = buildClaudeSettings({
       responseUrl,
@@ -125,7 +156,7 @@ export function createHerdrRegistry(options: HerdrRegistryOptions) {
       // because workspace.create silently falls back to $HOME otherwise.
       const created = await client.call(
         "workspace.create",
-        { label: agentName, cwd, focus: false },
+        { label: workspaceLabelFor(claudeUuid), cwd, focus: false },
         WorkspaceCreatedResultSchema,
       );
       workspaceId = created.workspace.workspace_id;

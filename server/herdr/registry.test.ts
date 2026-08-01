@@ -12,7 +12,11 @@ import { existsSync } from "node:fs";
 import { readFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createHerdrRegistry } from "./registry";
+import {
+  claudeUuidFromWorkspaceLabel,
+  createHerdrRegistry,
+  workspaceLabelFor,
+} from "./registry";
 
 const UUID = "3f2a9b01-1111-4222-8333-444455556666";
 const UUID2 = "7c4d5e02-2222-4333-8444-555566667777";
@@ -98,7 +102,7 @@ describe("HerdrCreateSession", () => {
 
     expect(fake.methods()).toEqual(["workspace.create", "agent.start"]);
     expect(fake.calls[0]?.params).toEqual({
-      label: "ccm-3f2a9b01",
+      label: `ccm-${UUID}`,
       cwd: "/tmp",
       focus: false,
     });
@@ -199,6 +203,35 @@ describe("HerdrCreateSession", () => {
     expect(fake.calls.some((call) => call.method === "workspace.close")).toBe(true);
     expect(existsSync(settingsPath)).toBe(false);
     expect(registry.hasSession(UUID)).toEqual({ present: false });
+  });
+});
+
+describe("PersistentSessionLabel", () => {
+  test("labels the workspace with the full lowercased uuid while the agent name stays 8 chars", async () => {
+    const mixedCase = "3F2B8C1D-9E4A-4B6F-8C2D-1A5E7F9B0C3D";
+    const lower = mixedCase.toLowerCase();
+    const fake = makeFakeClient();
+    const registry = makeRegistry(fake);
+
+    const result = await registry.createSession({ claudeUuid: mixedCase, cwd: "/tmp" });
+    trackSettings(result.settingsPath);
+
+    const createParams = fake.calls[0]?.params as { label: string };
+    expect(createParams.label).toBe(`ccm-${lower}`);
+    // 4 chars of prefix + a 36-char uuid: the persistence key, verified on live
+    // herdr. The agent name cannot carry this — herdr caps names at 32.
+    expect(createParams.label.length).toBe(40);
+
+    const startParams = fake.calls[1]?.params as { name: string };
+    expect(startParams.name).toBe("ccm-3f2b8c1d");
+    expect(startParams.name.length).toBeLessThanOrEqual(32);
+  });
+
+  test("the label round-trips back to the uuid, and legacy 8-char labels do not", () => {
+    expect(claudeUuidFromWorkspaceLabel(workspaceLabelFor(UUID))).toBe(UUID);
+    expect(claudeUuidFromWorkspaceLabel("ccm-3f2a9b01")).toBeUndefined();
+    expect(claudeUuidFromWorkspaceLabel("cyris")).toBeUndefined();
+    expect(claudeUuidFromWorkspaceLabel(`ccm-${UUID.toUpperCase()}`)).toBeUndefined();
   });
 });
 
