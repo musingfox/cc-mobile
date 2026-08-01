@@ -114,9 +114,10 @@ export function createHerdrClient(options: HerdrClientOptions = {}) {
   /**
    * Blocks until the agent reaches one of the requested statuses. The daemon
    * holds the connection open and responds on resolve or its own timeout
-   * (typed HerdrRpcError code "timeout"); the client read deadline sits
-   * AGENT_WAIT_DEADLINE_MARGIN_MS past the daemon budget so a legitimate
-   * long hold is never killed client-side.
+   * (typed HerdrRpcError code "timeout"). The resolved budget is always sent
+   * on the wire (herdr waits indefinitely when timeout_ms is absent), and the
+   * client read deadline sits AGENT_WAIT_DEADLINE_MARGIN_MS past it so the
+   * daemon's typed timeout always fires before the client's transport error.
    */
   async function agentWait(params: {
     target: string;
@@ -124,9 +125,12 @@ export function createHerdrClient(options: HerdrClientOptions = {}) {
     timeout_ms?: number;
   }): Promise<AgentInfo> {
     const daemonBudgetMs = params.timeout_ms ?? DEFAULT_AGENT_WAIT_TIMEOUT_MS;
-    const result = await call("agent.wait", params, AgentInfoResultSchema, {
-      timeoutMs: daemonBudgetMs + AGENT_WAIT_DEADLINE_MARGIN_MS,
-    });
+    const result = await call(
+      "agent.wait",
+      { ...params, timeout_ms: daemonBudgetMs },
+      AgentInfoResultSchema,
+      { timeoutMs: daemonBudgetMs + AGENT_WAIT_DEADLINE_MARGIN_MS },
+    );
     return result.agent;
   }
 

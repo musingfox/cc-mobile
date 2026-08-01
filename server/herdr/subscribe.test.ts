@@ -271,4 +271,46 @@ describe("herdr subscribe: SubscriptionReconnect", () => {
     await flush();
     expect(fake.attempts()).toBe(1);
   });
+
+  it("T4: stop() during an in-flight reconnect closes the late connection without subscribing", async () => {
+    const fake = fakeSubscriptionConnect();
+    const clock = fakeClock();
+    const errors: Error[] = [];
+    let connectCalls = 0;
+    let releaseConnect: (() => void) | undefined;
+    // Wraps the fake factory so the reconnect attempt parks mid-connect until released.
+    const gatedConnect: HerdrConnect = async (handlers) => {
+      connectCalls += 1;
+      if (connectCalls > 1) {
+        await new Promise<void>((resolve) => {
+          releaseConnect = resolve;
+        });
+      }
+      return fake.connect(handlers);
+    };
+    const startPromise = subscribeEvents(
+      { subscriptions: [SUBSCRIPTION_SPEC], onEvent: () => {}, onError: (e) => errors.push(e) },
+      baseDeps(gatedConnect, {
+        setTimeoutFn: clock.setTimeoutFn,
+        clearTimeoutFn: clock.clearTimeoutFn,
+      }),
+    );
+    await flush();
+    fake.sessions[0]?.pushLine(SUBSCRIPTION_ACK_LINE);
+    const handle = await startPromise;
+
+    fake.sessions[0]?.close();
+    await clock.fireNext(); // reconnect fires and parks inside connect()
+
+    handle.stop();
+    releaseConnect?.();
+    await flush();
+
+    // The late connection must be closed, never written to, and never retried.
+    expect(fake.sessions.length).toBe(2);
+    expect(fake.sessions[1]?.ended).toBe(true);
+    expect(fake.sessions[1]?.written.length).toBe(0);
+    expect(clock.scheduled.length).toBe(0);
+    expect(errors.length).toBe(0);
+  });
 });

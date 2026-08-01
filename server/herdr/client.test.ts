@@ -115,7 +115,7 @@ describe("herdr client: SnapshotQuery", () => {
     const { transport } = fakeTransport(() => result);
     const client = createHerdrClient({ transport });
 
-    expect(client.sessionSnapshot()).rejects.toThrow();
+    await expect(client.sessionSnapshot()).rejects.toThrow();
   });
 });
 
@@ -258,5 +258,17 @@ describe("herdr client: AgentWait", () => {
 
     expect(error).toBeInstanceOf(HerdrRpcError);
     expect((error as HerdrRpcError).code).toBe("timeout");
+  });
+
+  it("T3: without timeout_ms, sends the 60s default on the wire so the daemon deadline exists and fires first", async () => {
+    const { transport, calls } = fakeTransport(() => resultOf(AGENT_INFO_LINE));
+    const client = createHerdrClient({ transport });
+
+    await client.agentWait({ target: "pane-1", until: ["idle"] });
+
+    // The daemon waits forever when timeout_ms is absent — the resolved budget
+    // must reach the wire, and the client deadline must sit strictly past it.
+    expect(calls[0]?.params).toEqual({ target: "pane-1", until: ["idle"], timeout_ms: 60000 });
+    expect(calls[0]?.options?.timeoutMs).toBe(65000);
   });
 });

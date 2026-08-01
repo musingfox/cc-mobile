@@ -161,6 +161,13 @@ export async function subscribeEvents(
             options.onError?.(error);
           },
         });
+        if (stopped) {
+          // stop() raced this in-flight connect: the handle could not see the
+          // connection yet, so close it here instead of leaking the socket
+          // (and a daemon-side subscription nobody reads).
+          fail(new HerdrTransportError("herdr events.subscribe: stopped during connect"));
+          return;
+        }
         connection = conn;
         subscriptionSeq += 1;
         conn.write(
@@ -204,6 +211,7 @@ export async function subscribeEvents(
     try {
       await openOnce();
     } catch (error) {
+      if (stopped) return;
       options.onError?.(error instanceof Error ? error : new Error(String(error)));
       onUnexpectedClose();
       return;
