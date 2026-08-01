@@ -5,8 +5,7 @@
  * drive() waiting on the response relay (ADR-011 readback for claude v2.1.177).
  *
  * Hard constraints:
- *   - NO top-level import of node-pty
- *   - NO top-level import of SDK
+ *   - NO dependency on a terminal driver or an agent SDK
  *   - Standalone: accepts relay seam so tests can mock it
  */
 

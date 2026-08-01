@@ -9,8 +9,8 @@
  * Always exits 0 — hook must not crash the parent claude process.
  *
  * Hard constraints:
- *   - NO top-level import of node-pty
- *   - NO top-level import of SDK
+ *   - NO dependency on anything outside the standard library: this file is
+ *     executed by `bun` from inside a live pane, with no install step
  *   - All logging goes to stderr, never stdout
  */
 

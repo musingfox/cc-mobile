@@ -21,6 +21,10 @@ describe("RetiredMessageTypesRejected", () => {
     ["command", { type: "command", sessionId: "s", command: "/help" }],
     ["pty_send", { type: "pty_send", sessionId: "s", cwd: "/p", prompt: "hi" }],
     ["get_session_info", { type: "get_session_info", sessionId: "s" }],
+    // The old backend-named trio a cached bundle would still be sending.
+    ["tmux_create", { type: "tmux_create", claudeUuid: "u1", cwd: "/p" }],
+    ["tmux_send", { type: "tmux_send", claudeUuid: "u1", content: "hi" }],
+    ["tmux_teardown", { type: "tmux_teardown", claudeUuid: "u1" }],
   ])("client message %s no longer parses", (_name, payload) => {
     expect(ClientMessage.safeParse(payload).success).toBe(false);
   });

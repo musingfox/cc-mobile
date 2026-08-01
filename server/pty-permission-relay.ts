@@ -2,8 +2,8 @@
  * pty-permission-relay.ts — PTY permission bridge for ADR-011 hybrid architecture.
  *
  * Hard constraints:
- *   - NO top-level import of node-pty
- *   - NO top-level import of SDK (query, getSessionMessages, etc.)
+ *   - NO dependency on a terminal driver or an agent SDK: this is pure
+ *     in-memory bookkeeping, driven only by the HTTP endpoint
  *   - Supports injectable setTimeout/clearTimeout for testability
  */
 

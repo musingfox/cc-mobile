@@ -43,7 +43,9 @@ describe("ws.ts is a pure transport module", () => {
 
   it("assembles nothing — collaborators are injected by the composition root", () => {
     expect(wsSource).not.toContain("new EventBuffer");
-    expect(wsSource).not.toContain("new PtyOrchestrator");
     expect(wsSource).not.toContain('process.on("SIGTERM"');
+    // The orchestrator this used to name was deleted in #25; keeping every
+    // deleted symbol listed here would be a lock with nothing behind it.
+    // dead-code-residue.test.ts scans the whole tree for those instead.
   });
 });

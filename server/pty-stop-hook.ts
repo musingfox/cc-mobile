@@ -15,8 +15,8 @@
  * All diagnostics go to stderr.
  *
  * Hard constraints:
- *   - NO top-level import of node-pty
- *   - NO top-level import of SDK
+ *   - NO dependency on anything outside the standard library: this file is
+ *     executed by `bun` from inside a live pane, with no install step
  *   - Never throw to the parent claude process
  */
 

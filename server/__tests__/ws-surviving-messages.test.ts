@@ -3,9 +3,11 @@
  * query path was removed (#25).
  *
  * Three contracts share one harness here because they share one precondition:
- *   WsRoutingWithoutPermissionHandler — the "No permission handler" guard sat
- *     ahead of every case and died with the handler; a fresh connection's very
- *     first message must be answered.
+ *   WsRoutingWithoutPermissionHandler — the bridge's internal-error guard sat
+ *     ahead of every case and died with the bridge; a fresh connection's very
+ *     first message must be answered. (The source-level half of that contract —
+ *     that the guard's message string is gone tree-wide — is asserted in
+ *     dead-code-residue.test.ts.)
  *   ServerConfigStillAnswered — the settings screen still gets all five fields.
  *   NoOpConfigMessagesAccepted — the settings that no longer reach a pane are
  *     still *accepted*, not rejected. Pinned deliberately (plan D3) so this
@@ -17,8 +19,6 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { SessionManager } from "../session-manager";
 import { startWsHarness, testServerConfig, type WsHarness } from "./ws-harness";
 
@@ -69,12 +69,9 @@ describe("WsRoutingWithoutPermissionHandler", () => {
     expect(errorFrames(h)).toEqual([]);
   });
 
-  test("the guard's message is gone from the server source", () => {
-    const serverDir = join(import.meta.dir, "..");
-    for (const file of ["ws.ts", "app.ts", "session-manager.ts"]) {
-      expect(readFileSync(join(serverDir, file), "utf8")).not.toContain("No permission handler");
-    }
-  });
+  // The "no source file still carries the guard's message" half of this
+  // contract is asserted tree-wide in dead-code-residue.test.ts, which already
+  // walks every file under server/ and client/.
 });
 
 describe("ServerConfigStillAnswered", () => {

@@ -14,8 +14,8 @@
  * a fresh session per turn).
  *
  * Hard constraints:
- *   - NO top-level import of node-pty
- *   - NO top-level import of SDK (query, getSessionMessages, etc.)
+ *   - NO dependency on a terminal driver or an agent SDK: this is pure
+ *     in-memory bookkeeping, driven only by the HTTP endpoint
  *   - Supports injectable setTimeout/clearTimeout for testability
  */
 

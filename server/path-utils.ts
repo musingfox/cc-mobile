@@ -83,7 +83,7 @@ export function validateAllowedPath(cwd: string, allowedRoots: string[] | null):
 /**
  * Resolves and validates a raw cwd string.
  *
- * Steps (mirrors new_session L209-226 in ws.ts):
+ * Steps (the same order ws.ts's session-creating cases use):
  *   1. expandPath (home expansion + resolve)
  *   2. validateCwd (exists + is directory) → invalid_cwd on failure
  *   3. validateAllowedPath (allowed roots check) → path_not_allowed on failure

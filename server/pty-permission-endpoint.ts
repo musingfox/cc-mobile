@@ -2,8 +2,7 @@
  * pty-permission-endpoint.ts — HTTP handler for POST /api/pty-permission.
  *
  * Hard constraints:
- *   - NO top-level import of node-pty
- *   - NO top-level import of SDK
+ *   - NO dependency on a terminal driver or an agent SDK
  *   - Standalone: accepts relay + session-check seam so tests can mock both
  */
 
