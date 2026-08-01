@@ -1,65 +1,11 @@
 import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { Elysia } from "elysia";
+import { createApp, DIST_DIR } from "./app";
 import { parseServerConfig } from "./config";
-import { stripBasePath } from "./path-utils";
-import { createPermissionHandler } from "./permission-bridge";
-import { SessionManager } from "./session-manager";
-import { createUploadPlugin } from "./upload";
-import { createUploadImagePlugin } from "./upload-image";
-import { createWsPlugin } from "./ws";
-
-export const WS_IDLE_TIMEOUT_SECONDS = 240;
 
 const isProd = process.env.NODE_ENV === "production";
 const serverConfig = parseServerConfig(process.argv);
-const sessionManager = new SessionManager({ permissionMode: serverConfig.permissionMode });
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const DIST_DIR = join(__dirname, "..", "dist", "client");
-
-const _app = new Elysia({
-  websocket: {
-    idleTimeout: WS_IDLE_TIMEOUT_SECONDS,
-    sendPings: true,
-  },
-})
-  .use(createWsPlugin(sessionManager, createPermissionHandler, serverConfig))
-  .use(createUploadPlugin(serverConfig))
-  .use(createUploadImagePlugin(serverConfig))
-  .get("*", async ({ request }) => {
-    // Skip if dist/ doesn't exist (dev mode)
-    if (!existsSync(DIST_DIR)) {
-      return new Response("Not found", { status: 404 });
-    }
-
-    const url = new URL(request.url);
-    let pathname = stripBasePath(url.pathname, serverConfig.basePath);
-    pathname = pathname === "/" ? "/index.html" : pathname;
-    const filePath = join(DIST_DIR, pathname);
-
-    // Prevent directory traversal
-    if (!filePath.startsWith(DIST_DIR)) {
-      return new Response("Forbidden", { status: 403 });
-    }
-
-    const file = Bun.file(filePath);
-    if (await file.exists()) {
-      return new Response(file);
-    }
-
-    // Fallback to index.html for SPA routing
-    if (pathname !== "/index.html") {
-      const indexFile = Bun.file(join(DIST_DIR, "index.html"));
-      if (await indexFile.exists()) {
-        return new Response(indexFile);
-      }
-    }
-
-    return new Response("Not found", { status: 404 });
-  })
-  .listen({ port: serverConfig.port, hostname: serverConfig.hostname });
+createApp(serverConfig).listen({ port: serverConfig.port, hostname: serverConfig.hostname });
 
 const servingStatic = existsSync(DIST_DIR);
 console.log(
