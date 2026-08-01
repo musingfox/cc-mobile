@@ -18,6 +18,7 @@ ADR-014 拍板採用 C-hybrid（cc-mobile 擁有 tmux session），讓桌機可 
 - Anthropic 2026-06-15 當日公告暫停 Agent SDK 使用限制 enforcement（「For now, nothing has changed.」，無重啟時程；來源：support.claude.com/en/articles/15036540、thenewstack/the-decoder 報導）。
 - billable SDK query() 路徑目前從 mobile UI 不可達（client send()/sendCommand() 無呼叫點，UI 唯一活路徑 pty_send → PTY one-shot）。此路徑涉及 session-manager.ts 與 SDK resume 邏輯。
 - 現行 tmux 實作細節（包含 tmux-registry.ts 的 in-memory sessions）將被 herdr 取代，SDK query() 驅動路徑刪除範圍見 #25；herdr 驅動互動 TUI 落 cli 訂閱互動桶，計費風險自然消解。
+  - **2026-08-02 更新**：#25 已完成。SDK query() 路徑、PTY one-shot 鏈與 tmux adapter 全數刪除，`tmux_*` 訊息更名 `terminal_*`。實際刪除清單見 [ADR-011 module inventory](011-module-inventory.md) 文末的「#25 後現況」節。
 
 ### herdr socket API 契約摘要
 

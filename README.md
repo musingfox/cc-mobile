@@ -128,9 +128,8 @@ Mobile Browser (PWA)  <--WebSocket-->  Elysia Server (0.0.0.0:3001)
                                        Claude Code CLI (local)
 ```
 
-- **SDK**: Uses V1 `query()` API with resume pattern for multi-turn ([ADR-007](docs/adr/007-use-v1-query-api.md))
-- **Plugins**: Reads `~/.claude/settings.json` + `~/.claude/plugins/installed_plugins.json` ([ADR-006](docs/adr/006-plugin-loading-from-user-settings.md))
-- **Permissions**: Promise-based relay with 60s timeout ([ADR-002](docs/adr/002-permission-bridge-promise-pattern.md))
+- **Terminal layer**: herdr socket API drives a real `claude` in a persistent pane ([ADR-015](docs/adr/015-herdr-terminal-layer.md))
+- **Permissions**: Promise-based relay fed by the PreToolUse hook; 90s unanswered → deny ([ADR-002](docs/adr/002-permission-bridge-promise-pattern.md))
 - **State**: Zustand store with per-session isolation ([ADR-008](docs/adr/008-zustand-multi-session-state.md))
 - **Validation**: Zod schemas for all WebSocket messages ([ADR-001](docs/adr/001-zod-runtime-validation.md))
 
@@ -140,8 +139,8 @@ Mobile Browser (PWA)  <--WebSocket-->  Elysia Server (0.0.0.0:3001)
 bun install              # Install dependencies
 bun run dev:server       # Elysia backend on 0.0.0.0:3001
 bunx vite --host         # Vite frontend on :5173
-bun test                 # Run unit tests (bun:test)
-bun run test:e2e         # Run e2e tests (Playwright)
+bun test                 # Run unit tests (bun:test) — hermetic, no daemon needed
+bun run test:herdr       # Live e2e against a running herdr daemon + `claude` binary
 bun run build            # Production build (dist/client/)
 ```
 
@@ -155,11 +154,12 @@ cc-mobile/
 │   ├── index.ts                # Elysia app entry
 │   ├── config.ts               # CLI flag + env var parsing
 │   ├── ws.ts                   # WebSocket handler (Elysia plugin)
-│   ├── session-manager.ts      # V1 query() with resume pattern
-│   ├── permission-bridge.ts    # canUseTool <-> WebSocket relay
+│   ├── session-manager.ts      # Session map + settings state
+│   ├── terminal-control.ts     # terminal_create / terminal_teardown handlers
+│   ├── herdr/                  # herdr socket backend (ADR-015)
+│   ├── pty-permission-relay.ts # PreToolUse hook <-> WebSocket, 90s deny
 │   ├── session-listing.ts      # List resumable sessions per project
 │   ├── session-history.ts      # Session message history
-│   ├── settings-loader.ts      # Plugin discovery from ~/.claude/
 │   ├── protocol.ts             # Zod schemas for WS messages
 │   └── __tests__/
 ├── client/
@@ -189,10 +189,8 @@ cc-mobile/
 │   ├── utils/
 │   │   └── command-filter.ts   # Command/agent search filtering
 │   └── __tests__/
-├── e2e/                        # Playwright e2e tests
 ├── docs/adr/                   # Architecture Decision Records
 ├── vite.config.ts
-├── playwright.config.ts
 └── package.json
 ```
 
@@ -242,14 +240,14 @@ Open an issue describing:
 2. `bun install`
 3. Run `bun test` to verify the test suite passes
 4. Make your changes on a feature branch
-5. Run `bun test` and `bun run test:e2e` before submitting
+5. Run `bun test` before submitting (and `bun run test:herdr` if you have a herdr daemon)
 6. Open a PR with a clear description of the change
 
 ### Code Conventions
 
 - TypeScript throughout (server + client)
 - Zod schemas for all WebSocket message types
-- Bun test for unit tests, Playwright for e2e
+- Bun test throughout: hermetic unit tests, plus live herdr e2e under `server/integration/`
 - Conventional commits (`feat:`, `fix:`, `refactor:`, `docs:`)
 
 ## License

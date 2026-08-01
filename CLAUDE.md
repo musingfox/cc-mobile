@@ -11,9 +11,9 @@ CCMobile — a touch-optimized PWA for interacting with Claude Code from phones/
 - **Runtime**: Bun
 - **Backend**: Elysia (Bun-native server with native WebSocket support)
 - **Frontend**: React + Vite (root: `client/`)
-- **Claude integration**: herdr socket API (JSON-RPC over unix socket, ~/.config/herdr/herdr.sock; see ADR-015); SDK query() pending removal (#25)
+- **Claude integration**: herdr socket API (JSON-RPC over unix socket, ~/.config/herdr/herdr.sock; see ADR-015) — the only path; the SDK `query()` driver was removed in #25
 - **Validation**: Zod for WebSocket message schemas (see ADR-001)
-- **No additional API keys needed** — herdr drives the local `claude` CLI binary (legacy SDK wrapper pending removal, #25)
+- **No additional API keys needed** — herdr drives the local `claude` CLI binary
 
 ## Commands
 
@@ -21,8 +21,8 @@ CCMobile — a touch-optimized PWA for interacting with Claude Code from phones/
 bun install              # Install dependencies
 bun run dev:server       # Elysia backend on 0.0.0.0:3001
 bunx vite --host         # Vite frontend on :5173 (network accessible)
-bun test                 # Run unit tests (bun:test)
-bun run test:e2e         # Run e2e tests (Playwright)
+bun test                 # Run unit tests (bun:test) — hermetic, no daemon needed
+bun run test:herdr       # Live e2e against a running herdr daemon + `claude` binary
 bun run build            # Production build (Vite outputs to dist/client/)
 ```
 
@@ -43,14 +43,12 @@ Vite dev server proxies `/ws` and `/api` to Elysia backend on port 3001.
 
 ## Architecture
 
-注意：herdr 主幹為 #20–#25 的目標架構；該系列完成前，現行運行路徑仍為 tmux + PTY（ADR-011/014）。
-
 ```
 Mobile Browser (PWA) ←──WebSocket──→ Elysia Server (dev :3001 / prod :7701)
                                        ├─ WS Plugin (ws.ts) — Zod-validated messages
                                        ├─ Herdr Socket Main Trunk — JSON-RPC over unix socket (ADR-015)
-                                       ├─ Permission Bridge — canUseTool ↔ WebSocket Promise relay (pending #25)
-                                       ├─ Settings Loader — reads ~/.claude/ for plugins
+                                       ├─ Permission Relay — PreToolUse hook ↔ WebSocket, 90s deny (ADR-014)
+                                       ├─ Response Relay — Stop hook ↔ WebSocket (ADR-011 readback)
                                        └─ Static file serving (production)
                                               ↓
                                      Claude Code CLI (local) via herdr
@@ -60,17 +58,22 @@ Mobile Browser (PWA) ←──WebSocket──→ Elysia Server (dev :3001 / prod
 
 All recorded in `docs/adr/`. Key decisions:
 
-- **Herdr terminal layer** (ADR-015): herdr socket as primary trunk (replaces tmux); C-hybrid concepts carried; SDK query() path removal pending #25.
-- **Plugin loading** (ADR-006): Reads `~/.claude/settings.json` + `installed_plugins.json` to pass plugin paths to SDK. `skills: "all"` enables every discovered skill (replaces deprecated `allowedTools: ["Skill"]`).
-- **Permission Bridge** (ADR-002): Promise + 60s timeout pattern. Timeout interrupts conversation.
+- **Herdr terminal layer** (ADR-015): herdr socket is the only trunk; C-hybrid concepts carried; the SDK query() path was removed in #25 (see ADR-011's "#25 後現況" section).
+- **Permission relay** (ADR-002 / ADR-014): the PreToolUse hook POSTs to the server, which asks the phone and holds the reply. Unanswered after 90s → deny (#24).
 - **Zod validation** (ADR-001): Runtime validation on WS messages, single source of truth for types.
 - **Zustand + WsService** (ADR-008): Per-session state isolation via Zustand store + WebSocket singleton service.
 
 ### WebSocket Protocol
 
-Client→Server: `new_session`, `send`, `command`, `permission`, `interrupt`, `get_server_config`, `list_sessions`, `resume_session`
+Client→Server: `terminal_create`, `terminal_send`, `terminal_teardown`, `list_terminal_sessions`, `permission`, `interrupt`, `stop_task`, `append_user_message`, `get_server_config`, `set_model`, `set_effort`, `set_env_vars`, `set_permission_mode`, `list_sessions`, `resume_session`, `set_session_title`, `list_directories`, `reconnect`
 
-Server→Client: `session_created`, `stream_chunk`, `stream_end`, `permission_request`, `capabilities`, `result`, `error`, `server_config`
+Server→Client: `terminal_created`, `terminal_teardown_result`, `terminal_sessions`, `session_created`, `session_history`, `session_list`, `stream_chunk`, `stream_end`, `session_state`, `permission_request`, `capabilities`, `server_config`, `directory_listing`, `event`, `replay_complete`, `error`
+
+`resume_session` is read-only since #25: it loads a past session's history for
+viewing, but that session cannot be continued — start a new terminal session to
+keep talking. Deleted in #25 and refused by the Zod gate: `new_session`, `send`,
+`command`, `pty_send`, `get_session_info`, `session_info`, `result`, and the
+`tmux_*` names `terminal_*` replaced.
 
 Schemas defined in `server/protocol.ts`. Full spec in `cc-mobile.md`.
 

@@ -1,5 +1,9 @@
 # Module Inventory — ADR-011 PTY 混合架構移植評估
 
+> **Superseded by ADR-015**（herdr 取代 tmux/PTY 作為持久化終端層）。
+> 下方的檔案分類表是 2026-06 當時的評估紀錄，原樣保留不改寫；實際落地結果與
+> 該表的差異列於文末「#25 後現況」節。
+
 分析基準：ADR-011「搬移既有已驗證模式，非全砍重寫」。  
 判斷原則：只有綁死在 SDK `query()` 驅動與 `canUseTool` 的部分才需 DROP/ADAPT；UI、WS protocol、util、session 讀取多半可留。
 
@@ -86,3 +90,59 @@
 **overall_roll: KEEP_PROJECT**
 
 絕大多數程式碼（87%）與計費管道完全無關，可原樣保留。真正需要換掉的只有 `session-manager.ts`（一個檔案），以及五個需要調整介面或事件格式的 ADAPT 檔案。這個比例強烈支持「搬移既有模式」而非另起新專案：UI 層（40+ 個元件）、WS protocol、util、session 讀取全部可留；唯一核心替換是驅動層從 `query()` 改為 PTY keystroke，正如 ADR-011 架構表所示。重寫成本集中在一支檔案加五支介面調整，遠低於從頭建立整個 PWA 框架的成本。
+
+
+---
+
+## #25 後現況（2026-08-02，issue #25 死碼刪除完成）
+
+本表寫成時假設「以 PTY 取代 SDK query()」。實際落地是 ADR-015 的 herdr：PTY
+one-shot 鏈只活了一個開發週期，就與 SDK query() 路徑一起在 #25 被刪除。這一節
+記錄與上表的差異，供讀者判斷哪些 verdict 已不適用。
+
+### 實際刪除清單（#25）
+
+SDK query 路徑：
+
+- `server/session-manager.ts` 的 query 驅動（`sendMessage` / `getInitData` /
+  `getCapabilities` / `getPlugins` / `updateCanUseTool` / `activeQueries`）。檔案
+  本身存活，職責縮為 session map + 設定狀態，因此上表的 `DROP` 應讀作「部分刪除」。
+- `server/permission-bridge.ts`（上表 `ADAPT`——實際是刪除；其 Promise + timeout
+  模式由 `pty-permission-relay.ts` 承接，不是同一個檔案被改造）。
+- `server/settings-loader.ts`（上表 `KEEP`——實際刪除：唯一消費者是 query 的
+  `plugins` 選項；herdr 啟動的 claude 自己讀 `~/.claude`）。
+- `server/capabilities-cache.ts` 的寫入端 `saveCachedCapabilities`（`KEEP` 降為
+  唯讀：唯一寫入點在 query 的 system/init 訊息上）。
+
+PTY one-shot 鏈（ADR-011 的核心產物，整條刪除）：
+
+- `pty-orchestrator.ts`、`pty-reader.ts`、`pty-driver.ts`、`pty-worker.mjs`、
+  `tui-readiness.ts`、`tui-capture-readiness.ts` 與 `node-pty` 依賴。
+
+tmux adapter（ADR-014 的產物，整組刪除）：
+
+- `tmux-registry.ts`、`tmux-send-routing.ts`、`terminal-backend.ts` 的
+  `createTmuxBackend`。`buildClaudeSettings` 搬到中性的 `claude-settings.ts`。
+- `tmux_*` WS 訊息全數更名為 `terminal_*`，`tmux-control.ts` 更名
+  `terminal-control.ts`。
+
+Playwright e2e：
+
+- `e2e/`、`playwright.config.ts`、`@playwright/test`。其 `mock-session-manager.ts`
+  正是被刪的 query 路徑的替身。
+
+### 存活的 hook 鏈
+
+檔名仍帶 `pty-` 前綴但與 PTY 無關，是 herdr 的存活相依，不要照上表當成 PTY 遺物：
+`pty-stop-hook.ts`、`pty-permission-hook.ts`、`pty-{response,permission}-relay.ts`、
+`pty-{response,permission}-endpoint.ts`。
+
+### spike 腳本已失效
+
+`docs/adr/spike-011/` 與 `docs/adr/spike-014/` 下的驗證腳本 import 的模組已不存在，
+保留為歷史紀錄，**不可執行**。
+
+### 回歸防線
+
+`server/__tests__/dead-code-residue.test.ts` 掃描 `server/` 與 `client/`，任何一條
+指回上述已刪模組的引用都會讓測試變紅。

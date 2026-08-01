@@ -69,15 +69,22 @@ All messages are Zod-validated (see [ADR-001](docs/adr/001-zod-runtime-validatio
 ### Client → Server
 
 ```typescript
-{ type: "new_session", cwd: string }
-{ type: "send", sessionId: string, content: string }
-{ type: "command", sessionId: string, command: string }
-{ type: "permission", requestId: string, allow: boolean }
+{ type: "terminal_create", claudeUuid: string, cwd: string }
+{ type: "terminal_send", claudeUuid: string, content: string }
+{ type: "terminal_teardown", claudeUuid: string }
+{ type: "list_terminal_sessions" }
+{ type: "permission", requestId: string, allow: boolean, answers?: Record<string, string> }
 { type: "interrupt", sessionId: string }
+{ type: "stop_task", sessionId: string, taskId: string }
 { type: "get_server_config" }
 { type: "list_sessions", dir?: string, limit?: number, offset?: number }
 { type: "resume_session", sdkSessionId: string, cwd: string }
 ```
+
+Removed in #25 and now refused by the Zod gate with `{code:"invalid_message"}`:
+`new_session`, `send`, `command`, `pty_send`, `get_session_info`, and the
+`tmux_*` names that `terminal_*` replaced. There is no compatibility window — a
+cached PWA bundle recovers with a page reload.
 
 ### Server → Client
 
@@ -88,12 +95,15 @@ All messages are Zod-validated (see [ADR-001](docs/adr/001-zod-runtime-validatio
 { type: "permission_request", sessionId: string, requestId: string,
   tool: { name: string, parameters: Record<string, unknown> } }
 { type: "capabilities", sessionId: string, commands: string[], agents: string[], model: string }
-{ type: "result", sessionId: string, success: boolean, cost?: number }
+{ type: "terminal_created", claudeUuid: string, terminalName: string, paneRef: string }
+{ type: "terminal_teardown_result", claudeUuid: string, killed: boolean }
+{ type: "terminal_sessions", claudeUuids: string[], unknownUuids: string[] }
+{ type: "session_state", sessionId: string, state: "idle" | "running" | "requires_action" }
 { type: "error", code: string, message: string, sessionId?: string }
 { type: "server_config", config: { permissionMode: string } }
 ```
 
-Note: `stream_chunk.chunk` contains raw SDK message objects (e.g., `{ type: "assistant", message: { content: [...] } }`). The frontend's `extractTextFromChunk()` parses these into displayable text.
+Note: `stream_chunk.chunk` contains raw claude message objects (e.g., `{ type: "assistant", message: { content: [...] } }`). The frontend's `extractTextFromChunk()` parses these into displayable text.
 
 ## Project Structure
 
@@ -102,17 +112,19 @@ cc-mobile/
 ├── package.json
 ├── tsconfig.json
 ├── vite.config.ts
-├── playwright.config.ts
 ├── docs/adr/                    # Architecture Decision Records
 ├── server/
 │   ├── index.ts                 # Elysia app entry, listens on 0.0.0.0:3001
 │   ├── config.ts                # CLI flag + env var parsing
 │   ├── ws.ts                    # WebSocket handler as Elysia plugin (ADR-005)
-│   ├── session-manager.ts       # V1 query() with resume pattern (ADR-007)
-│   ├── permission-bridge.ts     # canUseTool ↔ WebSocket relay (ADR-002)
+│   ├── session-manager.ts       # Session map + settings state (no turn driver)
+│   ├── terminal-control.ts      # terminal_create / terminal_teardown handlers
+│   ├── claude-settings.ts       # Builds the --settings file that injects hooks
+│   ├── herdr/                   # herdr socket backend (ADR-015)
+│   ├── pty-permission-relay.ts  # PreToolUse hook ↔ WebSocket, 90s deny (ADR-002/014)
+│   ├── pty-response-relay.ts    # Stop hook ↔ WebSocket readback (ADR-011)
 │   ├── session-listing.ts       # List resumable sessions per project
 │   ├── session-history.ts       # Session message history
-│   ├── settings-loader.ts       # Loads user plugins from ~/.claude/ (ADR-006)
 │   ├── protocol.ts              # Zod schemas for WS messages (ADR-001)
 │   └── __tests__/               # Bun test files
 ├── client/
@@ -142,37 +154,48 @@ cc-mobile/
 │   │   ├── pins.ts              # Pin management
 │   │   └── tool-events.ts       # Tool event processing
 │   └── __tests__/               # Frontend unit tests
-├── e2e/                         # Playwright e2e tests
 └── public/                      # (Future: PWA manifest, icons)
 ```
 
 ## Key Implementation Details
 
-### 1. Session Manager — V1 Resume Pattern ([ADR-007](docs/adr/007-use-v1-query-api.md))
+### 1. Session Manager — session map + settings state
 
-Uses V1 `query()` API. `createSession()` is lightweight (stores config only). Each `sendMessage()` creates a fresh `query()` with `resume: sdkSessionId` for multi-turn continuity.
+The in-process `query()` turn driver was removed in #25 (ADR-015). Turns are
+driven by the herdr backend; `SessionManager` now only holds the session map
+(used by `resume_session` for read-only history viewing) and the settings the
+settings screen reads back through `get_server_config`.
 
 ```typescript
 class SessionManager {
-  async createSession(sessionId, cwd, canUseTool): Promise<void>;  // stores config
-  async *sendMessage(sessionId, content): AsyncGenerator<SDKMessage>;  // query() + resume
-  destroySession(sessionId): void;  // closes active query
+  async createSession(sessionId, cwd, sdkSessionId?): Promise<void>;
+  destroySession(sessionId): void;  // drops the entry, cleans up uploads
 }
 ```
 
-SDK options: `settingSources: ["user", "project", "local"]`, `systemPrompt: { type: "preset", preset: "claude_code" }`, `includePartialMessages: true`, `permissionMode: "default"`, `skills: "all"`, `plugins` loaded from user settings.
+`resume_session` is read-only: it loads a past session's history for viewing,
+but that session cannot be continued. Start a new terminal session to keep
+talking.
 
 ### 2. Plugin Loading ([ADR-006](docs/adr/006-plugin-loading-from-user-settings.md))
 
-`settings-loader.ts` reads `~/.claude/settings.json` (`enabledPlugins`) and `~/.claude/plugins/installed_plugins.json` (`installPath`), cross-references to produce `SdkPluginConfig[]` passed to each `query()` call. `skills: "all"` enables every discovered skill from plugins and user settings (replaces the deprecated `allowedTools: ["Skill"]` form).
+No longer done by this server. The `claude` process herdr starts reads
+`~/.claude` itself, so `settings-loader.ts` was deleted in #25 along with the
+`query()` call whose `plugins` option was its only consumer.
 
-### 3. Permission Bridge — Promise + Timeout ([ADR-002](docs/adr/002-permission-bridge-promise-pattern.md))
+### 3. Permission Relay — Promise + Timeout ([ADR-002](docs/adr/002-permission-bridge-promise-pattern.md))
 
-Bridges SDK's `canUseTool` callback to WebSocket client via Promise relay. Each tool use creates a pending Promise; client's approve/deny response resolves it. 60s timeout defaults to interrupt (deny + pause conversation).
+The PreToolUse hook inside the pane POSTs to `/api/pty-permission`; the server
+holds that HTTP request open, asks the phone over the WebSocket, and answers
+with the user's decision. Unanswered after 90s → deny (#24). The Promise +
+timeout shape is ADR-002's; the entry point is HTTP rather than `canUseTool`.
 
 ### 4. Quick Actions
 
-Capabilities extracted from SDK system init message (`slash_commands`, `agents` fields) during the first `sendMessage()` turn. Frontend features:
+**Frozen since #25**: the slash-command and agent lists came from the SDK's
+`system`/`init` message, so nothing writes the on-disk cache any more. A machine
+with a pre-#25 cache shows a stale list; one without shows an empty picker.
+Frontend features:
 - **Pinnable commands** — user pins frequently used commands to a compact bar (persisted in localStorage)
 - **Input autocomplete** — typing `/` or `@` in InputBar filters matching commands/agents
 
@@ -236,7 +259,7 @@ Add to home screen → launches as standalone app (no browser chrome).
 
 ### 8. Herdr Terminal Layer ([ADR-015](docs/adr/015-herdr-terminal-layer.md))
 
-Mobile "new session" launches a real `claude` process inside a herdr workspace (`tmux_create`/`tmux_send`/`tmux_teardown` messages). The same live session can be joined from the desktop with `herdr agent attach ccm-<first-8-of-uuid>`.
+Mobile "new session" launches a real `claude` process inside a herdr workspace (`terminal_create`/`terminal_send`/`terminal_teardown` messages). The same live session can be joined from the desktop with `herdr agent attach ccm-<first-8-of-uuid>`.
 
 **Limitation — trusted directories only**: the herdr path currently only works for working directories already trusted in `~/.claude.json`. For an untrusted directory, `claude` shows its folder-trust dialog on startup; the first prompt is swallowed by that dialog, and the readiness gate cannot detect this state. Until this is handled, only create sessions in previously trusted directories. Tracked in #24.
 
@@ -264,7 +287,7 @@ Mobile "new session" launches a real `claude` process inside a herdr workspace (
 
 **Done**:
 - Token-level streaming with deduplication (incremental text display)
-- Cost & usage status bar (tokens, cost, turns, duration) via SDK result messages
+- Cost & usage status bar (tokens, cost, turns, duration) via claude result messages
 - Session resume — list previous sessions via `listSessions()` API, one-tap resume (SessionListModal)
 - Tool & agent execution status display (ActivityPanel — live progress, completion, nested tools)
 - Hook status display
@@ -272,7 +295,7 @@ Mobile "new session" launches a real `claude` process inside a herdr workspace (
 - Settings page (default CWD, theme, pin management, localStorage persistence)
 - Server-side CLI flags: `--default-cwd`, `--permission-mode`, `--port`, `--hostname`
 - `CC_MOBILE_ALLOWED_ROOTS` env var for project path whitelist
-- E2E test suite (Playwright with mock server)
+- E2E test suite (Playwright with mock server) — removed in #25; the live herdr suites (`bun run test:herdr`) replaced it
 
 ### Phase 5: Future
 
