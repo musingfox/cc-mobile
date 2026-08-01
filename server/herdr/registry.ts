@@ -201,6 +201,23 @@ export function createHerdrRegistry(options: HerdrRegistryOptions) {
     }
   }
 
+  /**
+   * Registers a session this process did not create — a pane that survived a
+   * restart and has been verified to still hold a live claude. Everything
+   * `createSession` would have recorded is either read from the daemon snapshot
+   * or rebuilt by formula, so no RPC is issued here.
+   *
+   * Rejects a duplicate uuid exactly as `createSession` does: two workspaces
+   * claiming one uuid is an ambiguity to report, not to silently resolve.
+   */
+  function adoptSession(entry: HerdrSessionEntry & { claudeUuid: string }): void {
+    const { claudeUuid, ...rest } = entry;
+    if (sessions.has(claudeUuid)) {
+      throw new Error(`already registered: ${claudeUuid}`);
+    }
+    sessions.set(claudeUuid, rest);
+  }
+
   async function closeWorkspaceQuietly(workspaceId: string | undefined): Promise<void> {
     if (workspaceId === undefined) return;
     try {
@@ -257,6 +274,7 @@ export function createHerdrRegistry(options: HerdrRegistryOptions) {
 
   return {
     createSession,
+    adoptSession,
     listSessions,
     hasSession,
     lookup,

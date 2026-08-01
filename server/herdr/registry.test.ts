@@ -12,11 +12,7 @@ import { existsSync } from "node:fs";
 import { readFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  claudeUuidFromWorkspaceLabel,
-  createHerdrRegistry,
-  workspaceLabelFor,
-} from "./registry";
+import { claudeUuidFromWorkspaceLabel, createHerdrRegistry, workspaceLabelFor } from "./registry";
 
 const UUID = "3f2a9b01-1111-4222-8333-444455556666";
 const UUID2 = "7c4d5e02-2222-4333-8444-555566667777";
@@ -232,6 +228,55 @@ describe("PersistentSessionLabel", () => {
     expect(claudeUuidFromWorkspaceLabel("ccm-3f2a9b01")).toBeUndefined();
     expect(claudeUuidFromWorkspaceLabel("cyris")).toBeUndefined();
     expect(claudeUuidFromWorkspaceLabel(`ccm-${UUID.toUpperCase()}`)).toBeUndefined();
+  });
+});
+
+describe("adoptSession", () => {
+  const entry = {
+    claudeUuid: UUID,
+    workspaceId: "ws-1",
+    paneId: "pn-1",
+    agentName: "ccm-3f2a9b01",
+    settingsPath: "/tmp/ccm-settings-adopt.json",
+  };
+
+  test("registers a pane this process did not create, issuing no RPC", () => {
+    const fake = makeFakeClient();
+    const registry = makeRegistry(fake);
+
+    registry.adoptSession(entry);
+
+    expect(registry.hasSession(UUID)).toEqual({ present: true, paneRef: "pn-1" });
+    expect(registry.resolvePane(UUID)).toBe("pn-1");
+    expect(registry.listSessions()).toEqual([UUID]);
+    expect(registry.lookup(UUID)?.settingsPath).toBe(entry.settingsPath);
+    // Adoption reads state that already exists; it must not touch the daemon.
+    expect(fake.calls).toEqual([]);
+  });
+
+  test("rejects a duplicate uuid with the same error createSession raises", () => {
+    const registry = makeRegistry(makeFakeClient());
+    registry.adoptSession(entry);
+
+    expect(() => registry.adoptSession({ ...entry, paneId: "pn-other" })).toThrow(
+      /already registered/,
+    );
+    // The first registration wins; the loser never overwrites it.
+    expect(registry.resolvePane(UUID)).toBe("pn-1");
+  });
+
+  test("an adopted session tears down like any other", async () => {
+    const fake = makeFakeClient();
+    const registry = makeRegistry(fake);
+    registry.adoptSession(entry);
+
+    const result = await registry.teardown(UUID);
+
+    expect(result).toEqual({ killed: true });
+    expect(fake.calls.find((call) => call.method === "workspace.close")?.params).toEqual({
+      workspace_id: "ws-1",
+    });
+    expect(registry.hasSession(UUID)).toEqual({ present: false });
   });
 });
 
