@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import { Elysia } from "elysia";
 import type { ServerConfig } from "./config";
 import { EventBuffer } from "./event-buffer";
+import { createHerdrBackend } from "./herdr/backend";
 import { buildUrl, stripBasePath } from "./path-utils";
 import { createPermissionHandler } from "./permission-bridge";
 import { PtyOrchestrator } from "./pty-orchestrator";
@@ -22,7 +23,6 @@ import { createPtyPermissionRelay } from "./pty-permission-relay";
 import { createPtyResponseHandler } from "./pty-response-endpoint";
 import { createPtyResponseRelay } from "./pty-response-relay";
 import { SessionManager } from "./session-manager";
-import { createTmuxBackend } from "./terminal-backend";
 import { createUploadPlugin } from "./upload";
 import { createUploadImagePlugin } from "./upload-image";
 import { type ClientSink, createWsPlugin, type WsBackend } from "./ws";
@@ -107,9 +107,12 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
   const tmuxResponseUrl = `http://127.0.0.1:${serverConfig.port}${ptyResponseApiPath}`;
   const tmuxPermissionUrl = `http://127.0.0.1:${serverConfig.port}${ptyPermApiPath}`;
 
+  // herdr is the only default backend (ADR-015 / plan D1). Its transport
+  // connects lazily, so constructing the app here contacts no daemon —
+  // index.ts gates on daemon reachability before it listens.
   const backend: AppBackend =
     deps.backend ??
-    createTmuxBackend({
+    createHerdrBackend({
       responseUrl: tmuxResponseUrl,
       permissionUrl: tmuxPermissionUrl,
       responseRelay: ptyResponseRelay,
