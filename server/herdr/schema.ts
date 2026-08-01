@@ -72,14 +72,75 @@ export const AgentInfoSchema = z
   .passthrough();
 export type AgentInfo = z.infer<typeof AgentInfoSchema>;
 
+/**
+ * One workspace. `label` is the field cc-mobile writes its uuid into, which
+ * makes this the persistence record a restart reads its sessions back from —
+ * so it is typed rather than left to passthrough. Required per the daemon's
+ * own schema (probe 2026-08-01); the rest of its fields ride passthrough.
+ */
+export const WorkspaceInfoSchema = z
+  .object({
+    workspace_id: z.string(),
+    label: z.string(),
+  })
+  .passthrough();
+export type WorkspaceInfo = z.infer<typeof WorkspaceInfoSchema>;
+
+/**
+ * One pane. `agent` is the daemon's own detection ("claude" while a claude is
+ * running) and is optional — it is absent on panes sitting at a shell prompt.
+ */
+export const PaneInfoSchema = z
+  .object({
+    pane_id: z.string(),
+    workspace_id: z.string(),
+    agent: z.string().nullish(),
+  })
+  .passthrough();
+export type PaneInfo = z.infer<typeof PaneInfoSchema>;
+
 export const SessionSnapshotSchema = z
   .object({
     version: z.string(),
     protocol: z.number(),
+    // Required by the daemon and required here: a restart that silently saw an
+    // empty workspace list would adopt nothing and report no error at all.
+    workspaces: z.array(WorkspaceInfoSchema),
+    panes: z.array(PaneInfoSchema),
     agents: z.array(AgentInfoSchema),
   })
   .passthrough();
 export type SessionSnapshot = z.infer<typeof SessionSnapshotSchema>;
+
+/**
+ * One foreground process in a pane, as `pane.process_info` reports it. `argv`
+ * and `argv0` are both nullable on the wire — the daemon cannot always read a
+ * process's command line — so every consumer must tolerate null.
+ */
+export const PaneProcessSchema = z
+  .object({
+    argv: z.array(z.string()).nullish(),
+    argv0: z.string().nullish(),
+  })
+  .passthrough();
+export type PaneProcess = z.infer<typeof PaneProcessSchema>;
+
+export const PaneProcessInfoSchema = z
+  .object({
+    pane_id: z.string(),
+    foreground_processes: z.array(PaneProcessSchema).nullish(),
+  })
+  .passthrough();
+export type PaneProcessInfo = z.infer<typeof PaneProcessInfoSchema>;
+
+/** Live wire fact (probe 2026-08-01): the payload nests under `process_info`. */
+export const PaneProcessInfoResultSchema = z
+  .object({
+    type: z.literal("pane_process_info"),
+    process_info: PaneProcessInfoSchema,
+  })
+  .passthrough();
+export type PaneProcessInfoResult = z.infer<typeof PaneProcessInfoResultSchema>;
 
 export const PongResultSchema = z
   .object({
