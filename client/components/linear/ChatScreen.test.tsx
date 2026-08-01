@@ -103,10 +103,15 @@ describe("ChatScreen", () => {
       expect(useAppStore.getState().inputDraft).toContain("/clear");
     });
 
-    await waitFor(() => {
-      expect(queryByText("Clear chat")).toBeNull();
-    });
-  });
+    await waitFor(
+      () => {
+        expect(queryByText("Clear chat")).toBeNull();
+      },
+      // vaul's drawer close resolves only after its transition fallback
+      // (~5.1s under happy-dom), which overruns bun's 5s default timeout.
+      { timeout: 8000 },
+    );
+  }, 15000);
 
   test("shows thinking card when streaming starts before streamed content exists", () => {
     const store = useAppStore.getState();
