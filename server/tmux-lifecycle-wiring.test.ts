@@ -5,9 +5,10 @@
  *
  *   EX-A2 (wiring): the tmuxPermissionRelay is constructed with timeoutMs=90000
  *                   (the unattended default), not the relay's 600000 fallback.
- *   EX-B2:          createApp registers SIGTERM + SIGINT handlers that call
- *                   backend.teardownAll(); repeated construction does NOT add
- *                   duplicate listeners (idempotency).
+ *   EX-B2:          createApp registers NO shutdown signal handler and never
+ *                   calls backend.teardownAll() — panes outlive a SIGTERM so the
+ *                   next startup can remount them (plan D2). This inverts the
+ *                   original EX-B2, which pinned the opposite.
  *
  * These assertions used to point at createWsPlugin, which owned the assembly.
  * Assembly moved to createApp; the behaviour pinned here did not change.
@@ -105,38 +106,34 @@ afterAll(() => {
   }
 });
 
-// NOTE: EX-B2 runs first so the (process-global, one-shot) shutdown handler binds
-// to its spy backend; the idempotency flag is then already set when EX-A2 runs,
-// which is exactly what EX-A2 expects (it only inspects relay construction).
+// ── EX-B2: shutdown leaves panes alone ──────────────────────────────────────────
 
-// ── EX-B2: SIGTERM/SIGINT teardown + idempotency ────────────────────────────────
-
-describe("EX-B2: shutdown signal handlers call teardownAll, idempotently", () => {
-  it("registers SIGTERM + SIGINT handlers that invoke backend.teardownAll, and repeated construction adds no duplicate listeners", () => {
+describe("EX-B2: shutdown signals do not tear down panes", () => {
+  it("registers no SIGTERM/SIGINT handler and never calls backend.teardownAll, on first or repeated construction", () => {
     const spy = makeSpyBackend();
 
     const sigtermBase = process.listenerCount("SIGTERM");
     const sigintBase = process.listenerCount("SIGINT");
 
-    // First construction registers the handlers (idempotency flag starts false in this file's process).
     buildApp({ backend: spy.backend });
 
-    const sigtermAfter1 = process.listenerCount("SIGTERM");
-    const sigintAfter1 = process.listenerCount("SIGINT");
-    expect(sigtermAfter1).toBe(sigtermBase + 1);
-    expect(sigintAfter1).toBe(sigintBase + 1);
+    expect(process.listenerCount("SIGTERM")).toBe(sigtermBase);
+    expect(process.listenerCount("SIGINT")).toBe(sigintBase);
+    expect(spy.calls).toBe(0);
 
-    // Invoke the freshly-registered handlers (do NOT actually raise a signal).
-    const newSigterm = process.listeners("SIGTERM").filter((l) => !beforeSigterm.includes(l));
-    const newSigint = process.listeners("SIGINT").filter((l) => !beforeSigint.includes(l));
-    for (const l of newSigterm) (l as any)();
-    for (const l of newSigint) (l as any)();
-    expect(spy.calls).toBeGreaterThanOrEqual(2);
+    // Repeated construction must not sneak a handler back in either.
+    const spy2 = makeSpyBackend();
+    buildApp({ backend: spy2.backend });
+    expect(process.listenerCount("SIGTERM")).toBe(sigtermBase);
+    expect(process.listenerCount("SIGINT")).toBe(sigintBase);
+    expect(spy2.calls).toBe(0);
 
-    // Second construction must NOT add more listeners (idempotency).
-    buildApp({ backend: makeSpyBackend().backend });
-    expect(process.listenerCount("SIGTERM")).toBe(sigtermAfter1);
-    expect(process.listenerCount("SIGINT")).toBe(sigintAfter1);
+    // Raising the signals would kill the test process, so instead assert the
+    // stronger structural fact: no listener createApp added exists to invoke.
+    const addedSigterm = process.listeners("SIGTERM").filter((l) => !beforeSigterm.includes(l));
+    const addedSigint = process.listeners("SIGINT").filter((l) => !beforeSigint.includes(l));
+    expect(addedSigterm).toEqual([]);
+    expect(addedSigint).toEqual([]);
   });
 });
 

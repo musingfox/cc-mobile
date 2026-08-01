@@ -3,7 +3,7 @@
  *
  * Everything the server is made of is assembled here: the terminal backend, the
  * PTY orchestrator, the permission/response relays, the HTTP hook endpoints,
- * shutdown handling, the WS transport plugin, and static file serving.
+ * the WS transport plugin, and static file serving.
  * `createApp` returns the app *unlistened*, so wiring can be asserted without
  * binding a port; `index.ts` is reduced to parse-config → createApp → listen.
  */
@@ -54,10 +54,6 @@ export interface AppTestDeps {
   sessionManager?: SessionManager;
   permissionBridgeFactory?: typeof createPermissionHandler;
 }
-
-// Idempotency guard: tmux teardown signal handlers register at most once per
-// process, even when createApp runs more than once (e.g. across tests).
-let tmuxShutdownHandlersRegistered = false;
 
 /** Builds the whole server. The returned app has not been listened on. */
 export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
@@ -125,15 +121,12 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
     settings: { responseUrl: tmuxResponseUrl, permissionUrl: tmuxPermissionUrl },
   });
 
-  // On process shutdown, kill every cc-mobile-owned tmux session + unlink its settings.
-  if (!tmuxShutdownHandlersRegistered) {
-    tmuxShutdownHandlersRegistered = true;
-    const onShutdown = () => {
-      void backend.teardownAll();
-    };
-    process.on("SIGTERM", onShutdown);
-    process.on("SIGINT", onShutdown);
-  }
+  // No shutdown signal handler: pane survival across a stop is the persistence
+  // default (plan D2). A SIGTERM from pm2 or a deploy must leave the panes — and
+  // the live claude in them — alone, so the next startup can remount them.
+  // `backend.teardownAll` stays on the port for explicit callers; only the
+  // signal wiring is gone. Panes whose claude did die are collected by the
+  // startup orphan scan instead.
 
   // Independent tmux permission relay; sendToClient goes through the
   // claudeUuid→sink map so a permission_request only reaches the originating
