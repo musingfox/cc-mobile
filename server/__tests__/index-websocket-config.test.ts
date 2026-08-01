@@ -20,6 +20,19 @@ describe("server websocket keep-alive config", () => {
 
   it("keeps assembly out of the top-level entry script", () => {
     expect(indexSource).not.toContain("new Elysia");
-    expect(indexSource).toContain("createApp(serverConfig).listen(");
+    expect(indexSource).toContain("createApp(serverConfig");
+    expect(indexSource).toContain(".listen(");
+  });
+
+  it("remounts live sessions before it starts listening", () => {
+    // Ordering, not mere presence: a client that reconnects while the scan is
+    // still running would be told its still-running session no longer exists.
+    // The live receipt for this is the restart E2E; source order is what the
+    // hermetic suite can pin.
+    const remountAt = indexSource.indexOf("remountLiveSessions");
+    const listenAt = indexSource.indexOf("app.listen(");
+    expect(remountAt).toBeGreaterThan(-1);
+    expect(listenAt).toBeGreaterThan(-1);
+    expect(remountAt).toBeLessThan(listenAt);
   });
 });

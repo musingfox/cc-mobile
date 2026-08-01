@@ -15,6 +15,7 @@ import type { createPtyResponseRelay } from "../pty-response-relay";
 import type { ClientSink, TerminalBackend, TerminalSessionInfo } from "../terminal-backend";
 import { createHerdrClient, type HerdrClient, SUPPORTED_PROTOCOL } from "./client";
 import { createHerdrRegistry } from "./registry";
+import { type RemountReport, remountLiveSessions } from "./remount";
 import { createHerdrSendRouting } from "./send-routing";
 import { createHerdrStatusEvents } from "./status-events";
 import { resolveSocketPath } from "./transport";
@@ -36,7 +37,16 @@ export interface HerdrBackendOptions {
   readinessPollMs?: number;
 }
 
-export function createHerdrBackend(options: HerdrBackendOptions): TerminalBackend {
+/**
+ * The port plus the one capability only herdr has: because the daemon keeps
+ * panes alive across a server restart, this backend can rediscover its own
+ * sessions at startup. tmux never could, so this stays off the neutral port.
+ */
+export interface HerdrTerminalBackend extends TerminalBackend {
+  remountLiveSessions(): Promise<RemountReport>;
+}
+
+export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalBackend {
   const client = options.client ?? createHerdrClient();
 
   const registry = createHerdrRegistry({
@@ -80,6 +90,16 @@ export function createHerdrBackend(options: HerdrBackendOptions): TerminalBacken
     },
     hasSession: (claudeUuid) => registry.hasSession(claudeUuid),
     listLive: () => registry.listSessions(),
+    /**
+     * Mirrors createSession's composition order — register, then subscribe —
+     * so an adopted session is indistinguishable from one this process built.
+     */
+    remountLiveSessions: () =>
+      remountLiveSessions({
+        client,
+        adopt: (entry) => registry.adoptSession(entry),
+        subscribeStatus: (claudeUuid, paneId) => statusEvents.start(claudeUuid, paneId),
+      }),
     teardown,
     async teardownAll() {
       // Routed through the composed teardown so subscriptions and waiters are

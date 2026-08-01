@@ -15,6 +15,7 @@ import { Elysia } from "elysia";
 import type { ServerConfig } from "./config";
 import { EventBuffer } from "./event-buffer";
 import { createHerdrBackend } from "./herdr/backend";
+import type { RemountReport } from "./herdr/remount";
 import { buildUrl, stripBasePath } from "./path-utils";
 import { createPermissionHandler } from "./permission-bridge";
 import { PtyOrchestrator } from "./pty-orchestrator";
@@ -41,15 +42,23 @@ export interface AppBackend extends WsBackend {
   hasSession(claudeUuid: string): { present: boolean; paneRef?: string };
   getClient(claudeUuid: string): ((msg: Record<string, unknown>) => void) | undefined;
   teardownAll(): Promise<void>;
+  /** herdr only — a tmux backend has no panes to rediscover. */
+  remountLiveSessions?(): Promise<RemountReport>;
 }
 
 /**
  * Injection seam for tests (additive; production passes nothing). Substituting
  * a spy backend or relay factory exercises the wiring without spawning tmux or
  * binding a port.
+ *
+ * `backendRef` is the exception — production passes it. `createApp` returns the
+ * Elysia app, but `index.ts` needs the backend it built in order to remount
+ * before listening, so it hands in a cell for createApp to fill. Late-bound
+ * out-params are already how this file shares `clientSink`.
  */
 export interface AppTestDeps {
   backend?: AppBackend;
+  backendRef?: { current: AppBackend | null };
   createTmuxPermissionRelay?: typeof createPtyPermissionRelay;
   sessionManager?: SessionManager;
   permissionBridgeFactory?: typeof createPermissionHandler;
@@ -113,6 +122,8 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
       permissionUrl: tmuxPermissionUrl,
       responseRelay: ptyResponseRelay,
     });
+
+  if (deps.backendRef) deps.backendRef.current = backend;
 
   // PTY orchestrator — per-session --settings injection (ADR-014) reuses the same
   // loopback hook URLs as tmux, so PTY readback/permissions do not depend on the

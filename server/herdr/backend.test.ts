@@ -30,7 +30,7 @@ afterEach(async () => {
   settingsWritten.clear();
 });
 
-function makeFakeClient() {
+function makeFakeClient(results: Record<string, unknown> = {}) {
   const calls: Array<{ method: string; params: unknown }> = [];
   const subscriptions: unknown[] = [];
   const injected: Array<[string, unknown]> = [];
@@ -41,6 +41,7 @@ function makeFakeClient() {
   const client = {
     call: async (method: string, params: unknown) => {
       calls.push({ method, params });
+      if (method in results) return results[method];
       if (method === "workspace.create") {
         return {
           type: "workspace_created",
@@ -127,6 +128,72 @@ describe("herdr backend composition", () => {
     expect(backend.listLive()).toEqual([]);
     // Both subscriptions stopped — not just the workspaces closed.
     expect(fake.stopCalls()).toBe(2);
+  });
+
+  test("remountLiveSessions makes an adopted pane routable and subscribed", async () => {
+    const uuid = "3f2b8c1d-9e4a-4b6f-8c2d-1a5e7f9b0c3d";
+    const fake = makeFakeClient({
+      "session.snapshot": {
+        type: "session_snapshot",
+        snapshot: {
+          version: "0.7.5",
+          protocol: 17,
+          workspaces: [
+            {
+              workspace_id: "ws-1",
+              label: `ccm-${uuid}`,
+              number: 1,
+              focused: false,
+              active_tab_id: "ws-1:t1",
+              tab_count: 1,
+              pane_count: 1,
+              agent_status: "idle",
+            },
+          ],
+          tabs: [],
+          panes: [
+            {
+              pane_id: "pn-1",
+              terminal_id: "term-1",
+              workspace_id: "ws-1",
+              tab_id: "ws-1:t1",
+              focused: false,
+              agent_status: "working",
+              revision: 4,
+              agent: "claude",
+            },
+          ],
+          layouts: [],
+          agents: [],
+        },
+      },
+      "pane.process_info": {
+        type: "pane_process_info",
+        process_info: {
+          pane_id: "pn-1",
+          foreground_processes: [
+            { pid: 1, argv0: "claude", argv: ["claude", "--session-id", uuid] },
+          ],
+        },
+      },
+    });
+    const { backend } = makeBackend(fake);
+
+    const report = await backend.remountLiveSessions();
+
+    expect(report.adopted).toEqual([uuid]);
+    // Adopted through the same registry the port reads from, so the session is
+    // routable — and subscribed — exactly as a created one would be.
+    expect(backend.listLive()).toEqual([uuid]);
+    expect(backend.hasSession(uuid)).toEqual({ present: true, paneRef: "pn-1" });
+    expect(fake.subscriptions[0]).toEqual([{ type: "pane.agent_status_changed", pane_id: "pn-1" }]);
+
+    // A prompt now reaches the adopted pane with no create in between. The sink
+    // is bound the way ws.ts binds it — on the first tmux_send of the reconnected
+    // client — which is exactly what a remounted session depends on.
+    backend.registerClient(uuid, () => {});
+    await backend.send({ claudeUuid: uuid, content: "hi" });
+    expect(fake.injected[0]).toEqual(["pn-1", "hi"]);
   });
 
   test("a prompt reaches the created pane and its reply comes back on the shared relay", async () => {
