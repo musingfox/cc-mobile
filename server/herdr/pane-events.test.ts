@@ -19,14 +19,22 @@ function harness(
   overrides: {
     getSink?: (sessionId: string) => ((msg: Record<string, unknown>) => void) | undefined;
     transcript?: Partial<PaneEventTranscript>;
+    snapshot?: () => Promise<{ panes?: Record<string, unknown>[] }>;
+    subscribeFails?: boolean;
   } = {},
 ) {
   const sent: Record<string, Record<string, unknown>[]> = {};
   const transcriptCalls: string[] = [];
+  const errors: Error[] = [];
   let emit: ((event: { event: string; data: unknown }) => void) | undefined;
   let resync: ((snapshot: unknown) => void) | undefined;
   const subscriptions: unknown[] = [];
   let stopCalls = 0;
+
+  // Injected clock: the status poll is armed with setIntervalFn, so a test
+  // drives it by hand rather than by waiting a real second.
+  const ticks = new Map<number, () => void>();
+  let nextTimer = 1;
 
   const transcript: PaneEventTranscript = {
     attach: (id) => {
@@ -47,6 +55,7 @@ function harness(
   const events = createHerdrPaneEvents({
     subscribe: async (options: SubscribeEventsOptions): Promise<SubscriptionHandle> => {
       subscriptions.push(options.subscriptions);
+      if (overrides.subscribeFails) throw new Error("stream down");
       emit = options.onEvent as (event: { event: string; data: unknown }) => void;
       resync = options.onResync as (snapshot: unknown) => void;
       return {
@@ -62,18 +71,37 @@ function harness(
         messages.push(msg);
         sent[sessionId] = messages;
       }),
+    ...(overrides.snapshot ? { snapshot: overrides.snapshot } : {}),
+    setIntervalFn: (fn: () => void) => {
+      const id = nextTimer++;
+      ticks.set(id, fn);
+      return id;
+    },
+    clearIntervalFn: (handle: unknown) => {
+      ticks.delete(handle as number);
+    },
     transcript,
-    onError: () => {},
+    onError: (error: Error) => {
+      errors.push(error);
+    },
   });
 
   return {
     events,
     sent,
+    errors,
     transcriptCalls,
     subscriptions,
     stopCalls: () => stopCalls,
+    timerCount: () => ticks.size,
     emit: (event: { event: string; data: unknown }) => emit?.(event),
     resync: (snapshot: unknown) => resync?.(snapshot),
+    /** One poll interval, plus the microtasks the snapshot and its handlers use. */
+    tick: async () => {
+      for (const fn of [...ticks.values()]) fn();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    },
   };
 }
 
@@ -180,6 +208,21 @@ describe("PaneEventStatusForwarding", () => {
     ]);
   });
 
+  test("one settled status replacing another is not a turn ending", async () => {
+    const h = harness();
+    await h.events.start();
+
+    // First sighting still reads the turn out (a watcher can start mid-turn);
+    // the `done -> idle` that follows every turn must not read anything.
+    h.emit({ event: "pane_updated", data: { pane: { pane_id: "w3V:p1", agent_status: "done" } } });
+    h.emit({ event: "pane_updated", data: { pane: { pane_id: "w3V:p1", agent_status: "idle" } } });
+    await flush();
+
+    expect(h.transcriptCalls.filter((call) => call.startsWith("deliver"))).toEqual([
+      "deliver:w3V:p1",
+    ]);
+  });
+
   test("re-aligns from a fresh snapshot after the stream reconnects", async () => {
     const h = harness();
     await h.events.start();
@@ -189,6 +232,110 @@ describe("PaneEventStatusForwarding", () => {
     expect(h.sent["w3V:p1"]).toEqual([
       { type: "session_state", sessionId: "w3V:p1", state: "running" },
     ]);
+  });
+});
+
+/**
+ * The status poll. herdr emits a pure status change only on
+ * `pane.agent_status_changed`, which cannot be subscribed to without a pane id,
+ * so `pane.updated` reports a status only by accident (a title change carrying
+ * the pane record). These are the cases where the stream says nothing.
+ */
+describe("PaneEventStatusPoll", () => {
+  test("delivers a turn that settles with no event on the stream at all", async () => {
+    let status = "working";
+    const h = harness({
+      snapshot: async () => ({ panes: [{ pane_id: "w3V:p1", agent_status: status }] }),
+    });
+    await h.events.start();
+
+    await h.tick();
+    status = "done";
+    await h.tick();
+
+    expect(h.transcriptCalls).toEqual([
+      "status:w3V:p1:working",
+      "status:w3V:p1:done",
+      "deliver:w3V:p1",
+    ]);
+    expect(h.sent["w3V:p1"]).toEqual([
+      { type: "session_state", sessionId: "w3V:p1", state: "running" },
+      { type: "session_state", sessionId: "w3V:p1", state: "idle" },
+    ]);
+  });
+
+  test("repeats nothing the stream already reported", async () => {
+    const h = harness({
+      snapshot: async () => ({ panes: [{ pane_id: "w3V:p1", agent_status: "working" }] }),
+    });
+    await h.events.start();
+
+    h.emit({
+      event: "pane_updated",
+      data: { pane: { pane_id: "w3V:p1", agent_status: "working" } },
+    });
+    await h.tick();
+    await h.tick();
+
+    expect(h.sent["w3V:p1"]).toEqual([
+      { type: "session_state", sessionId: "w3V:p1", state: "running" },
+    ]);
+  });
+
+  test("still reports status when the stream never opened", async () => {
+    const h = harness({
+      subscribeFails: true,
+      snapshot: async () => ({ panes: [{ pane_id: "w3V:p1", agent_status: "blocked" }] }),
+    });
+    await h.events.start();
+    await h.tick();
+
+    expect(h.sent["w3V:p1"]).toEqual([
+      { type: "session_state", sessionId: "w3V:p1", state: "requires_action" },
+    ]);
+  });
+
+  test("a snapshot outage warns once, then recovers on its own", async () => {
+    let failing = true;
+    const h = harness({
+      snapshot: async () => {
+        if (failing) throw new Error("daemon gone");
+        return { panes: [{ pane_id: "w3V:p1", agent_status: "idle" }] };
+      },
+    });
+    await h.events.start();
+
+    await h.tick();
+    await h.tick();
+    await h.tick();
+    expect(h.errors).toHaveLength(1);
+
+    failing = false;
+    await h.tick();
+    expect(h.sent["w3V:p1"]).toEqual([
+      { type: "session_state", sessionId: "w3V:p1", state: "idle" },
+    ]);
+  });
+
+  test("stop leaves no poll behind", async () => {
+    const h = harness({
+      snapshot: async () => ({ panes: [{ pane_id: "w3V:p1", agent_status: "working" }] }),
+    });
+    await h.events.start();
+    expect(h.timerCount()).toBe(1);
+
+    h.events.stop();
+    await h.tick();
+
+    expect(h.timerCount()).toBe(0);
+    expect(h.sent["w3V:p1"]).toBeUndefined();
+  });
+
+  test("no snapshot source arms no poll", async () => {
+    const h = harness();
+    await h.events.start();
+
+    expect(h.timerCount()).toBe(0);
   });
 });
 

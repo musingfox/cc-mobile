@@ -15,6 +15,19 @@
  * `data.pane`. The bundled schema disagrees with the wire on the first one. Both
  * shapes are read here rather than assuming either convention.
  *
+ * The stream alone is NOT a status source (probe 2026-08-02, herdr
+ * `src/app/api.rs:580-624`): a pure status change emits only
+ * `pane.agent_status_changed`, whose subscription requires a concrete `pane_id`
+ * — the one thing a global watcher does not have. `pane.updated` is emitted for
+ * an agent *name* change, a terminal-title change and metadata expiry, and only
+ * happens to carry the current status inside its pane record. A turn that
+ * settles without touching the title therefore reports nothing at all, which is
+ * a reply the phone never receives. So a `session.snapshot` poll runs alongside
+ * the stream and feeds the same `observe`, which makes status level-triggered:
+ * the settle is noticed within one tick whether or not any event fires. The
+ * stream is kept for what the snapshot's panes do not carry — `agent_session`,
+ * i.e. the `/clear` that rotates the transcript.
+ *
  * What each signal drives:
  *   status change  → `session_state` to the client, plus the transcript tail
  *                    (armed while `working`) and a turn delivery when the
@@ -47,10 +60,24 @@ export interface PaneEventPermission {
   onStatus(sessionId: string, status: string): Promise<void> | void;
 }
 
+/** Handle returned by the injected interval scheduler. */
+export type TimerHandle = unknown;
+
+export const DEFAULT_STATUS_POLL_MS = 1_000;
+
 export interface HerdrPaneEventsOptions {
   subscribe: (options: SubscribeEventsOptions) => Promise<SubscriptionHandle>;
   /** Late-bound sink lookup, so a reconnect that rebinds a session still gets events. */
   getSink: (sessionId: string) => ClientSink | undefined;
+  /**
+   * The level-triggered status source (see the module header). Optional: a
+   * client slice without it degrades to the stream's incidental status reports,
+   * which is what this module did before the poll existed.
+   */
+  snapshot?: () => Promise<{ panes?: Partial<PaneInfo>[] }>;
+  pollIntervalMs?: number;
+  setIntervalFn?: (fn: () => void, ms: number) => TimerHandle;
+  clearIntervalFn?: (handle: TimerHandle) => void;
   transcript?: PaneEventTranscript;
   permission?: PaneEventPermission;
   onError?: (error: Error) => void;
@@ -74,7 +101,19 @@ function paneFieldsOf(event: { data?: unknown }): Partial<PaneInfo> | undefined 
 }
 
 export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
-  const { subscribe, getSink, transcript, permission } = options;
+  const { subscribe, getSink, snapshot, transcript, permission } = options;
+  const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_STATUS_POLL_MS;
+  const setIntervalFn =
+    options.setIntervalFn ??
+    ((fn: () => void, ms: number) => {
+      const timer = setInterval(fn, ms);
+      // A background poll must never be the reason a process stays alive.
+      (timer as { unref?: () => void }).unref?.();
+      return timer;
+    });
+  const clearIntervalFn =
+    options.clearIntervalFn ??
+    ((handle: TimerHandle) => clearInterval(handle as ReturnType<typeof setInterval>));
   const onError =
     options.onError ??
     ((error: Error) => {
@@ -85,6 +124,11 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
   let handle: SubscriptionHandle | undefined;
   let starting: Promise<void> | undefined;
   let stopped = false;
+  let poll: TimerHandle | undefined;
+  /** Tail-style guard: a slow snapshot makes the next tick skip, not pile up. */
+  let polling = false;
+  /** One warning per outage, not one per second. */
+  let pollFailing = false;
 
   function run(work: Promise<void> | void): void {
     void Promise.resolve(work).catch((error: unknown) => {
@@ -134,10 +178,40 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
     // `blocked` is claude asking for permission; every other status means
     // whatever was pending has been answered by someone.
     run(permission?.onStatus(sessionId, status));
-    // Deliver on arrival at a settled status rather than on "left working", so a
-    // subscription that started mid-turn still reads that turn out.
-    if (SETTLED_STATUSES.has(status) && previous !== status) {
+    // Deliver on ARRIVAL at a settled status — not on "left working" — so a
+    // watcher that started mid-turn still reads that turn out (previous is
+    // undefined then, and the fresh cursor sits at end of file, so it costs
+    // nothing when there is no turn).
+    //
+    // One settled status replacing another (`done` -> `idle` right after a
+    // turn) is NOT an arrival: nothing ran in between. Draining the file there
+    // hands the phone back the prompt it just typed and closes a turn that has
+    // not started — visible as a spinner that stops the instant you hit send.
+    // The poll samples often enough to see those pairs; the stream never did.
+    const wasSettled = previous !== undefined && SETTLED_STATUSES.has(previous);
+    if (SETTLED_STATUSES.has(status) && !wasSettled) {
       run(transcript?.deliverTurn(sessionId));
+    }
+  }
+
+  /**
+   * One snapshot, every pane observed. Identical path to an event, so a status
+   * the stream already reported is deduplicated rather than delivered twice.
+   */
+  async function pollOnce(): Promise<void> {
+    if (!snapshot || polling || stopped) return;
+    polling = true;
+    try {
+      const current = await snapshot();
+      for (const pane of current.panes ?? []) observe(pane);
+      pollFailing = false;
+    } catch (error) {
+      if (!pollFailing) {
+        pollFailing = true;
+        onError(error instanceof Error ? error : new Error(String(error)));
+      }
+    } finally {
+      polling = false;
     }
   }
 
@@ -172,6 +246,15 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
       } finally {
         starting = undefined;
       }
+
+      // Armed even when the subscription failed: the poll is the status source
+      // the stream never was, so a dead stream still leaves the phone with its
+      // replies and its activity dots.
+      if (snapshot && poll === undefined && !stopped) {
+        poll = setIntervalFn(() => {
+          void pollOnce();
+        }, pollIntervalMs);
+      }
     })();
     return starting;
   }
@@ -185,6 +268,10 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
     stopped = true;
     handle?.stop();
     handle = undefined;
+    if (poll !== undefined) {
+      clearIntervalFn(poll);
+      poll = undefined;
+    }
     panes.clear();
   }
 

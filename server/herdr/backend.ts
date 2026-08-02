@@ -142,9 +142,17 @@ export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalB
     },
   });
 
+  // Bound once: the poll below runs for the life of the process, and a client
+  // slice without this method simply has no level-triggered status source.
+  const sessionSnapshot = client.sessionSnapshot;
   const paneEvents = createHerdrPaneEvents({
     subscribe: (subscribeOptions) => client.subscribeEvents(subscribeOptions),
     getSink: (sessionId) => routing.getClient(sessionId),
+    // The status source. Without it a turn that settles without changing the
+    // pane's title is never read back at all — see pane-events.ts's header.
+    ...(typeof sessionSnapshot === "function"
+      ? { snapshot: () => sessionSnapshot.call(client) }
+      : {}),
     permission: {
       onStatus: (sessionId, status) => permission.onStatus(sessionId, status),
     },

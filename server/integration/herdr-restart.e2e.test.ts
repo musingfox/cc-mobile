@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createHerdrClient } from "../herdr/client";
 import { OkResultSchema } from "../herdr/schema";
 import { resolveSocketPath } from "../herdr/transport";
+import { waitUntil } from "./e2e-harness";
 
 // Live E2E for issue #23's Done criterion — a real claude session survives a
 // server kill + restart: create -> teach codeword -> confirm -> SIGTERM the
@@ -35,6 +36,7 @@ const SERVER_EXIT_DEADLINE_MS = 10_000;
 const CREATE_DEADLINE_MS = 45_000;
 const TURN_DEADLINE_MS = 120_000;
 const LIST_DEADLINE_MS = 10_000;
+const READY_DEADLINE_MS = 60_000;
 const TEST_TIMEOUT_MS = 240_000;
 
 const CODEWORD = "ZEBRA-7";
@@ -187,15 +189,49 @@ async function runTurn(
   prompt: string,
   expected: string,
   label: string,
+  client: ReturnType<typeof createHerdrClient>,
 ): Promise<void> {
   const t = Date.now();
-  ws.send(JSON.stringify({ type: "terminal_send", claudeUuid: sessionId, content: prompt }));
-  const reply = await collector.next(
-    (msg) => (msg.type === "stream_chunk" || msg.type === "error") && msg.sessionId === sessionId,
-    TURN_DEADLINE_MS,
-    `${label} stream_chunk`,
+  // A precaution, not a proven fix: step 8 once answered an `error` frame
+  // whose payload was not printed (2026-08-02), and this send is the one that
+  // follows a restart by ~300ms — far faster than a human taps, and now also
+  // much sooner after the settle, since the turn's end reaches the phone within
+  // a tick of happening. The two candidates are `session_busy` from
+  // send-routing's readiness probe and `session_error` from a throw inside the
+  // `terminal_send` try block (ws.ts). This gate removes the first; the
+  // assertion below prints the payload, so a recurrence names itself instead of
+  // costing another live run. On the passing run it logged nothing — the pane
+  // was ready on the first probe.
+  await waitUntil(
+    async () => {
+      const info = await client.agentGet(sessionId).catch(() => null);
+      if (info === null) return false;
+      const ready = info.agent_status === "idle" || info.agent_status === "done";
+      if (!ready) console.log(`[e2e] ${label} waiting, pane is ${info.agent_status}`);
+      return ready;
+    },
+    READY_DEADLINE_MS,
+    `${label} pane ready to accept a prompt`,
   );
-  expect(reply.type).toBe("stream_chunk");
+  ws.send(JSON.stringify({ type: "terminal_send", claudeUuid: sessionId, content: prompt }));
+  // Matched by content, not by position: the transcript reader delivers every
+  // renderable record since its cursor, and claude's own `user` record — the
+  // prompt echoed back — is one of them (server/transcript/records.ts). The
+  // reply is the assistant chunk carrying `expected`, whichever chunk that is.
+  const reply = await collector.next(
+    (msg) =>
+      msg.sessionId === sessionId &&
+      (msg.type === "error" ||
+        (msg.type === "stream_chunk" &&
+          (msg.chunk as { type?: string }).type === "assistant" &&
+          chunkText(msg).includes(expected))),
+    TURN_DEADLINE_MS,
+    `${label} assistant stream_chunk`,
+  );
+  // The payload, not just the name: an `error` here is the only thing the
+  // server says about why a turn did not happen, and a bare "Received: error"
+  // costs a whole live re-run to see it.
+  expect(reply.type === "error" ? JSON.stringify(reply) : reply.type).toBe("stream_chunk");
   expect((reply.chunk as { type?: string }).type).toBe("assistant");
   expect(chunkText(reply)).toContain(expected);
   await collector.next(
@@ -250,8 +286,8 @@ it.skipIf(!existsSync(socketPath))(
       expect(workspaceId).toBeDefined();
 
       // Steps 3-4: teach the codeword, confirm it landed — two full turns.
-      await runTurn(wsA, collectorA, sessionId, PROMPT_TURN_1, "OK", "step 3 turn 1");
-      await runTurn(wsA, collectorA, sessionId, PROMPT_TURN_2, "YES", "step 4 turn 2");
+      await runTurn(wsA, collectorA, sessionId, PROMPT_TURN_1, "OK", "step 3 turn 1", client);
+      await runTurn(wsA, collectorA, sessionId, PROMPT_TURN_2, "YES", "step 4 turn 2", client);
 
       // Step 5: SIGTERM kills the server process but NOT the pane (D2 live
       // proof: no shutdown handler tears the workspace down anymore).
@@ -295,7 +331,7 @@ it.skipIf(!existsSync(socketPath))(
       // Step 8: third turn on the SAME session recalls the codeword — same live
       // claude, context intact across the restart, driven by a server process
       // that has no registry entry for it at all.
-      await runTurn(wsB, collectorB, sessionId, PROMPT_TURN_3, CODEWORD, "step 8 turn 3");
+      await runTurn(wsB, collectorB, sessionId, PROMPT_TURN_3, CODEWORD, "step 8 turn 3", client);
 
       // Teardown through the mobile protocol; the daemon keeps no residue.
       wsB.send(JSON.stringify({ type: "terminal_teardown", sessionId }));

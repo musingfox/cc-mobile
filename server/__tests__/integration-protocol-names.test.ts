@@ -30,7 +30,7 @@ const knownMessages = new Set([...unionMembers(ClientMessage), ...unionMembers(S
  * message objects, and the e2e suites match on their `type` too. Spelled out
  * rather than pattern-skipped so an unexpected addition still fails.
  */
-const CHUNK_TYPES = new Set(["substring"]);
+const CHUNK_TYPES = new Set(["substring", "assistant"]);
 
 /**
  * Server→client acks that `terminal-control.ts` writes with a bare `ws.send`

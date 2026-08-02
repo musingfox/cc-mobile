@@ -7,6 +7,7 @@ import type { ServerConfig } from "../config";
 import { createHerdrClient } from "../herdr/client";
 import { OkResultSchema } from "../herdr/schema";
 import { resolveSocketPath } from "../herdr/transport";
+import { waitUntil } from "./e2e-harness";
 
 // Live E2E for issue #22's Done criterion — the mobile protocol drives a real
 // herdr-backed claude session end to end: create -> prompt -> reply ->
@@ -28,6 +29,7 @@ const REPO_ROOT = join(import.meta.dir, "..", "..");
 
 const CREATE_DEADLINE_MS = 45_000;
 const TURN_DEADLINE_MS = 120_000;
+const SCREEN_DEADLINE_MS = 10_000;
 const TEST_TIMEOUT_MS = 300_000;
 
 const PROMPT_TURN_1 = "Reply with exactly PONG and nothing else.\nDo not add punctuation.";
@@ -163,15 +165,26 @@ it.skipIf(!existsSync(socketPath))(
       // Step 2: two-line prompt submits as ONE turn; the reply arrives as
       // stream_chunk(assistant) + stream_end, read from claude's transcript
       // when herdr reports the turn settled.
+      //
+      // The assistant chunk is matched by content, not by position: the
+      // transcript reader delivers every renderable record since its cursor,
+      // and on a session whose file did not exist when the cursor was taken
+      // that includes claude's own `user` record — the prompt echoed back
+      // (server/transcript/records.ts). That echo is a real chunk, so "the
+      // first chunk is the reply" is not something delivery ever promised.
       const t2 = Date.now();
       ws.send(
         JSON.stringify({ type: "terminal_send", claudeUuid: sessionId, content: PROMPT_TURN_1 }),
       );
       const reply1 = await collector.next(
         (msg) =>
-          (msg.type === "stream_chunk" || msg.type === "error") && msg.sessionId === sessionId,
+          msg.sessionId === sessionId &&
+          (msg.type === "error" ||
+            (msg.type === "stream_chunk" &&
+              (msg.chunk as { type?: string }).type === "assistant" &&
+              chunkText(msg).includes("PONG"))),
         TURN_DEADLINE_MS,
-        "step 2 stream_chunk",
+        "step 2 assistant stream_chunk containing PONG",
       );
       expect(reply1.type).toBe("stream_chunk");
       expect((reply1.chunk as { type?: string }).type).toBe("assistant");
@@ -190,8 +203,20 @@ it.skipIf(!existsSync(socketPath))(
       const agentInfo = await client.agentGet(paneRef);
       // AgentInfo.agent is the kind label ("claude"); the attach target is .name.
       expect(agentInfo.name).toBe(`ccm-${uuid8}`);
-      const read = await client.paneRead({ pane_id: paneRef, source: "visible", strip_ansi: true });
-      expect(read.text).toContain(PROMPT_TURN_1_FRAGMENT);
+      // Polled, not read once: the reply now reaches the phone as soon as herdr
+      // reports the pane settled, which can be a redraw ahead of the screen the
+      // desktop shows. What is being verified is that the prompt is visible on
+      // the same live pane, not how fast the terminal repaints.
+      await waitUntil(
+        async () => {
+          const screen = await client
+            .paneRead({ pane_id: paneRef, source: "visible", strip_ansi: true })
+            .catch(() => null);
+          return screen?.text.includes(PROMPT_TURN_1_FRAGMENT) ?? false;
+        },
+        SCREEN_DEADLINE_MS,
+        "step 3 the prompt on the pane's visible screen",
+      );
       console.log(`[e2e] step 3 attach identity ccm-${uuid8} in ${Date.now() - t3}ms`);
 
       // Step 4: second turn on the SAME session — multi-turn on one live pane.
@@ -201,9 +226,13 @@ it.skipIf(!existsSync(socketPath))(
       );
       const reply2 = await collector.next(
         (msg) =>
-          (msg.type === "stream_chunk" || msg.type === "error") && msg.sessionId === sessionId,
+          msg.sessionId === sessionId &&
+          (msg.type === "error" ||
+            (msg.type === "stream_chunk" &&
+              (msg.chunk as { type?: string }).type === "assistant" &&
+              chunkText(msg).includes("PONG2"))),
         TURN_DEADLINE_MS,
-        "step 4 stream_chunk",
+        "step 4 assistant stream_chunk containing PONG2",
       );
       expect(reply2.type).toBe("stream_chunk");
       expect(chunkText(reply2)).toContain("PONG2");
