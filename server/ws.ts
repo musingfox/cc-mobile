@@ -68,6 +68,12 @@ export interface WsBackend extends TerminalControlBackend {
    * Optional: only a backend that remounts (herdr) can have any.
    */
   listUnknown?(): string[];
+  /**
+   * Per-uuid agent state for the live sessions. Optional: only a backend with
+   * a status source has any, and its absence costs the client its dot, not its
+   * session list.
+   */
+  listStates?(): Promise<Record<string, "idle" | "running" | "requires_action">>;
   send(params: { claudeUuid: string; content: string }): Promise<void>;
   registerClient(
     claudeUuid: string,
@@ -343,10 +349,23 @@ export function createWsPlugin(
             // stale list to the next reconnect.
             // unknownUuids carries the remount's conservatism to the client: a
             // skipped session is "leave the card alone", not "dead, delete it".
+            // states is the status bootstrap: the subscription only fires on
+            // change, so without it a reloaded client shows no activity until
+            // something happens to move. A lookup failure degrades to {} rather
+            // than withholding the liveness answer the reconcile depends on.
+            let states: Record<string, "idle" | "running" | "requires_action"> = {};
+            try {
+              states = (await backend.listStates?.()) ?? {};
+            } catch (error) {
+              console.warn(
+                `[ws] agent states unavailable: ${error instanceof Error ? error.message : String(error)}`,
+              );
+            }
             ws.send({
               type: "terminal_sessions",
               claudeUuids: backend.listLive(),
               unknownUuids: backend.listUnknown?.() ?? [],
+              states,
             });
             break;
           }

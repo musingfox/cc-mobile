@@ -324,6 +324,14 @@ const TerminalSessionsMessage = z.object({
    * alone — neither ready nor removed.
    */
   unknownUuids: z.array(z.string()),
+  /**
+   * What each live session is doing right now, so the first paint after a
+   * reload is correct instead of waiting for the next status change. Optional
+   * rather than required: unlike the two arrays, a missing map cannot be
+   * misread — it means "no snapshot", which the client already handles. A uuid
+   * absent from the map is "no claim", never "idle".
+   */
+  states: z.record(z.enum(["idle", "running", "requires_action"])).optional(),
 });
 
 export const ServerMessage = z.discriminatedUnion("type", [
