@@ -1,10 +1,11 @@
 /**
- * dead-code-residue.test.ts — DeadModuleResidueScan.
+ * dead-code-residue.test.ts — DeadModuleResidueScan and DeadHistoryPathResidueScan.
  *
  * #25 deleted three whole paths (SDK query, the PTY one-shot chain, the tmux
- * adapter) plus the Playwright suite. This scan is the guard that stops any of
- * them creeping back in via a stray import or a re-added script: every pattern
- * below must have zero hits across `server/` and `client/`.
+ * adapter) plus the Playwright suite; #26 deleted the browse-past-conversations
+ * path on top of them. This scan is the guard that stops any of them creeping
+ * back in via a stray import or a re-added script: every pattern below must
+ * have zero hits across `server/` and `client/`.
  *
  * Patterns are assembled from fragments so this file does not match itself.
  * `docs/` is deliberately out of scope — the ADRs and spike logs describe what
@@ -79,6 +80,10 @@ describe("DeadModuleResidueScan — deleted modules", () => {
     `permission${"-"}bridge`,
     `settings${"-"}loader`,
     `save${"Cached"}Capabilities`,
+    // browse-past-conversations modules and the type they spoke
+    `session${"-"}listing`,
+    `session${"-"}history`,
+    `Session${"List"}Item`,
     // The guard the deleted permission bridge put ahead of every WS case.
     `No permission ${"handler"}`,
   ];
@@ -93,6 +98,15 @@ describe("DeadModuleResidueScan — retired message names", () => {
     `tmux${"_"}`, // the whole tmux_* message family
     `pty${"_"}send`,
     `get${"_"}session_info`,
+    // #26: the browse-past-conversations names, client→server then server→client.
+    `list${"_"}sessions`, // note: `list_terminal_sessions` does not contain this
+    `resume${"_"}session`,
+    `set${"_"}session_title`,
+    `session${"_"}list`,
+    `session${"_"}history`,
+    // `session_created` is deliberately NOT scanned for the same reason as
+    // `new_session` below: it is an ordinary payload name that appears as a
+    // debug-log sample. Its refusal is proved at the schema level instead.
     // `new_session` / `send` / `command` are deliberately NOT scanned: they are
     // ordinary English words that appear as debug-log payloads and in prose,
     // and the schema-level proof that they are refused lives in
@@ -111,6 +125,12 @@ describe("DeadModuleResidueScan — dependency surface", () => {
     // deleted with the browse-past-conversations path.
     const production = hits(sdk).filter((p) => !p.includes(".test.") && !p.includes("__tests__"));
     expect(production.sort()).toEqual([]);
+  });
+
+  test("the agent SDK dependency is gone from package.json", () => {
+    const sdk = `@anthropic-ai/claude${"-"}agent-sdk`;
+    expect(Object.keys(packageJson.dependencies)).not.toContain(sdk);
+    expect(Object.keys(packageJson.devDependencies)).not.toContain(sdk);
   });
 
   test("the native pty dependency is gone from package.json", () => {
@@ -138,6 +158,8 @@ describe("DeadModuleResidueScan — deleted files stay deleted", () => {
     join("server", `permission${"-"}bridge.ts`),
     join("server", `settings${"-"}loader.ts`),
     join("server", `tmux${"-"}control.ts`),
+    join("server", `session${"-"}listing.ts`),
+    join("server", `session${"-"}history.ts`),
   ])("%s does not exist", (relative) => {
     expect(existsSync(join(repoRoot, relative))).toBe(false);
   });

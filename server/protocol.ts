@@ -109,10 +109,10 @@ const TerminalTeardownMessage = z.object({
   claudeUuid: z.string().min(1),
 });
 
-// Connection-scoped query, deliberately separate from list_sessions: that one
-// lists claude's on-disk SDK sessions, this one lists the terminal sessions
-// this server is currently routing. A reconnecting client asks for it to find
-// out which of its restored cards are still real.
+// Connection-scoped query: which terminal sessions is this server currently
+// routing? A reconnecting client asks for it to find out which of its restored
+// cards are still real. It is the only listing left — browsing claude's
+// on-disk sessions was deleted in #26.
 const ListTerminalSessionsMessage = z.object({
   type: z.literal("list_terminal_sessions"),
 });
