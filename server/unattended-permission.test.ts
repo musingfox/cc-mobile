@@ -36,6 +36,11 @@ function makeRouting(responseRelay = createPtyResponseRelay()) {
     client: {
       paneSendText: async () => {},
       paneSendKeys: async () => {},
+      // Readiness answers "idle with an empty composer" so the injection gate
+      // never refuses here: what these cases assert is the permission
+      // countdown, not the composer check.
+      agentGet: async () => ({ agent_status: "idle" }),
+      paneRead: async () => ({ text: "" }),
     },
     resolvePane: (claudeUuid) => claudeUuid,
     responseRelay,

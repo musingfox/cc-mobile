@@ -118,6 +118,16 @@ describe("DeadModuleResidueScan — retired message names", () => {
   });
 });
 
+describe("DeadModuleResidueScan — refusals that must not exist", () => {
+  test("no code refuses a prompt because a pane runs without a permission gate", () => {
+    // The human gate ruled that a `bypassPermissions` pane is drivable and
+    // merely flagged (Decision H4). A refusal code for it must never appear:
+    // the badge is the whole obligation, and a second rule pointing the other
+    // way would silently win.
+    expect(hits(`session${"_"}ungated`)).toEqual([]);
+  });
+});
+
 describe("DeadModuleResidueScan — dependency surface", () => {
   test("no production file imports the agent SDK any more", () => {
     const sdk = `@anthropic-ai/claude${"-"}agent-sdk`;

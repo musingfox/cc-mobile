@@ -98,6 +98,13 @@ export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalB
   const routing = createHerdrSendRouting({
     client,
     resolvePane: registry.resolvePane,
+    // Pane-keyed fallback: a session the user opened in their own terminal has
+    // no registry entry, and the daemon's listing is the only thing that knows
+    // it exists (Decision H1).
+    listDrivablePanes: async () =>
+      (await listSessionDescriptors())
+        .filter((session) => session.drivable)
+        .map((session) => session.sessionId),
     responseRelay: options.responseRelay,
   });
 

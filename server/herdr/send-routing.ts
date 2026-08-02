@@ -14,6 +14,7 @@
  */
 
 import type { createPtyResponseRelay } from "../pty-response-relay";
+import { composerHasTypedText } from "./prompt-box";
 
 export type ClientSink = (msg: Record<string, unknown>) => void;
 
@@ -21,14 +22,27 @@ export type ClientSink = (msg: Record<string, unknown>) => void;
 export interface HerdrSendClient {
   paneSendText(paneId: string, text: string): Promise<void>;
   paneSendKeys(paneId: string, keys: string[]): Promise<void>;
+  /** Readiness probe: what is this pane's claude doing right now? */
+  agentGet(target: string): Promise<{ agent_status?: string }>;
+  /** Readiness probe: what is on its screen right now? */
+  paneRead(params: { pane_id: string; source: "detection" }): Promise<{ text: string }>;
 }
 
 export interface HerdrSendRoutingOptions {
   client: HerdrSendClient;
   /** claudeUuid → herdr pane id; the registry owns the mapping. */
   resolvePane: (claudeUuid: string) => string | undefined;
+  /**
+   * Pane ids the daemon reports as drivable. The fallback for a session key
+   * that IS a pane id — every session the user opened in their own terminal,
+   * which this process's registry has never heard of (Decision H1/H5).
+   */
+  listDrivablePanes?: () => Promise<string[]>;
   responseRelay: ReturnType<typeof createPtyResponseRelay>;
 }
+
+/** Statuses in which claude is waiting for input rather than doing something. */
+const READY_STATUSES = new Set(["idle", "done"]);
 
 export interface HerdrSendParams {
   claudeUuid: string;
@@ -37,6 +51,7 @@ export interface HerdrSendParams {
 
 export function createHerdrSendRouting(options: HerdrSendRoutingOptions) {
   const { client, resolvePane, responseRelay: relay } = options;
+  const listDrivablePanes = options.listDrivablePanes ?? (async () => []);
 
   const clientSinks = new Map<string, ClientSink>();
   const ownerToUuids = new Map<unknown, Set<string>>();
@@ -61,10 +76,71 @@ export function createHerdrSendRouting(options: HerdrSendRoutingOptions) {
     }
   }
 
+  /**
+   * The pane this session key addresses.
+   *
+   * A key this process launched resolves through the registry. Any other key is
+   * treated as a pane id and checked against the daemon's own drivable list,
+   * which is what lets the phone continue a session the user started in their
+   * own terminal — the registry has no entry for one and never will.
+   */
+  async function resolveTarget(sessionKey: string): Promise<string | undefined> {
+    const own = resolvePane(sessionKey);
+    if (own !== undefined) return own;
+    try {
+      return (await listDrivablePanes()).includes(sessionKey) ? sessionKey : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Whether a prompt may be typed into this pane right now.
+   *
+   * Two refusals only: claude is mid-turn, or a human has half-typed something
+   * in the composer. The pane's permission mode is deliberately NOT consulted —
+   * an ungated pane is driven exactly like any other, flagged rather than
+   * blocked, by the owner's own ruling (Decision H4).
+   *
+   * A probe that cannot be completed does not refuse: a daemon hiccup must not
+   * silently swallow the user's prompt, and the injection itself reports its own
+   * failure.
+   */
+  async function isReady(paneId: string): Promise<boolean> {
+    try {
+      const status = (await client.agentGet(paneId)).agent_status;
+      if (typeof status === "string" && !READY_STATUSES.has(status)) return false;
+    } catch {
+      return true;
+    }
+    try {
+      const read = await client.paneRead({ pane_id: paneId, source: "detection" });
+      return !composerHasTypedText(read.text);
+    } catch {
+      return true;
+    }
+  }
+
   async function send(params: HerdrSendParams): Promise<void> {
     const { claudeUuid, content } = params;
     if (!clientSinks.has(claudeUuid)) {
       // Unregistered: no RPC, no waiter (the port's send never throws).
+      return;
+    }
+
+    const paneId = await resolveTarget(claudeUuid);
+
+    // Readiness is decided BEFORE the waiter is armed: a refusal must leave no
+    // trace at all — no injection, no pending turn, nothing for the UI to spin
+    // on.
+    if (paneId !== undefined && !(await isReady(paneId))) {
+      clientSinks.get(claudeUuid)?.({
+        type: "error",
+        sessionId: claudeUuid,
+        code: "session_busy",
+        message:
+          "That session is busy — it is mid-turn or someone has started typing in the terminal. Nothing was sent.",
+      });
       return;
     }
 
@@ -77,7 +153,6 @@ export function createHerdrSendRouting(options: HerdrSendRoutingOptions) {
     const responsePromise = relay.awaitResponse(claudeUuid);
 
     try {
-      const paneId = resolvePane(claudeUuid);
       if (paneId === undefined) {
         throw new Error("no pane mapping");
       }
