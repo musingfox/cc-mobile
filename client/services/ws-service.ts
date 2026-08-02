@@ -375,6 +375,12 @@ class WsService {
   // back without a claudeUuid, so a failure clears every pending optimistic
   // session rather than guessing which one it belongs to.
   private pendingTerminalCreates = new Set<string>();
+  // The prompt each session last handed to the server, with the id of the
+  // optimistic bubble it drew for it. A refusal (`session_busy`) is the one
+  // reply that means the turn never happened: the bubble has to come back off
+  // the screen and the text has to go back in the composer, or the user loses
+  // what they typed to a send that was never made.
+  private lastOptimisticSend = new Map<string, { messageId: string; prompt: string }>();
 
   private sendMessage(msg: Record<string, unknown>) {
     if (!this.ws) return;
@@ -1079,9 +1085,23 @@ class WsService {
           break;
         }
 
-        // A refused prompt is not a turn: keep the composer's text and just say
-        // why, rather than writing an assistant message into the transcript.
+        // A refused prompt is not a turn: undo the optimistic send instead of
+        // writing an assistant message into the transcript. Nothing reached
+        // claude, so the bubble claiming otherwise comes off and the prompt goes
+        // back where the user can edit and retry it — the composer was cleared
+        // the moment the send left, long before this refusal arrived.
         if (sessionId && msg.code === "session_busy") {
+          const attempted = this.lastOptimisticSend.get(sessionId);
+          if (attempted) {
+            this.lastOptimisticSend.delete(sessionId);
+            store.removeMessage(sessionId, attempted.messageId);
+            // Only into the composer it was typed in, and only while that
+            // composer is empty: whatever the user has typed since is newer
+            // than what was refused and must not be overwritten.
+            if (store.activeSessionId === sessionId && store.inputDraft.trim() === "") {
+              store.setInputDraft(attempted.prompt);
+            }
+          }
           toastService.info(msg.message as string);
           store.setStreaming(sessionId, false);
           break;
@@ -1175,12 +1195,14 @@ class WsService {
   terminalSend(sessionId: string, prompt: string) {
     if (!this.ws) return;
 
+    const messageId = `user-${Date.now()}`;
     useAppStore.getState().addMessage(sessionId, {
-      id: `user-${Date.now()}`,
+      id: messageId,
       role: "user",
       content: prompt,
       timestamp: Date.now(),
     });
+    this.lastOptimisticSend.set(sessionId, { messageId, prompt });
 
     this.sendMessage({ type: "terminal_send", claudeUuid: sessionId, content: prompt });
 

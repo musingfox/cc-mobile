@@ -247,6 +247,7 @@ interface AppState {
 
   // Messages
   addMessage: (sessionId: string, message: Message) => void;
+  removeMessage: (sessionId: string, messageId: string) => void;
   appendToLastAssistantMessage: (sessionId: string, text: string) => void;
   startStreamMessage: (sessionId: string, messageId: string, text: string) => void;
 
@@ -487,6 +488,19 @@ export const useAppStore = create<AppState>((set) => ({
       sessions: updateSession(state.sessions, sessionId, (s) => ({
         ...s,
         messages: [...s.messages, message],
+      })),
+    })),
+
+  /**
+   * Takes a message back out of the transcript. Only for a bubble that turned
+   * out never to have happened — an optimistic user message the server refused
+   * to send must not be left on screen claiming it was sent.
+   */
+  removeMessage: (sessionId, messageId) =>
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (s) => ({
+        ...s,
+        messages: s.messages.filter((m) => m.id !== messageId),
       })),
     })),
 

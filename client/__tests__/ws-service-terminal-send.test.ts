@@ -33,7 +33,7 @@ describe("wsService.terminalSend", () => {
     fake = new FakeWebSocket();
     prevWs = getInternal().ws;
     getInternal().ws = fake as unknown as WebSocket;
-    useAppStore.setState({ sessions: new Map(), activeSessionId: null });
+    useAppStore.setState({ sessions: new Map(), activeSessionId: null, inputDraft: "" });
     useAppStore.getState().addSession("s1", "/cwd", { ready: true });
   });
 
@@ -92,6 +92,57 @@ describe("wsService.terminalSend", () => {
     const last = session?.messages[session.messages.length - 1];
     expect(last?.content).toBe("Error: gone");
     expect(session?.isStreaming).toBe(false);
+  });
+
+  test("session_busy puts the prompt back in the composer and takes the bubble away", () => {
+    useAppStore.getState().setActiveSession("s1");
+    wsService.terminalSend("s1", "the thing I typed");
+
+    getInternal().handleMessage({
+      type: "error",
+      sessionId: "s1",
+      code: "session_busy",
+      message: "that session is busy — nothing was sent",
+    });
+
+    const session = useAppStore.getState().sessions.get("s1");
+    expect(session?.messages.length).toBe(0);
+    expect(session?.isStreaming).toBe(false);
+    expect(useAppStore.getState().inputDraft).toBe("the thing I typed");
+  });
+
+  test("session_busy never overwrites text the user typed after the refused send", () => {
+    useAppStore.getState().setActiveSession("s1");
+    wsService.terminalSend("s1", "refused prompt");
+    useAppStore.getState().setInputDraft("something newer");
+
+    getInternal().handleMessage({
+      type: "error",
+      sessionId: "s1",
+      code: "session_busy",
+      message: "busy",
+    });
+
+    // The bubble still goes, because that send genuinely did not happen.
+    expect(useAppStore.getState().sessions.get("s1")?.messages.length).toBe(0);
+    expect(useAppStore.getState().inputDraft).toBe("something newer");
+  });
+
+  test("session_busy for a session the user has navigated away from leaves the composer alone", () => {
+    useAppStore.getState().addSession("s2", "/cwd", { ready: true });
+    useAppStore.getState().setActiveSession("s1");
+    wsService.terminalSend("s1", "refused prompt");
+    useAppStore.getState().setActiveSession("s2");
+
+    getInternal().handleMessage({
+      type: "error",
+      sessionId: "s1",
+      code: "session_busy",
+      message: "busy",
+    });
+
+    expect(useAppStore.getState().sessions.get("s1")?.messages.length).toBe(0);
+    expect(useAppStore.getState().inputDraft).toBe("");
   });
 
   test("a second turn emits another terminal_send and never a terminal_create", () => {
