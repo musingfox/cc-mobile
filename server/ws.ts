@@ -381,7 +381,19 @@ export function createWsPlugin(
             }
             ws.send({
               type: "terminal_sessions",
-              sessions,
+              // Projected field by field: the backend's descriptor also carries
+              // the workspace teardown needs, which is nobody's business on the
+              // wire.
+              sessions: sessions.map((session) => ({
+                sessionId: session.sessionId,
+                agentSessionValue: session.agentSessionValue,
+                cwd: session.cwd,
+                origin: session.origin,
+                drivable: session.drivable,
+                readable: session.readable,
+                gated: session.gated,
+                ...(session.state ? { state: session.state } : {}),
+              })),
               claudeUuids: sessions.map((session) => session.sessionId),
               states,
             });

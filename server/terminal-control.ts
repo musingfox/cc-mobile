@@ -19,8 +19,12 @@ export interface TerminalControlBackend {
     claudeUuid: string;
     cwd: string;
   }): Promise<{ name: string; paneRef: string; settingsPath: string }>;
-  /** Idempotent: an unknown uuid resolves to `{killed:false}` rather than throwing. */
-  teardown(claudeUuid: string): Promise<{ killed: boolean }>;
+  /**
+   * Idempotent: an unknown session resolves to `{killed:false}` rather than
+   * throwing. A pane cc-mobile did not launch answers `{killed:false,
+   * reason:"not_owned"}` and issues no RPC at all (Decision M13).
+   */
+  teardown(sessionId: string): Promise<{ killed: boolean; reason?: "not_owned" }>;
 }
 
 export interface TerminalControlDeps {
@@ -75,20 +79,45 @@ export async function handleTerminalCreate(
 }
 
 /**
- * Tears down the terminal session for `claudeUuid`, replying with
- * `terminal_teardown_result`. An unknown uuid is not an error — it reports
- * `killed:false`.
+ * Tears down the session, replying with `terminal_teardown_result`. An unknown
+ * session is not an error — it reports `killed:false`.
+ *
+ * A session cc-mobile does not own is refused: the phone renders a close control
+ * on every card, and on a foreign card honouring it would close the terminal the
+ * user is sitting in (Decision M13). The reply carries both key names during the
+ * migration window, so a client on either side of the re-key can match it.
  */
 export async function handleTerminalTeardown(
-  msg: { claudeUuid: string },
+  msg: { sessionId?: string; claudeUuid?: string },
   deps: Pick<TerminalControlDeps, "backend" | "send">,
 ): Promise<void> {
   const { backend, send } = deps;
+  const sessionId = msg.sessionId ?? msg.claudeUuid;
+  if (!sessionId) {
+    send({
+      type: "error",
+      code: "invalid_message",
+      message: "terminal_teardown requires sessionId",
+    });
+    return;
+  }
+
   try {
-    const result = await backend.teardown(msg.claudeUuid);
+    const result = await backend.teardown(sessionId);
+    if (result.reason === "not_owned") {
+      send({
+        type: "error",
+        code: "session_not_owned",
+        sessionId,
+        message:
+          "This session belongs to a terminal you opened yourself; cc-mobile will not close it.",
+      });
+      return;
+    }
     send({
       type: "terminal_teardown_result",
-      claudeUuid: msg.claudeUuid,
+      sessionId,
+      claudeUuid: sessionId,
       killed: result.killed,
     });
   } catch (error) {

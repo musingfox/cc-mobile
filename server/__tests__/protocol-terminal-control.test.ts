@@ -58,13 +58,23 @@ describe("ClientMessage — terminal_teardown", () => {
     expect(result.data.claudeUuid).toBe("u1");
   });
 
-  it("rejects a missing claudeUuid", () => {
-    const result = ClientMessage.safeParse({ type: "terminal_teardown" });
-    expect(result.success).toBe(false);
+  it("accepts the pane-keyed sessionId as well as the legacy claudeUuid", () => {
+    // Both names travel during the re-key window (Decision H5): a cached bundle
+    // still sends claudeUuid, a current one sends the listed sessionId.
+    expect(
+      ClientMessage.safeParse({ type: "terminal_teardown", sessionId: "w3V:p1" }).success,
+    ).toBe(true);
+    // Neither key is a malformed request the handler answers with invalid_message
+    // rather than a teardown of nothing.
+    expect(ClientMessage.safeParse({ type: "terminal_teardown" }).success).toBe(true);
   });
 
-  it("rejects an empty claudeUuid", () => {
-    const result = ClientMessage.safeParse({ type: "terminal_teardown", claudeUuid: "" });
-    expect(result.success).toBe(false);
+  it("rejects an empty key under either name", () => {
+    expect(ClientMessage.safeParse({ type: "terminal_teardown", claudeUuid: "" }).success).toBe(
+      false,
+    );
+    expect(ClientMessage.safeParse({ type: "terminal_teardown", sessionId: "" }).success).toBe(
+      false,
+    );
   });
 });

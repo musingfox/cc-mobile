@@ -31,6 +31,12 @@ export const E2E_LABEL_PREFIX = "ccme2e-";
 export interface SessionDescriptor {
   /** herdr `pane_id` — the wire session key and every drive RPC's target. */
   sessionId: string;
+  /**
+   * The workspace holding the pane. Server-side only (the transport projects
+   * the wire fields): teardown closes workspaces, and guessing one out of a
+   * pane id would be an invariant nobody promised.
+   */
+  workspaceId: string;
   /** claude session uuid: the transcript key, `null` on a pane herdr has none for. */
   agentSessionValue: string | null;
   cwd: string;
@@ -145,6 +151,7 @@ export async function listClaudeSessions(
 
       return {
         sessionId: agent.pane_id,
+        workspaceId: agent.workspace_id,
         agentSessionValue,
         cwd: live.cwd ?? live.foreground_cwd ?? cwdByPane.get(agent.pane_id) ?? "",
         origin: WORKSPACE_LABEL_PATTERN.test(label) ? "self" : "foreign",

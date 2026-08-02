@@ -91,12 +91,45 @@ export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalB
     getSink: (claudeUuid) => routing.getClient(claudeUuid),
   });
 
-  async function teardown(claudeUuid: string) {
-    statusEvents.stop(claudeUuid);
-    // Kill first, then cancel the waiter.
-    const result = await registry.teardown(claudeUuid);
-    routing.teardown(claudeUuid);
-    return result;
+  async function listSessionDescriptors(): Promise<SessionDescriptor[]> {
+    if (typeof client.agentList !== "function") return [];
+    return listClaudeSessions({
+      client: client as SessionListingClient,
+      suppressLabel: options.suppressSessionLabel,
+    });
+  }
+
+  /**
+   * Closes a session — but only one cc-mobile started.
+   *
+   * Under the global listing the phone can see the user's own terminal
+   * sessions, and the same close control sits on every card. `workspace.close`
+   * on a foreign pane would kill a terminal the user is working in, so a pane
+   * whose workspace carries no `ccm-<uuid>` label is refused outright, with no
+   * RPC issued at all (Decision M13). Ownership is read from the label, not from
+   * this process's registry, so it survives a server restart.
+   */
+  async function teardown(sessionKey: string) {
+    // A session this process launched: routed by uuid, torn down as before.
+    if (registry.hasSession(sessionKey).present) {
+      statusEvents.stop(sessionKey);
+      // Kill first, then cancel the waiter.
+      const result = await registry.teardown(sessionKey);
+      routing.teardown(sessionKey);
+      return result;
+    }
+
+    const match = (await listSessionDescriptors()).find(
+      (session) => session.sessionId === sessionKey,
+    );
+    // Already gone from the daemon: idempotent, and nothing to close.
+    if (!match) return { killed: false };
+    if (match.origin === "foreign") return { killed: false, reason: "not_owned" as const };
+
+    await client.call("workspace.close", { workspace_id: match.workspaceId });
+    statusEvents.stop(sessionKey);
+    routing.teardown(sessionKey);
+    return { killed: true };
   }
 
   return {
@@ -118,13 +151,7 @@ export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalB
      * pane that outlived a server restart — appear without any rediscovery step
      * (Decision M12).
      */
-    async listSessionDescriptors(): Promise<SessionDescriptor[]> {
-      if (typeof client.agentList !== "function") return [];
-      return listClaudeSessions({
-        client: client as SessionListingClient,
-        suppressLabel: options.suppressSessionLabel,
-      });
-    },
+    listSessionDescriptors,
     /**
      * One RPC regardless of session count — the join happens locally against
      * the uuid→pane registry, so N live sessions still cost one round trip.

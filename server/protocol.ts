@@ -104,9 +104,16 @@ const TerminalCreateMessage = z.object({
   cwd: z.string().min(1),
 });
 
+/**
+ * Close a session. The key is the session id the server listed (herdr's pane
+ * id, Decision H5); `claudeUuid` is the same field under its pre-#29 name and
+ * stays accepted so a cached bundle can still close its own sessions. Exactly
+ * one of the two is required.
+ */
 const TerminalTeardownMessage = z.object({
   type: z.literal("terminal_teardown"),
-  claudeUuid: z.string().min(1),
+  sessionId: z.string().min(1).optional(),
+  claudeUuid: z.string().min(1).optional(),
 });
 
 // Connection-scoped query: which terminal sessions is this server currently

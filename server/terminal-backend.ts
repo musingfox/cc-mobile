@@ -22,6 +22,13 @@ export interface CreateSessionInput {
 
 export interface TeardownResult {
   killed: boolean;
+  /**
+   * Why nothing was killed, when the answer is not simply "no such session".
+   * `not_owned` means the pane belongs to a terminal the user opened themselves:
+   * closing it would kill their conversation, so no RPC is issued at all
+   * (Decision M13).
+   */
+  reason?: "not_owned";
 }
 
 export interface TerminalSendParams {

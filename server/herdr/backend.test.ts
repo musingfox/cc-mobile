@@ -333,3 +333,101 @@ describe("HerdrStartupGate", () => {
     expect(backend.listLive()).toEqual([]);
   });
 });
+
+// ── TeardownOwnershipGuard ───────────────────────────────────────────────────
+
+describe("TeardownOwnershipGuard", () => {
+  const SELF_UUID = "3f2a9b01-1111-4222-8333-444455556666";
+
+  /** A daemon holding one cc-mobile workspace (w1) and one the user opened (w9). */
+  function listingBackend() {
+    const calls: { method: string; params: unknown }[] = [];
+    const panes = [
+      { pane_id: "w1:p1", workspace_id: "w1" },
+      { pane_id: "w9:p1", workspace_id: "w9" },
+    ];
+    const agentInfo = (paneId: string, workspaceId: string) => ({
+      terminal_id: "t1",
+      agent_status: "idle",
+      workspace_id: workspaceId,
+      tab_id: `${workspaceId}:t1`,
+      pane_id: paneId,
+      focused: false,
+      revision: 1,
+      agent: "claude",
+      cwd: "/repo",
+      agent_session: { kind: "id", value: "a21273d4-77e6-43dc-b9cb-3647561d1192" },
+    });
+
+    const client = {
+      call: async (method: string, params: unknown) => {
+        calls.push({ method, params });
+        if (method === "pane.process_info") {
+          return {
+            type: "pane_process_info",
+            process_info: {
+              pane_id: (params as { pane_id: string }).pane_id,
+              foreground_processes: [
+                { pid: 1, argv0: "claude", argv: ["claude", "--permission-mode", "default"] },
+              ],
+            },
+          };
+        }
+        return { type: "ok" };
+      },
+      agentGet: async (target: string) => {
+        const pane = panes.find((entry) => entry.pane_id === target);
+        if (!pane) throw new Error("agent_not_found");
+        return agentInfo(pane.pane_id, pane.workspace_id);
+      },
+      agentList: async () => panes.map((pane) => agentInfo(pane.pane_id, pane.workspace_id)),
+      sessionSnapshot: async () => ({
+        version: "0.7.5",
+        protocol: 17,
+        workspaces: [
+          { workspace_id: "w1", label: `ccm-${SELF_UUID}` },
+          { workspace_id: "w9", label: "dev" },
+        ],
+        panes: [],
+        agents: [],
+      }),
+      paneSendText: async () => {},
+      paneSendKeys: async () => {},
+      subscribeEvents: async () => ({ stop: () => {} }),
+    };
+
+    const backend = createHerdrBackend({
+      client: client as unknown as NonNullable<HerdrBackendOptions["client"]>,
+      responseRelay: createPtyResponseRelay(),
+    });
+    return { backend, calls };
+  }
+
+  test("closes the workspace of a pane cc-mobile launched", async () => {
+    const { backend, calls } = listingBackend();
+
+    const result = await backend.teardown("w1:p1");
+
+    expect(result).toEqual({ killed: true });
+    const closes = calls.filter((call) => call.method === "workspace.close");
+    expect(closes).toEqual([{ method: "workspace.close", params: { workspace_id: "w1" } }]);
+  });
+
+  test("refuses a pane the user opened, issuing no RPC at all", async () => {
+    const { backend, calls } = listingBackend();
+
+    const result = await backend.teardown("w9:p1");
+
+    expect(result).toEqual({ killed: false, reason: "not_owned" });
+    expect(calls.some((call) => call.method === "workspace.close")).toBe(false);
+  });
+
+  test("a session the daemon no longer has is closed idempotently, not an error", async () => {
+    const { backend, calls } = listingBackend();
+
+    const result = await backend.teardown("gone:p1");
+
+    expect(result).toEqual({ killed: false });
+    expect(calls.some((call) => call.method === "workspace.close")).toBe(false);
+  });
+});

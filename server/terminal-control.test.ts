@@ -155,7 +155,9 @@ describe("handleTerminalTeardown", () => {
     await handleTerminalTeardown({ claudeUuid: "u1" }, { backend, send });
 
     expect(teardownCalls).toEqual(["u1"]);
-    expect(sent).toEqual([{ type: "terminal_teardown_result", claudeUuid: "u1", killed: true }]);
+    expect(sent).toEqual([
+      { type: "terminal_teardown_result", sessionId: "u1", claudeUuid: "u1", killed: true },
+    ]);
   });
 
   it("reports killed:false for an unknown uuid without throwing", async () => {
@@ -165,8 +167,44 @@ describe("handleTerminalTeardown", () => {
     await handleTerminalTeardown({ claudeUuid: "ghost" }, { backend, send });
 
     expect(sent).toEqual([
-      { type: "terminal_teardown_result", claudeUuid: "ghost", killed: false },
+      { type: "terminal_teardown_result", sessionId: "ghost", claudeUuid: "ghost", killed: false },
     ]);
+  });
+
+  it("refuses a session the user opened in their own terminal", async () => {
+    const asked: string[] = [];
+    const { backend } = makeFakeBackend({
+      teardown: async (sessionId) => {
+        asked.push(sessionId);
+        return { killed: false, reason: "not_owned" as const };
+      },
+    });
+    const { send, sent } = makeSendSpy();
+
+    await handleTerminalTeardown({ sessionId: "w9:p1" }, { backend, send });
+
+    // The refusal is the backend's (it issues no RPC); the handler's job is to
+    // say why, so the card can stay and explain itself instead of vanishing.
+    expect(asked).toEqual(["w9:p1"]);
+    expect(sent).toEqual([
+      {
+        type: "error",
+        code: "session_not_owned",
+        sessionId: "w9:p1",
+        message:
+          "This session belongs to a terminal you opened yourself; cc-mobile will not close it.",
+      },
+    ]);
+  });
+
+  it("answers invalid_message when neither key is present", async () => {
+    const { backend, teardownCalls } = makeFakeBackend();
+    const { send, sent } = makeSendSpy();
+
+    await handleTerminalTeardown({}, { backend, send });
+
+    expect(teardownCalls).toEqual([]);
+    expect(sent[0]).toMatchObject({ type: "error", code: "invalid_message" });
   });
 
   it("maps a backend rejection to terminal_error", async () => {
