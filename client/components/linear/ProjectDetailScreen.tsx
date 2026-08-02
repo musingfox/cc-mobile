@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Icon } from "../../design/icons";
 import { tokens as T } from "../../design/tokens";
 import { removeProject } from "../../services/projects";
@@ -6,7 +6,6 @@ import { toastService } from "../../services/toast-service";
 import { wsService } from "../../services/ws-service";
 import { useAppStore } from "../../stores/app-store";
 import type { LinearScreen } from "./AppShell";
-import RenameSessionSheet from "./RenameSessionSheet";
 import "./projects.css";
 import "./sessions.css";
 
@@ -14,17 +13,6 @@ interface Props {
   cwd: string;
   onNavigate: (screen: LinearScreen) => void;
   onBack: () => void;
-}
-
-function relativeTime(ts: number): string {
-  const secs = Math.floor((Date.now() - ts) / 1000);
-  if (secs < 60) return "just now";
-  const m = Math.floor(secs / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  return `${d}d ago`;
 }
 
 function basename(path: string): string {
@@ -39,51 +27,30 @@ function tildeify(path: string): string {
 interface SessionRowItem {
   key: string;
   title: string;
-  branch?: string;
   age: string;
-  liveness: "live" | "idle" | "recent";
+  live: boolean;
   onClick: () => void;
-  rename?: {
-    sdkSessionId: string;
-    cwd: string;
-    initialTitle: string;
-  };
-}
-
-interface RenameTarget {
-  sdkSessionId: string;
-  cwd: string;
-  initialTitle: string;
 }
 
 export default function ProjectDetailScreen({ cwd, onNavigate, onBack }: Props) {
   const sessions = useAppStore((s) => s.sessions);
-  const sessionList = useAppStore((s) => s.sessionList);
   const activeSessionId = useAppStore((s) => s.activeSessionId);
   const setActiveSession = useAppStore((s) => s.setActiveSession);
-  const connectionState = useAppStore((s) => s.connectionState);
 
   const [menuOpen, setMenuOpen] = useState(false);
-  const [renameTarget, setRenameTarget] = useState<RenameTarget | null>(null);
 
-  useEffect(() => {
-    if (connectionState === "connected" && sessionList.length === 0) {
-      wsService.listSessions();
-    }
-  }, [connectionState, sessionList.length]);
-
+  // Only sessions herdr is actually running. Past conversations are not
+  // listable any more — there is nothing to reopen read-only.
   const rows = useMemo<SessionRowItem[]>(() => {
     const items: SessionRowItem[] = [];
-    const seenSdkIds = new Set<string>();
 
     for (const [id, s] of sessions.entries()) {
       if (s.cwd !== cwd) continue;
-      if (s.sdkSessionId) seenSdkIds.add(s.sdkSessionId);
       items.push({
         key: `mem-${id}`,
         title: s.messages.length > 0 ? `${s.messages.length} msgs` : "new session",
         age: id === activeSessionId ? "current" : "open",
-        liveness: s.isStreaming ? "live" : "idle",
+        live: s.agentState === "running",
         onClick: () => {
           setActiveSession(id);
           onNavigate("chat");
@@ -91,34 +58,8 @@ export default function ProjectDetailScreen({ cwd, onNavigate, onBack }: Props) 
       });
     }
 
-    for (const s of sessionList) {
-      if (s.cwd !== cwd) continue;
-      if (seenSdkIds.has(s.sdkSessionId)) continue;
-      const initialTitle = s.customTitle ?? s.displayTitle ?? "";
-      items.push({
-        key: `srv-${s.sdkSessionId}`,
-        title: s.displayTitle || basename(s.cwd),
-        branch: s.gitBranch,
-        age: relativeTime(s.lastModified),
-        liveness: "recent",
-        onClick: () => {
-          try {
-            wsService.resumeSession(s.sdkSessionId, s.cwd);
-            onNavigate("chat");
-          } catch {
-            toastService.error("Could not resume session");
-          }
-        },
-        rename: {
-          sdkSessionId: s.sdkSessionId,
-          cwd: s.cwd,
-          initialTitle,
-        },
-      });
-    }
-
     return items;
-  }, [sessions, sessionList, cwd, activeSessionId, setActiveSession, onNavigate]);
+  }, [sessions, cwd, activeSessionId, setActiveSession, onNavigate]);
 
   const handleNewSession = () => {
     wsService.createTerminalSession(cwd);
@@ -194,44 +135,17 @@ export default function ProjectDetailScreen({ cwd, onNavigate, onBack }: Props) 
             rows.map((r) => (
               <div key={r.key} className="lin-session-row-wrap">
                 <button type="button" className="lin-session-row" onClick={r.onClick}>
-                  {r.liveness !== "recent" && <span className="lin-session-rail" />}
+                  <span className="lin-session-rail" />
                   <div className="lin-session-title">{r.title}</div>
                   <div className="lin-session-meta">
                     <span className="lin-session-meta-left">
-                      {r.branch ? (
-                        <>
-                          <Icon name="branch" size={10} color={T.fg3} />
-                          <span>{r.branch}</span>
-                          <span className="lin-dot-sep">·</span>
-                        </>
-                      ) : null}
                       <span>{r.age}</span>
                     </span>
-                    {r.liveness !== "recent" && (
-                      <span
-                        className={`lin-session-live ${
-                          r.liveness === "live" ? "is-live" : "is-idle"
-                        }`}
-                      >
-                        ● {r.liveness === "live" ? "Live" : "Active"}
-                      </span>
-                    )}
+                    <span className={`lin-session-live ${r.live ? "is-live" : "is-idle"}`}>
+                      ● {r.live ? "Live" : "Active"}
+                    </span>
                   </div>
                 </button>
-                {r.rename && (
-                  <button
-                    type="button"
-                    className="lin-session-rename"
-                    aria-label="Rename session"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      // biome-ignore lint/style/noNonNullAssertion: guarded by `r.rename` above
-                      setRenameTarget(r.rename!);
-                    }}
-                  >
-                    <Icon name="dots" size={14} color={T.fg3} />
-                  </button>
-                )}
               </div>
             ))
           )}
@@ -244,14 +158,6 @@ export default function ProjectDetailScreen({ cwd, onNavigate, onBack }: Props) 
           <span>New session in this project</span>
         </button>
       </footer>
-
-      <RenameSessionSheet
-        open={renameTarget !== null}
-        onClose={() => setRenameTarget(null)}
-        sdkSessionId={renameTarget?.sdkSessionId ?? ""}
-        cwd={renameTarget?.cwd ?? ""}
-        initialTitle={renameTarget?.initialTitle ?? ""}
-      />
     </div>
   );
 }
