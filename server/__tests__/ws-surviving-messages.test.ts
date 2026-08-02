@@ -178,6 +178,22 @@ describe("StopTaskReportsNoActiveQuery", () => {
   });
 });
 
+describe("InterruptWithoutSessionIsSilentNoOp", () => {
+  test("interrupting a session the server never registered emits nothing at all", async () => {
+    // The session map has had no writer since the resume handler was deleted,
+    // so this deletes nothing — and unlike the settings messages it must not
+    // put an error bubble in the chat either.
+    const h = await start();
+
+    h.send({ type: "interrupt", sessionId: "u1" });
+    // Barrier: a message that does reply, proving the interrupt was processed.
+    h.send({ type: "get_server_config" });
+    await h.waitFor((m) => m.type === "server_config");
+
+    expect(errorFrames(h)).toEqual([]);
+  });
+});
+
 describe("RetiredMessageTypesRejected", () => {
   test("a retired message name is refused with invalid_message, connection stays open", async () => {
     const h = await start();
