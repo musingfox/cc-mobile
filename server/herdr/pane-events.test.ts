@@ -19,7 +19,10 @@ function harness(
   overrides: {
     getSink?: (sessionId: string) => ((msg: Record<string, unknown>) => void) | undefined;
     transcript?: Partial<PaneEventTranscript>;
-    snapshot?: () => Promise<{ panes?: Record<string, unknown>[] }>;
+    snapshot?: () => Promise<{
+      panes?: Record<string, unknown>[];
+      agents?: Record<string, unknown>[];
+    }>;
     subscribeFails?: boolean;
   } = {},
 ) {
@@ -336,6 +339,76 @@ describe("PaneEventStatusPoll", () => {
     await h.events.start();
 
     expect(h.timerCount()).toBe(0);
+  });
+});
+
+/**
+ * A turn shorter than the sampling window. The status the poll sees is the same
+ * one it saw last time (or the settled status that follows it), so status alone
+ * says "nothing happened" — the daemon's `state_change_seq`, carried on the
+ * snapshot's `agents` rows, is what proves otherwise.
+ */
+describe("PaneEventShortTurn", () => {
+  const snapshotOf = (status: string, seq: number) => async () => ({
+    panes: [{ pane_id: "w3V:p1", agent_status: status }],
+    agents: [{ pane_id: "w3V:p1", agent_status: status, state_change_seq: seq }],
+  });
+
+  test("a turn that starts and finishes between two ticks is still read out", async () => {
+    let snapshot = snapshotOf("idle", 40);
+    const h = harness({ snapshot: () => snapshot() });
+    await h.events.start();
+    await h.tick();
+
+    // idle -> working -> idle happened entirely inside one interval.
+    snapshot = snapshotOf("idle", 42);
+    await h.tick();
+
+    expect(h.transcriptCalls.filter((call) => call.startsWith("deliver"))).toEqual([
+      "deliver:w3V:p1", // first sighting
+      "deliver:w3V:p1", // the turn nobody saw start
+    ]);
+  });
+
+  test("the same short turn landing on `done` is read out too", async () => {
+    let snapshot = snapshotOf("idle", 40);
+    const h = harness({ snapshot: () => snapshot() });
+    await h.events.start();
+    await h.tick();
+
+    snapshot = snapshotOf("done", 42);
+    await h.tick();
+
+    expect(h.transcriptCalls.filter((call) => call.startsWith("deliver"))).toHaveLength(2);
+    // `done` reads as idle to the UI too, so the phone sees no state flip — the
+    // reply arriving is the only visible difference.
+    expect(h.sent["w3V:p1"]).toEqual([
+      { type: "session_state", sessionId: "w3V:p1", state: "idle" },
+      { type: "session_state", sessionId: "w3V:p1", state: "idle" },
+    ]);
+  });
+
+  test("a session sitting still is read out once and never again", async () => {
+    const h = harness({ snapshot: snapshotOf("idle", 40) });
+    await h.events.start();
+
+    await h.tick();
+    await h.tick();
+    await h.tick();
+
+    expect(h.transcriptCalls.filter((call) => call.startsWith("deliver"))).toHaveLength(1);
+  });
+
+  test("the `done` -> `idle` decay is still not a turn, counter or no counter", async () => {
+    let snapshot = snapshotOf("done", 40);
+    const h = harness({ snapshot: () => snapshot() });
+    await h.events.start();
+    await h.tick();
+
+    snapshot = snapshotOf("idle", 41);
+    await h.tick();
+
+    expect(h.transcriptCalls.filter((call) => call.startsWith("deliver"))).toHaveLength(1);
   });
 });
 
