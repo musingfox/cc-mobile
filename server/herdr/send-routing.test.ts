@@ -138,6 +138,32 @@ describe("client sink map", () => {
     expect(harness.routing.getClient("u1")).toBe(sink);
   });
 
+  test("nobody is reported connected once the last connection closes", () => {
+    // What the status poll backs off on. The sink survives the disconnect on
+    // purpose (the case above), so ownership is the only thing that can answer
+    // "is anyone actually listening" — if this ever stopped emptying, the poll
+    // would run at full speed forever with nothing to run for.
+    const harness = makeHarness();
+    const owner = {};
+    expect(harness.routing.hasClients()).toBe(false);
+
+    harness.routing.registerClient("u1", () => {}, owner);
+    expect(harness.routing.hasClients()).toBe(true);
+
+    harness.routing.cleanupByOwner(owner);
+    expect(harness.routing.hasClients()).toBe(false);
+  });
+
+  test("a sink bound with no connection behind it still counts as a listener", () => {
+    const harness = makeHarness();
+    harness.routing.registerClient("u1", () => {});
+
+    expect(harness.routing.hasClients()).toBe(true);
+
+    harness.routing.teardown("u1");
+    expect(harness.routing.hasClients()).toBe(false);
+  });
+
   test("a reconnect rebinds the session, and the newest sink wins", () => {
     // E3: transcript delivery looks the sink up at delivery time, so this is
     // the binding that decides where a turn lands.

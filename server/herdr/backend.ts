@@ -148,6 +148,9 @@ export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalB
   const paneEvents = createHerdrPaneEvents({
     subscribe: (subscribeOptions) => client.subscribeEvents(subscribeOptions),
     getSink: (sessionId) => routing.getClient(sessionId),
+    // What the poll backs off on. A sink outlives its connection (it buffers for
+    // the reconnect), so the sink map cannot answer this — ownership can.
+    hasClients: () => routing.hasClients(),
     // The status source. Without it a turn that settles without changing the
     // pane's title is never read back at all — see pane-events.ts's header.
     ...(typeof sessionSnapshot === "function"

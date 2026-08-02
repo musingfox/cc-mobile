@@ -59,8 +59,12 @@ export function createHerdrSendRouting(options: HerdrSendRoutingOptions) {
   const clientSinks = new Map<string, ClientSink>();
   const ownerToUuids = new Map<unknown, Set<string>>();
   const uuidToOwner = new Map<string, unknown>();
+  /** Sinks bound with no connection behind them; see `hasClients`. */
+  const ownerlessSinks = new Set<string>();
 
   function registerClient(claudeUuid: string, sink: ClientSink, owner?: unknown) {
+    if (owner === undefined) ownerlessSinks.add(claudeUuid);
+    else ownerlessSinks.delete(claudeUuid);
     clientSinks.set(claudeUuid, sink);
     const prevOwner = uuidToOwner.get(claudeUuid);
     if (prevOwner !== undefined && prevOwner !== owner) {
@@ -172,6 +176,7 @@ export function createHerdrSendRouting(options: HerdrSendRoutingOptions) {
   /** Terminal removal: drop the sink and the owner index for this session. */
   function teardown(claudeUuid: string): void {
     clientSinks.delete(claudeUuid);
+    ownerlessSinks.delete(claudeUuid);
     const owner = uuidToOwner.get(claudeUuid);
     if (owner !== undefined) {
       ownerToUuids.get(owner)?.delete(claudeUuid);
@@ -200,8 +205,21 @@ export function createHerdrSendRouting(options: HerdrSendRoutingOptions) {
     return clientSinks.get(claudeUuid);
   }
 
+  /**
+   * Whether any live connection is still listening.
+   *
+   * Ownership, not the sink map, is the signal: a sink outlives its connection
+   * on purpose (it buffers for the reconnect), while `cleanupByOwner` runs the
+   * moment a socket closes. A registration made with no owner — only tests do
+   * that — counts as a listener, so injecting one never silences anything.
+   */
+  function hasClients(): boolean {
+    return ownerToUuids.size > 0 || ownerlessSinks.size > 0;
+  }
+
   return {
     registerClient,
+    hasClients,
     send,
     teardown,
     cleanupByOwner,

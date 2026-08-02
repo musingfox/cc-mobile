@@ -24,6 +24,7 @@ function harness(
       agents?: Record<string, unknown>[];
     }>;
     subscribeFails?: boolean;
+    hasClients?: () => boolean;
   } = {},
 ) {
   const sent: Record<string, Record<string, unknown>[]> = {};
@@ -75,6 +76,7 @@ function harness(
         sent[sessionId] = messages;
       }),
     ...(overrides.snapshot ? { snapshot: overrides.snapshot } : {}),
+    ...(overrides.hasClients ? { hasClients: overrides.hasClients } : {}),
     setIntervalFn: (fn: () => void) => {
       const id = nextTimer++;
       ticks.set(id, fn);
@@ -314,7 +316,9 @@ describe("PaneEventStatusPoll", () => {
     expect(h.errors).toHaveLength(1);
 
     failing = false;
-    await h.tick();
+    // An outage leaves nothing known to be running, so the retry comes at the
+    // backed-off rate rather than every second — it still comes.
+    for (let i = 0; i < 5; i++) await h.tick();
     expect(h.sent["w3V:p1"]).toEqual([
       { type: "session_state", sessionId: "w3V:p1", state: "idle" },
     ]);
@@ -409,6 +413,120 @@ describe("PaneEventShortTurn", () => {
     await h.tick();
 
     expect(h.transcriptCalls.filter((call) => call.startsWith("deliver"))).toHaveLength(1);
+  });
+});
+
+/**
+ * What the poll costs when nothing is waiting on it. Every snapshot is one unix
+ * connection to the daemon (transport.ts: one per RPC), so the tiers below are
+ * the difference between ~86 400 connections a day and a few thousand.
+ */
+describe("PaneEventPollBackOff", () => {
+  function counted(panes: Record<string, unknown>[], agents: Record<string, unknown>[] = []) {
+    const calls = { count: 0 };
+    return {
+      calls,
+      snapshot: async () => {
+        calls.count += 1;
+        return { panes, agents };
+      },
+    };
+  }
+
+  const livePane = [{ pane_id: "w3V:p1", agent: "claude", agent_status: "idle" }];
+  const liveAgent = [
+    { pane_id: "w3V:p1", agent: "claude", agent_status: "idle", state_change_seq: 40 },
+  ];
+
+  test("asks every second while a phone is watching a running claude", async () => {
+    const { calls, snapshot } = counted(livePane, liveAgent);
+    const h = harness({ snapshot, hasClients: () => true });
+    await h.events.start();
+
+    await h.tick();
+    await h.tick();
+    await h.tick();
+
+    expect(calls.count).toBe(3);
+  });
+
+  test("goes quiet when no phone is connected", async () => {
+    const { calls, snapshot } = counted(livePane, liveAgent);
+    const h = harness({ snapshot, hasClients: () => false });
+    await h.events.start();
+
+    for (let i = 0; i < 10; i++) await h.tick();
+
+    // One call to see where things stand, then nothing for half a minute.
+    expect(calls.count).toBe(1);
+  });
+
+  test("a pane event does not wake the poll for a phone that is not there", async () => {
+    const { calls, snapshot } = counted(livePane, liveAgent);
+    const h = harness({ snapshot, hasClients: () => false });
+    await h.events.start();
+    await h.tick();
+
+    // A working claude retitles its pane constantly; nobody is listening.
+    h.emit({
+      event: "pane_updated",
+      data: { pane: { pane_id: "w3V:p1", agent_status: "working" } },
+    });
+    await h.tick();
+    await h.tick();
+
+    expect(calls.count).toBe(1);
+  });
+
+  test("the phone coming back gets the turn it missed, in one look", async () => {
+    let connected = false;
+    let agents = [
+      { pane_id: "w3V:p1", agent: "claude", agent_status: "idle", state_change_seq: 40 },
+    ];
+    const calls = { count: 0 };
+    const h = harness({
+      hasClients: () => connected,
+      snapshot: async () => {
+        calls.count += 1;
+        return { panes: [{ pane_id: "w3V:p1", agent: "claude", agent_status: "idle" }], agents };
+      },
+    });
+    await h.events.start();
+    await h.tick();
+
+    // Two turns run in the user's own terminal while the phone is closed.
+    agents = [{ pane_id: "w3V:p1", agent: "claude", agent_status: "idle", state_change_seq: 44 }];
+    await h.tick();
+    await h.tick();
+    expect(calls.count).toBe(1);
+
+    connected = true;
+    await h.tick();
+
+    expect(calls.count).toBe(2);
+    expect(h.transcriptCalls.filter((call) => call.startsWith("deliver"))).toEqual([
+      "deliver:w3V:p1", // first sighting
+      "deliver:w3V:p1", // everything written while nobody was watching
+    ]);
+  });
+
+  test("with a phone but no claude anywhere, an event is what makes it look again", async () => {
+    const { calls, snapshot } = counted([{ pane_id: "wS:p1", agent_status: "unknown" }]);
+    const h = harness({ snapshot, hasClients: () => true });
+    await h.events.start();
+
+    await h.tick();
+    await h.tick();
+    await h.tick();
+    expect(calls.count).toBe(1);
+
+    h.emit({
+      event: "pane_updated",
+      data: { pane: { pane_id: "wS:p1", agent: "claude", agent_status: "working" } },
+    });
+    await h.tick();
+
+    expect(calls.count).toBe(2);
   });
 });
 

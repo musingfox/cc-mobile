@@ -65,10 +65,32 @@ export type TimerHandle = unknown;
 
 export const DEFAULT_STATUS_POLL_MS = 1_000;
 
+/**
+ * Tick multipliers for the snapshot RPC. The timer keeps its 1 s beat; what
+ * these decide is how many beats pass between two calls to the daemon, which is
+ * what actually costs a unix connection (one per RPC — see transport.ts).
+ *
+ *   full speed   a phone is connected and a claude is running: the settle has to
+ *                reach the phone inside a second, so every tick calls.
+ *   discovery    a phone is connected but no claude has been seen yet: nothing
+ *                to read back, only a new pane to notice. The stream notices it
+ *                sooner anyway (any event forces the next tick to call).
+ *   dormant      nobody is listening. Anything read here would be dropped on the
+ *                floor for want of a sink, so this is close to off — kept alive
+ *                only so a daemon restart is eventually noticed.
+ */
+const DISCOVERY_POLL_TICKS = 5;
+const DORMANT_POLL_TICKS = 30;
+
 export interface HerdrPaneEventsOptions {
   subscribe: (options: SubscribeEventsOptions) => Promise<SubscriptionHandle>;
   /** Late-bound sink lookup, so a reconnect that rebinds a session still gets events. */
   getSink: (sessionId: string) => ClientSink | undefined;
+  /**
+   * Whether any phone is currently connected. Defaults to "always", which is
+   * what this module assumed before the poll learned to back off.
+   */
+  hasClients?: () => boolean;
   /**
    * The level-triggered status source (see the module header). Optional: a
    * client slice without it degrades to the stream's incidental status reports,
@@ -130,6 +152,7 @@ function panesWithSeq(snapshot: {
 export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
   const { subscribe, getSink, snapshot, transcript, permission } = options;
   const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_STATUS_POLL_MS;
+  const hasClients = options.hasClients ?? (() => true);
   const setIntervalFn =
     options.setIntervalFn ??
     ((fn: () => void, ms: number) => {
@@ -156,6 +179,12 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
   let polling = false;
   /** One warning per outage, not one per second. */
   let pollFailing = false;
+  /** Whether the last snapshot found a claude anywhere on the machine. */
+  let claudeRunning = false;
+  /** Ticks passed since the last snapshot RPC. */
+  let ticksWaited = 0;
+  /** Something arrived on the stream: re-read the whole picture on the next tick. */
+  let dueNext = false;
 
   function run(work: Promise<void> | void): void {
     void Promise.resolve(work).catch((error: unknown) => {
@@ -247,11 +276,23 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
   }
 
   /** Every pane in a snapshot, with its agent's transition counter attached. */
-  function observeSnapshot(snapshot: {
+  function observeSnapshot(current: {
     panes?: Partial<PaneInfo>[];
     agents?: Partial<AgentInfo>[];
   }): void {
-    for (const pane of panesWithSeq(snapshot)) observe(pane);
+    const rows = panesWithSeq(current);
+    // "Is there anything to watch": a detected claude, or a pane reporting a
+    // status only an agent has. A shell prompt reports `unknown` and does not
+    // count — it is the whole machine sitting idle that the poll backs off for.
+    claudeRunning =
+      (current.agents ?? []).some((agent) => agent.agent === "claude") ||
+      rows.some(
+        (pane) =>
+          pane.agent === "claude" ||
+          (typeof pane.agent_status === "string" &&
+            STATE_BY_AGENT_STATUS[pane.agent_status] !== undefined),
+      );
+    for (const pane of rows) observe(pane);
   }
 
   /**
@@ -275,6 +316,25 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
   }
 
   /**
+   * Whether this tick calls the daemon. Skipping is not a delay in noticing a
+   * turn's end: `state_change_seq` makes a settle that happened between two
+   * calls just as visible as one sampled live, which is what lets the rate drop
+   * at all (see `observe`).
+   */
+  function dueThisTick(): boolean {
+    const every = !hasClients() ? DORMANT_POLL_TICKS : claudeRunning ? 1 : DISCOVERY_POLL_TICKS;
+    ticksWaited += 1;
+    // A stream event only shortcuts a wait somebody is waiting on: with no
+    // phone connected, a working claude retitles its pane every second and
+    // would otherwise hold the poll at full speed for nobody.
+    const shortcut = dueNext && hasClients();
+    if (ticksWaited < every && !shortcut) return false;
+    ticksWaited = 0;
+    dueNext = false;
+    return true;
+  }
+
+  /**
    * Opens the one subscription. Never rejects: a failed subscription costs the
    * UI its activity indicator and its live readback, not its sessions.
    */
@@ -286,7 +346,12 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
           subscriptions: [{ type: "pane.updated" }],
           onEvent: (event) => {
             const pane = paneFieldsOf(event);
-            if (pane) observe(pane);
+            if (!pane) return;
+            // Events carry no counter and may report a pane partially, so one
+            // is a reason to take a full snapshot rather than a substitute for
+            // it: a backed-off poll catches up on the next tick.
+            dueNext = true;
+            observe(pane);
           },
           // The stream carries no sequence numbers, so a reconnect re-aligns
           // from a fresh snapshot instead of replaying the gap.
@@ -310,8 +375,11 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
       // the stream never was, so a dead stream still leaves the phone with its
       // replies and its activity dots.
       if (snapshot && poll === undefined && !stopped) {
+        // The first tick always calls, whatever the tier: nothing is known yet,
+        // so a back-off decision would be based on nothing.
+        ticksWaited = DORMANT_POLL_TICKS;
         poll = setIntervalFn(() => {
-          void pollOnce();
+          if (dueThisTick()) void pollOnce();
         }, pollIntervalMs);
       }
     })();
