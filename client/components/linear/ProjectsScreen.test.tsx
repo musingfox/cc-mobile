@@ -96,3 +96,71 @@ describe("ProjectsScreen rows come only from saved projects", () => {
     expect(container.textContent).toContain("new");
   });
 });
+
+describe("ProjectsScreen dot reflects the server's agent state", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    seedProjects([{ cwd: "/a", label: "a" }]);
+    useAppStore.setState({
+      sessions: new Map(),
+      activeSessionId: null,
+      connectionState: "connected",
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    localStorage.clear();
+  });
+
+  function dots(container: HTMLElement) {
+    return [...container.querySelectorAll(".lin-project-live-dot")].map((n) =>
+      n.getAttribute("aria-label"),
+    );
+  }
+
+  test("a running session lights the row green", () => {
+    const store = useAppStore.getState();
+    store.addSession("u1", "/a");
+    store.setAgentState("u1", "running");
+
+    expect(dots(renderScreen().container)).toEqual(["live"]);
+  });
+
+  test("an idle session that the server confirmed shows the amber dot", () => {
+    const store = useAppStore.getState();
+    store.addSession("u1", "/a");
+    store.setAgentState("u1", "idle");
+
+    expect(dots(renderScreen().container)).toEqual(["active"]);
+  });
+
+  test("a confirmed session with no reported state still shows the amber dot", () => {
+    // herdr answered "unknown" for this pane: an answer, just not a state.
+    const store = useAppStore.getState();
+    store.addSession("u1", "/a");
+    store.setReceivedAuthoritativeState("u1", true);
+
+    expect(dots(renderScreen().container)).toEqual(["active"]);
+  });
+
+  test("a restored session the server has not spoken about shows no dot", () => {
+    useAppStore.getState().addSession("u1", "/a");
+
+    expect(dots(renderScreen().container)).toEqual([]);
+  });
+
+  test("a project with no session at all shows no dot", () => {
+    expect(dots(renderScreen().container)).toEqual([]);
+  });
+
+  test("one running session among idle ones wins the row", () => {
+    const store = useAppStore.getState();
+    store.addSession("u1", "/a");
+    store.addSession("u2", "/a");
+    store.setAgentState("u1", "running");
+    store.setAgentState("u2", "idle");
+
+    expect(dots(renderScreen().container)).toEqual(["live"]);
+  });
+});

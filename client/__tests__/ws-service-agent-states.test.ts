@@ -106,6 +106,31 @@ describe("ClientAdoptsServerAgentStates", () => {
     expect(session("u1")?.receivedAuthoritativeState).toBe(true);
   });
 
+  test("a freshly created session is spoken-for the moment the ack lands", () => {
+    // Otherwise a brand-new session shows no dot at all until the next
+    // reconnect or the first prompt — the opposite of what the user just did.
+    useAppStore.getState().addSession("u1", "/a", { ready: false });
+    getInternal().pendingTerminalCreates.add("u1");
+
+    getInternal().handleMessage({ type: "terminal_created", claudeUuid: "u1" });
+
+    expect(session("u1")?.agentState).toBe("idle");
+    expect(session("u1")?.isStreaming).toBe(false);
+    expect(session("u1")?.receivedAuthoritativeState).toBe(true);
+  });
+
+  test("a replayed create ack does not blank a session that is already running", () => {
+    // The ack is buffered, so a reconnect replays it. By then this connection
+    // is not waiting on the create any more, and herdr's state is the truth.
+    useAppStore.getState().addSession("u1", "/a", { ready: true });
+    useAppStore.getState().setAgentState("u1", "running");
+
+    getInternal().handleMessage({ type: "terminal_created", claudeUuid: "u1" });
+
+    expect(session("u1")?.agentState).toBe("running");
+    expect(session("u1")?.isStreaming).toBe(true);
+  });
+
   test("a session the remount skipped is not treated as spoken-for", () => {
     // Skipped means "no verdict", so the card keeps its pre-reply silence
     // instead of claiming the server confirmed it.

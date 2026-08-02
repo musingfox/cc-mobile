@@ -56,8 +56,13 @@ export default function ProjectsScreen({ onNavigate, onOpenProject, onAddProject
       for (const s of sessions.values()) {
         if (s.cwd !== p.cwd) continue;
         row.sessionCount += 1;
-        if (s.isStreaming) row.hasLive = true;
-        else row.hasIdle = true;
+        if (s.agentState === "running") row.hasLive = true;
+        // Gated on "the server has spoken about this session", not on a
+        // truthy state: a card restored from localStorage but not yet
+        // reconciled must stay dark rather than claim an activity nobody
+        // confirmed. A session herdr reported as "unknown" is still spoken
+        // for, and honestly shows the amber "active" dot.
+        if (s.receivedAuthoritativeState) row.hasIdle = true;
       }
       return row;
     });

@@ -554,9 +554,20 @@ class WsService {
       case "terminal_created": {
         const claudeUuid = msg.claudeUuid as string | undefined;
         if (!claudeUuid) break;
-        this.pendingTerminalCreates.delete(claudeUuid);
+        const wasPending = this.pendingTerminalCreates.delete(claudeUuid);
         const cwd = store.sessions.get(claudeUuid)?.cwd;
         store.setTerminalReady(claudeUuid, true);
+        // The create ack is the server speaking about this session: it exists,
+        // and it is not running anything yet. Without this the session stays
+        // unreconciled — and therefore dark on the Projects screen — until the
+        // next reconnect or the first prompt, which points the opposite way
+        // from what the user just did.
+        //
+        // Only for an ack this connection is actually waiting on. The ack is
+        // buffered, so a reconnect replays it: re-applying "idle" then would
+        // blank the spinner of a session that has since started running, which
+        // is the same client-side-claim-beats-herdr bug in a smaller window.
+        if (wasPending) store.setAgentState(claudeUuid, "idle");
         if (cwd) saveProject(cwd);
         break;
       }
