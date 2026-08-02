@@ -4,6 +4,8 @@ import type { ResolvedAction, SessionState } from "../stores/app-store";
 const SESSION_KEY_PREFIX = "ccm:session:";
 const ACTIVE_SESSION_KEY = "ccm:active-session";
 const SESSION_IDS_KEY = "ccm:session-ids";
+/** Per-session replay cursors, written by ws-service on every buffered event. */
+const LAST_EVENT_IDS_KEY = "ccm:lastEventIds";
 
 interface SerializableSessionState {
   id: string;
@@ -99,8 +101,27 @@ export function clearSessionState(sessionId: string): void {
     const currentIds = getAllSessionIds();
     const filtered = currentIds.filter((id) => id !== sessionId);
     localStorage.setItem(SESSION_IDS_KEY, JSON.stringify(filtered));
+
+    // Forget the replay cursor too. This is the choke point every removal
+    // passes through, so pruning here is what stops reconnects from carrying
+    // cursors for sessions that no longer exist.
+    clearLastEventId(sessionId);
   } catch (error) {
     console.error("[session-persistence] Failed to clear session:", error);
+  }
+}
+
+function clearLastEventId(sessionId: string): void {
+  try {
+    const stored = localStorage.getItem(LAST_EVENT_IDS_KEY);
+    if (!stored) return;
+    const parsed = JSON.parse(stored) as Record<string, number>;
+    if (!(sessionId in parsed)) return;
+    delete parsed[sessionId];
+    localStorage.setItem(LAST_EVENT_IDS_KEY, JSON.stringify(parsed));
+  } catch (error) {
+    // A corrupt or unwritable cursor blob must never block a removal.
+    console.error("[session-persistence] Failed to clear replay cursor:", error);
   }
 }
 

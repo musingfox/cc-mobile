@@ -590,7 +590,13 @@ class WsService {
             dead.push(id);
           }
         }
-        for (const id of dead) store.removeSession(id);
+        for (const id of dead) {
+          store.removeSession(id);
+          // removeSession prunes the persisted cursor; drop the in-memory one
+          // too, or the next buffered event rewrites the whole map from memory
+          // and resurrects the id we just forgot.
+          this.lastEventIds.delete(id);
+        }
         if (dead.length > 0) toastService.info("Terminal session ended");
         break;
       }
