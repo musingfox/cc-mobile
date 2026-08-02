@@ -15,8 +15,8 @@ import type { ClientSink, TerminalBackend, TerminalSessionInfo } from "../termin
 import { type AgentState, statesFromSnapshot } from "./agent-state";
 import { createHerdrClient, type HerdrClient, SUPPORTED_PROTOCOL } from "./client";
 import { createHerdrRegistry } from "./registry";
-import { type RemountReport, remountLiveSessions } from "./remount";
 import { createHerdrSendRouting } from "./send-routing";
+import { listClaudeSessions, type SessionDescriptor, type SessionListingClient } from "./sessions";
 import { createHerdrStatusEvents } from "./status-events";
 import { resolveSocketPath } from "./transport";
 
@@ -35,26 +35,28 @@ export interface HerdrBackendOptions {
     HerdrClient,
     "call" | "agentGet" | "paneSendText" | "paneSendKeys" | "subscribeEvents"
   > &
-    // Optional because listStates degrades to {} anyway: a client slice without
-    // it costs the UI its status dot, never its sessions.
-    Partial<Pick<HerdrClient, "sessionSnapshot">>;
+    // Optional because both degrade rather than fail: a client slice without
+    // `sessionSnapshot` costs the UI its status dot, and one without
+    // `agentList` answers an empty session list — never a thrown reply.
+    Partial<Pick<HerdrClient, "sessionSnapshot" | "agentList">>;
+  /** Injectable label suppression for the live-e2e suites (Decision M9). */
+  suppressSessionLabel?: (label: string) => boolean;
   readinessBudgetMs?: number;
   readinessPollMs?: number;
 }
 
 /**
- * The port plus the one capability only herdr has: because the daemon keeps
- * panes alive across a server restart, this backend can rediscover its own
- * sessions at startup. Not every backend can, so this stays off the neutral port.
+ * The port plus the capabilities only herdr has: the daemon knows every claude
+ * on the machine, including ones cc-mobile never launched, so this backend can
+ * answer "what is running" from a live query instead of from its own memory.
+ * Not every backend can, so this stays off the neutral port.
  */
 export interface HerdrTerminalBackend extends TerminalBackend {
-  remountLiveSessions(): Promise<RemountReport>;
   /**
-   * claudeUuids the last remount skipped rather than adopted or reaped —
-   * possibly alive but not routable. Carried into the terminal_sessions reply
-   * so a reconciling client leaves their cards alone instead of deleting them.
+   * Every claude the daemon reports, with identity and capability flags.
+   * Never rejects: an unreachable daemon answers `[]`.
    */
-  listUnknown(): string[];
+  listSessionDescriptors(): Promise<SessionDescriptor[]>;
   /**
    * What every live session is doing right now, from one daemon call. The
    * status subscription only fires on change, so this is the only way a client
@@ -89,10 +91,6 @@ export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalB
     getSink: (claudeUuid) => routing.getClient(claudeUuid),
   });
 
-  // Filled by remountLiveSessions; a uuid both adopted and skipped (duplicate
-  // workspaces) counts as adopted, so the two lists start disjoint.
-  let unknownUuids: string[] = [];
-
   async function teardown(claudeUuid: string) {
     statusEvents.stop(claudeUuid);
     // Kill first, then cancel the waiter.
@@ -115,24 +113,18 @@ export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalB
     hasSession: (claudeUuid) => registry.hasSession(claudeUuid),
     listLive: () => registry.listSessions(),
     /**
-     * Mirrors createSession's composition order — register, then subscribe —
-     * so an adopted session is indistinguishable from one this process built.
+     * Derived on demand from the daemon rather than from this process's memory,
+     * which is what makes a pane the user opened in their own terminal — and a
+     * pane that outlived a server restart — appear without any rediscovery step
+     * (Decision M12).
      */
-    remountLiveSessions: async () => {
-      const report = await remountLiveSessions({
-        client,
-        adopt: (entry) => registry.adoptSession(entry),
-        subscribeStatus: (claudeUuid, paneId) => statusEvents.start(claudeUuid, paneId),
+    async listSessionDescriptors(): Promise<SessionDescriptor[]> {
+      if (typeof client.agentList !== "function") return [];
+      return listClaudeSessions({
+        client: client as SessionListingClient,
+        suppressLabel: options.suppressSessionLabel,
       });
-      const adopted = new Set(report.adopted);
-      unknownUuids = [...new Set(report.skipped.map((entry) => entry.uuid))].filter(
-        (uuid) => !adopted.has(uuid),
-      );
-      return report;
     },
-    // Filtered at query time: a uuid that has become routable since the scan
-    // must answer as live, never as unknown.
-    listUnknown: () => unknownUuids.filter((uuid) => !registry.hasSession(uuid).present),
     /**
      * One RPC regardless of session count — the join happens locally against
      * the uuid→pane registry, so N live sessions still cost one round trip.

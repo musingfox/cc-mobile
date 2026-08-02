@@ -154,140 +154,93 @@ describe("herdr backend composition", () => {
     expect(fake.stopCalls()).toBe(2);
   });
 
-  test("remountLiveSessions makes an adopted pane routable and subscribed", async () => {
-    const uuid = "3f2b8c1d-9e4a-4b6f-8c2d-1a5e7f9b0c3d";
+  test("listSessionDescriptors reports every claude the daemon has, self or foreign", async () => {
+    const foreignPane = "w9:p1";
     const fake = makeFakeClient({
       "session.snapshot": {
         type: "session_snapshot",
         snapshot: {
           version: "0.7.5",
           protocol: 17,
-          workspaces: [
-            {
-              workspace_id: "ws-1",
-              label: `ccm-${uuid}`,
-              number: 1,
-              focused: false,
-              active_tab_id: "ws-1:t1",
-              tab_count: 1,
-              pane_count: 1,
-              agent_status: "idle",
-            },
-          ],
+          workspaces: [{ workspace_id: "w9", label: "dev" }],
           tabs: [],
-          panes: [
-            {
-              pane_id: "pn-1",
-              terminal_id: "term-1",
-              workspace_id: "ws-1",
-              tab_id: "ws-1:t1",
-              focused: false,
-              agent_status: "working",
-              revision: 4,
-              agent: "claude",
-            },
-          ],
+          panes: [],
           layouts: [],
           agents: [],
         },
       },
-      "pane.process_info": {
+      "pane.process_info": (params: unknown) => ({
         type: "pane_process_info",
         process_info: {
-          pane_id: "pn-1",
+          pane_id: (params as { pane_id: string }).pane_id,
           foreground_processes: [
-            { pid: 1, argv0: "claude", argv: ["claude", "--session-id", uuid] },
+            { pid: 1, argv0: "claude", argv: ["claude", "--permission-mode", "default"] },
           ],
         },
-      },
+      }),
     });
-    const { backend } = makeBackend(fake);
+    const snapshot = {
+      version: "0.7.5",
+      protocol: 17,
+      workspaces: [{ workspace_id: "w9", label: "dev" }],
+      panes: [],
+      agents: [],
+    };
+    const backend = createHerdrBackend({
+      client: {
+        ...fake.client,
+        sessionSnapshot: async () => snapshot,
+        agentList: async () => [
+          {
+            terminal_id: "t1",
+            agent_status: "idle",
+            workspace_id: "w9",
+            tab_id: "w9:t1",
+            pane_id: foreignPane,
+            focused: false,
+            revision: 3,
+            agent: "claude",
+            cwd: "/repo",
+            agent_session: { kind: "id", value: "a21273d4-77e6-43dc-b9cb-3647561d1192" },
+          },
+        ],
+        agentGet: async (target: string) => ({
+          terminal_id: "t1",
+          agent_status: "idle",
+          workspace_id: "w9",
+          tab_id: "w9:t1",
+          pane_id: target,
+          focused: false,
+          revision: 3,
+          agent: "claude",
+          cwd: "/repo",
+          agent_session: { kind: "id", value: "a21273d4-77e6-43dc-b9cb-3647561d1192" },
+        }),
+      },
+      responseRelay: createPtyResponseRelay(),
+    } as unknown as HerdrBackendOptions);
 
-    const report = await backend.remountLiveSessions();
+    const sessions = await backend.listSessionDescriptors();
 
-    expect(report.adopted).toEqual([uuid]);
-    // Adopted through the same registry the port reads from, so the session is
-    // routable — and subscribed — exactly as a created one would be.
-    expect(backend.listLive()).toEqual([uuid]);
-    expect(backend.hasSession(uuid)).toEqual({ present: true, paneRef: "pn-1" });
-    expect(fake.subscriptions[0]).toEqual([{ type: "pane.agent_status_changed", pane_id: "pn-1" }]);
-
-    // A prompt now reaches the adopted pane with no create in between. The sink
-    // is bound the way ws.ts binds it — on the first terminal_send of the reconnected
-    // client — which is exactly what a remounted session depends on.
-    backend.registerClient(uuid, () => {});
-    await backend.send({ claudeUuid: uuid, content: "hi" });
-    expect(fake.injected[0]).toEqual(["pn-1", "hi"]);
+    // Nothing was created through this backend, and the pane still lists: the
+    // daemon is the source of truth now, not the in-process registry.
+    expect(backend.listLive()).toEqual([]);
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]).toMatchObject({
+      sessionId: foreignPane,
+      origin: "foreign",
+      drivable: true,
+      readable: true,
+      gated: true,
+      cwd: "/repo",
+    });
   });
 
-  test("listUnknown carries remount skips and stays disjoint from listLive", async () => {
-    const adoptedUuid = "3f2b8c1d-9e4a-4b6f-8c2d-1a5e7f9b0c3d";
-    const skippedUuid = "7c4d5e02-2222-4333-8444-555566667777";
-    const makeWorkspace = (id: string, uuid: string) => ({
-      workspace_id: id,
-      label: `ccm-${uuid}`,
-      number: 1,
-      focused: false,
-      active_tab_id: `${id}:t1`,
-      tab_count: 1,
-      pane_count: 1,
-      agent_status: "idle",
-    });
-    const makePane = (id: string, workspaceId: string) => ({
-      pane_id: id,
-      terminal_id: `term-${id}`,
-      workspace_id: workspaceId,
-      tab_id: `${workspaceId}:t1`,
-      focused: false,
-      agent_status: "working",
-      revision: 4,
-      agent: "claude",
-    });
-    const fake = makeFakeClient({
-      "session.snapshot": {
-        type: "session_snapshot",
-        snapshot: {
-          version: "0.7.5",
-          protocol: 17,
-          workspaces: [makeWorkspace("ws-1", adoptedUuid), makeWorkspace("ws-2", skippedUuid)],
-          tabs: [],
-          panes: [makePane("pn-1", "ws-1"), makePane("pn-2", "ws-2")],
-          layouts: [],
-          agents: [],
-        },
-      },
-      "pane.process_info": (params: unknown) => {
-        const paneId = (params as { pane_id: string }).pane_id;
-        // pn-2 is unreachable on both the probe and its retry → skipped.
-        if (paneId === "pn-2") throw new Error("daemon busy");
-        return {
-          type: "pane_process_info",
-          process_info: {
-            pane_id: paneId,
-            foreground_processes: [
-              { pid: 1, argv0: "claude", argv: ["claude", "--session-id", adoptedUuid] },
-            ],
-          },
-        };
-      },
-    });
+  test("listSessionDescriptors answers empty rather than throwing without a listing client", async () => {
+    const fake = makeFakeClient();
     const { backend } = makeBackend(fake);
 
-    expect(backend.listUnknown()).toEqual([]);
-
-    const report = await backend.remountLiveSessions();
-
-    // The split the client will see: adopted answers as live, skipped answers
-    // as unknown — never as dead, never in both lists.
-    expect(report.adopted).toEqual([adoptedUuid]);
-    expect(report.skipped.map((entry) => entry.uuid)).toEqual([skippedUuid]);
-    expect(backend.listLive()).toEqual([adoptedUuid]);
-    expect(backend.listUnknown()).toEqual([skippedUuid]);
-
-    // A uuid that becomes routable after the scan answers as live, not unknown.
-    const info = await backend.createSession({ claudeUuid: skippedUuid, cwd: "/tmp" });
-    settingsWritten.add(info.settingsPath);
-    expect(backend.listUnknown()).toEqual([]);
+    expect(await backend.listSessionDescriptors()).toEqual([]);
   });
 
   test("a prompt reaches the created pane and its reply comes back on the shared relay", async () => {

@@ -24,15 +24,14 @@ describe("server websocket keep-alive config", () => {
     expect(indexSource).toContain(".listen(");
   });
 
-  it("remounts live sessions before it starts listening", () => {
-    // Ordering, not mere presence: a client that reconnects while the scan is
-    // still running would be told its still-running session no longer exists.
-    // The live receipt for this is the restart E2E; source order is what the
-    // hermetic suite can pin.
-    const remountAt = indexSource.indexOf("remountLiveSessions");
+  it("runs no startup rediscovery scan, only the daemon gate, before listening", () => {
+    // The session list is a live `agent.list` query (Decision M12), so startup
+    // has nothing to rebuild — and no scan a reconnecting client could race.
+    const verifyAt = indexSource.indexOf("verifyHerdrStartup");
     const listenAt = indexSource.indexOf("app.listen(");
-    expect(remountAt).toBeGreaterThan(-1);
+    expect(indexSource).not.toContain("remountLiveSessions");
+    expect(verifyAt).toBeGreaterThan(-1);
     expect(listenAt).toBeGreaterThan(-1);
-    expect(remountAt).toBeLessThan(listenAt);
+    expect(verifyAt).toBeLessThan(listenAt);
   });
 });

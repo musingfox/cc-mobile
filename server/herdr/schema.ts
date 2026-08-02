@@ -57,6 +57,27 @@ export type AgentStatus = z.infer<typeof AgentStatusSchema>;
 const ReportedAgentStatusSchema = z.string();
 
 /**
+ * The agent's own session identity. For claude this is always `kind: "id"`:
+ * herdr's SessionStart hook does report an `agent_session_path`, but the daemon
+ * discards it for every agent except pi/omp, so `value` (the claude session
+ * uuid) is the only key a transcript path can be derived from.
+ *
+ * Live wire fact (probe 2026-08-02): the value rotates on `/clear` and survives
+ * `claude -c`, so it is a *transcript* key, never a session identity — panes are
+ * keyed by `pane_id` (Decision H5). `value` is optional so a partially reported
+ * session cannot fail the whole agent parse.
+ */
+export const AgentSessionSchema = z
+  .object({
+    value: z.string().optional(),
+    agent: z.string().optional(),
+    kind: z.string().optional(),
+    source: z.string().optional(),
+  })
+  .passthrough();
+export type AgentSession = z.infer<typeof AgentSessionSchema>;
+
+/**
  * One detected agent. Required core fields only; the live daemon omits
  * `agent_session` / `interactive_ready` (and may omit `state_change_seq`)
  * on partially detected agents. `revision` and `state_change_seq` are the
@@ -73,7 +94,7 @@ export const AgentInfoSchema = z
     revision: z.number(),
     state_change_seq: z.number().optional(),
     agent: z.string().optional(),
-    agent_session: z.unknown().optional(),
+    agent_session: AgentSessionSchema.nullish(),
     interactive_ready: z.boolean().optional(),
     cwd: z.string().optional(),
     foreground_cwd: z.string().optional(),

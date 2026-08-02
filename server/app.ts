@@ -15,7 +15,6 @@ import { Elysia } from "elysia";
 import type { ServerConfig } from "./config";
 import { EventBuffer } from "./event-buffer";
 import { createHerdrBackend } from "./herdr/backend";
-import type { RemountReport } from "./herdr/remount";
 import { buildUrl, stripBasePath } from "./path-utils";
 import { createPtyPermissionHandler } from "./pty-permission-endpoint";
 import { createPtyPermissionRelay } from "./pty-permission-relay";
@@ -40,8 +39,6 @@ export interface AppBackend extends WsBackend {
   hasSession(claudeUuid: string): { present: boolean; paneRef?: string };
   getClient(claudeUuid: string): ((msg: Record<string, unknown>) => void) | undefined;
   teardownAll(): Promise<void>;
-  /** herdr only — a backend without persistent panes has nothing to rediscover. */
-  remountLiveSessions?(): Promise<RemountReport>;
 }
 
 /**

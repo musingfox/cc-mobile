@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { type AppBackend, createApp, DIST_DIR } from "./app";
+import { createApp, DIST_DIR } from "./app";
 import { parseServerConfig } from "./config";
 import { verifyHerdrStartup } from "./herdr/backend";
 
@@ -19,26 +19,10 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const backendRef: { current: AppBackend | null } = { current: null };
-  const app = createApp(serverConfig, { backendRef });
-
-  // Panes now outlive a stop, so the sessions still alive in the daemon are
-  // rediscovered before anything is served: a client that reconnects and asks for
-  // the live session list must not race a scan that has not finished, or it would
-  // be told its still-running session is gone. Fatal on failure, like the gate
-  // above — an unreadable daemon leaves every live pane stranded.
-  try {
-    const report = await backendRef.current?.remountLiveSessions?.();
-    if (report) {
-      console.log(
-        `[herdr] remount: ${report.adopted.length} adopted, ` +
-          `${report.reaped.length} reaped, ${report.skipped.length} skipped`,
-      );
-    }
-  } catch (error) {
-    console.error(`herdr remount failed: ${error instanceof Error ? error.message : String(error)}`);
-    process.exit(1);
-  }
+  // No startup rediscovery scan: the session list is derived live from the
+  // daemon on every `list_terminal_sessions` (Decision M12), so there is nothing
+  // to rebuild before serving and no window in which a client can race it.
+  const app = createApp(serverConfig);
 
   app.listen({ port: serverConfig.port, hostname: serverConfig.hostname });
 
