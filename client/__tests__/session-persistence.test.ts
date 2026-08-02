@@ -276,4 +276,84 @@ describe("session-persistence", () => {
     saveActiveSessionId(null);
     expect(loadActiveSessionId()).toBeNull();
   });
+
+  // RestoredSessionCarriesNoActivityClaim
+  test("a reload brings back the conversation but never the activity", () => {
+    // Written by an older bundle mid-turn: everything here claims the session
+    // is busy. Only the server may say that, so a reload must not.
+    localStorage.setItem(
+      "ccm:session:u1",
+      JSON.stringify({
+        id: "u1",
+        cwd: "/p",
+        sdkSessionId: "sdk-1",
+        messages: [{ id: "m1", role: "user", content: "hi", timestamp: 1 }],
+        pendingPermission: { requestId: "r1" },
+        isStreaming: true,
+        currentStreamMessageId: "m1",
+        activeToolStatus: null,
+        activeTools: [],
+        activeAgents: [],
+        activeHook: null,
+        usage: null,
+        contextUsage: null,
+        promptSuggestion: null,
+        resolvedActions: [],
+        agentState: "running",
+        receivedAuthoritativeState: true,
+        terminal: { ready: true },
+      }),
+    );
+
+    const loaded = loadSessionState("u1");
+
+    expect(loaded?.isStreaming).toBe(false);
+    expect(loaded?.agentState).toBeNull();
+    expect(loaded?.receivedAuthoritativeState).toBe(false);
+    expect(loaded?.pendingPermission).toBeNull();
+    expect(loaded?.currentStreamMessageId).toBeNull();
+    // The content cache half is untouched.
+    expect(loaded?.messages).toHaveLength(1);
+    expect(loaded?.cwd).toBe("/p");
+    expect(loaded?.sdkSessionId).toBe("sdk-1");
+    expect(loaded?.terminal).toEqual({ ready: true });
+  });
+
+  test("a payload without a terminal marker does not gain one on load", () => {
+    localStorage.setItem(
+      "ccm:session:u2",
+      JSON.stringify({
+        id: "u2",
+        cwd: "/p",
+        sdkSessionId: null,
+        messages: [],
+        pendingPermission: null,
+        isStreaming: false,
+        currentStreamMessageId: null,
+        activeToolStatus: null,
+        activeTools: [],
+        activeAgents: [],
+        activeHook: null,
+        usage: null,
+        contextUsage: null,
+        promptSuggestion: null,
+        resolvedActions: [],
+        agentState: null,
+        receivedAuthoritativeState: false,
+      }),
+    );
+
+    // Send routing keys on this marker: inventing one would route a prompt
+    // down a path the session never had.
+    expect(loadSessionState("u2")?.terminal).toBeUndefined();
+  });
+
+  // SessionRemovalDropsReplayCursor — the storage half of the choke point.
+  test("clearing a session also forgets its replay cursor", () => {
+    localStorage.setItem("ccm:lastEventIds", JSON.stringify({ u1: 5, u2: 9 }));
+
+    clearSessionState("u2");
+
+    expect(JSON.parse(localStorage.getItem("ccm:lastEventIds") ?? "{}")).toEqual({ u1: 5 });
+  });
 });

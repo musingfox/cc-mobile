@@ -75,7 +75,13 @@ export function loadSessionState(sessionId: string): SessionState | null {
 
     const parsed = JSON.parse(json) as SerializableSessionState;
 
-    // Deserialize Maps and provide defaults for new fields
+    // Deserialize Maps and provide defaults for new fields.
+    //
+    // Everything after the spread is an activity claim, and localStorage has
+    // no standing to make one: a reload used to resurrect a "busy" session
+    // whose work had long since finished, spinner and all. Conversation text
+    // and identity come back from disk; what the session is *doing* comes
+    // only from the server, via the live-session reply.
     return {
       ...parsed,
       sdkSessionId: parsed.sdkSessionId ?? null,
@@ -83,8 +89,11 @@ export function loadSessionState(sessionId: string): SessionState | null {
       activeAgents: new Map(parsed.activeAgents),
       resolvedActions: parsed.resolvedActions || [],
       contextUsage: parsed.contextUsage ?? null,
-      agentState: parsed.agentState ?? null,
-      receivedAuthoritativeState: parsed.receivedAuthoritativeState ?? false,
+      isStreaming: false,
+      currentStreamMessageId: null,
+      pendingPermission: null,
+      agentState: null,
+      receivedAuthoritativeState: false,
     };
   } catch (error) {
     console.error("[session-persistence] Failed to load session:", error);
