@@ -65,15 +65,21 @@ All recorded in `docs/adr/`. Key decisions:
 
 ### WebSocket Protocol
 
-Client→Server: `terminal_create`, `terminal_send`, `terminal_teardown`, `list_terminal_sessions`, `permission`, `interrupt`, `stop_task`, `append_user_message`, `get_server_config`, `set_model`, `set_effort`, `set_env_vars`, `set_permission_mode`, `list_sessions`, `resume_session`, `set_session_title`, `list_directories`, `reconnect`
+Client→Server: `terminal_create`, `terminal_send`, `terminal_teardown`, `list_terminal_sessions`, `permission`, `interrupt`, `stop_task`, `append_user_message`, `get_server_config`, `set_model`, `set_effort`, `set_env_vars`, `set_permission_mode`, `list_directories`, `reconnect`
 
-Server→Client: `terminal_created`, `terminal_teardown_result`, `terminal_sessions`, `session_created`, `session_history`, `session_list`, `stream_chunk`, `stream_end`, `session_state`, `permission_request`, `capabilities`, `server_config`, `directory_listing`, `event`, `replay_complete`, `error`
+Server→Client: `terminal_created`, `terminal_teardown_result`, `terminal_sessions`, `stream_chunk`, `stream_end`, `session_state`, `permission_request`, `capabilities`, `server_config`, `directory_listing`, `event`, `replay_complete`, `error`
 
-`resume_session` is read-only since #25: it loads a past session's history for
-viewing, but that session cannot be continued — start a new terminal session to
-keep talking. Deleted in #25 and refused by the Zod gate: `new_session`, `send`,
-`command`, `pty_send`, `get_session_info`, `session_info`, `result`, and the
-`tmux_*` names `terminal_*` replaced.
+Browsing past conversations is gone since #26: there is no session history,
+no listing and no resume — herdr's live sessions are the only sessions there
+are. `terminal_sessions` is therefore both the liveness list and the status
+bootstrap: it carries an optional `states` map (`claudeUuid` → `idle` |
+`running` | `requires_action`) so the phone's first paint after a reload is
+correct without waiting for a status event.
+
+Refused by the Zod gate: `list_sessions`, `resume_session`, `set_session_title`,
+`session_list`, `session_history`, `session_created` (all #26), plus #25's
+`new_session`, `send`, `command`, `pty_send`, `get_session_info`,
+`session_info`, `result` and the `tmux_*` names `terminal_*` replaced.
 
 Schemas defined in `server/protocol.ts`. Full spec in `cc-mobile.md`.
 

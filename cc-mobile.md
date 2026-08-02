@@ -52,7 +52,6 @@ Each turn creates a fresh `query()` with `resume` pointing to the SDK session ID
 
 | Package | Purpose |
 |---------|---------|
-| `@anthropic-ai/claude-agent-sdk` | Core — programmatic Claude Code access |
 | `elysia` | Bun-native server — routing, WebSocket (native), schema validation |
 | `zod` | Runtime validation for WebSocket messages (see [ADR-001](docs/adr/001-zod-runtime-validation.md)) |
 | `react` + `react-dom` | Frontend UI |
@@ -77,19 +76,18 @@ All messages are Zod-validated (see [ADR-001](docs/adr/001-zod-runtime-validatio
 { type: "interrupt", sessionId: string }
 { type: "stop_task", sessionId: string, taskId: string }
 { type: "get_server_config" }
-{ type: "list_sessions", dir?: string, limit?: number, offset?: number }
-{ type: "resume_session", sdkSessionId: string, cwd: string }
 ```
 
-Removed in #25 and now refused by the Zod gate with `{code:"invalid_message"}`:
-`new_session`, `send`, `command`, `pty_send`, `get_session_info`, and the
-`tmux_*` names that `terminal_*` replaced. There is no compatibility window — a
-cached PWA bundle recovers with a page reload.
+Refused by the Zod gate with `{code:"invalid_message"}`: `list_sessions`,
+`resume_session` and `set_session_title` (removed in #26 with the whole
+browse-past-conversations path), plus #25's `new_session`, `send`, `command`,
+`pty_send`, `get_session_info` and the `tmux_*` names that `terminal_*`
+replaced. There is no compatibility window — a cached PWA bundle recovers with
+a page reload.
 
 ### Server → Client
 
 ```typescript
-{ type: "session_created", sessionId: string, cwd: string }
 { type: "stream_chunk", sessionId: string, chunk: Record<string, unknown> }
 { type: "stream_end", sessionId: string }
 { type: "permission_request", sessionId: string, requestId: string,
@@ -97,11 +95,18 @@ cached PWA bundle recovers with a page reload.
 { type: "capabilities", sessionId: string, commands: string[], agents: string[], model: string }
 { type: "terminal_created", claudeUuid: string, terminalName: string, paneRef: string }
 { type: "terminal_teardown_result", claudeUuid: string, killed: boolean }
-{ type: "terminal_sessions", claudeUuids: string[], unknownUuids: string[] }
+{ type: "terminal_sessions", claudeUuids: string[], unknownUuids: string[],
+  states?: Record<string, "idle" | "running" | "requires_action"> }
 { type: "session_state", sessionId: string, state: "idle" | "running" | "requires_action" }
 { type: "error", code: string, message: string, sessionId?: string }
 { type: "server_config", config: { permissionMode: string } }
 ```
+
+`terminal_sessions` doubles as the status bootstrap: `states` carries what herdr
+says each live session is doing, read from one `session.snapshot` call. It is
+optional — a daemon hiccup degrades it to `{}` rather than failing the reply —
+and a uuid absent from the map means "no claim", never "idle". `session_created`,
+`session_list` and `session_history` were removed in #26 and are refused.
 
 Note: `stream_chunk.chunk` contains raw claude message objects (e.g., `{ type: "assistant", message: { content: [...] } }`). The frontend's `extractTextFromChunk()` parses these into displayable text.
 
@@ -162,9 +167,11 @@ cc-mobile/
 ### 1. Session Manager — session map + settings state
 
 The in-process `query()` turn driver was removed in #25 (ADR-015). Turns are
-driven by the herdr backend; `SessionManager` now only holds the session map
-(used by `resume_session` for read-only history viewing) and the settings the
-settings screen reads back through `get_server_config`.
+driven by the herdr backend; `SessionManager` now only holds the settings the
+settings screen reads back through `get_server_config`. Its session map has had
+no writer since #26 deleted the resume handler, so every session-scoped message
+(`set_permission_mode` with a `sessionId`, `append_user_message`) answers
+`session_not_found`, and `interrupt` is a silent no-op.
 
 ```typescript
 class SessionManager {
@@ -173,9 +180,10 @@ class SessionManager {
 }
 ```
 
-`resume_session` is read-only: it loads a past session's history for viewing,
-but that session cannot be continued. Start a new terminal session to keep
-talking.
+Browsing past conversations is gone since #26. herdr's live sessions are the
+only sessions there are: the Projects screen lists saved projects, its activity
+dot reflects the state herdr reports, and a project with nothing live shows no
+dot at all.
 
 ### 2. Plugin Loading ([ADR-006](docs/adr/006-plugin-loading-from-user-settings.md))
 
