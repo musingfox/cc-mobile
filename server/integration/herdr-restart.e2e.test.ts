@@ -12,9 +12,13 @@ import { resolveSocketPath } from "../herdr/transport";
 // -> a third turn recalls the codeword (same claude session, context intact).
 //
 // The server MUST run as a child process (not in-process createApp): the point
-// is that the OS process dies and a fresh one remounts the pane from the
-// daemon snapshot. Same port is mandatory — the Stop-hook URL baked into the
-// session's settings file carries the port number.
+// is that the OS process dies and a fresh one still finds the pane.
+//
+// Updated for #29: there is no remount scan and no settings file any more. The
+// new server rediscovers nothing — it asks `agent.list` when the phone asks
+// what is running, and ownership comes from the workspace label, which survives
+// the restart. The session key is herdr's pane id, so the third turn is sent to
+// a key server B never minted.
 //
 // Runs only against a real daemon (skipIf socket missing) and burns three real
 // claude turns with minimal prompts. cwd = this repo's root, which must be a
@@ -66,10 +70,10 @@ function spawnServer(port: number): Bun.Subprocess {
 }
 
 /**
- * Polls until the server accepts HTTP on the port. index.ts only listens after
- * verifyHerdrStartup AND the remount scan complete, so a bound port implies
- * remount finished — the client cannot race a half-done scan. Fails fast if
- * the child exits first (e.g. daemon gate fatal).
+ * Polls until the server accepts HTTP on the port. index.ts listens once
+ * verifyHerdrStartup passes; there is nothing else to wait for, because the
+ * session list is derived on demand from the daemon rather than rebuilt at
+ * startup. Fails fast if the child exits first (e.g. daemon gate fatal).
  */
 async function waitForServerReady(
   proc: Bun.Subprocess,
@@ -85,7 +89,7 @@ async function waitForServerReady(
     if (exited) throw new Error(`${label} exited (code ${proc.exitCode}) before becoming ready`);
     try {
       await fetch(`http://127.0.0.1:${port}/`);
-      return; // any HTTP response means listen() ran, hence remount completed
+      return; // any HTTP response means listen() ran
     } catch {
       await Bun.sleep(250);
     }
@@ -179,15 +183,15 @@ async function openWs(port: number): Promise<WebSocket> {
 async function runTurn(
   ws: WebSocket,
   collector: ReturnType<typeof createMessageCollector>,
-  claudeUuid: string,
+  sessionId: string,
   prompt: string,
   expected: string,
   label: string,
 ): Promise<void> {
   const t = Date.now();
-  ws.send(JSON.stringify({ type: "terminal_send", claudeUuid, content: prompt }));
+  ws.send(JSON.stringify({ type: "terminal_send", claudeUuid: sessionId, content: prompt }));
   const reply = await collector.next(
-    (msg) => (msg.type === "stream_chunk" || msg.type === "error") && msg.sessionId === claudeUuid,
+    (msg) => (msg.type === "stream_chunk" || msg.type === "error") && msg.sessionId === sessionId,
     TURN_DEADLINE_MS,
     `${label} stream_chunk`,
   );
@@ -195,7 +199,7 @@ async function runTurn(
   expect((reply.chunk as { type?: string }).type).toBe("assistant");
   expect(chunkText(reply)).toContain(expected);
   await collector.next(
-    (msg) => msg.type === "stream_end" && msg.sessionId === claudeUuid,
+    (msg) => msg.type === "stream_end" && msg.sessionId === sessionId,
     TURN_DEADLINE_MS,
     `${label} stream_end`,
   );
@@ -234,6 +238,10 @@ it.skipIf(!existsSync(socketPath))(
       expect(created.type).toBe("terminal_created");
       expect(created.claudeUuid).toBe(claudeUuid);
       const paneRef = created.paneRef as string;
+      // The wire session key (Decision H5) — and the only key server B will
+      // know, since it never minted the request uuid.
+      const sessionId = created.sessionId as string;
+      expect(sessionId).toBe(paneRef);
       console.log(`[e2e] step 2 terminal_created paneRef=${paneRef} in ${Date.now() - t2}ms`);
 
       // Record the workspace for the post-teardown assertion + finally cleanup.
@@ -242,8 +250,8 @@ it.skipIf(!existsSync(socketPath))(
       expect(workspaceId).toBeDefined();
 
       // Steps 3-4: teach the codeword, confirm it landed — two full turns.
-      await runTurn(wsA, collectorA, claudeUuid, PROMPT_TURN_1, "OK", "step 3 turn 1");
-      await runTurn(wsA, collectorA, claudeUuid, PROMPT_TURN_2, "YES", "step 4 turn 2");
+      await runTurn(wsA, collectorA, sessionId, PROMPT_TURN_1, "OK", "step 3 turn 1");
+      await runTurn(wsA, collectorA, sessionId, PROMPT_TURN_2, "YES", "step 4 turn 2");
 
       // Step 5: SIGTERM kills the server process but NOT the pane (D2 live
       // proof: no shutdown handler tears the workspace down anymore).
@@ -258,14 +266,15 @@ it.skipIf(!existsSync(socketPath))(
       wsA = undefined;
       console.log(`[e2e] step 5 server A terminated in ${Date.now() - t5}ms`);
 
-      // Step 6: server process B on the SAME port — the Stop-hook URL written
-      // into the session's settings file pins this port number.
+      // Step 6: server process B on the same port.
       const t6 = Date.now();
       procB = spawnServer(port);
       await waitForServerReady(procB, port, "server B");
-      console.log(`[e2e] step 6 server B ready (remount done) in ${Date.now() - t6}ms`);
+      console.log(`[e2e] step 6 server B ready in ${Date.now() - t6}ms`);
 
-      // Step 7: the remounted session is in the authoritative live list.
+      // Step 7: the surviving session is in the authoritative live list — not
+      // because anything was remounted, but because the daemon still has the
+      // pane and its workspace still carries cc-mobile's ownership label.
       wsB = await openWs(port);
       const collectorB = createMessageCollector(wsB);
       wsB.send(JSON.stringify({ type: "list_terminal_sessions" }));
@@ -274,15 +283,22 @@ it.skipIf(!existsSync(socketPath))(
         LIST_DEADLINE_MS,
         "step 7 terminal_sessions",
       );
-      expect(listed.claudeUuids as string[]).toContain(claudeUuid);
+      expect(listed.claudeUuids as string[]).toContain(sessionId);
+      const descriptor = (listed.sessions as Array<Record<string, unknown>>).find(
+        (session) => session.sessionId === sessionId,
+      );
+      // Ownership is label-derived, so it survives a process that has forgotten
+      // everything (Decision M12) — which is what keeps teardown allowed below.
+      expect(descriptor?.origin).toBe("self");
       console.log(`[e2e] step 7 session listed after restart`);
 
-      // Step 8: third turn on the SAME claudeUuid recalls the codeword —
-      // same live claude session, context intact across the restart.
-      await runTurn(wsB, collectorB, claudeUuid, PROMPT_TURN_3, CODEWORD, "step 8 turn 3");
+      // Step 8: third turn on the SAME session recalls the codeword — same live
+      // claude, context intact across the restart, driven by a server process
+      // that has no registry entry for it at all.
+      await runTurn(wsB, collectorB, sessionId, PROMPT_TURN_3, CODEWORD, "step 8 turn 3");
 
       // Teardown through the mobile protocol; the daemon keeps no residue.
-      wsB.send(JSON.stringify({ type: "terminal_teardown", claudeUuid }));
+      wsB.send(JSON.stringify({ type: "terminal_teardown", sessionId }));
       const teardownResult = await collectorB.next(
         (msg) => msg.type === "terminal_teardown_result" || msg.type === "error",
         CREATE_DEADLINE_MS,

@@ -13,6 +13,10 @@ import { resolveSocketPath } from "../herdr/transport";
 // desktop-attach identity -> second turn -> teardown. This is the sequence the
 // the deleted PTY one-shot path could not do (multi-turn on one live session).
 //
+// Updated for #29: the session key on the wire is herdr's pane id, not the uuid
+// the client minted for the create request, and the replies below are read out
+// of claude's transcript rather than delivered by a Stop hook.
+//
 // Runs only against a real daemon (skipIf socket missing) and burns two real
 // claude turns with minimal prompts. cwd = this repo's root, which must be a
 // trusted directory per plan D5 (trust-dialog handling is deferred to #24).
@@ -145,6 +149,10 @@ it.skipIf(!existsSync(socketPath))(
       const paneRef = created.paneRef as string;
       expect(typeof paneRef).toBe("string");
       expect(paneRef.length).toBeGreaterThan(0);
+      // The wire session key from here on (Decision H5); the request uuid only
+      // named the buffer slot this ack landed in.
+      const sessionId = created.sessionId as string;
+      expect(sessionId).toBe(paneRef);
       console.log(`[e2e] step 1 terminal_created paneRef=${paneRef} in ${Date.now() - t1}ms`);
 
       // Record the workspace for the post-teardown assertion + finally cleanup.
@@ -152,13 +160,16 @@ it.skipIf(!existsSync(socketPath))(
       workspaceId = panesBefore.panes.find((pane) => pane.pane_id === paneRef)?.workspace_id;
       expect(workspaceId).toBeDefined();
 
-      // Step 2: two-line prompt submits as ONE turn; reply arrives as
-      // stream_chunk(assistant) + stream_end via the Stop-hook relay.
+      // Step 2: two-line prompt submits as ONE turn; the reply arrives as
+      // stream_chunk(assistant) + stream_end, read from claude's transcript
+      // when herdr reports the turn settled.
       const t2 = Date.now();
-      ws.send(JSON.stringify({ type: "terminal_send", claudeUuid, content: PROMPT_TURN_1 }));
+      ws.send(
+        JSON.stringify({ type: "terminal_send", claudeUuid: sessionId, content: PROMPT_TURN_1 }),
+      );
       const reply1 = await collector.next(
         (msg) =>
-          (msg.type === "stream_chunk" || msg.type === "error") && msg.sessionId === claudeUuid,
+          (msg.type === "stream_chunk" || msg.type === "error") && msg.sessionId === sessionId,
         TURN_DEADLINE_MS,
         "step 2 stream_chunk",
       );
@@ -166,7 +177,7 @@ it.skipIf(!existsSync(socketPath))(
       expect((reply1.chunk as { type?: string }).type).toBe("assistant");
       expect(chunkText(reply1)).toContain("PONG");
       await collector.next(
-        (msg) => msg.type === "stream_end" && msg.sessionId === claudeUuid,
+        (msg) => msg.type === "stream_end" && msg.sessionId === sessionId,
         TURN_DEADLINE_MS,
         "step 2 stream_end",
       );
@@ -183,19 +194,21 @@ it.skipIf(!existsSync(socketPath))(
       expect(read.text).toContain(PROMPT_TURN_1_FRAGMENT);
       console.log(`[e2e] step 3 attach identity ccm-${uuid8} in ${Date.now() - t3}ms`);
 
-      // Step 4: second turn on the SAME claudeUuid — multi-turn, per-turn Stop hook.
+      // Step 4: second turn on the SAME session — multi-turn on one live pane.
       const t4 = Date.now();
-      ws.send(JSON.stringify({ type: "terminal_send", claudeUuid, content: PROMPT_TURN_2 }));
+      ws.send(
+        JSON.stringify({ type: "terminal_send", claudeUuid: sessionId, content: PROMPT_TURN_2 }),
+      );
       const reply2 = await collector.next(
         (msg) =>
-          (msg.type === "stream_chunk" || msg.type === "error") && msg.sessionId === claudeUuid,
+          (msg.type === "stream_chunk" || msg.type === "error") && msg.sessionId === sessionId,
         TURN_DEADLINE_MS,
         "step 4 stream_chunk",
       );
       expect(reply2.type).toBe("stream_chunk");
       expect(chunkText(reply2)).toContain("PONG2");
       await collector.next(
-        (msg) => msg.type === "stream_end" && msg.sessionId === claudeUuid,
+        (msg) => msg.type === "stream_end" && msg.sessionId === sessionId,
         TURN_DEADLINE_MS,
         "step 4 stream_end",
       );
@@ -203,7 +216,7 @@ it.skipIf(!existsSync(socketPath))(
 
       // Step 5: teardown kills the workspace and leaves no pane behind.
       const t5 = Date.now();
-      ws.send(JSON.stringify({ type: "terminal_teardown", claudeUuid }));
+      ws.send(JSON.stringify({ type: "terminal_teardown", sessionId }));
       const teardownResult = await collector.next(
         (msg) => msg.type === "terminal_teardown_result" || msg.type === "error",
         CREATE_DEADLINE_MS,
