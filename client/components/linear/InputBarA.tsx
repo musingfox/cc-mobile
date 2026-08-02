@@ -52,10 +52,6 @@ const InputBarA = forwardRef<InputBarAHandle, Props>(function InputBarA(
   );
   // A terminal session only accepts input once the server reports it ready.
   const terminalNotReady = terminal !== undefined && !terminal.ready;
-  // A session without a terminal was opened from history (#25 D1): it can be
-  // read but never continued — the old PTY one-shot path that used to accept
-  // typing here started a brand-new claude conversation, so it is gone.
-  const readOnly = sessionId !== null && terminal === undefined;
 
   const [images, setImages] = useState<ImageAttachment[]>([]);
   const [files, setFiles] = useState<FileAttachment[]>([]);
@@ -103,8 +99,7 @@ const InputBarA = forwardRef<InputBarAHandle, Props>(function InputBarA(
       (!trimmed && images.length === 0 && files.length === 0) ||
       disabled ||
       isUploading ||
-      terminalNotReady ||
-      readOnly
+      terminalNotReady
     )
       return;
     if (!sessionId || !sessionCwd) return;
@@ -207,11 +202,7 @@ const InputBarA = forwardRef<InputBarAHandle, Props>(function InputBarA(
 
   const hasAttachments = images.length > 0 || files.length > 0;
   const canSend =
-    !disabled &&
-    !isUploading &&
-    !terminalNotReady &&
-    !readOnly &&
-    (inputDraft.trim() || hasAttachments);
+    !disabled && !isUploading && !terminalNotReady && (inputDraft.trim() || hasAttachments);
 
   return (
     <div className="lin-input-bar">
@@ -269,12 +260,6 @@ const InputBarA = forwardRef<InputBarAHandle, Props>(function InputBarA(
         </div>
       )}
 
-      {readOnly && (
-        <div className="lin-input-readonly">
-          Read-only view of a past session. Start a new session to continue.
-        </div>
-      )}
-
       <div className="lin-composer">
         <textarea
           ref={textareaRef}
@@ -284,11 +269,11 @@ const InputBarA = forwardRef<InputBarAHandle, Props>(function InputBarA(
           onKeyDown={handleKeyDown}
           placeholder="Message cc-mobile…"
           rows={1}
-          disabled={disabled || readOnly}
+          disabled={disabled}
         />
         <div className="lin-composer-actions">
           <div className="lin-composer-attach">
-            <AttachmentSheet onAttach={handleAttach} disabled={disabled || readOnly} />
+            <AttachmentSheet onAttach={handleAttach} disabled={disabled} />
           </div>
           <button
             type="button"

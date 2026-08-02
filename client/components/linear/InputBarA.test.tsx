@@ -137,36 +137,17 @@ describe("InputBarA", () => {
     expect(terminalMock).toHaveBeenCalledWith("s1", "hello");
   });
 
-  // ── read-only history sessions (#25 D1) ────────────────────────────────────
-
-  test("session without a terminal: send is refused and no message is appended", () => {
-    const terminalMock = mock(() => {});
-    wsService.terminalSend = terminalMock as typeof wsService.terminalSend;
-    seed("hello", undefined);
-
-    const { container } = render(<InputBarA sessionId="s1" />);
-    const send = container.querySelector('[aria-label="Send"]') as HTMLButtonElement;
-    expect(send.disabled).toBe(true);
-
-    fireEvent.click(send);
-    const textarea = container.querySelector("textarea") as HTMLTextAreaElement;
-    fireEvent.keyDown(textarea, { key: "Enter", metaKey: true, isComposing: false });
-
-    expect(terminalMock).toHaveBeenCalledTimes(0);
-    const session = useAppStore.getState().sessions.get("s1") as unknown as {
-      messages?: unknown[];
-    };
-    expect(session.messages ?? []).toHaveLength(0);
-  });
-
-  test("session without a terminal: textarea disabled and the read-only reason is shown", () => {
+  test("a session with no terminal marker renders no read-only banner", () => {
+    // There is nothing left to view read-only: the composer only knows
+    // "ready" and "not ready". The pre-reconcile window where a markerless
+    // session can still be typed into is covered by the send-flow guard,
+    // which drops the send instead of the composer refusing to render.
     seed("", undefined);
 
     const { container } = render(<InputBarA sessionId="s1" />);
-    const textarea = container.querySelector("textarea") as HTMLTextAreaElement;
 
-    expect(textarea.disabled).toBe(true);
-    expect(container.textContent).toContain("Read-only view of a past session");
+    expect(container.textContent).not.toContain("Read-only view of a past session");
+    expect(container.querySelector(".lin-input-readonly")).toBeNull();
   });
 
   test("PTY toggle and Append (+) buttons are gone", () => {

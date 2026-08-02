@@ -9,8 +9,9 @@ interface SendArgs {
   uploadImage: (sessionId: string, base64: string, mediaType: string) => Promise<{ path: string }>;
   /**
    * Present only for terminal-backed (live herdr) sessions. Absent means the
-   * session is a read-only history view (#25 D1): nothing is sent, nothing is
-   * uploaded, and the composer keeps whatever the user typed.
+   * session is not routable yet — a card restored from localStorage before the
+   * reconcile has confirmed it. Nothing is sent, nothing is uploaded, and the
+   * composer keeps whatever the user typed.
    */
   terminalSend?: (sessionId: string, prompt: string) => void;
   clearInputs: () => void;
@@ -37,8 +38,8 @@ export async function runSend({
   terminalSend,
   clearInputs,
 }: SendArgs): Promise<void> {
-  // Read-only session: refuse silently. Uploads are skipped too — landing an
-  // image for a prompt that can never be sent just litters the upload dir.
+  // Unroutable session: refuse silently. Uploads are skipped too — landing an
+  // image for a prompt that cannot be sent just litters the upload dir.
   if (!terminalSend) return;
   if (landing) return;
 
