@@ -4,11 +4,13 @@ import { join } from "node:path";
 
 const wsSource = readFileSync(join(import.meta.dir, "..", "ws.ts"), "utf8");
 
-describe("WsData shape", () => {
-  it("only keeps per-socket session tracking", () => {
+describe("socket-scoped state", () => {
+  it("the socket carries no per-session state at all", () => {
+    // The only writer was the resume handler, which is gone: a connection is
+    // now a pipe, and every session id arrives on the message that needs it.
     const removedField = "heart" + "beat?:";
-    expect(wsSource).toContain("interface WsData");
-    expect(wsSource).toContain("currentSessionId?: string;");
+    expect(wsSource).not.toContain("interface WsData");
+    expect(wsSource).not.toContain("currentSessionId");
     expect(wsSource).not.toContain(removedField);
   });
 

@@ -105,12 +105,12 @@ describe("DeadModuleResidueScan — retired message names", () => {
 });
 
 describe("DeadModuleResidueScan — dependency surface", () => {
-  test("only session listing and history still import the agent SDK", () => {
+  test("no production file imports the agent SDK any more", () => {
     const sdk = `@anthropic-ai/claude${"-"}agent-sdk`;
-    // Test files legitimately import SDK types to build fixtures for those two
-    // modules; what must stay contained is the production surface.
+    // The last two importers were the session listing and history readers,
+    // deleted with the browse-past-conversations path.
     const production = hits(sdk).filter((p) => !p.includes(".test.") && !p.includes("__tests__"));
-    expect(production.sort()).toEqual(["server/session-history.ts", "server/session-listing.ts"]);
+    expect(production.sort()).toEqual([]);
   });
 
   test("the native pty dependency is gone from package.json", () => {

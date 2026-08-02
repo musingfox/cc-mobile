@@ -4,11 +4,9 @@ import { type Capabilities, loadCachedCapabilities } from "./capabilities-cache"
 import type { ServerConfig } from "./config";
 import { listDirectories } from "./directory-listing";
 import type { EventBuffer } from "./event-buffer";
-import { buildUrl, expandPath, validateAllowedPath, validateCwd } from "./path-utils";
-import { ClientMessage, ServerMessage } from "./protocol";
+import { buildUrl } from "./path-utils";
+import { ClientMessage } from "./protocol";
 import type { createPtyPermissionRelay, PtyRelaySnapshot } from "./pty-permission-relay";
-import { loadSessionHistory } from "./session-history";
-import { listClaudeSessions, renameClaudeSession } from "./session-listing";
 import type { SessionManager } from "./session-manager";
 import {
   handleTerminalCreate,
@@ -18,16 +16,12 @@ import {
 
 type PtyPermissionRelay = ReturnType<typeof createPtyPermissionRelay>;
 
-interface WsData {
-  currentSessionId?: string;
-}
-
 // ---------------------------------------------------------------------------
-// Capabilities emit helpers — extracted seams (logic-free; byte-equivalent)
+// Capabilities emit helper — extracted seam (logic-free; byte-equivalent)
 //
-// TODO(#25-followup): the disk cache these read has had no writer since the SDK
-// query path was removed, so the slash-command / agent lists are frozen at
-// whatever a pre-#25 run left behind (empty on a machine that never had one).
+// TODO(#26): the disk cache this reads has had no writer since the SDK query
+// path was removed, so the slash-command / agent lists are frozen at whatever
+// a pre-#25 run left behind (empty on a machine that never had one).
 // ---------------------------------------------------------------------------
 
 /** open/reconnect path: bare ws.send, no sessionId */
@@ -38,22 +32,6 @@ export function emitCapabilitiesOnOpen(
   if (cachedCapabilities) {
     ws.send({
       type: "capabilities",
-      ...cachedCapabilities,
-    });
-  }
-}
-
-/** resume path: sendBuffered with sessionId */
-export function emitCapabilitiesOnResume(
-  sendBuf: (ws: any, sessionId: string, msg: Record<string, unknown>) => void,
-  ws: any,
-  sessionId: string,
-  cachedCapabilities: Capabilities | null,
-): void {
-  if (cachedCapabilities) {
-    sendBuf(ws, sessionId, {
-      type: "capabilities",
-      sessionId,
       ...cachedCapabilities,
     });
   }
@@ -179,22 +157,12 @@ export function createWsPlugin(
 
       try {
         switch (message.type) {
-          case "set_session_title": {
-            try {
-              await renameClaudeSession(message.sdkSessionId, message.title, message.dir);
-            } catch (err) {
-              ws.send({
-                type: "error",
-                code: "rename_failed",
-                message: err instanceof Error ? err.message : String(err),
-              });
-            }
-            break;
-          }
-
-          // TODO(#25-followup): the append buffer this fills has no consumer —
-          // the SDK turn driver that used to drain it is gone. Accepted rather
-          // than rejected so the client method does not start erroring.
+          // TODO(#25-followup, #26): the append buffer this fills has no
+          // consumer — the SDK turn driver that used to drain it is gone. And
+          // with the last session-registering handler deleted in #26, the
+          // manager's map is permanently empty, so this now always answers
+          // `session_not_found`. Accepted rather than rejected at the schema so
+          // the client method does not start throwing.
           case "append_user_message": {
             try {
               sessionManager.appendUserMessage(message.sessionId, message.content);
@@ -226,12 +194,14 @@ export function createWsPlugin(
             break;
           }
 
+          // TODO(#25-followup, #26): the session map is permanently empty, so
+          // this deletes nothing and stays silent — no frame of any kind.
           case "interrupt": {
             sessionManager.destroySession(message.sessionId);
             break;
           }
 
-          // TODO(#25-followup): there is no in-process turn to stop any more, so
+          // TODO(#25-followup, #26): there is no in-process turn to stop any more, so
           // this always answers `no_active_query`. The UI's stop button stays
           // wired but inert until herdr exposes a per-task interrupt.
           case "stop_task": {
@@ -260,11 +230,14 @@ export function createWsPlugin(
             break;
           }
 
-          // TODO(#25-followup): set_permission_mode / set_env_vars / set_model /
-          // set_effort record state and echo it back, but herdr receives none of
-          // it — the pane's mode comes from the argv app.ts built at startup.
-          // These stay accepted (rather than rejected) so the settings UI does
-          // not error at the user; making the UI honest is a separate ticket.
+          // TODO(#25-followup, #26): set_permission_mode / set_env_vars /
+          // set_model / set_effort record state and echo it back, but herdr
+          // receives none of it — the pane's mode comes from the argv app.ts
+          // built at startup. Since #26 emptied the session map for good, the
+          // per-session branch below always answers `session_not_found`; only
+          // the global branch still records anything. These stay accepted
+          // (rather than rejected) so the settings UI does not error at the
+          // user; making the UI honest is a separate ticket.
           case "set_permission_mode": {
             if (message.sessionId) {
               if (!sessionManager.hasSession(message.sessionId)) {
@@ -327,22 +300,6 @@ export function createWsPlugin(
             break;
           }
 
-          case "list_sessions": {
-            const sessions = await listClaudeSessions({
-              dir: message.dir,
-              limit: message.limit ?? 20,
-              offset: message.offset ?? 0,
-            });
-            try {
-              const validated = ServerMessage.parse({ type: "session_list", sessions });
-              ws.send(validated);
-            } catch (err) {
-              console.error("[ws] session_list validation failed:", err);
-              ws.send({ type: "session_list", sessions });
-            }
-            break;
-          }
-
           case "list_terminal_sessions": {
             // Bare send, not sendBuffered: this is a connection-scoped question
             // and its answer, not a session event. Buffering it would replay a
@@ -382,70 +339,6 @@ export function createWsPlugin(
               unknownUuids: backend.listUnknown?.() ?? [],
               states,
             });
-            break;
-          }
-
-          case "resume_session": {
-            const cwd = expandPath(message.cwd);
-            const cwdError = validateCwd(cwd);
-            if (cwdError) {
-              ws.send({
-                type: "error",
-                code: "invalid_cwd",
-                message: cwdError,
-              });
-              break;
-            }
-
-            if (!validateAllowedPath(cwd, serverConfig.allowedRoots)) {
-              ws.send({
-                type: "error",
-                code: "path_not_allowed",
-                message: "Project path is not in the allowed roots",
-              });
-              break;
-            }
-
-            const sessionId = crypto.randomUUID();
-            (ws.data as WsData).currentSessionId = sessionId;
-
-            await sessionManager.createSession(sessionId, cwd, message.sdkSessionId);
-
-            sendBuffered(ws, sessionId, {
-              type: "session_created",
-              sessionId,
-              cwd,
-            });
-
-            // Load and send history
-            try {
-              const messages = await loadSessionHistory(message.sdkSessionId);
-              const validated = ServerMessage.parse({
-                type: "session_history",
-                sessionId,
-                messages,
-              });
-              sendBuffered(ws, sessionId, validated);
-            } catch (_err) {
-              // Session created but history load failed - not fatal
-              try {
-                const validated = ServerMessage.parse({
-                  type: "session_history",
-                  sessionId,
-                  messages: [],
-                });
-                sendBuffered(ws, sessionId, validated);
-              } catch {
-                sendBuffered(ws, sessionId, {
-                  type: "session_history",
-                  sessionId,
-                  messages: [],
-                });
-              }
-            }
-
-            // Send cached capabilities if available
-            emitCapabilitiesOnResume(sendBuffered, ws, sessionId, cachedCapabilities);
             break;
           }
 

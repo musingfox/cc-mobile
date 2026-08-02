@@ -49,7 +49,9 @@ describe("ProjectsScreen rows come only from saved projects", () => {
 
     const { container } = renderScreen();
 
-    const titles = [...container.querySelectorAll(".lin-project-title")].map((n) => n.textContent);
+    const titles = Array.from(container.querySelectorAll(".lin-project-title")).map(
+      (n) => n.textContent,
+    );
     expect(titles).toEqual(["a", "b"]);
     expect(container.textContent).not.toContain("session");
   });
@@ -114,7 +116,7 @@ describe("ProjectsScreen dot reflects the server's agent state", () => {
   });
 
   function dots(container: HTMLElement) {
-    return [...container.querySelectorAll(".lin-project-live-dot")].map((n) =>
+    return Array.from(container.querySelectorAll(".lin-project-live-dot")).map((n) =>
       n.getAttribute("aria-label"),
     );
   }

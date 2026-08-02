@@ -52,16 +52,8 @@ describe("WsRoutingWithoutPermissionHandler", () => {
   test("a brand-new connection's first message is answered, not blocked", async () => {
     const h = await start();
 
-    h.send({ type: "list_sessions", dir: "/tmp/does-not-exist-cc-mobile" });
-
-    const reply = await h.waitFor((m) => m.type === "session_list");
-    expect(reply.type).toBe("session_list");
-    expect(errorFrames(h)).toEqual([]);
-  });
-
-  test("a brand-new connection can read the server config immediately", async () => {
-    const h = await start();
-
+    // The probe used to be the session listing; that message is gone, so this
+    // asks the other connection-scoped question that is answered immediately.
     h.send({ type: "get_server_config" });
 
     const reply = await h.waitFor((m) => m.type === "server_config");

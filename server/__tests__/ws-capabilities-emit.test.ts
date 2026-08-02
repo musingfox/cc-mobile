@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Capabilities } from "../capabilities-cache";
-import { emitCapabilitiesOnOpen, emitCapabilitiesOnResume } from "../ws";
+import { emitCapabilitiesOnOpen } from "../ws";
 
 // Fake ws with bare send (open/reconnect path)
 function makeFakeWs() {
@@ -11,15 +11,6 @@ function makeFakeWs() {
     },
     sent,
   };
-}
-
-// Fake sendBuffered that collects the inner payload (the capabilities message)
-function makeFakeSendBuffered() {
-  const payloads: Record<string, unknown>[] = [];
-  const fn = (_ws: unknown, _sessionId: string, msg: Record<string, unknown>) => {
-    payloads.push(msg);
-  };
-  return { fn, payloads };
 }
 
 const SAMPLE_CAPS: Capabilities = {
@@ -52,25 +43,6 @@ describe("capabilities emit helpers", () => {
 
   // EX-3 covered the init path, which fed capabilities out of the SDK query's
   // system/init message. That path (and its emit helper) went with #25.
-
-  // EX-4: resume — cache non-null → one frame with sessionId + cache fields
-  test("EX-4: emitCapabilitiesOnResume with non-null cache emits one frame with sessionId", () => {
-    const { fn, payloads } = makeFakeSendBuffered();
-    emitCapabilitiesOnResume(fn, {}, "sess-r", SAMPLE_CAPS);
-
-    expect(payloads).toHaveLength(1);
-    const frame = payloads[0];
-    expect(frame.type).toBe("capabilities");
-    expect(frame.sessionId).toBe("sess-r");
-    expect(frame.commands).toEqual(SAMPLE_CAPS.commands);
-    expect(frame.agents).toEqual(SAMPLE_CAPS.agents);
-    expect(frame.model).toBe(SAMPLE_CAPS.model);
-  });
-
-  // EX-5: resume — cache null → no frame
-  test("EX-5: emitCapabilitiesOnResume with null cache emits nothing", () => {
-    const { fn, payloads } = makeFakeSendBuffered();
-    emitCapabilitiesOnResume(fn, {}, "sess-r", null);
-    expect(payloads).toHaveLength(0);
-  });
+  // EX-4/EX-5 covered the resume path's emit helper, which went with #26 —
+  // there is no resume any more, so the open path is the only emitter left.
 });

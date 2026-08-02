@@ -2,38 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { ClientMessage, ServerMessage } from "../protocol";
 
 describe("ClientMessage schema", () => {
-  test("set_session_title valid with dir", () => {
-    const result = ClientMessage.safeParse({
-      type: "set_session_title",
-      sdkSessionId: "uuid-1",
-      title: "New title",
-      dir: "/p",
-    });
-    expect(result.success).toBe(true);
-    if (result.success && result.data.type === "set_session_title") {
-      expect(result.data).toEqual({
-        type: "set_session_title",
-        sdkSessionId: "uuid-1",
-        title: "New title",
-        dir: "/p",
-      });
-    }
-  });
-  test("set_session_title valid without dir", () => {
-    const result = ClientMessage.safeParse({
-      type: "set_session_title",
-      sdkSessionId: "uuid-1",
-      title: "New title",
-    });
-    expect(result.success).toBe(true);
-  });
-  test("set_session_title rejects when sdkSessionId missing", () => {
-    const result = ClientMessage.safeParse({
-      type: "set_session_title",
-      title: "New title",
-    });
-    expect(result.success).toBe(false);
-  });
   test("permission missing allow field", () => {
     const result = ClientMessage.safeParse({ type: "permission", requestId: "r1" });
     expect(result.success).toBe(false);
@@ -66,51 +34,6 @@ describe("ClientMessage schema", () => {
   test("get_server_config valid", () => {
     const result = ClientMessage.safeParse({ type: "get_server_config" });
     expect(result.success).toBe(true);
-  });
-
-  test("T7: list_sessions valid", () => {
-    const result = ClientMessage.safeParse({ type: "list_sessions", limit: 10 });
-    expect(result.success).toBe(true);
-  });
-
-  test("list_sessions with all options", () => {
-    const result = ClientMessage.safeParse({
-      type: "list_sessions",
-      dir: "/test/dir",
-      limit: 20,
-      offset: 5,
-    });
-    expect(result.success).toBe(true);
-  });
-
-  test("list_sessions minimal (no options)", () => {
-    const result = ClientMessage.safeParse({ type: "list_sessions" });
-    expect(result.success).toBe(true);
-  });
-
-  test("T8: resume_session valid", () => {
-    const result = ClientMessage.safeParse({
-      type: "resume_session",
-      sdkSessionId: "abc",
-      cwd: "/test",
-    });
-    expect(result.success).toBe(true);
-  });
-
-  test("resume_session missing sdkSessionId", () => {
-    const result = ClientMessage.safeParse({
-      type: "resume_session",
-      cwd: "/test",
-    });
-    expect(result.success).toBe(false);
-  });
-
-  test("resume_session missing cwd", () => {
-    const result = ClientMessage.safeParse({
-      type: "resume_session",
-      sdkSessionId: "abc",
-    });
-    expect(result.success).toBe(false);
   });
 
   test("12: set_env_vars valid", () => {

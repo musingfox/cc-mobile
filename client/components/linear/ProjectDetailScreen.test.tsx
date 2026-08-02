@@ -30,7 +30,9 @@ describe("ProjectDetailScreen shows only live sessions", () => {
 
     const { container } = renderScreen("/a");
 
-    const badges = [...container.querySelectorAll(".lin-session-live")].map((n) => n.textContent);
+    const badges = Array.from(container.querySelectorAll(".lin-session-live")).map(
+      (n) => n.textContent,
+    );
     expect(badges.length).toBe(1);
     expect(badges[0]).toContain("Live");
   });
@@ -42,7 +44,9 @@ describe("ProjectDetailScreen shows only live sessions", () => {
 
     const { container } = renderScreen("/a");
 
-    const badges = [...container.querySelectorAll(".lin-session-live")].map((n) => n.textContent);
+    const badges = Array.from(container.querySelectorAll(".lin-session-live")).map(
+      (n) => n.textContent,
+    );
     expect(badges.length).toBe(1);
     expect(badges[0]).toContain("Active");
   });

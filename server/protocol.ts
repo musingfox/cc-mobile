@@ -22,13 +22,6 @@ export type ImageBlock = z.infer<typeof ImageBlockSchema>;
 export type ContentBlock = z.infer<typeof ContentBlockSchema>;
 
 // Client → Server messages
-const SetSessionTitleMessage = z.object({
-  type: z.literal("set_session_title"),
-  sdkSessionId: z.string(),
-  title: z.string(),
-  dir: z.string().optional(),
-});
-
 const AppendUserMessageSchema = z.object({
   type: z.literal("append_user_message"),
   sessionId: z.string(),
@@ -55,19 +48,6 @@ const InterruptMessage = z.object({
 
 const GetServerConfigMessage = z.object({
   type: z.literal("get_server_config"),
-});
-
-const ListSessionsMessage = z.object({
-  type: z.literal("list_sessions"),
-  dir: z.string().optional(),
-  limit: z.number().optional(),
-  offset: z.number().optional(),
-});
-
-const ResumeSessionMessage = z.object({
-  type: z.literal("resume_session"),
-  sdkSessionId: z.string(),
-  cwd: z.string(),
 });
 
 const SetPermissionModeMessage = z.object({
@@ -141,15 +121,12 @@ export const ClientMessage = z.discriminatedUnion("type", [
   PermissionMessage,
   InterruptMessage,
   GetServerConfigMessage,
-  ListSessionsMessage,
-  ResumeSessionMessage,
   SetPermissionModeMessage,
   SetEnvVarsMessage,
   SetModelMessage,
   SetEffortMessage,
   ListDirectoriesMessage,
   ReconnectMessage,
-  SetSessionTitleMessage,
   AppendUserMessageSchema,
   StopTaskMessage,
   TerminalSendMessage,
@@ -161,12 +138,6 @@ export const ClientMessage = z.discriminatedUnion("type", [
 export type ClientMessage = z.infer<typeof ClientMessage>;
 
 // Server → Client messages
-const SessionCreatedMessage = z.object({
-  type: z.literal("session_created"),
-  sessionId: z.string(),
-  cwd: z.string(),
-});
-
 const StreamChunkMessage = z.object({
   type: z.literal("stream_chunk"),
   sessionId: z.string(),
@@ -254,34 +225,6 @@ const ServerConfigMessage = z.object({
   }),
 });
 
-export const SessionListItemSchema = z.object({
-  sdkSessionId: z.string(),
-  displayTitle: z.string(),
-  cwd: z.string(),
-  gitBranch: z.string().optional(),
-  lastModified: z.number(),
-  createdAt: z.number().optional(),
-  customTitle: z.string().optional(),
-});
-
-export const HistoryMessageSchema = z.object({
-  id: z.string(),
-  role: z.enum(["user", "assistant"]),
-  content: z.string(),
-  timestamp: z.number(),
-});
-
-const SessionListMessage = z.object({
-  type: z.literal("session_list"),
-  sessions: z.array(SessionListItemSchema),
-});
-
-const SessionHistoryMessage = z.object({
-  type: z.literal("session_history"),
-  sessionId: z.string(),
-  messages: z.array(HistoryMessageSchema),
-});
-
 const DirectoryListingMessage = z.object({
   type: z.literal("directory_listing"),
   path: z.string(),
@@ -335,15 +278,12 @@ const TerminalSessionsMessage = z.object({
 });
 
 export const ServerMessage = z.discriminatedUnion("type", [
-  SessionCreatedMessage,
   StreamChunkMessage,
   StreamEndMessage,
   PermissionRequestMessage,
   ErrorMessage,
   CapabilitiesMessage,
   ServerConfigMessage,
-  SessionListMessage,
-  SessionHistoryMessage,
   DirectoryListingMessage,
   EventWrapperMessage,
   ReplayCompleteMessage,
@@ -352,8 +292,6 @@ export const ServerMessage = z.discriminatedUnion("type", [
 ]);
 
 export type ServerMessage = z.infer<typeof ServerMessage>;
-export type SessionListItem = z.infer<typeof SessionListItemSchema>;
-export type HistoryMessage = z.infer<typeof HistoryMessageSchema>;
 export type AgentInfo = z.infer<typeof AgentInfoSchema>;
 export type CommandInfo = z.infer<typeof CommandInfoSchema>;
 export type ModelInfo = z.infer<typeof ModelInfoSchema>;
