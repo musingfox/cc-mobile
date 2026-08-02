@@ -161,14 +161,22 @@ describe("wsService terminal reattach reconcile", () => {
     expect(infoToast).not.toHaveBeenCalled();
   });
 
-  test("SDK sessions carry no terminal marker and are never touched", () => {
+  test("a markerless ghost is removed too, storage and all", () => {
+    // The marker exemption is what let a card herdr never heard of survive
+    // every reconnect — the openabc symptom. herdr's answer now governs every
+    // session in the store, marker or not.
     useAppStore.getState().addSession("u4", "/tmp");
+    const persisted = useAppStore.getState().sessions.get("u4");
+    if (!persisted) throw new Error("session not added");
+    saveSessionState("u4", persisted);
+    expect(getAllSessionIds()).toContain("u4");
 
     getInternal().handleMessage({ type: "terminal_sessions", claudeUuids: [] });
 
-    expect(useAppStore.getState().sessions.get("u4")).toBeDefined();
-    expect(useAppStore.getState().sessions.get("u4")?.terminal).toBeUndefined();
-    expect(infoToast).not.toHaveBeenCalled();
+    expect(useAppStore.getState().sessions.has("u4")).toBe(false);
+    expect(localStorage.getItem("ccm:session:u4")).toBeNull();
+    expect(getAllSessionIds()).not.toContain("u4");
+    expect(infoToast).toHaveBeenCalledTimes(1);
   });
 
   test("a mixed live list readies every listed session and removes none", () => {
@@ -183,14 +191,24 @@ describe("wsService terminal reattach reconcile", () => {
     expect(infoToast).not.toHaveBeenCalled();
   });
 
-  test("removing the active terminal session falls back to a surviving one", () => {
-    useAppStore.getState().addSession("u4", "/tmp");
+  test("removing the active session falls back to a session that survived", () => {
+    useAppStore.getState().addSession("u1", "/tmp", { ready: false });
     useAppStore.getState().addSession("u2", "/tmp", { ready: true });
     expect(useAppStore.getState().activeSessionId).toBe("u2");
 
+    getInternal().handleMessage({ type: "terminal_sessions", claudeUuids: ["u1"] });
+
+    expect(useAppStore.getState().activeSessionId).toBe("u1");
+  });
+
+  test("when nothing survives there is no active session left", () => {
+    useAppStore.getState().addSession("u4", "/tmp");
+    useAppStore.getState().setActiveSession("u4");
+
     getInternal().handleMessage({ type: "terminal_sessions", claudeUuids: [] });
 
-    expect(useAppStore.getState().activeSessionId).toBe("u4");
+    expect(sessionIds()).toEqual([]);
+    expect(useAppStore.getState().activeSessionId).toBeNull();
   });
 
   test("removing the only session leaves no active session", () => {

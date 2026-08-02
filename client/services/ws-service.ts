@@ -571,12 +571,14 @@ class WsService {
         const unknown = new Set(
           Array.isArray(msg.unknownUuids) ? (msg.unknownUuids as string[]) : [],
         );
+        // Every store session is reconciled, not just the ones carrying a
+        // terminal marker. A markerless card cannot be anything but a ghost
+        // from an older bundle or a cleared server, and exempting it is what
+        // let localStorage keep resurrecting sessions herdr never had.
         // Materialise before mutating: removeSession replaces the sessions Map.
-        const terminalSessions = [...store.sessions.entries()].filter(
-          ([, s]) => s.terminal !== undefined,
-        );
+        const storedSessions = [...store.sessions.entries()];
         const dead: string[] = [];
-        for (const [id] of terminalSessions) {
+        for (const [id] of storedSessions) {
           if (live.has(id)) {
             this.pendingTerminalCreates.delete(id);
             store.setTerminalReady(id, true);
