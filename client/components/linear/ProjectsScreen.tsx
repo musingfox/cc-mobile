@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Icon } from "../../design/icons";
 import { tokens as T } from "../../design/tokens";
 import { loadProjects, type SavedProject } from "../../services/projects";
-import { wsService } from "../../services/ws-service";
 import { useAppStore } from "../../stores/app-store";
 import type { LinearScreen } from "./AppShell";
 import "./projects.css";
@@ -32,82 +31,37 @@ interface ProjectRow {
 
 export default function ProjectsScreen({ onNavigate, onOpenProject, onAddProject }: Props) {
   const sessions = useAppStore((s) => s.sessions);
-  const sessionList = useAppStore((s) => s.sessionList);
-  const connectionState = useAppStore((s) => s.connectionState);
 
   const [saved, setSaved] = useState<SavedProject[]>(() => loadProjects());
-  const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    if (connectionState === "connected" && sessionList.length === 0) {
-      setIsLoading(true);
-      wsService.listSessions();
-      const t = setTimeout(() => setIsLoading(false), 2000);
-      return () => clearTimeout(t);
-    }
-  }, [connectionState, sessionList.length]);
-
-  useEffect(() => {
-    if (sessionList.length > 0) setIsLoading(false);
-  }, [sessionList.length]);
-
-  // Reload saved projects when sessions change (createSession persists)
+  // Re-read the saved list whenever the session map changes identity. Every
+  // store mutation replaces the Map, so this also catches the
+  // terminal_created → setTerminalReady → saveProject sequence, where the
+  // optimistic session had already grown the map and the size never changes.
   useEffect(() => {
     setSaved(loadProjects());
-  }, [sessions.size, sessionList.length]);
+  }, [sessions]);
 
   const rows = useMemo<ProjectRow[]>(() => {
-    const map = new Map<string, ProjectRow>();
-
-    const ensure = (cwd: string): ProjectRow => {
-      const existing = map.get(cwd);
-      if (existing) return existing;
+    // Rows come from the saved projects alone — a session whose cwd was never
+    // saved (or whose project the user removed) conjures no row.
+    return saved.map((p) => {
       const row: ProjectRow = {
-        cwd,
-        label: basename(cwd),
+        cwd: p.cwd,
+        label: p.label || basename(p.cwd),
         sessionCount: 0,
         hasLive: false,
         hasIdle: false,
       };
-      map.set(cwd, row);
-      return row;
-    };
-
-    for (const p of saved) {
-      const row = ensure(p.cwd);
-      if (p.label) row.label = p.label;
-    }
-
-    for (const s of sessions.values()) {
-      const row = ensure(s.cwd);
-      row.sessionCount += 1;
-      if (s.isStreaming) row.hasLive = true;
-      else row.hasIdle = true;
-    }
-
-    const seenSdkIds = new Set<string>();
-    for (const s of sessionList) {
-      if (seenSdkIds.has(s.sdkSessionId)) continue;
-      seenSdkIds.add(s.sdkSessionId);
-      const row = ensure(s.cwd);
-      row.sessionCount += 1;
-    }
-
-    // Stable order: saved first (saved order), then any new cwds appended.
-    const ordered: ProjectRow[] = [];
-    const used = new Set<string>();
-    for (const p of saved) {
-      const r = map.get(p.cwd);
-      if (r) {
-        ordered.push(r);
-        used.add(p.cwd);
+      for (const s of sessions.values()) {
+        if (s.cwd !== p.cwd) continue;
+        row.sessionCount += 1;
+        if (s.isStreaming) row.hasLive = true;
+        else row.hasIdle = true;
       }
-    }
-    for (const [cwd, r] of map.entries()) {
-      if (!used.has(cwd)) ordered.push(r);
-    }
-    return ordered;
-  }, [saved, sessions, sessionList]);
+      return row;
+    });
+  }, [saved, sessions]);
 
   const totalCount = rows.length;
 
@@ -134,10 +88,7 @@ export default function ProjectsScreen({ onNavigate, onOpenProject, onAddProject
       </header>
 
       <div className="lin-projects-body lin-scroll">
-        {isLoading && rows.length === 0 && (
-          <div className="lin-projects-empty">Loading projects…</div>
-        )}
-        {!isLoading && rows.length === 0 && (
+        {rows.length === 0 && (
           <div className="lin-projects-empty">
             <div>No projects yet.</div>
             <button type="button" className="lin-projects-empty-cta" onClick={onAddProject}>
