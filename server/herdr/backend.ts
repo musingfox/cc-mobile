@@ -12,12 +12,14 @@
 
 import type { createPtyResponseRelay } from "../pty-response-relay";
 import type { ClientSink, TerminalBackend, TerminalSessionInfo } from "../terminal-backend";
+import { createTranscriptDelivery } from "../transcript/delivery";
+import { resolveTranscriptPath } from "../transcript/path";
 import { type AgentState, statesFromSnapshot } from "./agent-state";
 import { createHerdrClient, type HerdrClient, SUPPORTED_PROTOCOL } from "./client";
+import { createHerdrPaneEvents } from "./pane-events";
 import { createHerdrRegistry } from "./registry";
 import { createHerdrSendRouting } from "./send-routing";
 import { listClaudeSessions, type SessionDescriptor, type SessionListingClient } from "./sessions";
-import { createHerdrStatusEvents } from "./status-events";
 import { resolveSocketPath } from "./transport";
 
 export interface HerdrBackendOptions {
@@ -85,18 +87,59 @@ export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalB
     responseRelay: options.responseRelay,
   });
 
-  const statusEvents = createHerdrStatusEvents({
-    subscribe: (subscribeOptions) => client.subscribeEvents(subscribeOptions),
-    // Late-bound: a reconnect rebinds the uuid to a fresh sink.
-    getSink: (claudeUuid) => routing.getClient(claudeUuid),
-  });
-
   async function listSessionDescriptors(): Promise<SessionDescriptor[]> {
     if (typeof client.agentList !== "function") return [];
     return listClaudeSessions({
       client: client as SessionListingClient,
       suppressLabel: options.suppressSessionLabel,
     });
+  }
+
+  /**
+   * True while this process still has the hook chain armed for a session: its
+   * Stop hook resolves a waiter that emits the reply itself, so reading the same
+   * turn out of the transcript would deliver it twice (Decision M7). Sessions
+   * launched by an earlier process — and every foreign pane — have no live
+   * waiter, so they read back from the transcript today.
+   */
+  function legacyReadback(sessionId: string): boolean {
+    if (registry.hasSession(sessionId).present) return true;
+    return registry
+      .listSessions()
+      .some((claudeUuid) => registry.resolvePane(claudeUuid) === sessionId);
+  }
+
+  const delivery = createTranscriptDelivery({
+    resolvePath: async (sessionId) => {
+      const match = (await listSessionDescriptors()).find(
+        (session) => session.sessionId === sessionId,
+      );
+      if (!match) return null;
+      return resolveTranscriptPath({ sessionValue: match.agentSessionValue, cwd: match.cwd });
+    },
+    // Late-bound: a reconnect rebinds the session to a fresh sink.
+    getSink: (sessionId) => routing.getClient(sessionId),
+    legacyReadback,
+  });
+
+  const paneEvents = createHerdrPaneEvents({
+    subscribe: (subscribeOptions) => client.subscribeEvents(subscribeOptions),
+    getSink: (sessionId) => routing.getClient(sessionId),
+    transcript: {
+      attach: (sessionId) => delivery.attach(sessionId),
+      resetCursor: (sessionId) => delivery.resetCursor(sessionId),
+      onStatus: (sessionId, status) => delivery.onStatus(sessionId, status),
+      deliverTurn: (sessionId) => delivery.deliverTurn(sessionId),
+    },
+  });
+
+  /**
+   * Opens the global event stream on first use rather than at construction, so
+   * building the backend still contacts no daemon (app.ts assembles it before
+   * anything has checked the socket).
+   */
+  function ensureEvents(): Promise<void> {
+    return paneEvents.start();
   }
 
   /**
@@ -112,10 +155,12 @@ export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalB
   async function teardown(sessionKey: string) {
     // A session this process launched: routed by uuid, torn down as before.
     if (registry.hasSession(sessionKey).present) {
-      statusEvents.stop(sessionKey);
+      const paneId = registry.resolvePane(sessionKey);
       // Kill first, then cancel the waiter.
       const result = await registry.teardown(sessionKey);
       routing.teardown(sessionKey);
+      forgetSession(sessionKey);
+      if (paneId) forgetSession(paneId);
       return result;
     }
 
@@ -127,16 +172,22 @@ export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalB
     if (match.origin === "foreign") return { killed: false, reason: "not_owned" as const };
 
     await client.call("workspace.close", { workspace_id: match.workspaceId });
-    statusEvents.stop(sessionKey);
     routing.teardown(sessionKey);
+    forgetSession(sessionKey);
     return { killed: true };
+  }
+
+  /** Drops everything remembered about a session that no longer exists. */
+  function forgetSession(sessionId: string): void {
+    paneEvents.forget(sessionId);
+    delivery.forget(sessionId);
   }
 
   return {
     async createSession(input): Promise<TerminalSessionInfo> {
       const info = await registry.createSession(input);
       // Non-fatal by construction: start() never rejects.
-      await statusEvents.start(input.claudeUuid, info.paneId);
+      await ensureEvents();
       return {
         name: info.agentName,
         paneRef: info.paneId,
@@ -151,7 +202,12 @@ export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalB
      * pane that outlived a server restart — appear without any rediscovery step
      * (Decision M12).
      */
-    listSessionDescriptors,
+    async listSessionDescriptors(): Promise<SessionDescriptor[]> {
+      // First listing is also what opens the event stream: the phone asking
+      // "what is running" is the earliest moment a daemon connection is wanted.
+      await ensureEvents();
+      return listSessionDescriptors();
+    },
     /**
      * One RPC regardless of session count — the join happens locally against
      * the uuid→pane registry, so N live sessions still cost one round trip.

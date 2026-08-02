@@ -132,6 +132,10 @@ export const PaneInfoSchema = z
     workspace_id: z.string(),
     agent: z.string().nullish(),
     agent_status: ReportedAgentStatusSchema.optional(),
+    // Live wire fact (probe 2026-08-02): `pane.updated` carries the full pane
+    // record including its agent session, which is how a `/clear` that rotates
+    // the transcript key is noticed without polling.
+    agent_session: AgentSessionSchema.nullish(),
   })
   .passthrough();
 export type PaneInfo = z.infer<typeof PaneInfoSchema>;

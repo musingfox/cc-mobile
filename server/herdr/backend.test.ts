@@ -89,7 +89,7 @@ function makeBackend(fake: ReturnType<typeof makeFakeClient>) {
 }
 
 describe("herdr backend composition", () => {
-  test("createSession returns the port shape and starts the status subscription", async () => {
+  test("createSession returns the port shape and opens the global event stream", async () => {
     const fake = makeFakeClient();
     const { backend } = makeBackend(fake);
 
@@ -99,7 +99,9 @@ describe("herdr backend composition", () => {
     expect(info.name).toBe("ccm-3f2a9b01");
     expect(info.paneRef).toBe("p1");
     expect(Object.keys(info).sort()).toEqual(["name", "paneRef", "settingsPath"]);
-    expect(fake.subscriptions[0]).toEqual([{ type: "pane.agent_status_changed", pane_id: "p1" }]);
+    // One global stream, not one per pane: a filter carrying a pane_id could
+    // never see the sessions the user starts in their own terminal.
+    expect(fake.subscriptions).toEqual([[{ type: "pane.updated" }]]);
     expect(backend.hasSession(UUID)).toEqual({ present: true, paneRef: "p1" });
     expect(backend.listLive()).toEqual([UUID]);
   });
@@ -122,7 +124,7 @@ describe("herdr backend composition", () => {
     expect(args[pmIdx + 1]).toBe("acceptEdits");
   });
 
-  test("teardown stops the subscription, closes the workspace and deregisters", async () => {
+  test("teardown closes the workspace and deregisters the session", async () => {
     const fake = makeFakeClient();
     const { backend } = makeBackend(fake);
     const info = await backend.createSession({ claudeUuid: UUID, cwd: "/tmp" });
@@ -131,7 +133,6 @@ describe("herdr backend composition", () => {
     const result = await backend.teardown(UUID);
 
     expect(result).toEqual({ killed: true });
-    expect(fake.stopCalls()).toBe(1);
     expect(fake.calls.some((call) => call.method === "workspace.close")).toBe(true);
     expect(backend.hasSession(UUID)).toEqual({ present: false });
   });
@@ -150,8 +151,9 @@ describe("herdr backend composition", () => {
     await backend.teardownAll();
 
     expect(backend.listLive()).toEqual([]);
-    // Both subscriptions stopped — not just the workspaces closed.
-    expect(fake.stopCalls()).toBe(2);
+    // Two workspaces closed; the one shared event stream stays open for the
+    // sessions that are still running.
+    expect(fake.calls.filter((call) => call.method === "workspace.close")).toHaveLength(2);
   });
 
   test("listSessionDescriptors reports every claude the daemon has, self or foreign", async () => {
