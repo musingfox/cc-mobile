@@ -41,8 +41,19 @@ export interface NativePermissionOptions {
    */
   originOf?: (sessionId: string) => Promise<"self" | "foreign"> | "self" | "foreign";
   newRequestId?: () => string;
+  /** How long an unanswered prompt on a self-launched pane may hold a turn. */
+  timeoutMs?: number;
+  setTimeoutFn?: (fn: () => void, ms: number) => unknown;
+  clearTimeoutFn?: (id: unknown) => void;
+  now?: () => number;
   warn?: (message: string) => void;
 }
+
+/**
+ * #24's unattended-safety budget, carried forward: a prompt nobody answers must
+ * not hold a turn open indefinitely.
+ */
+export const UNATTENDED_DENY_MS = 90_000;
 
 /** What the option list degrades to when the screen cannot be parsed. */
 export const CANCEL_ONLY_OPTIONS: PromptOption[] = [
@@ -64,6 +75,11 @@ export interface PendingNativePermission {
   paneRevision: number;
   origin: "self" | "foreign";
   options: PromptOption[];
+  /** Countdown bookkeeping for the unattended deny; absent on foreign panes. */
+  timerId?: unknown;
+  armedAt?: number;
+  /** Countdown already spent, carried across a disconnect (the frozen countdown). */
+  elapsedMs: number;
 }
 
 function rawTail(text: string): string {
@@ -74,6 +90,11 @@ export function createNativePermission(options: NativePermissionOptions) {
   const { client, getSink } = options;
   const originOf = options.originOf ?? (() => "foreign" as const);
   const newRequestId = options.newRequestId ?? (() => `perm-${crypto.randomUUID()}`);
+  const timeoutMs = options.timeoutMs ?? UNATTENDED_DENY_MS;
+  const setTimeoutFn = options.setTimeoutFn ?? ((fn, ms) => setTimeout(fn, ms));
+  const clearTimeoutFn =
+    options.clearTimeoutFn ?? ((id: unknown) => clearTimeout(id as ReturnType<typeof setTimeout>));
+  const now = options.now ?? (() => Date.now());
   const warn =
     options.warn ?? ((message: string) => console.warn(`[herdr] permission: ${message}`));
 
@@ -89,6 +110,7 @@ export function createNativePermission(options: NativePermissionOptions) {
   function drop(sessionId: string): void {
     const entry = pending.get(sessionId);
     if (!entry) return;
+    if (entry.timerId !== undefined) clearTimeoutFn(entry.timerId);
     pending.delete(sessionId);
     bySessionOfRequest.delete(entry.requestId);
   }
@@ -114,6 +136,7 @@ export function createNativePermission(options: NativePermissionOptions) {
     sessionId: string,
     sample: { parsed: ParsedPrompt | null; text: string; revision: number },
     origin: "self" | "foreign",
+    elapsedMs = 0,
   ): PendingNativePermission {
     const requestId = newRequestId();
     const { parsed } = sample;
@@ -125,6 +148,7 @@ export function createNativePermission(options: NativePermissionOptions) {
       paneRevision: sample.revision,
       origin,
       options: parsed ? parsed.options : CANCEL_ONLY_OPTIONS,
+      elapsedMs,
     };
     pending.set(sessionId, entry);
     bySessionOfRequest.set(requestId, sessionId);
@@ -148,7 +172,57 @@ export function createNativePermission(options: NativePermissionOptions) {
       options: entry.options,
     });
 
+    armDeny(entry);
     return entry;
+  }
+
+  /**
+   * Starts the unattended countdown — on a pane cc-mobile launched, and nowhere
+   * else.
+   *
+   * On a session the user opened in their own terminal somebody is demonstrably
+   * at the keyboard, and cancelling a prompt they are still reading would be
+   * cc-mobile answering for them (Decision H2). Where cc-mobile IS the only
+   * operator, an unanswered prompt holding a turn forever is the failure #24
+   * exists to prevent.
+   */
+  function armDeny(entry: PendingNativePermission): void {
+    if (entry.origin !== "self" || paused) return;
+    const remaining = timeoutMs - entry.elapsedMs;
+    entry.armedAt = now();
+    entry.timerId = setTimeoutFn(
+      () => {
+        void denyUnattended(entry.requestId);
+      },
+      Math.max(0, remaining),
+    );
+  }
+
+  /**
+   * The automated answer, and the only one cc-mobile ever sends by itself: `esc`
+   * — never a digit, never Enter. Nothing here can approve a tool call.
+   *
+   * The same fire-time guard as a user's own answer applies, and it is not
+   * optional: herdr reports claude's first-run trust dialog as `idle`, and `esc`
+   * there means "No, exit" — a timer landing on a mis-read state would kill the
+   * user's claude (probe 2026-08-02).
+   */
+  async function denyUnattended(requestId: string): Promise<void> {
+    const sessionId = bySessionOfRequest.get(requestId);
+    if (!sessionId) return;
+    const entry = pending.get(sessionId);
+    if (!entry || entry.requestId !== requestId) return;
+
+    if (!(await guardStillCurrent(entry))) {
+      drop(sessionId);
+      return;
+    }
+    try {
+      await client.paneSendKeys(sessionId, ["esc"]);
+    } catch (error) {
+      warn(`${sessionId}: unattended deny failed: ${describe(error)}`);
+    }
+    drop(sessionId);
   }
 
   /**
@@ -272,9 +346,23 @@ export function createNativePermission(options: NativePermissionOptions) {
     return (sample.parsed?.fingerprint ?? UNPARSED_FINGERPRINT) === entry.fingerprint;
   }
 
-  /** Connection lost: keep the pending records, stop claiming the phone has seen them. */
+  /**
+   * Connection lost: freeze the countdown, keep the pending records.
+   *
+   * The gap does not count against the user — they cannot answer a prompt they
+   * cannot see. What was already spent is remembered, so a long disconnect does
+   * not silently reset the budget either.
+   */
   function pause(): void {
+    if (paused) return;
     paused = true;
+    for (const entry of pending.values()) {
+      if (entry.timerId === undefined) continue;
+      clearTimeoutFn(entry.timerId);
+      entry.timerId = undefined;
+      entry.elapsedMs += now() - (entry.armedAt ?? now());
+      entry.armedAt = undefined;
+    }
   }
 
   /**
@@ -298,8 +386,9 @@ export function createNativePermission(options: NativePermissionOptions) {
       }
       const sample = await readPrompt(entry.sessionId);
       if (!sample) continue;
+      const spent = entry.elapsedMs;
       drop(entry.sessionId);
-      emit(entry.sessionId, sample, entry.origin);
+      emit(entry.sessionId, sample, entry.origin, spent);
     }
   }
 
