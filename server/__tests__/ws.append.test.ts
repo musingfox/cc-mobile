@@ -1,4 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { SessionManager } from "../session-manager";
+import { startWsHarness, testServerConfig, type WsHarness } from "./ws-harness";
 
 /**
  * C3 — WS handler for `append_user_message`. We exercise the branch logic
@@ -99,5 +101,44 @@ describe("WS append_user_message handler", () => {
         sessionId: "s1",
       },
     ]);
+  });
+});
+
+/**
+ * SessionScopedMessagesReportSessionNotFound — the real socket answer now that
+ * nothing registers a session server-side any more. The simulated cases above
+ * pin the branch logic; this pins what the phone actually receives.
+ */
+describe("append_user_message over a fresh connection", () => {
+  let harness: WsHarness | null = null;
+
+  afterEach(async () => {
+    await harness?.close();
+    harness = null;
+  });
+
+  test("answers a typed session_not_found instead of appearing to succeed", async () => {
+    harness = await startWsHarness(
+      {
+        createSession: async () => ({ name: "n", paneRef: "p1", settingsPath: "/tmp/s" }),
+        teardown: async () => ({ killed: false }),
+        listLive: () => [],
+        send: async () => {},
+        registerClient: () => {},
+        cleanupByOwner: () => {},
+      },
+      testServerConfig,
+      { sessionManager: new SessionManager({ permissionMode: "default" }) },
+    );
+
+    harness.send({ type: "append_user_message", sessionId: "u1", content: "hi" });
+
+    const reply = await harness.waitFor((m) => m.type === "error");
+    expect(reply).toEqual({
+      type: "error",
+      code: "session_not_found",
+      message: "Session u1 not found",
+      sessionId: "u1",
+    });
   });
 });

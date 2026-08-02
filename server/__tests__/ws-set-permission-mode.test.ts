@@ -1,5 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { SessionManager } from "../session-manager";
+import { startWsHarness, testServerConfig, type WsHarness } from "./ws-harness";
 
 async function makeManagerWithSession(sessionId: string) {
   const mgr = new SessionManager({ permissionMode: "default" });
@@ -70,5 +71,59 @@ describe("set_permission_mode semantics (C3b)", () => {
     );
     // No global mutation either
     expect(mgr.getPermissionMode()).toBe("default");
+  });
+});
+
+/**
+ * SessionScopedMessagesReportSessionNotFound — the same branch, over the wire.
+ * Since the resume handler was deleted there is no way for a session to reach
+ * the manager's map through the socket, so the per-session form of this message
+ * always answers not-found. Pinned so review reads it as intended, not broken.
+ */
+describe("set_permission_mode over a fresh connection", () => {
+  let harness: WsHarness | null = null;
+
+  async function start() {
+    harness = await startWsHarness(
+      {
+        createSession: async () => ({ name: "n", paneRef: "p1", settingsPath: "/tmp/s" }),
+        teardown: async () => ({ killed: false }),
+        listLive: () => [],
+        send: async () => {},
+        registerClient: () => {},
+        cleanupByOwner: () => {},
+      },
+      testServerConfig,
+      { sessionManager: new SessionManager({ permissionMode: "default" }) },
+    );
+    return harness;
+  }
+
+  afterEach(async () => {
+    await harness?.close();
+    harness = null;
+  });
+
+  test("with a sessionId: the full session_not_found frame comes back", async () => {
+    const h = await start();
+
+    h.send({ type: "set_permission_mode", sessionId: "u1", mode: "plan" });
+
+    const reply = await h.waitFor((m) => m.type === "error");
+    expect(reply).toEqual({
+      type: "error",
+      code: "session_not_found",
+      message: "Session u1 not found",
+      sessionId: "u1",
+    });
+  });
+
+  test("without a sessionId: the global branch still records and echoes the mode", async () => {
+    const h = await start();
+
+    h.send({ type: "set_permission_mode", mode: "plan" });
+
+    const reply = await h.waitFor((m) => m.type === "server_config");
+    expect((reply.config as Record<string, unknown>).permissionMode).toBe("plan");
   });
 });
