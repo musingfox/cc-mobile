@@ -1,6 +1,5 @@
 import { expect, it } from "bun:test";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { type AppBackend, createApp } from "../app";
 import type { ServerConfig } from "../config";
@@ -57,7 +56,10 @@ it.skipIf(!existsSync(socketPath))(
     app.listen({ port, hostname: "127.0.0.1" });
 
     const client = createHerdrClient({ socketPath });
-    const cwd = mkdtempSync(join(tmpdir(), "ccme2e-foreign-"));
+    // The repo root, not a fresh temp dir: claude shows its trust dialog in an
+    // untrusted directory and never reaches SessionStart, so herdr's integration
+    // never reports a session id and the wait below would always time out.
+    const cwd = join(import.meta.dir, "..", "..");
 
     let workspaceId: string | undefined;
     let ws: WebSocket | undefined;
@@ -136,7 +138,8 @@ it.skipIf(!existsSync(socketPath))(
           .call("workspace.close", { workspace_id: workspaceId }, OkResultSchema)
           .catch(() => {});
       }
-      rmSync(cwd, { recursive: true, force: true });
+      // cwd is the repo itself — nothing to remove, and removing it would be
+      // catastrophic.
       await app.stop(true);
     }
   },
