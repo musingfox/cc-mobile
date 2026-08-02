@@ -92,6 +92,21 @@ export function createWsPlugin(
     pausedTerminalPermissions: [] as PtyRelaySnapshot[],
   };
 
+  /**
+   * The connection's stable identity, used as the sink-ownership key.
+   *
+   * Elysia builds a FRESH `ElysiaWS` wrapper per callback — `message` and
+   * `close` never receive the same object — so keying ownership on the wrapper
+   * makes `cleanupByOwner` on close look up an owner that was never inserted:
+   * it matches nothing and the owner map grows one dead entry per connection.
+   * `ws.raw` is the single Bun socket the adapter carries into both callbacks.
+   * The fallback keeps every connection distinct rather than collapsing them
+   * onto one shared `undefined` key if a future adapter stops exposing `raw`.
+   */
+  function ownerOf(ws: { raw?: unknown }): unknown {
+    return ws.raw ?? ws;
+  }
+
   // Helper to send buffered messages
   function sendBuffered(ws: any, sessionId: string, message: Record<string, unknown>) {
     // Append to the buffer FIRST so the event survives a dead/mid-close socket:
@@ -316,12 +331,12 @@ export function createWsPlugin(
             // reconnecting client received no status events at all until it
             // sent a prompt. Same sink shape and same owner as terminal_send,
             // so the reply-recovery rules are unchanged — the binding is only
-            // moved earlier. cleanupByOwner(ws) on close releases them.
+            // moved earlier. cleanupByOwner on close releases them.
             for (const claudeUuid of backend.listLive()) {
               backend.registerClient(
                 claudeUuid,
                 (msg: Record<string, unknown>) => sendBuffered(ws, claudeUuid, msg),
-                ws,
+                ownerOf(ws),
               );
             }
 
@@ -398,7 +413,7 @@ export function createWsPlugin(
             backend.registerClient(
               claudeUuid,
               (msg: Record<string, unknown>) => sendBuffered(ws, claudeUuid, msg),
-              ws,
+              ownerOf(ws),
             );
             // Resume any terminal permission requests paused on the prior disconnect:
             // re-fires permission_request to the freshly-rebound sink (frozen-countdown).
@@ -427,7 +442,7 @@ export function createWsPlugin(
 
       // Remove this connection's uuid->sink bindings (baton map §cleanup).
       // Dead-binding leak prevention only; no rebind/replay to a new connection.
-      backend.cleanupByOwner(ws);
+      backend.cleanupByOwner(ownerOf(ws));
 
       clientSink.current = null;
       console.log("[ws] client disconnected");

@@ -144,14 +144,17 @@ export function createHerdrSendRouting(options: HerdrSendRoutingOptions) {
   }
 
   /**
-   * Transient disconnect (ws close): drop the dead sink bindings but keep the
-   * waiter armed, so a reply landing during the gap stays recoverable (E2).
+   * Transient disconnect (ws close): release the owner index for that
+   * connection. The waiter stays armed and the sink stays installed, so a reply
+   * or a permission_request landing during the gap still reaches the buffer-first
+   * sink and replays on reconnect (E2). Only the owner index is per-connection
+   * and therefore unbounded — `clientSinks` is uuid-keyed and last-write-wins,
+   * so a reconnect displaces the stale entry and teardown removes it for good.
    */
   function cleanupByOwner(owner: unknown): void {
     const uuids = ownerToUuids.get(owner);
     if (!uuids) return;
     for (const claudeUuid of uuids) {
-      clientSinks.delete(claudeUuid);
       uuidToOwner.delete(claudeUuid);
     }
     ownerToUuids.delete(owner);
