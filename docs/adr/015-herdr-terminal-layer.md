@@ -92,3 +92,52 @@ herdr 作為持久化終端層可行，C-hybrid 概念延續，SDK 路徑移除 
 
 ToS §3(7) 約束「無 client = 全 deny + 行程暫停」原樣繼承，不放寬。deny 行為與 smallest-client-wins 處理維持 ADR-014 設計意圖。
 
+## 2026-08-02 增修：herdr 原生模型（#29）
+
+### 背景
+
+上文的 hook 讀回管道（承接 ADR-011）有一個結構性上限：它只對「cc-mobile 自己啟動、且注入了 `--settings` 的 claude」有效。使用者自己在終端機開的 claude 沒有那個 settings 檔，因此 cc-mobile 看不到、讀不回、也答不了它的權限提問——而那正是 §1「在手機上繼續終端機的 session」要的東西。
+
+#29 把讀回與權限兩條路都改成向 herdr 要，於是自建與外來 session 不再有差別，自建 hook 管道整套拆除。
+
+### 決策
+
+1. **session 列表來自 `agent.list` 全域列舉**，不再是 cc-mobile 自己的記憶體 Map。手機看得到機器上每一個 claude，包含使用者自己開的（H1）。列表以 `pane_id` 為鍵（H5）：每個 pane 都有、`/clear` 後不變，而 `agent_session.value` 兩者皆不成立。
+2. **回覆從 transcript 讀回**（`~/.claude/projects/**/<session>.jsonl`，增量讀取 + `{byteOffset, lastUuid}` 游標），取代 Stop hook POST。附著時游標取檔尾，因此不會把既有對話當成新訊息重播。
+3. **權限走 herdr `blocked` + 螢幕解析 + `pane.send_keys`**，取代 PreToolUse hook。`permission_request.tool.parameters` 因此是**解析後的螢幕文字**而非結構化 `input` JSON（H3）——claude 在 blocked 期間 transcript 一個 byte 都不寫（實測 43 秒），螢幕是唯一可機讀來源。選項改由 server 提供（終端機自己的字句與數量，2 或 3 不固定），client 回 `optionId`。
+4. **自建 session 改用原生 argv**：`["--permission-mode", mode, "--session-id", uuid]`，不寫 settings 檔（M6）。`server/claude-settings.ts`、`pty-{stop,permission}-hook.ts`、`pty-{response,permission}-{relay,endpoint}.ts` 全數刪除，兩個 HTTP hook 端點回 404。#28（Stop hook 啟動競態）隨之關閉：樹裡已經沒有那個 POST 可以掉。
+5. **啟動 remount 掃描刪除**（M12），擁有權改由 workspace label `ccm-<uuid>` 認定。`terminal_teardown` 只關自己開的 pane，外來 pane 一律拒絕且不發任何 RPC（M13）——使用者接受的是「自己送進去的東西自己負責」，不是「誤觸可以殺掉自己的終端機」。
+
+### D2 平價張力（明文記錄）
+
+90 秒無人看管自動 deny（#24）在原生模型下**必須是主動送 `esc`**，而不再是 resolve 一個 promise。這帶來一個舊模型沒有的破壞性：狀態誤判時 `esc` 會落在別的地方。實測 2026-08-02——claude 首次啟動的 trust dialog 在 herdr 眼中是 `idle`，在那裡送 `esc` 等同「No, exit」，直接殺掉 claude。
+
+因此自動 deny 收窄為：**只對 cc-mobile 自建 pane**（外來 pane 有人在鍵盤前，替他取消他還在讀的提問是越權），且送鍵前必須重讀 `agent_status` **並** 重新解析螢幕比對 fingerprint，兩者皆符才送。使用者自己按下的選項走同一道閘。這是平價的代價：外來 pane 的無人看管提問會無限期佔住那一輪。
+
+### H4 裁定（使用者裁決，記錄為已接受的風險）
+
+`--permission-mode bypassPermissions` 的 pane **可驅動**，只標示不封鎖。
+
+本計畫原本建議拒絕注入（比照被刪除的 `remount.ts:220` 收養拒絕），**人為閘門推翻**：「可以送，我自己負責」。這是機器所有者對自己機器的決定，不是技術結論——探測資料裡沒有任何東西讓「對無閘 pane 注入」變得比較安全。裁定保留的義務是**揭露**：`gated:false` 上 wire，卡片與輸入框上方都必須持續顯示無關卡標示，使用者才是在知情下按送出。程式碼裡不存在任何以權限模式為由的拒絕（`session_ungated` 有 repo 全域掃描測試釘住零命中）。
+
+連帶（比 H4 字面稍寬，因此獨立記錄）：M12 刪掉 remount 掃描時，一併刪掉了它對 `bypassPermissions` pane 的收養拒絕。留著會讓兩條規則指向相反方向——自建的無閘 pane 被拒、一模一樣的外來 pane 卻能驅動——而且較弱的那條會贏。其 argv 檢查只以 `gated` 旗標的形式存活。
+
+### 唯一保留的注入拒絕
+
+`session_busy`：`agent_status ∉ {idle, done}`，或提示框裡有人打到一半（沿用 herdr `claude.toml` `live_prompt_box` 的區域界定）。這保護的是「不要覆寫人類半打的輸入」，與 H4 是不同的顧慮，使用者也沒有放棄它。
+
+### 前置條件
+
+herdr 必須能偵測 claude 的 agent 狀態，需先安裝整合：
+
+```bash
+herdr integration install claude
+```
+
+沒有它，`agent_status` 不會有 `blocked`，權限流程與回覆讀回的觸發都不會發生。
+
+### 對本 ADR 上文的影響
+
+- 「hook 讀回複用 ADR-011 的機制」**作廢**：讀回改自 transcript，權限改自螢幕。
+- ToS §3(7)「無 client = 全 deny + 行程暫停」的意圖以 `UnattendedDenyForSelfLaunched` 承接並收窄（見上）：自動送出的鍵只有 `esc`，永遠不會是同意。
+- `events.subscribe` 改為單一全域 `pane.updated` 訂閱（M5）：`pane.agent_status_changed` 需要 `pane_id`，對還沒列舉過的 pane 不可能訂閱。

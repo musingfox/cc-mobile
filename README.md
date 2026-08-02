@@ -53,7 +53,21 @@ Not a terminal replacement — a touch translation of terminal interactions. Run
 
 - [Bun](https://bun.sh) runtime (v1.0+)
 - [Claude Code CLI](https://claude.ai/code) installed locally (the `claude` binary)
-- An active `ANTHROPIC_API_KEY` (used by the SDK through the CLI)
+- A running [herdr](https://github.com/musingfox/herdr) daemon — cc-mobile drives
+  claude entirely through its socket
+- **herdr's claude integration installed** (see below)
+
+### Prerequisite: `herdr integration install claude`
+
+```bash
+herdr integration install claude
+```
+
+Run this once per machine, before starting the server. It is what teaches herdr
+to report a pane's `agent_status`, and everything cc-mobile does hangs off that
+one signal: a permission prompt is a pane going `blocked`, a reply is read back
+when a pane settles, and the session list's activity dots are status changes.
+Without the integration the phone shows sessions that never seem to do anything.
 
 ## Quick Start
 
@@ -61,6 +75,9 @@ Not a terminal replacement — a touch translation of terminal interactions. Run
 # Clone the repo and install
 cd cc-mobile
 bun install
+
+# One-off: let herdr detect claude in a pane
+herdr integration install claude
 
 # Start backend (terminal 1)
 bun run dev:server
@@ -119,17 +136,23 @@ cloudflared tunnel --url http://localhost:3001
 ```
 Mobile Browser (PWA)  <--WebSocket-->  Elysia Server (0.0.0.0:3001)
                                          ├─ WS Plugin (ws.ts)
-                                         ├─ Session Manager (V1 query + resume)
-                                         ├─ Permission Bridge (canUseTool relay)
-                                         ├─ Session Listing (list/resume sessions)
-                                         ├─ Settings Loader (plugin discovery)
+                                         ├─ herdr backend (socket JSON-RPC)
+                                         ├─ Pane events (one global subscription)
+                                         ├─ Transcript readback (.jsonl tail)
+                                         ├─ Native permission (screen → send_keys)
                                          └─ Config (CLI flags + env vars)
                                                 ↓
-                                       Claude Code CLI (local)
+                                       Claude Code CLI (local, via herdr)
 ```
 
 - **Terminal layer**: herdr socket API drives a real `claude` in a persistent pane ([ADR-015](docs/adr/015-herdr-terminal-layer.md))
-- **Permissions**: Promise-based relay fed by the PreToolUse hook; 90s unanswered → deny ([ADR-002](docs/adr/002-permission-bridge-promise-pattern.md))
+- **Every claude on the machine**: the session list comes from `agent.list`, so a
+  session you started in your own terminal shows up on the phone and can be
+  continued there ([ADR-015 §2026-08-02](docs/adr/015-herdr-terminal-layer.md))
+- **Replies**: read incrementally from claude's own transcript file, not from a hook
+- **Permissions**: herdr reports the pane `blocked`, the server parses the prompt
+  off the screen, the phone shows the terminal's own options, and the chosen key
+  is pressed in the pane; 90s unanswered → Esc, on cc-mobile's own panes only
 - **State**: Zustand store with per-session isolation ([ADR-008](docs/adr/008-zustand-multi-session-state.md))
 - **Validation**: Zod schemas for all WebSocket messages ([ADR-001](docs/adr/001-zod-runtime-validation.md))
 
@@ -157,9 +180,10 @@ cc-mobile/
 │   ├── session-manager.ts      # Session map + settings state
 │   ├── terminal-control.ts     # terminal_create / terminal_teardown handlers
 │   ├── herdr/                  # herdr socket backend (ADR-015)
-│   ├── pty-permission-relay.ts # PreToolUse hook <-> WebSocket, 90s deny
-│   ├── session-listing.ts      # List resumable sessions per project
-│   ├── session-history.ts      # Session message history
+│   │   ├── sessions.ts         # Global claude listing from agent.list
+│   │   ├── pane-events.ts      # One global pane.updated subscription
+│   │   └── permission/         # Screen prompt parse + send_keys answers
+│   ├── transcript/             # .jsonl path, incremental read, turn delivery
 │   ├── protocol.ts             # Zod schemas for WS messages
 │   └── __tests__/
 ├── client/
