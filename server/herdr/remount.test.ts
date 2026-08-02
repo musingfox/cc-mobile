@@ -105,7 +105,7 @@ const shellProcess = {
   cwd: "/tmp/scratch",
 };
 
-function snapshotResult(workspaces: unknown[], panes: unknown[]) {
+function snapshotResult(workspaces: unknown[], panes: unknown[], agents: unknown[] = []) {
   return {
     type: "session_snapshot",
     snapshot: {
@@ -115,7 +115,7 @@ function snapshotResult(workspaces: unknown[], panes: unknown[]) {
       tabs: [],
       panes,
       layouts: [],
-      agents: [],
+      agents,
     },
   };
 }
@@ -135,6 +135,8 @@ interface FakeOptions {
   processSequence?: Record<string, (unknown[] | Error)[]>;
   closeFails?: boolean;
   snapshotFails?: boolean;
+  /** The snapshot's `agents` array; defaults to empty. */
+  agents?: unknown[];
 }
 
 function makeFakeClient(options: FakeOptions) {
@@ -145,7 +147,7 @@ function makeFakeClient(options: FakeOptions) {
       calls.push({ method, params });
       if (method === "session.snapshot") {
         if (options.snapshotFails) throw new Error("daemon gone");
-        return parse(schema, snapshotResult(options.workspaces, options.panes));
+        return parse(schema, snapshotResult(options.workspaces, options.panes, options.agents));
       }
       if (method === "pane.process_info") {
         const paneId = (params as { pane_id: string }).pane_id;
@@ -298,6 +300,35 @@ describe("StartupRemount", () => {
     // without this the adopted session routes prompts but shows no activity.
     expect(harness.subscribed).toEqual([[UUID, "pn-1"]]);
     expect(fake.closed()).toEqual([]);
+  });
+
+  test("adopts even when the daemon reports an agent_status this build never heard of", async () => {
+    // A herdr release that adds a status value must not brick boot: the snapshot
+    // is parsed here, and a rejected snapshot aborts the remount, which index.ts
+    // treats as fatal. Both carriers (pane record and agent record) say it.
+    const fake = makeFakeClient({
+      workspaces: [workspace("ws-1", workspaceLabelFor(UUID))],
+      panes: [{ ...pane("pn-1", "ws-1", "claude"), agent_status: "compacting" }],
+      agents: [
+        {
+          terminal_id: "term_pn-1",
+          agent_status: "compacting",
+          workspace_id: "ws-1",
+          tab_id: "ws-1:t1",
+          pane_id: "pn-1",
+          focused: false,
+          revision: 412,
+        },
+      ],
+      processes: { "pn-1": [claudeProcess(UUID)] },
+    });
+    const harness = makeDeps(fake);
+
+    const report = await remountLiveSessions(harness.deps);
+
+    expect(report.adopted).toEqual([UUID]);
+    expect(report.skipped).toEqual([]);
+    expect(harness.subscribed).toEqual([[UUID, "pn-1"]]);
   });
 
   test("leaves a legacy 8-char label entirely alone", async () => {

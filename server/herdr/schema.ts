@@ -46,6 +46,17 @@ export const AgentStatusSchema = z.enum(["idle", "working", "blocked", "done", "
 export type AgentStatus = z.infer<typeof AgentStatusSchema>;
 
 /**
+ * Inbound reading of the same enum. Deliberately `z.string()`, not the enum: a
+ * status this build has never heard of must pass the parse and then fail the
+ * lookup (STATE_BY_AGENT_STATUS in agent-state.ts has no entry for it, which
+ * reads as "no claim"). `session.snapshot` is what the startup remount parses,
+ * and a failed remount is fatal (index.ts exits 1) — a daemon-side enum addition
+ * must not be able to brick boot. Presence is still required wherever the daemon
+ * promises the field: an *absent* status is a shape violation, not new vocabulary.
+ */
+const ReportedAgentStatusSchema = z.string();
+
+/**
  * One detected agent. Required core fields only; the live daemon omits
  * `agent_session` / `interactive_ready` (and may omit `state_change_seq`)
  * on partially detected agents. `revision` and `state_change_seq` are the
@@ -54,7 +65,7 @@ export type AgentStatus = z.infer<typeof AgentStatusSchema>;
 export const AgentInfoSchema = z
   .object({
     terminal_id: z.string(),
-    agent_status: AgentStatusSchema,
+    agent_status: ReportedAgentStatusSchema,
     workspace_id: z.string(),
     tab_id: z.string(),
     pane_id: z.string(),
@@ -91,13 +102,15 @@ export type WorkspaceInfo = z.infer<typeof WorkspaceInfoSchema>;
  * running) and is optional — it is absent on panes sitting at a shell prompt.
  * `agent_status` rides passthrough today; typing it optional only names data
  * that already arrives, and keeps a pane without a detected agent parseable.
+ * An unrecognised value reads as `unknown` rather than failing the parse — see
+ * ReportedAgentStatusSchema: this snapshot feeds the boot-time remount.
  */
 export const PaneInfoSchema = z
   .object({
     pane_id: z.string(),
     workspace_id: z.string(),
     agent: z.string().nullish(),
-    agent_status: AgentStatusSchema.optional(),
+    agent_status: ReportedAgentStatusSchema.optional(),
   })
   .passthrough();
 export type PaneInfo = z.infer<typeof PaneInfoSchema>;
