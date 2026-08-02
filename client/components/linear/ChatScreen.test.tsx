@@ -20,14 +20,12 @@ describe("ChatScreen", () => {
     cleanup();
   });
 
-  test("renders resumed user history messages with YOU label", () => {
+  test("renders user and assistant messages with their role labels", () => {
     const store = useAppStore.getState();
     store.addSession("s1", "/tmp/project");
     store.setActiveSession("s1");
-    store.loadSessionHistory("s1", [
-      { id: "m1", role: "user", content: "hi", timestamp: 0 },
-      { id: "m2", role: "assistant", content: "hello", timestamp: 1 },
-    ]);
+    store.addMessage("s1", { id: "m1", role: "user", content: "hi", timestamp: 0 });
+    store.addMessage("s1", { id: "m2", role: "assistant", content: "hello", timestamp: 1 });
 
     const { container, getByText } = render(<ChatScreen onNavigate={() => {}} />);
     expect(getByText("YOU")).not.toBeNull();
@@ -39,7 +37,7 @@ describe("ChatScreen", () => {
     const store = useAppStore.getState();
     store.addSession("s1", "/tmp/project");
     store.setActiveSession("s1");
-    store.loadSessionHistory("s1", [{ id: "m1", role: "user", content: "hi", timestamp: 0 }]);
+    store.addMessage("s1", { id: "m1", role: "user", content: "hi", timestamp: 0 });
 
     const { container } = render(<ChatScreen onNavigate={() => {}} />);
     const userBubble = container.querySelector(".lin-msg--user");
@@ -181,9 +179,7 @@ describe("ChatScreen", () => {
     const store = useAppStore.getState();
     store.addSession("s1", "/tmp/project");
     store.setActiveSession("s1");
-    store.loadSessionHistory("s1", [
-      { id: "m1", role: "assistant", content: "done", timestamp: 1 },
-    ]);
+    store.addMessage("s1", { id: "m1", role: "assistant", content: "done", timestamp: 1 });
 
     const { container } = render(<ChatScreen onNavigate={() => {}} />);
     expect(container.querySelector(".lin-thinking")).toBeNull();

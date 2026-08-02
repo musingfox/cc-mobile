@@ -45,8 +45,8 @@ describe("WsService debug logging integration", () => {
       { type: "command", sessionId: "1", command: "/help" },
       { type: "permission", requestId: "1", allow: true },
       { type: "interrupt", sessionId: "1" },
-      { type: "list_sessions" },
-      { type: "resume_session", sdkSessionId: "sdk-1", cwd: "/test" },
+      { type: "list_terminal_sessions" },
+      { type: "terminal_create", claudeUuid: "u1", cwd: "/test" },
       { type: "set_permission_mode", mode: "auto" },
     ];
 
@@ -61,8 +61,8 @@ describe("WsService debug logging integration", () => {
       "command",
       "permission",
       "interrupt",
-      "list_sessions",
-      "resume_session",
+      "list_terminal_sessions",
+      "terminal_create",
       "set_permission_mode",
     ]);
   });

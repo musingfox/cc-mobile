@@ -363,7 +363,6 @@ class WsService {
   // (starting at 1), so a single global cursor would mis-baseline replay across
   // sessions and silently drop missed events on reconnect (→ stuck spinner).
   private lastEventIds = new Map<string, number>();
-  private pendingResumeSdkSessionId: string | null = null;
   private disconnectBannerTimeout: number | null = null;
   // Dedupe set for `api_retry` toasts within a single turn. Cleared on
   // `stream_end`. Key shape: `${error_status ?? "unknown"}-${attempt}`.
@@ -529,28 +528,6 @@ class WsService {
     const sessionId = msg.sessionId as string | undefined;
 
     switch (msg.type) {
-      case "session_created": {
-        const cwd = (msg.cwd as string) || "/";
-        if (sessionId) {
-          // Replace current session if it's empty
-          const activeId = store.activeSessionId;
-          if (activeId) {
-            const activeSession = store.sessions.get(activeId);
-            if (activeSession && activeSession.messages.length === 0) {
-              store.removeSession(activeId);
-            }
-          }
-          store.addSession(sessionId, cwd);
-          // If this was a resume, store the sdkSessionId
-          if (this.pendingResumeSdkSessionId) {
-            store.setSdkSessionId(sessionId, this.pendingResumeSdkSessionId);
-            this.pendingResumeSdkSessionId = null;
-          }
-          saveProject(cwd);
-        }
-        break;
-      }
-
       case "terminal_created": {
         const claudeUuid = msg.claudeUuid as string | undefined;
         if (!claudeUuid) break;
@@ -1075,26 +1052,6 @@ class WsService {
           this.pendingTerminalCreates.clear();
         }
 
-        // Auto-resume if server lost the session (e.g. after server restart)
-        if (
-          sessionId &&
-          msg.code === "session_error" &&
-          typeof msg.message === "string" &&
-          msg.message.includes("not found")
-        ) {
-          const session = store.sessions.get(sessionId);
-          if (session?.sdkSessionId) {
-            console.log(
-              `[ws-service] session lost on server, auto-resuming: ${session.sdkSessionId}`,
-            );
-            toastService.info("Reconnecting to session...");
-            // Remove stale session, resume will create a new one
-            store.removeSession(sessionId);
-            this.resumeSession(session.sdkSessionId, session.cwd);
-            break;
-          }
-        }
-
         if (sessionId) {
           store.addMessage(sessionId, {
             id: `error-${Date.now()}`,
@@ -1107,22 +1064,6 @@ class WsService {
           store.setGlobalError(msg.message as string);
           toastService.error(msg.message as string);
         }
-        break;
-      }
-
-      case "session_list": {
-        // Store session list in app store
-        store.setSessionList(
-          (msg.sessions as Array<{
-            sdkSessionId: string;
-            displayTitle: string;
-            cwd: string;
-            gitBranch?: string;
-            lastModified: number;
-            createdAt?: number;
-            customTitle?: string;
-          }>) || [],
-        );
         break;
       }
 
@@ -1158,20 +1099,6 @@ class WsService {
             allowedRoots: config.allowedRoots ?? null,
             homeDirectory: config.homeDirectory ?? "~",
           });
-        }
-        break;
-      }
-
-      case "session_history": {
-        if (sessionId) {
-          const messages =
-            (msg.messages as Array<{
-              id: string;
-              role: string;
-              content: string;
-              timestamp: number;
-            }>) || [];
-          store.loadSessionHistory(sessionId, messages);
         }
         break;
       }
@@ -1354,36 +1281,6 @@ class WsService {
   stopTask(sessionId: string, taskId: string) {
     if (!this.ws) return;
     this.sendMessage({ type: "stop_task", sessionId, taskId });
-  }
-
-  setSessionTitle(sdkSessionId: string, title: string, dir?: string) {
-    if (!this.ws) return;
-    this.sendMessage({
-      type: "set_session_title",
-      sdkSessionId,
-      title,
-      ...(dir ? { dir } : {}),
-    });
-  }
-
-  listSessions(dir?: string, limit?: number, offset?: number) {
-    if (!this.ws) return;
-    this.sendMessage({
-      type: "list_sessions",
-      ...(dir && { dir }),
-      ...(limit && { limit }),
-      ...(offset && { offset }),
-    });
-  }
-
-  resumeSession(sdkSessionId: string, cwd: string) {
-    if (!this.ws) return;
-    this.pendingResumeSdkSessionId = sdkSessionId;
-    this.sendMessage({
-      type: "resume_session",
-      sdkSessionId,
-      cwd,
-    });
   }
 
   setPermissionMode(mode: string, sessionId?: string) {

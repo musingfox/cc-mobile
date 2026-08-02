@@ -80,36 +80,3 @@ describe("Contract 3: DETECT_AND_DISPLAY_API_RETRY", () => {
     expect(isApiRetry(chunk)).toBe(false);
   });
 });
-
-describe("Contract 5: FRONTEND_SESSION_LIST_PAGINATION", () => {
-  it("PAGE_SIZE constant is 20", () => {
-    // Visual inspection confirms PAGE_SIZE = 20 in SessionListModal.tsx
-    const PAGE_SIZE = 20;
-    expect(PAGE_SIZE).toBe(20);
-  });
-
-  it("Load More button triggers listSessions with offset", () => {
-    // Mock state scenario:
-    // Initial: offset = 0, listSessions(dir, 20, 0)
-    // After Load More click: offset = 20, listSessions(dir, 20, 20)
-    const initialOffset = 0;
-    const PAGE_SIZE = 20;
-    const newOffset = initialOffset + PAGE_SIZE;
-    expect(newOffset).toBe(20);
-  });
-
-  it("hasMore is false when sessionList.length < PAGE_SIZE", () => {
-    const PAGE_SIZE = 20;
-    const sessionListLength = 15;
-    const hasMore = sessionListLength >= PAGE_SIZE;
-    expect(hasMore).toBe(false);
-  });
-
-  it("hasMore is true when sessionList.length === PAGE_SIZE", () => {
-    const PAGE_SIZE = 20;
-    const sessionListLength = 20;
-    const hasMore = sessionListLength >= PAGE_SIZE;
-    expect(hasMore).toBe(true);
-  });
-});
-

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ContentBlock, SessionListItem } from "../../server/protocol";
+import type { ContentBlock } from "../../server/protocol";
 import {
   clearSessionState,
   getAllSessionIds,
@@ -163,7 +163,6 @@ export type SessionState = {
   resolvedActions: ResolvedAction[];
   agentState: "idle" | "running" | "requires_action" | null;
   receivedAuthoritativeState: boolean;
-  historyUnknownRoleWarned?: boolean;
   permissionMode?: string;
   // Present only on sessions backed by a live terminal session (herdr).
   // `ready` flips true on `terminal_created`; sends are gated until then.
@@ -278,14 +277,6 @@ interface AppState {
   inputDraft: string;
   setInputDraft: (draft: string) => void;
 
-  // Session list for resume
-  sessionList: SessionListItem[];
-  setSessionList: (sessions: SessionListItem[]) => void;
-  loadSessionHistory: (
-    sessionId: string,
-    messages: Array<{ id: string; role: string; content: string; timestamp: number }>,
-  ) => void;
-
   // Resolved actions
   addResolvedAction: (sessionId: string, action: ResolvedAction) => void;
 
@@ -351,7 +342,6 @@ export const useAppStore = create<AppState>((set) => ({
         resolvedActions: [],
         agentState: null,
         receivedAuthoritativeState: false,
-        historyUnknownRoleWarned: false,
         permissionMode: undefined,
         terminal,
       });
@@ -513,39 +503,6 @@ export const useAppStore = create<AppState>((set) => ({
 
   inputDraft: "",
   setInputDraft: (inputDraft) => set({ inputDraft }),
-
-  sessionList: [],
-  setSessionList: (sessions) => set({ sessionList: sessions }),
-  loadSessionHistory: (sessionId, messages) =>
-    set((state) => {
-      const session = state.sessions.get(sessionId);
-      if (!session) return state;
-
-      let warnedUnknownRole = false;
-      const normalizedMessages: Message[] = messages.map((m) => {
-        const role: "user" | "assistant" =
-          m.role === "user" || m.role === "assistant" ? m.role : "assistant";
-        if (m.role !== "user" && m.role !== "assistant") warnedUnknownRole = true;
-        return {
-          id: m.id,
-          role,
-          content: m.content,
-          timestamp: m.timestamp,
-        };
-      });
-
-      if (warnedUnknownRole && !session.historyUnknownRoleWarned) {
-        console.warn("[app-store] unknown history role coerced to assistant", { sessionId });
-      }
-
-      const next = new Map(state.sessions);
-      next.set(sessionId, {
-        ...session,
-        messages: normalizedMessages,
-        historyUnknownRoleWarned: session.historyUnknownRoleWarned || warnedUnknownRole,
-      });
-      return { sessions: next };
-    }),
 
   addActiveTool: (sessionId, toolUseId, tool) =>
     set((state) => ({
