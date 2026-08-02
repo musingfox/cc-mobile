@@ -64,6 +64,20 @@ export interface WsBackend extends TerminalControlBackend {
    * session list.
    */
   listStates?(): Promise<Record<string, "idle" | "running" | "requires_action">>;
+  /**
+   * Answers a screen-derived permission prompt by pressing a key in the pane.
+   * Resolves `false` when the backend does not own that `requestId`, which is
+   * what lets the transport fall through to the legacy hook relay without either
+   * holder reporting a spurious failure. Optional: only a backend that can read
+   * a terminal has one.
+   */
+  resolvePermission?(
+    requestId: string,
+    answer: { optionId?: string; allow?: boolean },
+  ): Promise<boolean>;
+  /** Connection lifecycle for pending native prompts (see resolvePermission). */
+  pausePermissions?(): void;
+  resumePermissions?(): Promise<void> | void;
   send(params: { claudeUuid: string; content: string }): Promise<void>;
   registerClient(
     claudeUuid: string,
@@ -211,13 +225,40 @@ export function createWsPlugin(
           }
 
           case "permission": {
-            // The herdr relay is the only holder of in-flight permission
-            // requests; resolving an unknown requestId is a silent no-op.
-            terminalPermissionRelay.resolvePermission(
-              message.requestId,
-              message.allow,
-              message.answers,
-            );
+            // Exactly one answer form is required. A discriminated union cannot
+            // express that at the schema, so it is enforced here rather than
+            // silently treating "no answer" as a denial.
+            if (message.optionId === undefined && message.allow === undefined) {
+              ws.send({
+                type: "error",
+                code: "invalid_message",
+                message: "permission requires optionId or allow",
+              });
+              break;
+            }
+
+            // Native prompts first: the backend owns the ids it minted from the
+            // screen. Only if it disclaims the id does the legacy hook relay get
+            // a look, so neither holder reports a failure for the other's id.
+            const handled = await backend
+              .resolvePermission?.(message.requestId, {
+                ...(message.optionId !== undefined ? { optionId: message.optionId } : {}),
+                ...(message.allow !== undefined ? { allow: message.allow } : {}),
+              })
+              .catch((error: unknown) => {
+                console.warn(
+                  `[ws] native permission answer failed: ${error instanceof Error ? error.message : String(error)}`,
+                );
+                return true;
+              });
+            if (handled) break;
+            if (message.allow !== undefined) {
+              terminalPermissionRelay.resolvePermission(
+                message.requestId,
+                message.allow,
+                message.answers,
+              );
+            }
             break;
           }
 

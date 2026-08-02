@@ -2,8 +2,19 @@ import { describe, expect, test } from "bun:test";
 import { ClientMessage, ServerMessage } from "../protocol";
 
 describe("ClientMessage schema", () => {
-  test("permission missing allow field", () => {
+  // Both answer forms are optional at the schema — a discriminated union cannot
+  // express "exactly one of" — so a message carrying neither parses here and is
+  // refused by the ws handler instead (see ws-permission-resolve.test.ts).
+  test("permission carrying neither answer form parses; the handler refuses it", () => {
     const result = ClientMessage.safeParse({ type: "permission", requestId: "r1" });
+    expect(result.success).toBe(true);
+  });
+  test("permission accepts the server-supplied optionId form", () => {
+    const result = ClientMessage.safeParse({ type: "permission", requestId: "r1", optionId: "3" });
+    expect(result.success).toBe(true);
+  });
+  test("permission rejects an empty optionId", () => {
+    const result = ClientMessage.safeParse({ type: "permission", requestId: "r1", optionId: "" });
     expect(result.success).toBe(false);
   });
   test("permission valid", () => {

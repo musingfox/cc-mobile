@@ -42,11 +42,17 @@ export interface PaneEventTranscript {
   deliverTurn(sessionId: string): Promise<void> | void;
 }
 
+/** The permission side of the wiring; `blocked` is what raises a prompt. */
+export interface PaneEventPermission {
+  onStatus(sessionId: string, status: string): Promise<void> | void;
+}
+
 export interface HerdrPaneEventsOptions {
   subscribe: (options: SubscribeEventsOptions) => Promise<SubscriptionHandle>;
   /** Late-bound sink lookup, so a reconnect that rebinds a session still gets events. */
   getSink: (sessionId: string) => ClientSink | undefined;
   transcript?: PaneEventTranscript;
+  permission?: PaneEventPermission;
   onError?: (error: Error) => void;
 }
 
@@ -68,7 +74,7 @@ function paneFieldsOf(event: { data?: unknown }): Partial<PaneInfo> | undefined 
 }
 
 export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
-  const { subscribe, getSink, transcript } = options;
+  const { subscribe, getSink, transcript, permission } = options;
   const onError =
     options.onError ??
     ((error: Error) => {
@@ -125,6 +131,9 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
     }
 
     run(transcript?.onStatus(sessionId, status));
+    // `blocked` is claude asking for permission; every other status means
+    // whatever was pending has been answered by someone.
+    run(permission?.onStatus(sessionId, status));
     // Deliver on arrival at a settled status rather than on "left working", so a
     // subscription that started mid-turn still reads that turn out.
     if (SETTLED_STATUSES.has(status) && previous !== status) {

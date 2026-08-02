@@ -17,6 +17,7 @@ import { resolveTranscriptPath } from "../transcript/path";
 import { type AgentState, statesFromSnapshot } from "./agent-state";
 import { createHerdrClient, type HerdrClient, SUPPORTED_PROTOCOL } from "./client";
 import { createHerdrPaneEvents } from "./pane-events";
+import { createNativePermission } from "./permission/native-permission";
 import { createHerdrRegistry } from "./registry";
 import { createHerdrSendRouting } from "./send-routing";
 import { listClaudeSessions, type SessionDescriptor, type SessionListingClient } from "./sessions";
@@ -35,7 +36,7 @@ export interface HerdrBackendOptions {
    */
   client?: Pick<
     HerdrClient,
-    "call" | "agentGet" | "paneSendText" | "paneSendKeys" | "subscribeEvents"
+    "call" | "agentGet" | "paneRead" | "paneSendText" | "paneSendKeys" | "subscribeEvents"
   > &
     // Optional because both degrade rather than fail: a client slice without
     // `sessionSnapshot` costs the UI its status dot, and one without
@@ -67,6 +68,19 @@ export interface HerdrTerminalBackend extends TerminalBackend {
    * reply.
    */
   listStates(): Promise<Record<string, AgentState>>;
+  /**
+   * Presses the chosen option's key in the pane, after re-proving on live RPCs
+   * that the same prompt is still on screen. Resolves `false` — silently, with
+   * no keystroke — for a `requestId` this backend never issued.
+   */
+  resolvePermission(
+    requestId: string,
+    answer: { optionId?: string; allow?: boolean },
+  ): Promise<boolean>;
+  /** Connection lost: stop treating pending prompts as seen by the phone. */
+  pausePermissions(): void;
+  /** Reconnect: re-read and re-emit every prompt still on screen. */
+  resumePermissions(): Promise<void>;
 }
 
 export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalBackend {
@@ -122,9 +136,34 @@ export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalB
     legacyReadback,
   });
 
+  /**
+   * Permissions with no hook behind them: herdr says `blocked`, the screen is
+   * read and parsed, the phone answers with a keystroke. This works for panes
+   * cc-mobile never launched, which a PreToolUse hook it installs never could.
+   */
+  const permission = createNativePermission({
+    client: {
+      agentGet: (target) => client.agentGet(target),
+      paneRead: (params) => client.paneRead(params),
+      paneSendKeys: (paneId, keys) => client.paneSendKeys(paneId, keys),
+    },
+    getSink: (sessionId) => routing.getClient(sessionId),
+    // Recorded at emit time because it gates the automated deny (Decision H2),
+    // which must not depend on a listing succeeding 90 s later.
+    originOf: async (sessionId) => {
+      const match = (await listSessionDescriptors()).find(
+        (session) => session.sessionId === sessionId,
+      );
+      return match?.origin ?? "foreign";
+    },
+  });
+
   const paneEvents = createHerdrPaneEvents({
     subscribe: (subscribeOptions) => client.subscribeEvents(subscribeOptions),
     getSink: (sessionId) => routing.getClient(sessionId),
+    permission: {
+      onStatus: (sessionId, status) => permission.onStatus(sessionId, status),
+    },
     transcript: {
       attach: (sessionId) => delivery.attach(sessionId),
       resetCursor: (sessionId) => delivery.resetCursor(sessionId),
@@ -181,6 +220,7 @@ export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalB
   function forgetSession(sessionId: string): void {
     paneEvents.forget(sessionId);
     delivery.forget(sessionId);
+    permission.forget(sessionId);
   }
 
   return {
@@ -223,6 +263,14 @@ export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalB
         return {};
       }
     },
+    /**
+     * Answers a native (screen-derived) permission prompt. Reports whether this
+     * backend owned the id, so the transport can fall through to the legacy hook
+     * relay for a request that came from there instead.
+     */
+    resolvePermission: (requestId, answer) => permission.resolve(requestId, answer),
+    pausePermissions: () => permission.pause(),
+    resumePermissions: () => permission.resume(),
     teardown,
     async teardownAll() {
       // Routed through the composed teardown so subscriptions and waiters are

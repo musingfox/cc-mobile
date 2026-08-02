@@ -1,0 +1,20 @@
+
+✻ Cooked for 17s
+
+❯ Run this exact bash command: touch /private/tmp/cf-0802-JmBO/probe/cwd/canary2.txt
+
+⏺ Running 1 shell command…
+  ⎿  $ touch /private/tmp/cf-0802-JmBO/probe/cwd/canary2.txt
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Bash command
+
+   touch /private/tmp/cf-0802-JmBO/probe/cwd/canary2.txt
+   Create empty canary2.txt file
+
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and always allow access to cwd/ from this project
+   3. No
+
+ Esc to cancel · Tab to amend · ctrl+e to explain

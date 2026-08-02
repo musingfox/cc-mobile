@@ -131,3 +131,77 @@ describe("PermissionReplyBroadcast", () => {
     await pending;
   });
 });
+
+/**
+ * Since #29 two holders can own a pending prompt: the backend's screen-derived
+ * one (which presses a key in the pane) and the legacy hook relay. The reply
+ * must reach whichever owns the id, and the other must stay silent.
+ */
+describe("PermissionAnswerKeySend — transport dispatch", () => {
+  function backendWithNative(handled: boolean) {
+    const answered: { requestId: string; answer: unknown }[] = [];
+    const backend = {
+      ...backendStub,
+      resolvePermission: async (requestId: string, answer: unknown) => {
+        answered.push({ requestId, answer });
+        return handled;
+      },
+    };
+    return { backend, answered };
+  }
+
+  test("an optionId answer goes to the backend, not the legacy relay", async () => {
+    const { relay } = makeRelay();
+    const { backend, answered } = backendWithNative(true);
+    harness = await startWsHarness(backend, undefined, { terminalPermissionRelay: relay });
+
+    const pending = relay.requestPtyPermission({
+      sessionId: "u1",
+      toolUseId: "toolu_01B",
+      toolName: "Bash",
+      toolInput: {},
+    });
+    let settled = false;
+    pending.then(() => {
+      settled = true;
+    });
+
+    harness.send({ type: "permission", requestId: "r1", optionId: "3" });
+    await settle();
+
+    expect(answered).toEqual([{ requestId: "r1", answer: { optionId: "3" } }]);
+    expect(settled).toBe(false);
+    relay.resolvePermission("toolu_01B", false);
+    await pending;
+  });
+
+  test("a legacy allow the backend disclaims falls through to the hook relay", async () => {
+    const { relay } = makeRelay();
+    const { backend, answered } = backendWithNative(false);
+    harness = await startWsHarness(backend, undefined, { terminalPermissionRelay: relay });
+
+    const pending = relay.requestPtyPermission({
+      sessionId: "u1",
+      toolUseId: "toolu_01C",
+      toolName: "Bash",
+      toolInput: {},
+    });
+
+    harness.send({ type: "permission", requestId: "toolu_01C", allow: true });
+
+    expect(await pending).toEqual({ allow: true, answers: undefined });
+    expect(answered).toHaveLength(1);
+  });
+
+  test("a permission carrying neither optionId nor allow is refused", async () => {
+    const { relay } = makeRelay();
+    const { backend, answered } = backendWithNative(true);
+    harness = await startWsHarness(backend, undefined, { terminalPermissionRelay: relay });
+
+    harness.send({ type: "permission", requestId: "r1" });
+    const error = await harness.waitFor((msg) => msg.type === "error");
+
+    expect(error.code).toBe("invalid_message");
+    expect(answered).toHaveLength(0);
+  });
+});

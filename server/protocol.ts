@@ -34,10 +34,22 @@ const StopTaskMessage = z.object({
   taskId: z.string(),
 });
 
+/**
+ * The user's answer to a permission prompt.
+ *
+ * `optionId` names one of the options the server offered — the terminal's own
+ * choices, parsed off the screen (Decision H3). `allow` is the pre-#29 boolean
+ * form, still accepted for one migration window so a cached PWA bundle can keep
+ * answering prompts (Decision M14); the server maps `false` to `esc` and `true`
+ * to the terminal's first option. Both are optional at the schema because a
+ * discriminated union cannot carry a cross-field refinement; the handler
+ * refuses a message carrying neither.
+ */
 const PermissionMessage = z.object({
   type: z.literal("permission"),
   requestId: z.string(),
-  allow: z.boolean(),
+  optionId: z.string().min(1).optional(),
+  allow: z.boolean().optional(),
   answers: z.record(z.string()).optional(),
 });
 
@@ -156,6 +168,24 @@ const StreamEndMessage = z.object({
   sessionId: z.string(),
 });
 
+/** One choice the terminal is offering, in the terminal's own wording. */
+const PermissionOptionSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  /** The key the server presses in the pane when this option is chosen. */
+  keystroke: z.string(),
+});
+
+/**
+ * A pending permission prompt.
+ *
+ * Since #29 `tool.parameters` carries parsed SCREEN text (`{text, description}`)
+ * rather than the structured hook `input` JSON: while claude is blocked the
+ * transcript holds nothing about the pending call, so the screen is the only
+ * machine-readable source (research P4). `options` is what the terminal actually
+ * offers — 2 or 3, wording varies — and is optional only because the legacy hook
+ * relay, alive until the pipeline is deleted, has none to report.
+ */
 const PermissionRequestMessage = z.object({
   type: z.literal("permission_request"),
   sessionId: z.string(),
@@ -164,6 +194,7 @@ const PermissionRequestMessage = z.object({
     name: z.string(),
     parameters: z.record(z.unknown()),
   }),
+  options: z.array(PermissionOptionSchema).optional(),
 });
 
 const ErrorMessage = z.object({
