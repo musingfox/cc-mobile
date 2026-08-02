@@ -11,18 +11,10 @@
  * on `pane.agent_status_changed` — `pane_id` is required.
  */
 
+import { STATE_BY_AGENT_STATUS } from "./agent-state";
 import type { SubscribeEventsOptions, SubscriptionHandle } from "./subscribe";
 
 export type ClientSink = (msg: Record<string, unknown>) => void;
-
-/** herdr agent_status → the client's session_state enum; `unknown` is dropped. */
-const STATE_BY_AGENT_STATUS: Record<string, "idle" | "running" | "requires_action" | undefined> = {
-  working: "running",
-  blocked: "requires_action",
-  idle: "idle",
-  // End-of-turn is `done`, not `idle` — both mean "not busy" to the UI.
-  done: "idle",
-};
 
 export interface HerdrStatusEventsOptions {
   subscribe: (options: SubscribeEventsOptions) => Promise<SubscriptionHandle>;

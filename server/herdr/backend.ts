@@ -12,6 +12,7 @@
 
 import type { createPtyResponseRelay } from "../pty-response-relay";
 import type { ClientSink, TerminalBackend, TerminalSessionInfo } from "../terminal-backend";
+import { type AgentState, statesFromSnapshot } from "./agent-state";
 import { createHerdrClient, type HerdrClient, SUPPORTED_PROTOCOL } from "./client";
 import { createHerdrRegistry } from "./registry";
 import { type RemountReport, remountLiveSessions } from "./remount";
@@ -33,7 +34,10 @@ export interface HerdrBackendOptions {
   client?: Pick<
     HerdrClient,
     "call" | "agentGet" | "paneSendText" | "paneSendKeys" | "subscribeEvents"
-  >;
+  > &
+    // Optional because listStates degrades to {} anyway: a client slice without
+    // it costs the UI its status dot, never its sessions.
+    Partial<Pick<HerdrClient, "sessionSnapshot">>;
   readinessBudgetMs?: number;
   readinessPollMs?: number;
 }
@@ -51,6 +55,14 @@ export interface HerdrTerminalBackend extends TerminalBackend {
    * so a reconciling client leaves their cards alone instead of deleting them.
    */
   listUnknown(): string[];
+  /**
+   * What every live session is doing right now, from one daemon call. The
+   * status subscription only fires on change, so this is the only way a client
+   * that reloaded mid-session can learn the current state without waiting for
+   * the next transition. Never rejects: a daemon hiccup costs the dot, not the
+   * reply.
+   */
+  listStates(): Promise<Record<string, AgentState>>;
 }
 
 export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalBackend {
@@ -121,6 +133,21 @@ export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalB
     // Filtered at query time: a uuid that has become routable since the scan
     // must answer as live, never as unknown.
     listUnknown: () => unknownUuids.filter((uuid) => !registry.hasSession(uuid).present),
+    /**
+     * One RPC regardless of session count — the join happens locally against
+     * the uuid→pane registry, so N live sessions still cost one round trip.
+     */
+    async listStates(): Promise<Record<string, AgentState>> {
+      try {
+        if (typeof client.sessionSnapshot !== "function") return {};
+        const snapshot = await client.sessionSnapshot();
+        return statesFromSnapshot(snapshot, registry.resolvePane, registry.listSessions());
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        console.warn(`[herdr] agent state snapshot failed: ${detail}`);
+        return {};
+      }
+    },
     teardown,
     async teardownAll() {
       // Routed through the composed teardown so subscriptions and waiters are

@@ -89,12 +89,15 @@ export type WorkspaceInfo = z.infer<typeof WorkspaceInfoSchema>;
 /**
  * One pane. `agent` is the daemon's own detection ("claude" while a claude is
  * running) and is optional — it is absent on panes sitting at a shell prompt.
+ * `agent_status` rides passthrough today; typing it optional only names data
+ * that already arrives, and keeps a pane without a detected agent parseable.
  */
 export const PaneInfoSchema = z
   .object({
     pane_id: z.string(),
     workspace_id: z.string(),
     agent: z.string().nullish(),
+    agent_status: AgentStatusSchema.optional(),
   })
   .passthrough();
 export type PaneInfo = z.infer<typeof PaneInfoSchema>;
