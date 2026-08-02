@@ -571,6 +571,16 @@ class WsService {
         const unknown = new Set(
           Array.isArray(msg.unknownUuids) ? (msg.unknownUuids as string[]) : [],
         );
+        // What herdr says each live session is doing. Lenient: an older server
+        // sends no map at all, and a live session may legitimately carry no
+        // entry (herdr reported "unknown"). Either way the session is still
+        // marked as spoken-for, which is what the UI gates its dot on — a
+        // reconciled session with no state is honestly "active, not running",
+        // not "unknown, show nothing".
+        const reportedStates =
+          typeof msg.states === "object" && msg.states !== null && !Array.isArray(msg.states)
+            ? (msg.states as Record<string, unknown>)
+            : {};
         // Every store session is reconciled, not just the ones carrying a
         // terminal marker. A markerless card cannot be anything but a ghost
         // from an older bundle or a cleared server, and exempting it is what
@@ -582,6 +592,13 @@ class WsService {
           if (live.has(id)) {
             this.pendingTerminalCreates.delete(id);
             store.setTerminalReady(id, true);
+            const reported = reportedStates[id];
+            if (reported === "idle" || reported === "running" || reported === "requires_action") {
+              // setAgentState syncs isStreaming and marks the session spoken-for.
+              store.setAgentState(id, reported);
+            } else {
+              store.setReceivedAuthoritativeState(id, true);
+            }
           } else if (unknown.has(id)) {
             // Skipped, not declared dead — leave the card (and its persisted
             // state) exactly as it is; the next restart may re-adopt it.
