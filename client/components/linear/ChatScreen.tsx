@@ -106,6 +106,9 @@ export default function ChatScreen({ onNavigate }: Props) {
   const handleDeny = () => {
     if (activeSessionId) wsService.denyPermission(activeSessionId);
   };
+  const handleChoose = (optionId: string) => {
+    if (activeSessionId) wsService.answerPermissionOption(activeSessionId, optionId);
+  };
 
   const pickerItems =
     pickerKind === "slash"
@@ -230,7 +233,12 @@ export default function ChatScreen({ onNavigate }: Props) {
 
       <PromptSuggestionChip sessionId={activeSessionId} />
 
-      <PermissionSheetA pending={pendingPermission} onApprove={handleApprove} onDeny={handleDeny} />
+      <PermissionSheetA
+        pending={pendingPermission}
+        onApprove={handleApprove}
+        onDeny={handleDeny}
+        onChoose={handleChoose}
+      />
 
       <InputBarA
         ref={inputRef}

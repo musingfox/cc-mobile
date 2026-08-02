@@ -5,12 +5,42 @@ import { wsService } from "../services/ws-service";
 import { useAppStore } from "../stores/app-store";
 
 /**
- * ClientTerminalReattach — on reconnect the client asks the server which
- * terminal sessions are alive and converges every card to that answer: live
- * ones become ready again (curing the permanent ready:false after a reload),
- * dead ones leave the list with a single toast, and creates still in flight are
- * left alone until their `terminal_created` arrives.
+ * ClientSessionRekey (list half) — on reconnect the client asks the server which
+ * claude sessions are alive anywhere on the machine and converges every card to
+ * that answer: listed ones become ready again (curing the permanent ready:false
+ * after a reload), absent ones leave the list with a single toast, creates still
+ * in flight are left alone until their `terminal_created` arrives, and a session
+ * the user started in their own terminal gets a card this browser has never
+ * seen.
+ *
+ * The list is keyed by herdr's pane id (Decision H5) and carries per-session
+ * capability flags; `unknownUuids` went with the startup remount scan that
+ * produced it (Decision M12), so "skipped, leave alone" no longer exists.
  */
+
+/** One entry of the server's `terminal_sessions.sessions` array. */
+function descriptor(sessionId: string, overrides: Record<string, unknown> = {}) {
+  return {
+    sessionId,
+    agentSessionValue: `value-${sessionId}`,
+    cwd: "/tmp",
+    origin: "self",
+    drivable: true,
+    readable: true,
+    gated: true,
+    ...overrides,
+  };
+}
+
+/** A `terminal_sessions` reply listing exactly these session ids. */
+function listing(ids: string[], overrides: Record<string, Record<string, unknown>> = {}) {
+  const sessions = ids.map((id) => descriptor(id, overrides[id] ?? {}));
+  return {
+    type: "terminal_sessions",
+    sessions,
+    claudeUuids: sessions.map((entry) => entry.sessionId),
+  };
+}
 
 class FakeWebSocket {
   send = mock((_data: string) => {});
@@ -56,7 +86,7 @@ describe("wsService terminal reattach reconcile", () => {
   test("a live session flips back to ready", () => {
     useAppStore.getState().addSession("u1", "/tmp", { ready: false });
 
-    getInternal().handleMessage({ type: "terminal_sessions", claudeUuids: ["u1"] });
+    getInternal().handleMessage(listing(["u1"]));
 
     expect(useAppStore.getState().sessions.get("u1")?.terminal?.ready).toBe(true);
     expect(getInternal().pendingTerminalCreates.has("u1")).toBe(false);
@@ -72,7 +102,7 @@ describe("wsService terminal reattach reconcile", () => {
     saveSessionState("u2", persisted);
     expect(getAllSessionIds()).toContain("u2");
 
-    getInternal().handleMessage({ type: "terminal_sessions", claudeUuids: [] });
+    getInternal().handleMessage(listing([]));
 
     expect(useAppStore.getState().sessions.has("u2")).toBe(false);
     expect(getAllSessionIds()).not.toContain("u2");
@@ -85,76 +115,67 @@ describe("wsService terminal reattach reconcile", () => {
     useAppStore.getState().addSession("u2a", "/tmp", { ready: true });
     useAppStore.getState().addSession("u2b", "/tmp", { ready: true });
 
-    getInternal().handleMessage({ type: "terminal_sessions", claudeUuids: [] });
+    getInternal().handleMessage(listing([]));
 
     expect(sessionIds()).toEqual([]);
     expect(infoToast).toHaveBeenCalledTimes(1);
   });
 
-  test("a session the server marks unknown is left untouched — kept, not readied, not removed", () => {
-    useAppStore.getState().addSession("u6", "/tmp", { ready: false });
-    const persisted = useAppStore.getState().sessions.get("u6");
-    if (!persisted) throw new Error("session not added");
-    saveSessionState("u6", persisted);
+  test("a listed session the browser has never seen gets a card", () => {
+    // The user's own terminal session, appearing on the phone for the first time.
+    getInternal().handleMessage(
+      listing(["w9:p1"], {
+        "w9:p1": { origin: "foreign", readable: false, cwd: "/repo" },
+      }),
+    );
 
-    getInternal().handleMessage({
-      type: "terminal_sessions",
-      claudeUuids: [],
-      unknownUuids: ["u6"],
+    const session = useAppStore.getState().sessions.get("w9:p1");
+    expect(session?.cwd).toBe("/repo");
+    expect(session?.descriptor).toEqual({
+      origin: "foreign",
+      drivable: true,
+      readable: false,
+      gated: true,
     });
-
-    // Skipped-at-remount is "leave alone": the card and its persisted state
-    // survive so the next restart can re-adopt the still-running session.
-    expect(useAppStore.getState().sessions.has("u6")).toBe(true);
-    expect(useAppStore.getState().sessions.get("u6")?.terminal?.ready).toBe(false);
-    expect(getAllSessionIds()).toContain("u6");
-    expect(localStorage.getItem("ccm:session:u6")).not.toBeNull();
-    expect(infoToast).not.toHaveBeenCalled();
+    expect(session?.terminal?.ready).toBe(true);
   });
 
-  test("an unknown card does not shield a genuinely dead one", () => {
-    useAppStore.getState().addSession("u6", "/tmp", { ready: false });
-    useAppStore.getState().addSession("u2", "/tmp", { ready: true });
+  test("a new card from the list does not steal the active session", () => {
+    // The list arrives on every reconnect; yanking the user out of the
+    // conversation they are reading would be worse than not showing the card.
+    useAppStore.getState().addSession("u1", "/tmp", { ready: true });
 
-    getInternal().handleMessage({
-      type: "terminal_sessions",
-      claudeUuids: [],
-      unknownUuids: ["u6"],
+    getInternal().handleMessage(listing(["u1", "w9:p1"]));
+
+    expect(useAppStore.getState().activeSessionId).toBe("u1");
+  });
+
+  test("an ungated pane is listed as drivable with the flag intact", () => {
+    getInternal().handleMessage(listing(["w4:p1"], { "w4:p1": { gated: false } }));
+
+    const flags = useAppStore.getState().sessions.get("w4:p1")?.descriptor;
+    expect(flags?.gated).toBe(false);
+    expect(flags?.drivable).toBe(true);
+  });
+
+  test("a legacy uuid-keyed card is reconciled away once, with one toast", () => {
+    // The documented one-time upgrade loss: cards keyed by claude uuid match no
+    // pane id, so they leave on the first listing (Decision H5).
+    useAppStore.getState().addSession("3f2a9b01-1111-4222-8333-444455556666", "/tmp", {
+      ready: true,
     });
 
-    expect(sessionIds()).toEqual(["u6"]);
+    getInternal().handleMessage(listing([]));
+
+    expect(sessionIds()).toEqual([]);
     expect(infoToast).toHaveBeenCalledTimes(1);
-  });
-
-  test("live wins when a uuid appears in both lists", () => {
-    useAppStore.getState().addSession("u1", "/tmp", { ready: false });
-
-    getInternal().handleMessage({
-      type: "terminal_sessions",
-      claudeUuids: ["u1"],
-      unknownUuids: ["u1"],
-    });
-
-    expect(useAppStore.getState().sessions.get("u1")?.terminal?.ready).toBe(true);
-  });
-
-  test("a malformed unknownUuids degrades to empty rather than breaking the reconcile", () => {
-    useAppStore.getState().addSession("u1", "/tmp", { ready: false });
-
-    getInternal().handleMessage({
-      type: "terminal_sessions",
-      claudeUuids: ["u1"],
-      unknownUuids: "u9",
-    });
-
-    expect(useAppStore.getState().sessions.get("u1")?.terminal?.ready).toBe(true);
   });
 
   test("a create still in flight is left alone", () => {
     useAppStore.getState().addSession("u3", "/tmp", { ready: false });
     getInternal().pendingTerminalCreates.add("u3");
 
-    getInternal().handleMessage({ type: "terminal_sessions", claudeUuids: [] });
+    getInternal().handleMessage(listing([]));
 
     expect(useAppStore.getState().sessions.has("u3")).toBe(true);
     expect(useAppStore.getState().sessions.get("u3")?.terminal?.ready).toBe(false);
@@ -171,7 +192,7 @@ describe("wsService terminal reattach reconcile", () => {
     saveSessionState("u4", persisted);
     expect(getAllSessionIds()).toContain("u4");
 
-    getInternal().handleMessage({ type: "terminal_sessions", claudeUuids: [] });
+    getInternal().handleMessage(listing([]));
 
     expect(useAppStore.getState().sessions.has("u4")).toBe(false);
     expect(localStorage.getItem("ccm:session:u4")).toBeNull();
@@ -183,7 +204,7 @@ describe("wsService terminal reattach reconcile", () => {
     useAppStore.getState().addSession("u1", "/tmp", { ready: false });
     useAppStore.getState().addSession("u2", "/tmp", { ready: true });
 
-    getInternal().handleMessage({ type: "terminal_sessions", claudeUuids: ["u2", "u1"] });
+    getInternal().handleMessage(listing(["u2", "u1"]));
 
     expect(useAppStore.getState().sessions.get("u1")?.terminal?.ready).toBe(true);
     expect(useAppStore.getState().sessions.get("u2")?.terminal?.ready).toBe(true);
@@ -196,7 +217,7 @@ describe("wsService terminal reattach reconcile", () => {
     useAppStore.getState().addSession("u2", "/tmp", { ready: true });
     expect(useAppStore.getState().activeSessionId).toBe("u2");
 
-    getInternal().handleMessage({ type: "terminal_sessions", claudeUuids: ["u1"] });
+    getInternal().handleMessage(listing(["u1"]));
 
     expect(useAppStore.getState().activeSessionId).toBe("u1");
   });
@@ -205,7 +226,7 @@ describe("wsService terminal reattach reconcile", () => {
     useAppStore.getState().addSession("u4", "/tmp");
     useAppStore.getState().setActiveSession("u4");
 
-    getInternal().handleMessage({ type: "terminal_sessions", claudeUuids: [] });
+    getInternal().handleMessage(listing([]));
 
     expect(sessionIds()).toEqual([]);
     expect(useAppStore.getState().activeSessionId).toBeNull();
@@ -214,7 +235,7 @@ describe("wsService terminal reattach reconcile", () => {
   test("removing the only session leaves no active session", () => {
     useAppStore.getState().addSession("u2", "/tmp", { ready: true });
 
-    getInternal().handleMessage({ type: "terminal_sessions", claudeUuids: [] });
+    getInternal().handleMessage(listing([]));
 
     expect(sessionIds()).toEqual([]);
     expect(useAppStore.getState().activeSessionId).toBeNull();
@@ -223,7 +244,7 @@ describe("wsService terminal reattach reconcile", () => {
   test("a malformed payload changes nothing", () => {
     useAppStore.getState().addSession("u5", "/tmp", { ready: false });
 
-    getInternal().handleMessage({ type: "terminal_sessions" });
+    getInternal().handleMessage({ type: "terminal_sessions", sessions: "nope" });
 
     expect(useAppStore.getState().sessions.has("u5")).toBe(true);
     expect(useAppStore.getState().sessions.get("u5")?.terminal?.ready).toBe(false);

@@ -228,14 +228,21 @@ export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalB
       return listSessionDescriptors();
     },
     /**
-     * One RPC regardless of session count — the join happens locally against
-     * the uuid→pane registry, so N live sessions still cost one round trip.
+     * One RPC regardless of session count — the join happens locally, so N live
+     * sessions still cost one round trip.
+     *
+     * Keyed by pane id, like everything else the client sees (Decision H5).
+     * Every pane in the snapshot is included rather than only the ones this
+     * process launched: the client looks up the ids it holds, and narrowing the
+     * map to the registry is what used to make it answer nothing at all for a
+     * session the user started in their own terminal.
      */
     async listStates(): Promise<Record<string, AgentState>> {
       try {
         if (typeof client.sessionSnapshot !== "function") return {};
         const snapshot = await client.sessionSnapshot();
-        return statesFromSnapshot(snapshot, registry.resolvePane, registry.listSessions());
+        const paneIds = (snapshot.panes ?? []).map((pane) => pane.pane_id);
+        return statesFromSnapshot(snapshot, (paneId) => paneId, paneIds);
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
         console.warn(`[herdr] agent state snapshot failed: ${detail}`);

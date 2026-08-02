@@ -552,6 +552,11 @@
   color: #6a6a6a;
 }
 
+.lin-permission-description {
+  font-size: 12px;
+  color: #a0a0a0;
+}
+
 .lin-permission-hint {
   display: flex;
   align-items: center;
@@ -561,12 +566,17 @@
   color: #6a6a6a;
 }
 
+/* Column, not row: the terminal's option labels are full sentences
+   ("Yes, and always allow access to cwd/ from this project"), and a 2-3 wide
+   row would truncate the very wording the sheet exists to show verbatim. */
 .lin-permission-actions {
   display: flex;
+  flex-direction: column;
   gap: 8px;
   margin-top: 2px;
 }
 
+.lin-permission-option,
 .lin-permission-deny,
 .lin-permission-approve {
   border-radius: 8px;
@@ -591,4 +601,18 @@
   color: #0e0e10;
   padding: 12px;
   font-weight: 600;
+}
+
+.lin-permission-option {
+  background: #1c1c20;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #ececec;
+  padding: 12px;
+  font-weight: 500;
+  text-align: left;
+}
+
+.lin-permission-option:disabled,
+.lin-permission-deny:disabled {
+  opacity: 0.45;
 }

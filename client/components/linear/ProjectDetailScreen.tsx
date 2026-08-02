@@ -29,6 +29,12 @@ interface SessionRowItem {
   title: string;
   age: string;
   live: boolean;
+  /** The user started this one in their own terminal, not from the phone. */
+  foreign: boolean;
+  /** claude runs there with no permission gate — it will not stop to ask. */
+  ungated: boolean;
+  /** Replies cannot be read back: herdr has no transcript key for that pane. */
+  unreadable: boolean;
   onClick: () => void;
 }
 
@@ -51,6 +57,9 @@ export default function ProjectDetailScreen({ cwd, onNavigate, onBack }: Props) 
         title: s.messages.length > 0 ? `${s.messages.length} msgs` : "new session",
         age: id === activeSessionId ? "current" : "open",
         live: s.agentState === "running",
+        foreign: s.descriptor?.origin === "foreign",
+        ungated: s.descriptor?.gated === false,
+        unreadable: s.descriptor?.readable === false,
         onClick: () => {
           setActiveSession(id);
           onNavigate("chat");
@@ -140,6 +149,13 @@ export default function ProjectDetailScreen({ cwd, onNavigate, onBack }: Props) 
                   <div className="lin-session-meta">
                     <span className="lin-session-meta-left">
                       <span>{r.age}</span>
+                      {r.foreign && <span className="lin-session-badge">terminal</span>}
+                      {/* Disclosure, never a lock: the session stays drivable
+                          and only the badge says so (Decision H4). */}
+                      {r.ungated && (
+                        <span className="lin-session-badge is-warn">no permission gate</span>
+                      )}
+                      {r.unreadable && <span className="lin-session-badge">no readback</span>}
                     </span>
                     <span className={`lin-session-live ${r.live ? "is-live" : "is-idle"}`}>
                       ● {r.live ? "Live" : "Active"}

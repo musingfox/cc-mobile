@@ -29,12 +29,42 @@ export type Message = {
   compactMetadata?: CompactMetadata;
 };
 
+/** One choice the terminal is offering, in its own wording (server-supplied). */
+export type PermissionOption = {
+  id: string;
+  label: string;
+  keystroke: string;
+};
+
 export type PendingPermission = {
   requestId: string;
   tool: {
     name: string;
+    /**
+     * Parsed screen text (`{text, description}`) since #29 — while claude is
+     * blocked the transcript holds nothing about the pending call, so the
+     * terminal's screen is the only source. There are no structured tool
+     * arguments to key on any more.
+     */
     parameters: Record<string, unknown>;
   };
+  /** Empty (or absent) means the screen could not be parsed: offer Cancel only. */
+  options?: PermissionOption[];
+};
+
+/**
+ * What the server knows about a live session that the card must show honestly.
+ *
+ * `gated: false` means claude runs in that pane with no permission gate: it will
+ * not stop to ask before acting. The badge is the whole safeguard — the composer
+ * stays enabled, because driving such a pane is the owner's own accepted risk
+ * (Decision H4).
+ */
+export type SessionDescriptorFlags = {
+  origin: "self" | "foreign";
+  drivable: boolean;
+  readable: boolean;
+  gated: boolean;
 };
 
 export type ModelInfo = {
@@ -167,6 +197,8 @@ export type SessionState = {
   // Present only on sessions backed by a live terminal session (herdr).
   // `ready` flips true on `terminal_created`; sends are gated until then.
   terminal?: { ready: boolean };
+  /** Server-supplied capability flags; absent until the session has been listed. */
+  descriptor?: SessionDescriptorFlags;
 };
 
 type ConnectionState = "connecting" | "connected" | "disconnected";
@@ -194,6 +226,20 @@ interface AppState {
   activeSessionId: string | null;
 
   addSession: (sessionId: string, cwd: string, terminal?: { ready: boolean }) => void;
+  /**
+   * Moves an optimistic card onto the session id the server assigned. Idempotent:
+   * a replayed `terminal_created` finds no card under the old key and does
+   * nothing, rather than resurrecting one.
+   */
+  rekeySession: (fromId: string, toId: string) => void;
+  /**
+   * Creates or refreshes a card from the server's session list, WITHOUT making
+   * it the active session — the list arrives on every reconnect and must not
+   * yank the user out of the conversation they are reading.
+   */
+  upsertListedSession: (
+    descriptor: SessionDescriptorFlags & { sessionId: string; cwd: string },
+  ) => void;
   setTerminalReady: (sessionId: string, ready: boolean) => void;
   setSdkSessionId: (sessionId: string, sdkSessionId: string) => void;
   removeSession: (sessionId: string) => void;
@@ -349,6 +395,58 @@ export const useAppStore = create<AppState>((set) => ({
         sessions: next,
         activeSessionId: sessionId,
       };
+    }),
+
+  rekeySession: (fromId, toId) =>
+    set((state) => {
+      if (fromId === toId) return state;
+      const session = state.sessions.get(fromId);
+      if (!session) return state;
+      const next = new Map(state.sessions);
+      next.delete(fromId);
+      const existing = next.get(toId);
+      next.set(
+        toId,
+        existing ? { ...existing, cwd: existing.cwd || session.cwd } : { ...session, id: toId },
+      );
+      clearSessionState(fromId);
+      return {
+        sessions: next,
+        activeSessionId: state.activeSessionId === fromId ? toId : state.activeSessionId,
+      };
+    }),
+
+  upsertListedSession: (descriptor) =>
+    set((state) => {
+      const { sessionId, cwd, ...flags } = descriptor;
+      const next = new Map(state.sessions);
+      const existing = next.get(sessionId);
+      next.set(sessionId, {
+        ...(existing ?? {
+          id: sessionId,
+          cwd,
+          sdkSessionId: null,
+          messages: [],
+          pendingPermission: null,
+          isStreaming: false,
+          currentStreamMessageId: null,
+          activeToolStatus: null,
+          activeTools: new Map(),
+          activeAgents: new Map(),
+          activeHook: null,
+          usage: null,
+          contextUsage: null,
+          promptSuggestion: null,
+          resolvedActions: [],
+          agentState: null,
+          receivedAuthoritativeState: false,
+          permissionMode: undefined,
+        }),
+        cwd: existing?.cwd || cwd,
+        terminal: { ready: true },
+        descriptor: flags,
+      });
+      return { sessions: next };
     }),
 
   setTerminalReady: (sessionId, ready) =>

@@ -8,6 +8,20 @@
 
 /* Attachment chips ----------------------------------------- */
 
+/* Disclosure, not a lock: the composer below stays enabled (Decision H4). */
+.lin-input-ungated {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  margin-bottom: 6px;
+  border: 1px solid rgba(224, 168, 74, 0.35);
+  border-radius: 7px;
+  background: rgba(224, 168, 74, 0.08);
+  font-size: 11px;
+  color: #e0a84a;
+}
+
 .lin-input-chips {
   display: flex;
   gap: 6px;

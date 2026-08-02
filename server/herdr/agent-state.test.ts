@@ -140,7 +140,7 @@ describe("backend.listStates — one call, never a rejection", () => {
     await expect(backend.listStates()).resolves.toEqual({});
   });
 
-  test("three live sessions still cost exactly one snapshot RPC", async () => {
+  test("every pane in the snapshot is keyed by pane id, in one RPC", async () => {
     let snapshotCalls = 0;
     const panes = [
       { pane_id: "p1", workspace_id: "w1", agent_status: "working" },
@@ -176,10 +176,9 @@ describe("backend.listStates — one call, never a rejection", () => {
     const states = await backend.listStates();
 
     expect(snapshotCalls).toBe(1);
-    expect(states).toEqual({
-      [uuids[0]]: "running",
-      [uuids[1]]: "requires_action",
-      [uuids[2]]: "idle",
-    });
+    // Pane ids, not claude uuids: that is the session key the client holds
+    // (Decision H5), and it is the only key a session the user opened in their
+    // own terminal has at all.
+    expect(states).toEqual({ p1: "running", p2: "requires_action", p3: "idle" });
   });
 });

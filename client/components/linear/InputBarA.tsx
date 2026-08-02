@@ -52,6 +52,16 @@ const InputBarA = forwardRef<InputBarAHandle, Props>(function InputBarA(
   );
   // A terminal session only accepts input once the server reports it ready.
   const terminalNotReady = terminal !== undefined && !terminal.ready;
+  const descriptor = useAppStore((s) =>
+    sessionId ? s.sessions.get(sessionId)?.descriptor : undefined,
+  );
+  // `gated: false` means claude runs in that pane with no permission gate: it
+  // will not stop to ask before acting, so nothing here can intercept a tool
+  // call. The composer stays enabled — driving such a pane is the owner's own
+  // accepted risk (Decision H4) — and the badge is the whole safeguard, which
+  // is why it sits directly above the send button rather than on a card
+  // somewhere else.
+  const ungated = descriptor?.gated === false;
 
   const [images, setImages] = useState<ImageAttachment[]>([]);
   const [files, setFiles] = useState<FileAttachment[]>([]);
@@ -206,6 +216,12 @@ const InputBarA = forwardRef<InputBarAHandle, Props>(function InputBarA(
 
   return (
     <div className="lin-input-bar">
+      {ungated && (
+        <div className="lin-input-ungated" role="status">
+          <Icon name="shield" size={11} color={T.accentWarn} />
+          <span>No permission gate — this session runs tools without asking</span>
+        </div>
+      )}
       {hasAttachments && (
         <div className="lin-input-chips">
           {images.map((img) => (

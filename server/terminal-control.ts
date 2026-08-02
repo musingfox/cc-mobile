@@ -66,6 +66,12 @@ export async function handleTerminalCreate(
     send({
       type: "terminal_created",
       claudeUuid: msg.claudeUuid,
+      // The session key from here on is herdr's pane id (Decision H5). The
+      // request uuid rides along because the ack is buffered under it — the
+      // pane does not exist until createSession returns, so there is no
+      // pane-keyed buffer to write into at request time (Decision M15) — and
+      // the client re-keys its optimistic card on receipt.
+      sessionId: info.paneRef,
       terminalName: info.name,
       paneRef: info.paneRef,
     });

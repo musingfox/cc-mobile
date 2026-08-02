@@ -71,7 +71,15 @@ describe("handleTerminalCreate — happy path", () => {
 
     expect(createSessionCalls).toEqual([{ claudeUuid: "u1", cwd: testRoot }]);
     expect(sent).toEqual([
-      { type: "terminal_created", claudeUuid: "u1", terminalName: "cc-u1", paneRef: "7" },
+      {
+        type: "terminal_created",
+        claudeUuid: "u1",
+        // The wire session key is the pane id; the request uuid only names the
+        // buffer slot the ack was written into.
+        sessionId: "7",
+        terminalName: "cc-u1",
+        paneRef: "7",
+      },
     ]);
   });
 

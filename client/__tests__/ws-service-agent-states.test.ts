@@ -15,6 +15,24 @@ class FakeWebSocket {
   send = mock((_data: string) => {});
 }
 
+/** A `terminal_sessions` reply; per-session state rides on the descriptor. */
+function listing(entries: { sessionId: string; state?: string; cwd?: string }[]) {
+  return {
+    type: "terminal_sessions",
+    sessions: entries.map((entry) => ({
+      sessionId: entry.sessionId,
+      agentSessionValue: null,
+      cwd: entry.cwd ?? "/a",
+      origin: "self",
+      drivable: true,
+      readable: true,
+      gated: true,
+      ...(entry.state ? { state: entry.state } : {}),
+    })),
+    claudeUuids: entries.map((entry) => entry.sessionId),
+  };
+}
+
 function getInternal() {
   return wsService as unknown as {
     ws: WebSocket | null;
@@ -51,12 +69,7 @@ describe("ClientAdoptsServerAgentStates", () => {
   test("a reported running state lands on the session and drives the spinner", () => {
     useAppStore.getState().addSession("u1", "/a", { ready: false });
 
-    getInternal().handleMessage({
-      type: "terminal_sessions",
-      claudeUuids: ["u1"],
-      unknownUuids: [],
-      states: { u1: "running" },
-    });
+    getInternal().handleMessage(listing([{ sessionId: "u1", state: "running" }]));
 
     expect(session("u1")?.agentState).toBe("running");
     expect(session("u1")?.isStreaming).toBe(true);
@@ -68,12 +81,7 @@ describe("ClientAdoptsServerAgentStates", () => {
     // it is still an answer — the card must not look unheard-from.
     useAppStore.getState().addSession("u1", "/a", { ready: false });
 
-    getInternal().handleMessage({
-      type: "terminal_sessions",
-      claudeUuids: ["u1"],
-      unknownUuids: [],
-      states: {},
-    });
+    getInternal().handleMessage(listing([{ sessionId: "u1" }]));
 
     expect(session("u1")?.agentState).toBeNull();
     expect(session("u1")?.receivedAuthoritativeState).toBe(true);
@@ -82,11 +90,7 @@ describe("ClientAdoptsServerAgentStates", () => {
   test("an older server that sends no states map still marks live sessions", () => {
     useAppStore.getState().addSession("u1", "/a", { ready: false });
 
-    getInternal().handleMessage({
-      type: "terminal_sessions",
-      claudeUuids: ["u1"],
-      unknownUuids: [],
-    });
+    getInternal().handleMessage(listing([{ sessionId: "u1" }]));
 
     expect(session("u1")?.agentState).toBeNull();
     expect(session("u1")?.receivedAuthoritativeState).toBe(true);
@@ -95,12 +99,7 @@ describe("ClientAdoptsServerAgentStates", () => {
   test("an unrecognised state string is ignored rather than stored", () => {
     useAppStore.getState().addSession("u1", "/a", { ready: false });
 
-    getInternal().handleMessage({
-      type: "terminal_sessions",
-      claudeUuids: ["u1"],
-      unknownUuids: [],
-      states: { u1: "nonsense" },
-    });
+    getInternal().handleMessage(listing([{ sessionId: "u1", state: "nonsense" }]));
 
     expect(session("u1")?.agentState).toBeNull();
     expect(session("u1")?.receivedAuthoritativeState).toBe(true);
@@ -112,7 +111,7 @@ describe("ClientAdoptsServerAgentStates", () => {
     useAppStore.getState().addSession("u1", "/a", { ready: false });
     getInternal().pendingTerminalCreates.add("u1");
 
-    getInternal().handleMessage({ type: "terminal_created", claudeUuid: "u1" });
+    getInternal().handleMessage({ type: "terminal_created", claudeUuid: "u1", sessionId: "u1" });
 
     expect(session("u1")?.agentState).toBe("idle");
     expect(session("u1")?.isStreaming).toBe(false);
@@ -125,24 +124,19 @@ describe("ClientAdoptsServerAgentStates", () => {
     useAppStore.getState().addSession("u1", "/a", { ready: true });
     useAppStore.getState().setAgentState("u1", "running");
 
-    getInternal().handleMessage({ type: "terminal_created", claudeUuid: "u1" });
+    getInternal().handleMessage({ type: "terminal_created", claudeUuid: "u1", sessionId: "u1" });
 
     expect(session("u1")?.agentState).toBe("running");
     expect(session("u1")?.isStreaming).toBe(true);
   });
 
-  test("a session the remount skipped is not treated as spoken-for", () => {
-    // Skipped means "no verdict", so the card keeps its pre-reply silence
-    // instead of claiming the server confirmed it.
+  test("a session the server does not list is gone, not merely unheard-from", () => {
+    // "Skipped, leave alone" existed only while a startup scan could decline to
+    // adopt a pane. The list is a live daemon query now: absent means gone.
     useAppStore.getState().addSession("u1", "/a", { ready: false });
 
-    getInternal().handleMessage({
-      type: "terminal_sessions",
-      claudeUuids: [],
-      unknownUuids: ["u1"],
-      states: {},
-    });
+    getInternal().handleMessage(listing([]));
 
-    expect(session("u1")?.receivedAuthoritativeState).toBe(false);
+    expect(session("u1")).toBeUndefined();
   });
 });

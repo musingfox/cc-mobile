@@ -1,14 +1,14 @@
 /**
- * agent-state.ts — the uuid → agent-state join.
+ * agent-state.ts — the session → agent-state join.
  *
- * The status subscription (status-events.ts) is edge-triggered: it only speaks
- * when a pane's status *changes*, so a client that reloads mid-session learns
- * nothing until the next transition. This module is the level-triggered half —
- * one `session.snapshot` answers "what is every live session doing right now",
- * which is what the first paint after a reload needs.
+ * The pane event stream is edge-triggered: it only speaks when a pane's status
+ * *changes*, so a client that reloads mid-session learns nothing until the next
+ * transition. This module is the level-triggered half — one `session.snapshot`
+ * answers "what is every live session doing right now", which is what the first
+ * paint after a reload needs.
  *
- * Pure by construction: the RPC and the registry lookup are supplied by the
- * caller (backend.ts), so every mapping rule below is testable without a daemon.
+ * Pure by construction: the RPC and the key mapping are supplied by the caller
+ * (backend.ts), so every mapping rule below is testable without a daemon.
  */
 
 import type { SessionSnapshot } from "./schema";
@@ -30,18 +30,22 @@ export const STATE_BY_AGENT_STATUS: Record<string, AgentState | undefined> = {
 };
 
 /**
- * Resolves each live uuid's agent state from one snapshot.
+ * Resolves each live session's agent state from one snapshot.
  *
  * Two carriers are read from the same response because it is not settled which
- * one an *adopted* pane populates: the pane record wins, the matching agent
- * record (joined on pane_id) is the fallback. A uuid whose status is missing,
+ * one every pane populates: the pane record wins, the matching agent record
+ * (joined on pane_id) is the fallback. A session whose status is missing,
  * `unknown`, or whose pane is absent from the snapshot is omitted rather than
  * guessed — a missing key reads as "no claim", never as "idle".
+ *
+ * `resolvePane` exists because the key on the wire need not be the pane id it
+ * looks up; since #29 it usually is (`sessionId` IS the pane id, Decision H5)
+ * and the mapping is the identity.
  */
 export function statesFromSnapshot(
   snapshot: Pick<SessionSnapshot, "panes" | "agents">,
-  resolvePane: (claudeUuid: string) => string | undefined,
-  liveUuids: readonly string[],
+  resolvePane: (sessionKey: string) => string | undefined,
+  liveKeys: readonly string[],
 ): Record<string, AgentState> {
   const statusByPane = new Map<string, string>();
 
@@ -58,12 +62,12 @@ export function statesFromSnapshot(
   }
 
   const states: Record<string, AgentState> = {};
-  for (const claudeUuid of liveUuids) {
-    const paneId = resolvePane(claudeUuid);
+  for (const sessionKey of liveKeys) {
+    const paneId = resolvePane(sessionKey);
     if (!paneId) continue;
     const status = statusByPane.get(paneId);
     const state = status ? STATE_BY_AGENT_STATUS[status] : undefined;
-    if (state) states[claudeUuid] = state;
+    if (state) states[sessionKey] = state;
   }
   return states;
 }

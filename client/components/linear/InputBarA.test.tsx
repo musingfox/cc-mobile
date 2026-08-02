@@ -164,3 +164,49 @@ describe("InputBarA", () => {
     expect(container.querySelector('[aria-label="Stop"]')).not.toBeNull();
   });
 });
+
+/**
+ * The H4 disclosure: a pane whose claude runs with no permission gate is still
+ * drivable from the phone — the user accepted that risk — but the composer must
+ * say so every time, because there is no prompt to intercept and no undo.
+ */
+describe("InputBarA — ungated session disclosure", () => {
+  afterEach(() => cleanup());
+
+  function seedWithFlags(gated: boolean) {
+    useAppStore.setState({
+      inputDraft: "",
+      capabilities: null,
+      sessions: new Map([
+        [
+          "s1",
+          {
+            cwd: "/tmp/proj",
+            terminal: { ready: true },
+            descriptor: { origin: "self", drivable: true, readable: true, gated },
+          },
+        ],
+      ]) as never,
+      activeSessionId: "s1",
+    });
+  }
+
+  test("an ungated session shows the warning AND keeps the composer usable", () => {
+    seedWithFlags(false);
+
+    const { container } = render(<InputBarA sessionId="s1" />);
+
+    expect(container.querySelector(".lin-input-ungated")?.textContent).toContain(
+      "No permission gate",
+    );
+    expect((container.querySelector("textarea") as HTMLTextAreaElement).disabled).toBe(false);
+  });
+
+  test("a gated session shows no warning", () => {
+    seedWithFlags(true);
+
+    const { container } = render(<InputBarA sessionId="s1" />);
+
+    expect(container.querySelector(".lin-input-ungated")).toBeNull();
+  });
+});

@@ -533,7 +533,16 @@ class WsService {
         if (!claudeUuid) break;
         const wasPending = this.pendingTerminalCreates.delete(claudeUuid);
         const cwd = store.sessions.get(claudeUuid)?.cwd;
-        store.setTerminalReady(claudeUuid, true);
+        // The session key is herdr's pane id from here on; the request uuid was
+        // only ever the buffer slot the ack landed in. Re-keying is idempotent,
+        // so a replayed ack after a reconnect changes nothing.
+        const serverId = (msg.sessionId as string | undefined) ?? claudeUuid;
+        if (serverId !== claudeUuid) {
+          store.rekeySession(claudeUuid, serverId);
+          this.lastEventIds.delete(claudeUuid);
+        }
+        const sessionKey = serverId;
+        store.setTerminalReady(sessionKey, true);
         // The create ack is the server speaking about this session: it exists,
         // and it is not running anything yet. Without this the session stays
         // unreconciled — and therefore dark on the Projects screen — until the
@@ -544,57 +553,52 @@ class WsService {
         // buffered, so a reconnect replays it: re-applying "idle" then would
         // blank the spinner of a session that has since started running, which
         // is the same client-side-claim-beats-herdr bug in a smaller window.
-        if (wasPending) store.setAgentState(claudeUuid, "idle");
+        if (wasPending) store.setAgentState(sessionKey, "idle");
         if (cwd) saveProject(cwd);
         break;
       }
 
       case "terminal_sessions": {
-        // Server-authoritative live list. A malformed payload must not tear
-        // down local state, so anything but an array is ignored.
-        if (!Array.isArray(msg.claudeUuids)) break;
-        const live = new Set(msg.claudeUuids as string[]);
-        // Sessions the server's remount skipped rather than adopted: possibly
-        // alive but not routable. Lenient parse — an older server sends none.
-        const unknown = new Set(
-          Array.isArray(msg.unknownUuids) ? (msg.unknownUuids as string[]) : [],
+        // Server-authoritative live list, keyed by herdr pane id. A malformed
+        // payload must not tear down local state, so anything but an array of
+        // descriptors is ignored entirely.
+        if (!Array.isArray(msg.sessions)) break;
+        const descriptors = (msg.sessions as Record<string, unknown>[]).filter(
+          (entry): entry is Record<string, unknown> =>
+            typeof entry === "object" && entry !== null && typeof entry.sessionId === "string",
         );
-        // What herdr says each live session is doing. Lenient: an older server
-        // sends no map at all, and a live session may legitimately carry no
-        // entry (herdr reported "unknown"). Either way the session is still
-        // marked as spoken-for, which is what the UI gates its dot on — a
-        // reconciled session with no state is honestly "active, not running",
-        // not "unknown, show nothing".
-        const reportedStates =
-          typeof msg.states === "object" && msg.states !== null && !Array.isArray(msg.states)
-            ? (msg.states as Record<string, unknown>)
-            : {};
-        // Every store session is reconciled, not just the ones carrying a
-        // terminal marker. A markerless card cannot be anything but a ghost
-        // from an older bundle or a cleared server, and exempting it is what
-        // let localStorage keep resurrecting sessions herdr never had.
-        // Materialise before mutating: removeSession replaces the sessions Map.
-        const storedSessions = [...store.sessions.entries()];
-        const dead: string[] = [];
-        for (const [id] of storedSessions) {
-          if (live.has(id)) {
-            this.pendingTerminalCreates.delete(id);
-            store.setTerminalReady(id, true);
-            const reported = reportedStates[id];
-            if (reported === "idle" || reported === "running" || reported === "requires_action") {
-              // setAgentState syncs isStreaming and marks the session spoken-for.
-              store.setAgentState(id, reported);
-            } else {
-              store.setReceivedAuthoritativeState(id, true);
-            }
-          } else if (unknown.has(id)) {
-            // Skipped, not declared dead — leave the card (and its persisted
-            // state) exactly as it is; the next restart may re-adopt it.
-          } else if (!this.pendingTerminalCreates.has(id)) {
-            // Not live and not awaiting a create ack — the session is gone.
-            dead.push(id);
+        const live = new Set(descriptors.map((entry) => entry.sessionId as string));
+
+        // Every listed session gets a card, including ones the user started in
+        // their own terminal and this browser has never seen — that is the
+        // point of the global listing.
+        for (const entry of descriptors) {
+          const sessionId = entry.sessionId as string;
+          store.upsertListedSession({
+            sessionId,
+            cwd: typeof entry.cwd === "string" ? entry.cwd : "",
+            origin: entry.origin === "self" ? "self" : "foreign",
+            drivable: entry.drivable !== false,
+            readable: entry.readable === true,
+            gated: entry.gated !== false,
+          });
+          this.pendingTerminalCreates.delete(sessionId);
+          // First paint comes from the descriptor's own state: the status
+          // subscription only fires on change, so without it a reloaded client
+          // shows nothing until something happens to move.
+          const state = entry.state;
+          if (state === "idle" || state === "running" || state === "requires_action") {
+            store.setAgentState(sessionId, state);
+          } else {
+            store.setReceivedAuthoritativeState(sessionId, true);
           }
         }
+
+        // Anything not in the list is gone. Materialise before mutating:
+        // removeSession replaces the sessions Map.
+        const dead = [...store.sessions.keys()].filter(
+          (id) => !live.has(id) && !this.pendingTerminalCreates.has(id),
+        );
         for (const id of dead) {
           store.removeSession(id);
           // removeSession prunes the persisted cursor; drop the in-memory one
@@ -1000,12 +1004,19 @@ class WsService {
 
       case "permission_request":
         if (sessionId) {
+          // The options are the terminal's own, parsed off its screen — never
+          // synthesised here. An empty list means the screen was unreadable and
+          // the sheet offers Cancel only.
+          const options = Array.isArray(msg.options)
+            ? (msg.options as { id: string; label: string; keystroke: string }[])
+            : [];
           store.setPermission(sessionId, {
             requestId: msg.requestId as string,
             tool: msg.tool as {
               name: string;
               parameters: Record<string, unknown>;
             },
+            options,
           });
           // Background notification when page is hidden
           const settingsStore = useSettingsStore.getState();
@@ -1050,6 +1061,30 @@ class WsService {
             store.removeSession(uuid);
           }
           this.pendingTerminalCreates.clear();
+        }
+
+        // The prompt on the terminal changed before the tap arrived (somebody
+        // answered it there, or claude moved on). Nothing was sent, so the sheet
+        // must close rather than sit on a question that no longer exists.
+        if (
+          sessionId &&
+          (msg.code === "permission_prompt_stale" || msg.code === "permission_option_unknown")
+        ) {
+          store.setPermission(sessionId, null);
+          toastService.info(
+            msg.code === "permission_prompt_stale"
+              ? "The prompt changed in the terminal — nothing was sent."
+              : "That option is no longer offered — nothing was sent.",
+          );
+          break;
+        }
+
+        // A refused prompt is not a turn: keep the composer's text and just say
+        // why, rather than writing an assistant message into the transcript.
+        if (sessionId && msg.code === "session_busy") {
+          toastService.info(msg.message as string);
+          store.setStreaming(sessionId, false);
+          break;
         }
 
         if (sessionId) {
@@ -1210,50 +1245,59 @@ class WsService {
     });
   }
 
+  /**
+   * Answers the pending prompt by naming one of the options the terminal is
+   * offering. The server presses that option's key in the pane — there is no
+   * generic "allow" any more, because the terminal's choices are not a fixed
+   * two (a Bash prompt inside the project offers three, elsewhere two).
+   *
+   * `"cancel"` is the id of the synthetic Cancel action the server sends when
+   * the screen could not be parsed; it maps to Esc.
+   */
+  answerPermissionOption(sessionId: string, optionId: string) {
+    const session = useAppStore.getState().sessions.get(sessionId);
+    if (!this.ws || !session?.pendingPermission) return;
+
+    this.sendMessage({
+      type: "permission",
+      requestId: session.pendingPermission.requestId,
+      optionId,
+    });
+
+    const option = session.pendingPermission.options?.find((entry) => entry.id === optionId);
+    const denied = optionId === "cancel" || /^no\b/i.test(option?.label ?? "");
+    this.recordPermissionAction(sessionId, denied ? "denied" : "approved");
+    useAppStore.getState().setPermission(sessionId, null);
+  }
+
+  /** Swipe-right shortcut: the terminal's first option — its one-shot "Yes". */
   approvePermission(sessionId: string) {
-    const session = useAppStore.getState().sessions.get(sessionId);
-    if (!this.ws || !session?.pendingPermission) return;
-
-    this.sendMessage({
-      type: "permission",
-      requestId: session.pendingPermission.requestId,
-      allow: true,
-    });
-
-    this.recordPermissionAction(sessionId, "approved");
-    useAppStore.getState().setPermission(sessionId, null);
+    const pending = useAppStore.getState().sessions.get(sessionId)?.pendingPermission;
+    const first = pending?.options?.[0];
+    if (!first) return;
+    this.answerPermissionOption(sessionId, first.id);
   }
 
+  /** Swipe-left shortcut: the terminal's own "No", or Esc when it offers none. */
   denyPermission(sessionId: string) {
-    const session = useAppStore.getState().sessions.get(sessionId);
-    if (!this.ws || !session?.pendingPermission) return;
-
-    this.sendMessage({
-      type: "permission",
-      requestId: session.pendingPermission.requestId,
-      allow: false,
-    });
-
-    this.recordPermissionAction(sessionId, "denied");
-    useAppStore.getState().setPermission(sessionId, null);
-  }
-
-  answerPermission(sessionId: string, answers: Record<string, string>) {
-    const session = useAppStore.getState().sessions.get(sessionId);
-    if (!this.ws || !session?.pendingPermission) return;
-
-    this.sendMessage({
-      type: "permission",
-      requestId: session.pendingPermission.requestId,
-      allow: true,
-      answers,
-    });
-
-    this.recordPermissionAction(sessionId, "answered", answers);
-    useAppStore.getState().setPermission(sessionId, null);
+    const pending = useAppStore.getState().sessions.get(sessionId)?.pendingPermission;
+    const options = pending?.options ?? [];
+    const no = options.find((entry) => /^no\b/i.test(entry.label));
+    const target = no ?? options.find((entry) => entry.id === "cancel");
+    if (!target) return;
+    this.answerPermissionOption(sessionId, target.id);
   }
 
   closeSession(sessionId: string) {
+    // A session the user opened in their own terminal is not ours to kill:
+    // `workspace.close` there would take down the terminal they are working in,
+    // and the conversation inside it. The server refuses it too (Decision M13);
+    // this stops the request ever leaving the phone.
+    const descriptor = useAppStore.getState().sessions.get(sessionId)?.descriptor;
+    if (descriptor?.origin === "foreign") {
+      toastService.info("That session belongs to a terminal — close it there.");
+      return;
+    }
     if (this.ws) {
       // Terminal-backed sessions own a live herdr workspace: `interrupt` only
       // reaches the SDK session manager, so without a teardown the `claude`

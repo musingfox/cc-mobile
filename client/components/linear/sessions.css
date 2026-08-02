@@ -242,3 +242,19 @@
   border-color: rgba(255, 255, 255, 0.2);
   color: #ececec;
 }
+
+/* Session card disclosure badges (#29). `is-warn` marks a pane whose claude
+   runs with no permission gate — the card stays tappable and the session stays
+   drivable; the badge is the whole safeguard (Decision H4). */
+.lin-session-badge {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 5px;
+  padding: 1px 5px;
+  font-size: 10px;
+  color: #a0a0a0;
+}
+
+.lin-session-badge.is-warn {
+  border-color: rgba(224, 168, 74, 0.4);
+  color: #e0a84a;
+}

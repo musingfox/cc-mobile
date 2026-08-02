@@ -64,8 +64,18 @@ describe("SessionRemovalDropsReplayCursor", () => {
 
     getInternal().handleMessage({
       type: "terminal_sessions",
+      sessions: [
+        {
+          sessionId: "u1",
+          agentSessionValue: null,
+          cwd: "/tmp",
+          origin: "self",
+          drivable: true,
+          readable: true,
+          gated: true,
+        },
+      ],
       claudeUuids: ["u1"],
-      unknownUuids: [],
     });
 
     expect(storedCursors()).toEqual({ u1: 5 });
@@ -76,8 +86,18 @@ describe("SessionRemovalDropsReplayCursor", () => {
 
     getInternal().handleMessage({
       type: "terminal_sessions",
+      sessions: [
+        {
+          sessionId: "u1",
+          agentSessionValue: null,
+          cwd: "/tmp",
+          origin: "self",
+          drivable: true,
+          readable: true,
+          gated: true,
+        },
+      ],
       claudeUuids: ["u1"],
-      unknownUuids: [],
     });
 
     const sent: Record<string, unknown>[] = [];
