@@ -39,13 +39,25 @@ export function emitCapabilitiesOnOpen(
 
 /** The terminal backend surface the WS transport drives. */
 export interface WsBackend extends TerminalControlBackend {
-  /** claudeUuids with a live session — the authority a reconnecting client asks for. */
+  /** claudeUuids with a session this process launched and still routes for. */
   listLive(): string[];
   /**
-   * claudeUuids the startup remount skipped — possibly alive but not routable.
-   * Optional: only a backend that remounts (herdr) can have any.
+   * Every claude the daemon has, foreign ones included — the authority a
+   * reconnecting client reconciles against. Optional: only a backend that can
+   * enumerate the machine (herdr) has one, and its absence answers "none".
    */
-  listUnknown?(): string[];
+  listSessionDescriptors?(): Promise<
+    {
+      sessionId: string;
+      agentSessionValue: string | null;
+      cwd: string;
+      origin: "self" | "foreign";
+      drivable: boolean;
+      readable: boolean;
+      gated: boolean;
+      state?: "idle" | "running" | "requires_action";
+    }[]
+  >;
   /**
    * Per-uuid agent state for the live sessions. Optional: only a backend with
    * a status source has any, and its absence costs the client its dot, not its
@@ -319,23 +331,42 @@ export function createWsPlugin(
             // Bare send, not sendBuffered: this is a connection-scoped question
             // and its answer, not a session event. Buffering it would replay a
             // stale list to the next reconnect.
-            // unknownUuids carries the remount's conservatism to the client: a
-            // skipped session is "leave the card alone", not "dead, delete it".
+            // The list is the daemon's, not this process's memory: a session the
+            // user started in their own terminal is listed exactly like one
+            // cc-mobile launched (Decision H1), keyed by pane id (H5).
             // states is the status bootstrap: the subscription only fires on
             // change, so without it a reloaded client shows no activity until
             // something happens to move. A lookup failure degrades to {} rather
-            // than withholding the liveness answer the reconcile depends on.
-            //
-            // Bind this socket as the sink for every live uuid before replying:
+            // than withholding the liveness answer the reconcile depends on;
+            // each descriptor also carries its own state.
+            let sessions: NonNullable<
+              Awaited<ReturnType<NonNullable<typeof backend.listSessionDescriptors>>>
+            > = [];
+            try {
+              sessions = (await backend.listSessionDescriptors?.()) ?? [];
+            } catch (error) {
+              console.warn(
+                `[ws] session listing unavailable: ${error instanceof Error ? error.message : String(error)}`,
+              );
+            }
+
+            // Bind this socket as the sink for every session before replying:
             // until now a sink existed only after a terminal_send, so a
             // reconnecting client received no status events at all until it
             // sent a prompt. Same sink shape and same owner as terminal_send,
             // so the reply-recovery rules are unchanged — the binding is only
             // moved earlier. cleanupByOwner on close releases them.
-            for (const claudeUuid of backend.listLive()) {
+            // Both keys are bound: the pane ids the client now reconciles on,
+            // and the uuids the hook pipeline still routes replies and
+            // permission prompts by until it is removed (Decision M7).
+            const sinkKeys = new Set([
+              ...sessions.map((session) => session.sessionId),
+              ...backend.listLive(),
+            ]);
+            for (const sessionKey of sinkKeys) {
               backend.registerClient(
-                claudeUuid,
-                (msg: Record<string, unknown>) => sendBuffered(ws, claudeUuid, msg),
+                sessionKey,
+                (msg: Record<string, unknown>) => sendBuffered(ws, sessionKey, msg),
                 ownerOf(ws),
               );
             }
@@ -350,8 +381,8 @@ export function createWsPlugin(
             }
             ws.send({
               type: "terminal_sessions",
-              claudeUuids: backend.listLive(),
-              unknownUuids: backend.listUnknown?.() ?? [],
+              sessions,
+              claudeUuids: sessions.map((session) => session.sessionId),
               states,
             });
             break;

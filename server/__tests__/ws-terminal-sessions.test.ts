@@ -1,11 +1,10 @@
 /**
- * ws-terminal-sessions.test.ts — TerminalSessionListQuery.
+ * ws-terminal-sessions.test.ts — TerminalSessionsPayload.
  *
- * The server's live terminal sessions are the authority a reconnecting client
- * reconciles its restored cards against: live ones become writable again, dead
- * ones are dropped. Before this message pair existed, a client that reloaded
- * mid-create had no way to ask, and its card stayed stuck unwritable forever
- * (#22).
+ * The reply is now the daemon's whole picture, not this process's memory: every
+ * claude on the machine, keyed by pane id, each carrying whether it can be read
+ * back, whether cc-mobile owns it, and whether it still asks before it acts.
+ * A reconnecting client reconciles its restored cards against exactly this.
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
@@ -19,36 +18,62 @@ afterEach(async () => {
   harness = null;
 });
 
-function backendWithLive(claudeUuids: string[]) {
+function descriptor(overrides: Record<string, unknown> = {}) {
+  return {
+    sessionId: "w3V:p1",
+    agentSessionValue: "a21273d4-77e6-43dc-b9cb-3647561d1192",
+    cwd: "/repo",
+    origin: "self" as const,
+    drivable: true,
+    readable: true,
+    gated: true,
+    ...overrides,
+  };
+}
+
+function backendListing(sessions: ReturnType<typeof descriptor>[]) {
   return {
     createSession: async () => ({ name: "n", paneRef: "p1", settingsPath: "/tmp/s" }),
     teardown: async () => ({ killed: false }),
-    listLive: () => claudeUuids,
+    listLive: () => [],
+    listSessionDescriptors: async () => sessions,
     send: async () => {},
     registerClient: () => {},
     cleanupByOwner: () => {},
   };
 }
 
-describe("TerminalSessionListQuery — protocol", () => {
+describe("TerminalSessionsPayload — protocol", () => {
   test("both halves of the message pair validate", () => {
     expect(ClientMessage.safeParse({ type: "list_terminal_sessions" }).success).toBe(true);
     expect(
       ServerMessage.safeParse({
         type: "terminal_sessions",
-        claudeUuids: ["u1"],
-        unknownUuids: ["u9"],
+        sessions: [descriptor()],
+        claudeUuids: ["w3V:p1"],
       }).success,
     ).toBe(true);
   });
 
+  test("the capability flags round-trip on the wire", () => {
+    const parsed = ServerMessage.safeParse({
+      type: "terminal_sessions",
+      sessions: [
+        descriptor({ readable: false, agentSessionValue: null }),
+        descriptor({ sessionId: "w9:p1", origin: "foreign", gated: false, state: "running" }),
+      ],
+      claudeUuids: ["w3V:p1", "w9:p1"],
+    });
+
+    expect(parsed.success).toBe(true);
+    const sessions = parsed.success && "sessions" in parsed.data ? parsed.data.sessions : [];
+    expect(sessions[0]).toMatchObject({ readable: false, agentSessionValue: null });
+    expect(sessions[1]).toMatchObject({ origin: "foreign", gated: false, state: "running" });
+  });
+
   test("states is optional — a reply without it is still valid", () => {
-    // Unlike the two arrays, a missing states map cannot be misread: it means
-    // "no snapshot", which is exactly the pre-reconcile state the client
-    // already renders as "no dot".
     expect(
-      ServerMessage.safeParse({ type: "terminal_sessions", claudeUuids: ["u1"], unknownUuids: [] })
-        .success,
+      ServerMessage.safeParse({ type: "terminal_sessions", sessions: [], claudeUuids: [] }).success,
     ).toBe(true);
   });
 
@@ -56,106 +81,97 @@ describe("TerminalSessionListQuery — protocol", () => {
     expect(
       ServerMessage.safeParse({
         type: "terminal_sessions",
+        sessions: [],
         claudeUuids: ["u1"],
-        unknownUuids: [],
         states: { u1: "bogus" },
       }).success,
     ).toBe(false);
   });
 
-  test("the reply requires both lists — a missing one is not an empty one", () => {
+  test("the reply requires the sessions array and a well-formed descriptor", () => {
     expect(ServerMessage.safeParse({ type: "terminal_sessions" }).success).toBe(false);
-    expect(
-      ServerMessage.safeParse({ type: "terminal_sessions", claudeUuids: "u1", unknownUuids: [] })
-        .success,
-    ).toBe(false);
-    // unknownUuids is how the remount's "leave it alone" verdict travels; a
-    // reply without it would let the client mistake skipped for dead.
     expect(
       ServerMessage.safeParse({ type: "terminal_sessions", claudeUuids: ["u1"] }).success,
     ).toBe(false);
     expect(
-      ServerMessage.safeParse({ type: "terminal_sessions", claudeUuids: [], unknownUuids: "u9" })
+      ServerMessage.safeParse({ type: "terminal_sessions", sessions: "nope", claudeUuids: [] })
         .success,
+    ).toBe(false);
+    // A descriptor missing its capability flags would be read as "all false",
+    // which is a card the user cannot use and cannot be told why.
+    expect(
+      ServerMessage.safeParse({
+        type: "terminal_sessions",
+        sessions: [{ sessionId: "w3V:p1", cwd: "/repo" }],
+        claudeUuids: ["w3V:p1"],
+      }).success,
     ).toBe(false);
   });
 });
 
-describe("TerminalSessionListQuery — handler", () => {
-  test("answers with the backend's live list, bare rather than enveloped", async () => {
-    harness = await startWsHarness(backendWithLive(["u1", "u2"]));
+describe("TerminalSessionsPayload — handler", () => {
+  test("answers with the daemon's whole listing, ids mirroring the descriptors", async () => {
+    const sessions = [descriptor(), descriptor({ sessionId: "w9:p1", origin: "foreign" })];
+    harness = await startWsHarness(backendListing(sessions));
 
     harness.send({ type: "list_terminal_sessions" });
     const reply = await harness.waitFor((msg) => msg.type === "terminal_sessions");
 
     expect(reply).toEqual({
       type: "terminal_sessions",
-      claudeUuids: ["u1", "u2"],
-      unknownUuids: [],
+      sessions,
+      claudeUuids: ["w3V:p1", "w9:p1"],
       states: {},
     });
     // A connection-scoped answer must not be buffered: replaying a stale list
     // to a later reconnect would delete cards that are alive by then.
-    expect(harness.eventBuffer.replay("u1", 0)).toEqual([]);
+    expect(harness.eventBuffer.replay("w3V:p1", 0)).toEqual([]);
     expect(harness.received.some((msg) => msg.type === "event")).toBe(false);
   });
 
   test("no live sessions answers with an empty list, not silence", async () => {
-    harness = await startWsHarness(backendWithLive([]));
+    harness = await startWsHarness(backendListing([]));
 
     harness.send({ type: "list_terminal_sessions" });
     const reply = await harness.waitFor((msg) => msg.type === "terminal_sessions");
 
     expect(reply).toEqual({
       type: "terminal_sessions",
+      sessions: [],
       claudeUuids: [],
-      unknownUuids: [],
       states: {},
     });
   });
 
-  test("a backend that reports remount skips carries them as unknownUuids", async () => {
-    harness = await startWsHarness({
-      ...backendWithLive(["u1"]),
-      listUnknown: () => ["u7"],
-    });
+  test("no reply ever carries the retired unknownUuids key", async () => {
+    harness = await startWsHarness(backendListing([descriptor()]));
 
     harness.send({ type: "list_terminal_sessions" });
     const reply = await harness.waitFor((msg) => msg.type === "terminal_sessions");
 
-    // The remount's conservatism reaches the client: u7 was skipped, not
-    // declared dead, so the reply must not lump it in with the missing.
-    expect(reply).toEqual({
-      type: "terminal_sessions",
-      claudeUuids: ["u1"],
-      unknownUuids: ["u7"],
-      states: {},
-    });
+    // The remount scan that produced it is gone (Decision M12), so "skipped,
+    // leave the card alone" has no referent any more.
+    expect(Object.keys(reply)).not.toContain("unknownUuids");
   });
 
   test("the reply carries what each live session is doing, unbuffered", async () => {
     harness = await startWsHarness({
-      ...backendWithLive(["u1", "u2"]),
-      listStates: async () => ({ u1: "running" as const }),
+      ...backendListing([descriptor(), descriptor({ sessionId: "w9:p1" })]),
+      listStates: async () => ({ "w3V:p1": "running" as const }),
     });
 
     harness.send({ type: "list_terminal_sessions" });
     const reply = await harness.waitFor((msg) => msg.type === "terminal_sessions");
 
-    // u2 is live but carries no key: the daemon had nothing usable to say, and
-    // "no claim" must not be rounded down to "idle".
-    expect(reply).toEqual({
-      type: "terminal_sessions",
-      claudeUuids: ["u1", "u2"],
-      unknownUuids: [],
-      states: { u1: "running" },
-    });
-    expect(harness.eventBuffer.replay("u1", 0)).toEqual([]);
+    // w9:p1 is live but carries no key: the daemon had nothing usable to say,
+    // and "no claim" must not be rounded down to "idle".
+    expect(reply.states).toEqual({ "w3V:p1": "running" });
+    expect(harness.eventBuffer.replay("w3V:p1", 0)).toEqual([]);
   });
 
   test("a status lookup failure still answers the liveness question", async () => {
     harness = await startWsHarness({
-      ...backendWithLive(["u1", "u2"]),
+      ...backendListing([descriptor()]),
       listStates: async () => {
         throw new Error("socket closed");
       },
@@ -166,23 +182,22 @@ describe("TerminalSessionListQuery — handler", () => {
 
     // The dot degrades; the reconcile does not. Withholding the reply would
     // freeze every restored card instead of just dimming it.
-    expect(reply).toEqual({
-      type: "terminal_sessions",
-      claudeUuids: ["u1", "u2"],
-      unknownUuids: [],
-      states: {},
-    });
+    expect(reply.states).toEqual({});
+    expect(reply.claudeUuids).toEqual(["w3V:p1"]);
     expect(harness.received.some((msg) => msg.type === "error")).toBe(false);
   });
 
   test("the answer is read at query time, not captured earlier", async () => {
-    const live: string[] = [];
-    harness = await startWsHarness({ ...backendWithLive([]), listLive: () => live });
+    let live: ReturnType<typeof descriptor>[] = [];
+    harness = await startWsHarness({
+      ...backendListing([]),
+      listSessionDescriptors: async () => live,
+    });
 
     harness.send({ type: "list_terminal_sessions" });
     await harness.waitFor((msg) => msg.type === "terminal_sessions");
 
-    live.push("u3");
+    live = [descriptor({ sessionId: "w7:p1" })];
     harness.send({ type: "list_terminal_sessions" });
     const replies = await harness
       .waitFor(
@@ -193,6 +208,23 @@ describe("TerminalSessionListQuery — handler", () => {
       )
       .then(() => harness?.received.filter((msg) => msg.type === "terminal_sessions"));
 
-    expect(replies?.map((msg) => msg.claudeUuids)).toEqual([[], ["u3"]]);
+    expect(replies?.map((msg) => msg.claudeUuids)).toEqual([[], ["w7:p1"]]);
+  });
+
+  test("binds this socket as the sink for every listed session", async () => {
+    const bound: string[] = [];
+    harness = await startWsHarness({
+      ...backendListing([descriptor(), descriptor({ sessionId: "w9:p1", origin: "foreign" })]),
+      registerClient: (sessionId: string) => {
+        bound.push(sessionId);
+      },
+    });
+
+    harness.send({ type: "list_terminal_sessions" });
+    await harness.waitFor((msg) => msg.type === "terminal_sessions");
+
+    // Foreign sessions included: without a sink they would get no status, no
+    // transcript readback and no permission prompt.
+    expect(bound.sort()).toEqual(["w3V:p1", "w9:p1"]);
   });
 });

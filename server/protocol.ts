@@ -257,16 +257,40 @@ const SessionStateMessage = z.object({
   state: z.enum(["idle", "running", "requires_action"]),
 });
 
+/**
+ * One live claude, as the daemon reports it. `sessionId` is herdr's `pane_id`
+ * (Decision H5): it exists for every pane, including ones with no claude session
+ * uuid, and it survives a `/clear` that rotates `agentSessionValue`.
+ *
+ * The three flags are what let a card render honestly instead of guessing:
+ * `readable:false` means replies cannot be read back (no transcript key),
+ * `origin:"foreign"` means the user opened it in their own terminal (so no close
+ * affordance — Decision M13), and `gated:false` means claude runs there with no
+ * permission gate. `gated` is a warning, never a lock: such panes stay drivable
+ * by the owner's own ruling (Decision H4).
+ */
+const TerminalSessionDescriptor = z.object({
+  sessionId: z.string(),
+  agentSessionValue: z.string().nullable(),
+  cwd: z.string(),
+  origin: z.enum(["self", "foreign"]),
+  drivable: z.boolean(),
+  readable: z.boolean(),
+  gated: z.boolean(),
+  state: z.enum(["idle", "running", "requires_action"]).optional(),
+});
+
 /** Reply to list_terminal_sessions. Empty list means "none live", not "unknown". */
 const TerminalSessionsMessage = z.object({
   type: z.literal("terminal_sessions"),
-  claudeUuids: z.array(z.string()),
+  /** Every claude on the machine, foreign ones included (Decision H1). */
+  sessions: z.array(TerminalSessionDescriptor),
   /**
-   * Sessions the startup remount skipped (transient RPC failure, ambiguous
-   * pane): possibly alive but not routable. Clients must leave their cards
-   * alone — neither ready nor removed.
+   * The same sessions as bare ids, in the same order — `sessions.map(s =>
+   * s.sessionId)`. Kept so a client that only reconciles ids keeps working;
+   * `unknownUuids` is gone with the remount scan that produced it (M12).
    */
-  unknownUuids: z.array(z.string()),
+  claudeUuids: z.array(z.string()),
   /**
    * What each live session is doing right now, so the first paint after a
    * reload is correct instead of waiting for the next status change. Optional
