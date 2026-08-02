@@ -353,6 +353,21 @@ export function createWsPlugin(
             // change, so without it a reloaded client shows no activity until
             // something happens to move. A lookup failure degrades to {} rather
             // than withholding the liveness answer the reconcile depends on.
+            //
+            // Bind this socket as the sink for every live uuid before replying:
+            // until now a sink existed only after a terminal_send, so a
+            // reconnecting client received no status events at all until it
+            // sent a prompt. Same sink shape and same owner as terminal_send,
+            // so the reply-recovery rules are unchanged — the binding is only
+            // moved earlier. cleanupByOwner(ws) on close releases them.
+            for (const claudeUuid of backend.listLive()) {
+              backend.registerClient(
+                claudeUuid,
+                (msg: Record<string, unknown>) => sendBuffered(ws, claudeUuid, msg),
+                ws,
+              );
+            }
+
             let states: Record<string, "idle" | "running" | "requires_action"> = {};
             try {
               states = (await backend.listStates?.()) ?? {};
