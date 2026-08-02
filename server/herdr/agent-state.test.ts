@@ -8,7 +8,6 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { createPtyResponseRelay } from "../pty-response-relay";
 import { statesFromSnapshot } from "./agent-state";
 import { createHerdrBackend, type HerdrBackendOptions } from "./backend";
 import type { SessionSnapshot } from "./schema";
@@ -131,7 +130,6 @@ function makeClient(overrides: Record<string, unknown>) {
 describe("backend.listStates — one call, never a rejection", () => {
   test("a failing snapshot degrades to an empty map instead of rejecting", async () => {
     const backend = createHerdrBackend({
-      responseRelay: createPtyResponseRelay(),
       client: makeClient({
         sessionSnapshot: async () => {
           throw new Error("socket closed");
@@ -151,7 +149,6 @@ describe("backend.listStates — one call, never a rejection", () => {
     ];
     let paneCounter = 0;
     const backend = createHerdrBackend({
-      responseRelay: createPtyResponseRelay(),
       client: makeClient({
         call: async (method: string) => {
           if (method === "workspace.create") {
@@ -172,10 +169,8 @@ describe("backend.listStates — one call, never a rejection", () => {
     });
 
     const uuids = [`${UUID.slice(0, -1)}1`, `${UUID.slice(0, -1)}2`, `${UUID.slice(0, -1)}3`];
-    const settingsPaths: string[] = [];
     for (const claudeUuid of uuids) {
-      const info = await backend.createSession({ claudeUuid, cwd: "/tmp" });
-      settingsPaths.push(info.settingsPath);
+      await backend.createSession({ claudeUuid, cwd: "/tmp" });
     }
 
     const states = await backend.listStates();
@@ -186,11 +181,5 @@ describe("backend.listStates — one call, never a rejection", () => {
       [uuids[1]]: "requires_action",
       [uuids[2]]: "idle",
     });
-
-    for (const path of settingsPaths) {
-      await Bun.file(path)
-        .unlink()
-        .catch(() => {});
-    }
   });
 });

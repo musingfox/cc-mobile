@@ -10,7 +10,6 @@
 
 import type { ServerConfig } from "../config";
 import { EventBuffer } from "../event-buffer";
-import type { createPtyPermissionRelay } from "../pty-permission-relay";
 import type { SessionManager } from "../session-manager";
 import { createWsPlugin, type WsBackend } from "../ws";
 
@@ -24,15 +23,6 @@ export const testServerConfig: ServerConfig = {
 };
 
 const sessionManagerStub = {} as never;
-
-const relayStub = {
-  requestPtyPermission: () => new Promise(() => {}),
-  resolvePermission: () => {},
-  getPendingCount: () => 0,
-  hasPendingForSession: () => false,
-  pausePending: () => [],
-  resumePending: () => {},
-} as never;
 
 export interface WsHarness {
   /** Messages the server sent, in order, already JSON-parsed. */
@@ -49,7 +39,6 @@ export interface WsHarness {
 
 /** Collaborator overrides for tests that need a real one instead of the stub. */
 export interface WsHarnessOverrides {
-  terminalPermissionRelay?: ReturnType<typeof createPtyPermissionRelay>;
   /** A real SessionManager, for the cases that assert on server-held state. */
   sessionManager?: SessionManager;
 }
@@ -66,7 +55,6 @@ export async function startWsHarness(
     .use(
       createWsPlugin(overrides.sessionManager ?? sessionManagerStub, serverConfig, {
         backend: backend as WsBackend,
-        terminalPermissionRelay: (overrides.terminalPermissionRelay as never) ?? relayStub,
         eventBuffer,
         clientSink: { current: null },
       }),

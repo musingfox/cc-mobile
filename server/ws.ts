@@ -6,15 +6,12 @@ import { listDirectories } from "./directory-listing";
 import type { EventBuffer } from "./event-buffer";
 import { buildUrl } from "./path-utils";
 import { ClientMessage } from "./protocol";
-import type { createPtyPermissionRelay, PtyRelaySnapshot } from "./pty-permission-relay";
 import type { SessionManager } from "./session-manager";
 import {
   handleTerminalCreate,
   handleTerminalTeardown,
   type TerminalControlBackend,
 } from "./terminal-control";
-
-type PtyPermissionRelay = ReturnType<typeof createPtyPermissionRelay>;
 
 // ---------------------------------------------------------------------------
 // Capabilities emit helper — extracted seam (logic-free; byte-equivalent)
@@ -65,11 +62,11 @@ export interface WsBackend extends TerminalControlBackend {
    */
   listStates?(): Promise<Record<string, "idle" | "running" | "requires_action">>;
   /**
-   * Answers a screen-derived permission prompt by pressing a key in the pane.
-   * Resolves `false` when the backend does not own that `requestId`, which is
-   * what lets the transport fall through to the legacy hook relay without either
-   * holder reporting a spurious failure. Optional: only a backend that can read
-   * a terminal has one.
+   * Answers a screen-derived permission prompt by pressing a key in the pane,
+   * after re-proving on live RPCs that the same prompt is still up. Resolves
+   * `false` for an id it never issued — a silent no-op, so a stale sheet cannot
+   * raise an error at the user. Optional: only a backend that can read a
+   * terminal has one.
    */
   resolvePermission?(
     requestId: string,
@@ -90,7 +87,7 @@ export interface WsBackend extends TerminalControlBackend {
 /**
  * Late-bound handle on the live socket, owned by the composition root. The
  * plugin points it at the current connection on open and nulls it on close, so
- * relays constructed before any client existed can still reach one.
+ * collaborators constructed before any client existed can still reach one.
  */
 export interface ClientSink {
   current: ((msg: Record<string, unknown>) => void) | null;
@@ -99,7 +96,6 @@ export interface ClientSink {
 /** Everything the transport needs but does not build. Assembled in app.ts. */
 export interface WsCollaborators {
   backend: WsBackend;
-  terminalPermissionRelay: PtyPermissionRelay;
   eventBuffer: EventBuffer;
   clientSink: ClientSink;
 }
@@ -109,14 +105,9 @@ export function createWsPlugin(
   serverConfig: ServerConfig,
   collaborators: WsCollaborators,
 ) {
-  const { backend, terminalPermissionRelay, eventBuffer, clientSink } = collaborators;
+  const { backend, eventBuffer, clientSink } = collaborators;
   const cachedCapabilities: Capabilities | null = loadCachedCapabilities();
   const wsPath = buildUrl(serverConfig.basePath, "/ws");
-
-  // Persistent state across reconnects
-  const persistentState = {
-    pausedTerminalPermissions: [] as PtyRelaySnapshot[],
-  };
 
   /**
    * The connection's stable identity, used as the sink-ownership key.
@@ -184,10 +175,29 @@ export function createWsPlugin(
           // receives it on reconnect via replay. Errors stay bare: they carry
           // no session to key a buffer entry on, and the session they refer to
           // does not exist to replay for.
-          send: (msg) =>
-            msg.type === "terminal_created"
-              ? sendBuffered(ws, message.claudeUuid, msg)
-              : ws.send(msg),
+          send: (msg) => {
+            if (msg.type !== "terminal_created") {
+              ws.send(msg);
+              return;
+            }
+            // Bind the sink the moment the pane id exists, rather than waiting
+            // for the first prompt. The pane is already live and its events are
+            // already flowing, and transcript delivery advances its cursor
+            // whether or not a sink is listening — so a turn settling in this
+            // window would be read and dropped for good.
+            const sessionId = msg.sessionId;
+            if (typeof sessionId === "string" && sessionId.length > 0) {
+              backend.registerClient(
+                sessionId,
+                (event: Record<string, unknown>) => sendBuffered(ws, sessionId, event),
+                ownerOf(ws),
+              );
+            }
+            // The buffer key stays the request uuid: the pane did not exist when
+            // the client asked, so there is no pane-keyed cursor to write into
+            // (Decision M15). The client re-keys its card on receipt.
+            sendBuffered(ws, message.claudeUuid, msg);
+          },
         });
         return;
       }
@@ -224,6 +234,10 @@ export function createWsPlugin(
             break;
           }
 
+          // `answers` (the AskUserQuestion payload) is still accepted by the
+          // schema so a cached bundle's message parses, but it is carried
+          // nowhere: an answer is a keystroke in a pane now, and there is no
+          // structured channel left to put typed text into.
           case "permission": {
             // Exactly one answer form is required. A discriminated union cannot
             // express that at the schema, so it is enforced here rather than
@@ -237,28 +251,20 @@ export function createWsPlugin(
               break;
             }
 
-            // Native prompts first: the backend owns the ids it minted from the
-            // screen. Only if it disclaims the id does the legacy hook relay get
-            // a look, so neither holder reports a failure for the other's id.
-            const handled = await backend
+            // The backend presses the chosen key in the pane. An id it does
+            // not know is a silent no-op, exactly as the deleted hook relay was:
+            // a stale sheet answering a prompt that has already been dealt with
+            // must not raise an error at the user.
+            await backend
               .resolvePermission?.(message.requestId, {
                 ...(message.optionId !== undefined ? { optionId: message.optionId } : {}),
                 ...(message.allow !== undefined ? { allow: message.allow } : {}),
               })
               .catch((error: unknown) => {
                 console.warn(
-                  `[ws] native permission answer failed: ${error instanceof Error ? error.message : String(error)}`,
+                  `[ws] permission answer failed: ${error instanceof Error ? error.message : String(error)}`,
                 );
-                return true;
               });
-            if (handled) break;
-            if (message.allow !== undefined) {
-              terminalPermissionRelay.resolvePermission(
-                message.requestId,
-                message.allow,
-                message.answers,
-              );
-            }
             break;
           }
 
@@ -499,12 +505,10 @@ export function createWsPlugin(
               (msg: Record<string, unknown>) => sendBuffered(ws, claudeUuid, msg),
               ownerOf(ws),
             );
-            // Resume any terminal permission requests paused on the prior disconnect:
-            // re-fires permission_request to the freshly-rebound sink (frozen-countdown).
-            if (persistentState.pausedTerminalPermissions.length > 0) {
-              terminalPermissionRelay.resumePending(persistentState.pausedTerminalPermissions);
-              persistentState.pausedTerminalPermissions = [];
-            }
+            // Any prompt still blocked from before the disconnect is re-read
+            // from the live screen and re-raised to the freshly-rebound sink,
+            // rather than replayed from a stored payload.
+            await backend.resumePermissions?.();
             await backend.send({ claudeUuid, content });
             break;
           }
@@ -521,8 +525,9 @@ export function createWsPlugin(
     },
 
     close(ws) {
-      // Pause pending permissions for potential reconnect
-      persistentState.pausedTerminalPermissions = terminalPermissionRelay.pausePending();
+      // Pending permissions survive the gap: claude is blocked on its own
+      // screen either way, and the prompt is re-read on reconnect.
+      backend.pausePermissions?.();
 
       // Remove this connection's uuid->sink bindings (baton map §cleanup).
       // Dead-binding leak prevention only; no rebind/replay to a new connection.

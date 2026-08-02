@@ -18,7 +18,7 @@ export interface TerminalControlBackend {
   createSession(params: {
     claudeUuid: string;
     cwd: string;
-  }): Promise<{ name: string; paneRef: string; settingsPath: string }>;
+  }): Promise<{ name: string; paneRef: string }>;
   /**
    * Idempotent: an unknown session resolves to `{killed:false}` rather than
    * throwing. A pane cc-mobile did not launch answers `{killed:false,

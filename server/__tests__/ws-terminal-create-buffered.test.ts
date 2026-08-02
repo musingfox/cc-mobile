@@ -20,7 +20,7 @@ afterEach(async () => {
 
 function backend(overrides: Record<string, unknown> = {}) {
   return {
-    createSession: async () => ({ name: "ccm-u1", paneRef: "pn-1", settingsPath: "/tmp/s.json" }),
+    createSession: async () => ({ name: "ccm-u1", paneRef: "pn-1" }),
     teardown: async () => ({ killed: false }),
     listLive: () => [],
     send: async () => {},
@@ -99,5 +99,50 @@ describe("BufferedCreateAck", () => {
 
     expect(error).toMatchObject({ code: "terminal_error" });
     expect(harness.eventBuffer.replay("u1", 0)).toEqual([]);
+  });
+});
+
+/**
+ * The pane exists — and its events are already flowing — from the moment
+ * `createSession` returns. Transcript delivery advances its cursor whether or
+ * not a sink is listening, so a turn that settled between the ack and the first
+ * prompt would be read out and dropped for good. Binding at the ack closes that
+ * window.
+ */
+describe("create-time sink binding", () => {
+  test("the socket is bound as the sink for the new pane before the ack goes out", async () => {
+    const bound: { key: string; order: number }[] = [];
+    let order = 0;
+    harness = await startWsHarness(
+      backend({
+        registerClient: (key: string) => {
+          bound.push({ key, order: ++order });
+        },
+      }),
+    );
+
+    harness.send({ type: "terminal_create", claudeUuid: "u1", cwd: "/tmp" });
+    await harness.waitFor((msg) => msg.type === "event");
+
+    // Keyed by the pane id — the key every transcript chunk and status event
+    // for this session will carry (Decision H5) — not by the request uuid.
+    expect(bound.map((entry) => entry.key)).toEqual(["pn-1"]);
+  });
+
+  test("a failed create binds nothing", async () => {
+    const bound: string[] = [];
+    harness = await startWsHarness(
+      backend({
+        registerClient: (key: string) => bound.push(key),
+        createSession: async () => {
+          throw new Error("daemon refused");
+        },
+      }),
+    );
+
+    harness.send({ type: "terminal_create", claudeUuid: "u1", cwd: "/tmp" });
+    await harness.waitFor((msg) => msg.type === "error");
+
+    expect(bound).toEqual([]);
   });
 });

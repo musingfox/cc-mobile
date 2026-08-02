@@ -141,23 +141,6 @@ describe("TranscriptTurnDelivery", () => {
     expect(spy.messages.map((m) => m.type)).toEqual(["stream_chunk", "stream_end"]);
   });
 
-  it("suppresses delivery while the session still replies through the hook chain", async () => {
-    const spy = sinkSpy();
-    const file = fakeFile();
-    const delivery = createTranscriptDelivery({
-      resolvePath: async () => PATH,
-      getSink: () => spy.sink,
-      read: file.read,
-      initCursor: async () => ({ byteOffset: 0, lastUuid: null }),
-      legacyReadback: () => true,
-    });
-
-    file.append(assistantText("hi", "u1"), assistantText("there", "u2"));
-    await delivery.deliverTurn("w3V:p1");
-
-    expect(spy.messages).toEqual([]);
-  });
-
   it("delivers into the sink bound last, not the one bound at attach time", async () => {
     const ws1 = sinkSpy();
     const ws2 = sinkSpy();

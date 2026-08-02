@@ -28,7 +28,7 @@ function recordingBackend(live: string[]) {
   const registered: string[] = [];
 
   const backend: Partial<WsBackend> = {
-    createSession: async () => ({ name: "n", paneRef: "p1", settingsPath: "/tmp/s" }),
+    createSession: async () => ({ name: "n", paneRef: "p1" }),
     teardown: async () => ({ killed: false }),
     listLive: () => live,
     send: async () => {},
@@ -63,14 +63,6 @@ async function startServer(backend: Partial<WsBackend>) {
     .use(
       createWsPlugin({} as never, testServerConfig, {
         backend: backend as WsBackend,
-        terminalPermissionRelay: {
-          requestPtyPermission: () => new Promise(() => {}),
-          resolvePermission: () => {},
-          getPendingCount: () => 0,
-          hasPendingForSession: () => false,
-          pausePending: () => [],
-          resumePending: () => {},
-        } as never,
         eventBuffer: new EventBuffer(500),
         clientSink: { current: null },
       }),

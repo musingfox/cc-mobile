@@ -3,12 +3,10 @@
  * (createApp) for terminal lifecycle wiring (no real pane, no real signals sent,
  * no port bound).
  *
- *   EX-A2 (wiring): the terminalPermissionRelay is constructed with timeoutMs=90000
- *                   (the unattended default), not the relay's 600000 fallback.
- *   EX-B2:          createApp registers NO shutdown signal handler and never
- *                   calls backend.teardownAll() — panes outlive a SIGTERM so the
- *                   next startup can remount them (plan D2). This inverts the
- *                   original EX-B2, which pinned the opposite.
+ *   EX-B2: createApp registers NO shutdown signal handler and never calls
+ *          backend.teardownAll() — panes outlive a SIGTERM, and the next startup
+ *          finds them again by asking the daemon (plan D2). This inverts the
+ *          original EX-B2, which pinned the opposite.
  *
  * These assertions used to point at createWsPlugin, which owned the assembly.
  * Assembly moved to createApp; the behaviour pinned here did not change.
@@ -35,7 +33,7 @@ const sessionManagerStub = {} as any;
 function makeSpyBackend() {
   let teardownAllCalls = 0;
   const backend: AppBackend = {
-    createSession: async () => ({ name: "", paneRef: "1", settingsPath: "" }),
+    createSession: async () => ({ name: "", paneRef: "1" }),
     hasSession: () => ({ present: false }),
     listLive: () => [],
     teardown: async () => ({ killed: false }),
@@ -51,28 +49,6 @@ function makeSpyBackend() {
     backend,
     get calls() {
       return teardownAllCalls;
-    },
-  };
-}
-
-// Capture the timeoutMs the production wiring passes into the terminal permission relay.
-function makeRelayCapture() {
-  let captured: number | undefined;
-  const factory = (_send: any, opts: any = {}) => {
-    captured = opts.timeoutMs;
-    return {
-      requestPtyPermission: () => new Promise(() => {}),
-      resolvePermission: () => {},
-      getPendingCount: () => 0,
-      hasPendingForSession: () => false,
-      pausePending: () => [],
-      resumePending: () => {},
-    };
-  };
-  return {
-    factory: factory as any,
-    get timeoutMs() {
-      return captured;
     },
   };
 }
@@ -125,20 +101,6 @@ describe("EX-B2: shutdown signals do not tear down panes", () => {
     const addedSigint = process.listeners("SIGINT").filter((l) => !beforeSigint.includes(l));
     expect(addedSigterm).toEqual([]);
     expect(addedSigint).toEqual([]);
-  });
-});
-
-// ── EX-A2 (wiring) ─────────────────────────────────────────────────────────────
-
-describe("EX-A2 wiring: terminal permission relay timeout", () => {
-  it("production wiring constructs the terminal permission relay with timeoutMs=90000 (not 600000)", () => {
-    const relayCap = makeRelayCapture();
-    buildApp({
-      backend: makeSpyBackend().backend,
-      createTerminalPermissionRelay: relayCap.factory,
-    });
-    expect(relayCap.timeoutMs).toBe(90000);
-    expect(relayCap.timeoutMs).not.toBe(600000);
   });
 });
 

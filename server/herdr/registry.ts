@@ -2,24 +2,22 @@
  * registry.ts — HerdrCreateSession + HerdrTeardown: cc-mobile-owned claude
  * sessions living in herdr workspaces.
  *
- * Lifecycle contract: per-uuid settings file, a fixed claude argv,
- * duplicate-uuid rejection, settings unlink on teardown. Launch is herdr's
- * two-step: `workspace.create` for a pane at a shell prompt, then `agent.start`
- * into that pane. The daemon assembles argv itself and passes `args` through
- * verbatim, which is what keeps `--session-id` (Stop-hook keying) and
- * `--settings` (hook wiring) working.
+ * Lifecycle contract: a plain claude argv, duplicate-uuid rejection. Launch is
+ * herdr's two-step: `workspace.create` for a pane at a shell prompt, then
+ * `agent.start` into that pane. The daemon assembles argv itself and passes
+ * `args` through verbatim.
  *
- * `buildClaudeSettings` is imported rather than re-implemented: the hook shape
- * is one contract, not two.
+ * Since #29 a session cc-mobile starts is an ORDINARY claude: no `--settings`,
+ * no settings file, no hooks. Replies are read from the transcript and
+ * permissions are answered through the pane, which is what a session the user
+ * started in their own terminal already needed — so the two kinds of session
+ * stopped differing (Decision M6). `--session-id` stays: it costs nothing and
+ * names the transcript immediately, though nothing may treat it as permanent
+ * (a `/clear` rotates it).
  */
 
-import { existsSync } from "node:fs";
-import { unlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import type { ZodType } from "zod";
 import { z } from "zod";
-import { buildClaudeSettings } from "../claude-settings";
 import type { AgentGetFn } from "./readiness";
 import { waitForInteractiveReady } from "./readiness";
 
@@ -51,15 +49,10 @@ export interface HerdrSessionEntry {
   workspaceId: string;
   paneId: string;
   agentName: string;
-  settingsPath: string;
 }
 
 export interface HerdrRegistryOptions {
   client: HerdrRegistryClient;
-  /** Full URL for the Stop hook POST target. */
-  responseUrl?: string;
-  /** Full URL for the PreToolUse hook POST target. */
-  permissionUrl?: string;
   /** claude --permission-mode value (default "default" — no more unconditional bypass). */
   permissionMode?: string;
   /** Readiness gate tuning + test seams. */
@@ -78,7 +71,6 @@ export interface HerdrCreateSessionResult {
   /** herdr agent name — also the desktop attach target (`herdr agent attach <name>`). */
   agentName: string;
   paneId: string;
-  settingsPath: string;
 }
 
 /**
@@ -113,23 +105,9 @@ export function claudeUuidFromWorkspaceLabel(label: string): string | undefined 
   return WORKSPACE_LABEL_PATTERN.exec(label)?.[1];
 }
 
-/**
- * Rebuilt by formula rather than persisted: the path is a pure function of the
- * uuid, so a restart needs nothing on disk to find the settings file again.
- */
-export function settingsPathFor(claudeUuid: string): string {
-  return join(tmpdir(), `ccm-settings-${claudeUuid}.json`);
-}
-
 export function createHerdrRegistry(options: HerdrRegistryOptions) {
   const { client } = options;
-  const responseUrl = options.responseUrl ?? "http://127.0.0.1:3001/api/pty-response";
-  const permissionUrl = options.permissionUrl ?? "http://127.0.0.1:3001/api/pty-permission";
   const permissionMode = options.permissionMode ?? "default";
-
-  // The hooks live one directory up, next to the endpoints that receive them.
-  const STOP_HOOK_PATH = join(import.meta.dir, "..", "pty-stop-hook.ts");
-  const PERM_HOOK_PATH = join(import.meta.dir, "..", "pty-permission-hook.ts");
 
   const sessions = new Map<string, HerdrSessionEntry>();
 
@@ -141,16 +119,6 @@ export function createHerdrRegistry(options: HerdrRegistryOptions) {
     }
 
     const agentName = agentNameFor(claudeUuid);
-    const settingsPath = settingsPathFor(claudeUuid);
-
-    const settingsObj = buildClaudeSettings({
-      responseUrl,
-      stopHookPath: STOP_HOOK_PATH,
-      permissionUrl,
-      permissionHookPath: PERM_HOOK_PATH,
-    });
-    // Written before any RPC so the failure path below always has a file to unlink.
-    await writeFile(settingsPath, JSON.stringify(settingsObj, null, 2), "utf8");
 
     let workspaceId: string | undefined;
     try {
@@ -171,14 +139,7 @@ export function createHerdrRegistry(options: HerdrRegistryOptions) {
           name: agentName,
           kind: "claude",
           pane_id: paneId,
-          args: [
-            "--permission-mode",
-            permissionMode,
-            "--settings",
-            settingsPath,
-            "--session-id",
-            claudeUuid,
-          ],
+          args: ["--permission-mode", permissionMode, "--session-id", claudeUuid],
         },
         AgentStartedResultSchema,
       );
@@ -192,13 +153,12 @@ export function createHerdrRegistry(options: HerdrRegistryOptions) {
         now: options.now,
       });
 
-      sessions.set(claudeUuid, { workspaceId, paneId, agentName, settingsPath });
-      return { agentName, paneId, settingsPath };
+      sessions.set(claudeUuid, { workspaceId, paneId, agentName });
+      return { agentName, paneId };
     } catch (error) {
       // Leave nothing half-created: the pane (and the claude in it) would
       // otherwise outlive a failed create with no uuid mapping to reach it.
       await closeWorkspaceQuietly(workspaceId);
-      await unlinkQuietly(settingsPath);
       throw error;
     }
   }
@@ -229,14 +189,6 @@ export function createHerdrRegistry(options: HerdrRegistryOptions) {
     }
   }
 
-  async function unlinkQuietly(settingsPath: string): Promise<void> {
-    try {
-      if (existsSync(settingsPath)) await unlink(settingsPath);
-    } catch {
-      // ignore
-    }
-  }
-
   function listSessions(): string[] {
     return [...sessions.keys()];
   }
@@ -262,7 +214,6 @@ export function createHerdrRegistry(options: HerdrRegistryOptions) {
     }
 
     await closeWorkspaceQuietly(entry.workspaceId);
-    await unlinkQuietly(entry.settingsPath);
 
     sessions.delete(claudeUuid);
     return { killed: true };

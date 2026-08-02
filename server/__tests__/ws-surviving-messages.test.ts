@@ -30,7 +30,7 @@ afterEach(async () => {
 });
 
 const backendStub = {
-  createSession: async () => ({ name: "n", paneRef: "p1", settingsPath: "/tmp/s" }),
+  createSession: async () => ({ name: "n", paneRef: "p1" }),
   teardown: async () => ({ killed: false }),
   listLive: () => [],
   send: async () => {},

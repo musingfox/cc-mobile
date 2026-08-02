@@ -1,19 +1,23 @@
 /**
- * send-routing.ts — HerdrPromptInjection + HerdrReplyDelivery.
+ * send-routing.ts — HerdrPromptInjection + the client sink map.
  *
- * The waiter/sink semantics (arm before injecting, arm-time sink capture for
- * E1/E3 recovery, cancel-on-failure) were carried over 1:1 from the previous
- * terminal adapter, which is gone as of #25. Only the injection differs, and
- * that difference is the point of #22: `pane.send_text` lands multi-line text
- * in the composer without submitting, then `pane.send_keys ["Enter"]` submits
- * the whole thing as one turn (live-verified 2026-08-01). No prompt flattening.
+ * `pane.send_text` lands multi-line text in the composer without submitting,
+ * then `pane.send_keys ["Enter"]` submits the whole thing as one turn
+ * (live-verified 2026-08-01). No prompt flattening.
+ *
+ * This module no longer waits for a reply. Since #29 the answer comes from
+ * claude's own transcript file (`server/transcript/`), driven by the status
+ * transition herdr reports — so a session the user started in their own
+ * terminal reads back exactly like one cc-mobile launched, which a Stop hook
+ * cc-mobile installs never could. What survives is the sink map, including its
+ * late-bound lookup: a reconnect rebinds a session to a fresh sink and the
+ * delivery module consults it at delivery time (E1/E3).
  *
  * `agent.wait` is deliberately never called: it matches the CURRENT settled
  * state, so waiting after a second Enter resolves instantly on the previous
- * turn's `done`. The Stop-hook relay is the only reply signal.
+ * turn's `done`.
  */
 
-import type { createPtyResponseRelay } from "../pty-response-relay";
 import { composerHasTypedText } from "./prompt-box";
 
 export type ClientSink = (msg: Record<string, unknown>) => void;
@@ -38,7 +42,6 @@ export interface HerdrSendRoutingOptions {
    * which this process's registry has never heard of (Decision H1/H5).
    */
   listDrivablePanes?: () => Promise<string[]>;
-  responseRelay: ReturnType<typeof createPtyResponseRelay>;
 }
 
 /** Statuses in which claude is waiting for input rather than doing something. */
@@ -50,7 +53,7 @@ export interface HerdrSendParams {
 }
 
 export function createHerdrSendRouting(options: HerdrSendRoutingOptions) {
-  const { client, resolvePane, responseRelay: relay } = options;
+  const { client, resolvePane } = options;
   const listDrivablePanes = options.listDrivablePanes ?? (async () => []);
 
   const clientSinks = new Map<string, ClientSink>();
@@ -144,14 +147,6 @@ export function createHerdrSendRouting(options: HerdrSendRoutingOptions) {
       return;
     }
 
-    // Captured before arming: if the owner disconnects mid-turn, cleanupByOwner
-    // drops this uuid from clientSinks but the buffer-first sink referenced here
-    // still appends the reply to the event buffer for replay on reconnect (E1).
-    const armTimeSink = clientSinks.get(claudeUuid);
-
-    // Armed before injection so the Stop-hook POST can never beat the waiter.
-    const responsePromise = relay.awaitResponse(claudeUuid);
-
     try {
       if (paneId === undefined) {
         throw new Error("no pane mapping");
@@ -160,10 +155,8 @@ export function createHerdrSendRouting(options: HerdrSendRoutingOptions) {
       await client.paneSendText(paneId, content);
       await client.paneSendKeys(paneId, ["Enter"]);
     } catch (error) {
-      // The pane is gone or unreachable, so the Stop hook will never fire and
-      // the armed waiter would spin the client UI forever.
-      responsePromise.catch(() => {});
-      relay.cancel(claudeUuid);
+      // The pane is gone or unreachable: say so rather than leaving the phone
+      // waiting for a turn that was never started.
       const failSink = clientSinks.get(claudeUuid);
       failSink?.({
         type: "error",
@@ -173,44 +166,12 @@ export function createHerdrSendRouting(options: HerdrSendRoutingOptions) {
           error instanceof Error ? error.message : String(error)
         }). The paired terminal session may have closed.`,
       });
-      return;
     }
-
-    responsePromise
-      .then((text: string) => {
-        // E3 first: a reconnect may have rebound this uuid to a new sink.
-        // E1 fallback: deliver into the arm-time sink so a reply arriving while
-        // fully disconnected still reaches the event buffer.
-        const currentSink = clientSinks.get(claudeUuid) ?? armTimeSink;
-        if (currentSink) {
-          currentSink({
-            type: "stream_chunk",
-            sessionId: claudeUuid,
-            chunk: {
-              type: "assistant",
-              message: {
-                role: "assistant",
-                content: [{ type: "text", text }],
-                stop_reason: "end_turn",
-              },
-            },
-          });
-          currentSink({ type: "stream_end", sessionId: claudeUuid });
-        }
-      })
-      .catch(() => {
-        // cancelled / timed out / superseded: no delivery
-      });
   }
 
-  function hasPending(claudeUuid: string): boolean {
-    return relay.hasPending(claudeUuid);
-  }
-
-  /** Terminal removal: unlike cleanupByOwner, this DOES cancel the waiter. */
+  /** Terminal removal: drop the sink and the owner index for this session. */
   function teardown(claudeUuid: string): void {
     clientSinks.delete(claudeUuid);
-    relay.cancel(claudeUuid);
     const owner = uuidToOwner.get(claudeUuid);
     if (owner !== undefined) {
       ownerToUuids.get(owner)?.delete(claudeUuid);
@@ -220,9 +181,9 @@ export function createHerdrSendRouting(options: HerdrSendRoutingOptions) {
 
   /**
    * Transient disconnect (ws close): release the owner index for that
-   * connection. The waiter stays armed and the sink stays installed, so a reply
-   * or a permission_request landing during the gap still reaches the buffer-first
-   * sink and replays on reconnect (E2). Only the owner index is per-connection
+   * connection. The sink stays installed, so a reply or a permission_request
+   * landing during the gap still reaches the buffer-first sink and replays on
+   * reconnect (E2). Only the owner index is per-connection
    * and therefore unbounded — `clientSinks` is uuid-keyed and last-write-wins,
    * so a reconnect displaces the stale entry and teardown removes it for good.
    */
@@ -242,7 +203,6 @@ export function createHerdrSendRouting(options: HerdrSendRoutingOptions) {
   return {
     registerClient,
     send,
-    hasPending,
     teardown,
     cleanupByOwner,
     getClient,

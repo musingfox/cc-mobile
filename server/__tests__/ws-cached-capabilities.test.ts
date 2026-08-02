@@ -22,7 +22,7 @@ const BACKUP_FILE = `${CACHE_FILE}.ws-cached-capabilities.backup`;
 let harness: WsHarness | null = null;
 
 const backendStub = {
-  createSession: async () => ({ name: "n", paneRef: "p1", settingsPath: "/tmp/s" }),
+  createSession: async () => ({ name: "n", paneRef: "p1" }),
   teardown: async () => ({ killed: false }),
   listLive: () => [],
   send: async () => {},

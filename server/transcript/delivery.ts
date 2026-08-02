@@ -21,9 +21,9 @@
  *     delivered. A session no client has ever bound has no event buffer to
  *     replay from, so holding its records back would only queue a backlog that
  *     Decision M3 says must never land in the chat view.
- *   - `legacyReadback(sessionId)` suppresses delivery for sessions whose replies
- *     still arrive through the hook pipeline, so `main` never double-delivers
- *     during the migration (Decision M7). It is deleted with the pipeline.
+ *   - Delivery is unconditional: every session reads back from its own
+ *     transcript. The migration-window suppression that existed while the Stop
+ *     hook still answered for cc-mobile-launched panes went with that pipeline.
  */
 
 import {
@@ -47,8 +47,6 @@ export interface TranscriptDeliveryOptions {
   resolvePath: (sessionId: string) => Promise<string | null>;
   /** Late-bound sink lookup: a reconnect that rebound the session must win. */
   getSink: (sessionId: string) => ClientSink | undefined;
-  /** Migration-window suppression (Decision M7). Defaults to "never suppress". */
-  legacyReadback?: (sessionId: string) => boolean;
   read?: (input: { path: string; cursor: TranscriptCursor }) => Promise<TranscriptReadResult>;
   initCursor?: (input: { path: string }) => Promise<TranscriptCursor>;
   toChunk?: (record: unknown) => TranscriptChunk | null;
@@ -75,7 +73,6 @@ export function createTranscriptDelivery(options: TranscriptDeliveryOptions) {
   const {
     resolvePath,
     getSink,
-    legacyReadback = () => false,
     read = readTranscriptSince,
     initCursor = initCursorAtEof,
     toChunk = transcriptRecordToChunk,
@@ -151,7 +148,6 @@ export function createTranscriptDelivery(options: TranscriptDeliveryOptions) {
         // Advance first: suppressed or undeliverable records are dropped, never
         // queued (see the module header).
         state.cursor = result.cursor;
-        if (legacyReadback(sessionId)) return [];
         const chunks: TranscriptChunk[] = [];
         for (const record of result.records) {
           const chunk = toChunk(record);

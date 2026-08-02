@@ -76,7 +76,7 @@ describe("RetiredHistoryMessagesRejected over the socket", () => {
   test("a retired history request gets one error frame and the socket stays open", async () => {
     harness = await startWsHarness(
       {
-        createSession: async () => ({ name: "n", paneRef: "p1", settingsPath: "/tmp/s" }),
+        createSession: async () => ({ name: "n", paneRef: "p1" }),
         teardown: async () => ({ killed: false }),
         listLive: () => [],
         send: async () => {},

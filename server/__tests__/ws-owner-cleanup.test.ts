@@ -67,14 +67,6 @@ async function startServer(backend: Partial<WsBackend>) {
     .use(
       createWsPlugin({} as never, testServerConfig, {
         backend: backend as WsBackend,
-        terminalPermissionRelay: {
-          requestPtyPermission: () => new Promise(() => {}),
-          resolvePermission: () => {},
-          getPendingCount: () => 0,
-          hasPendingForSession: () => false,
-          pausePending: () => [],
-          resumePending: () => {},
-        } as never,
         eventBuffer: new EventBuffer(500),
         clientSink: { current: null },
       }),

@@ -33,7 +33,7 @@ function descriptor(overrides: Record<string, unknown> = {}) {
 
 function backendListing(sessions: ReturnType<typeof descriptor>[]) {
   return {
-    createSession: async () => ({ name: "n", paneRef: "p1", settingsPath: "/tmp/s" }),
+    createSession: async () => ({ name: "n", paneRef: "p1" }),
     teardown: async () => ({ killed: false }),
     listLive: () => [],
     listSessionDescriptors: async () => sessions,

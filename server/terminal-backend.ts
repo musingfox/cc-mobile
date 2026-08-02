@@ -44,7 +44,6 @@ export interface TerminalSessionInfo {
    * herdr passes its `pane_id` through.
    */
   paneRef: string;
-  settingsPath: string;
 }
 
 export interface TerminalHasSessionResult {

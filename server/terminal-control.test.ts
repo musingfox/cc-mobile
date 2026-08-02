@@ -40,7 +40,7 @@ function makeFakeBackend(overrides: Partial<TerminalControlBackend> = {}) {
   const backend: TerminalControlBackend = {
     createSession: async (params) => {
       createSessionCalls.push(params);
-      return { name: "cc-u1", paneRef: "7", settingsPath: "/s" };
+      return { name: "cc-u1", paneRef: "7" };
     },
     teardown: async (claudeUuid) => {
       teardownCalls.push(claudeUuid);

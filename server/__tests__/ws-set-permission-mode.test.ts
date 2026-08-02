@@ -86,7 +86,7 @@ describe("set_permission_mode over a fresh connection", () => {
   async function start() {
     harness = await startWsHarness(
       {
-        createSession: async () => ({ name: "n", paneRef: "p1", settingsPath: "/tmp/s" }),
+        createSession: async () => ({ name: "n", paneRef: "p1" }),
         teardown: async () => ({ killed: false }),
         listLive: () => [],
         send: async () => {},

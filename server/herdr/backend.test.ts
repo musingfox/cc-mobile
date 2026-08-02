@@ -5,30 +5,14 @@
  * transport, so the protocol check under test is the production one.
  */
 
-import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
-import { unlink } from "node:fs/promises";
+import { describe, expect, test } from "bun:test";
 import { createApp } from "../app";
 import { parseServerConfig } from "../config";
-import { createPtyResponseRelay } from "../pty-response-relay";
 import { createHerdrBackend, type HerdrBackendOptions, verifyHerdrStartup } from "./backend";
 import { createHerdrClient } from "./client";
 import { HerdrTransportError } from "./errors";
 
 const UUID = "3f2a9b01-1111-4222-8333-444455556666";
-
-const settingsWritten = new Set<string>();
-
-afterEach(async () => {
-  for (const path of settingsWritten) {
-    try {
-      if (existsSync(path)) await unlink(path);
-    } catch {
-      // ignore
-    }
-  }
-  settingsWritten.clear();
-});
 
 /** A per-method result, or a function of the params for pane-dependent replies. */
 type FakeResult = unknown | ((params: unknown) => unknown);
@@ -77,15 +61,9 @@ function makeFakeClient(results: Record<string, FakeResult> = {}) {
   return { client, calls, subscriptions, injected, stopCalls: () => stopCalls };
 }
 
-/** Keeps a handle on the relay so tests can drive a Stop-hook resolution. */
 function makeBackend(fake: ReturnType<typeof makeFakeClient>) {
-  const relay = createPtyResponseRelay();
-  const backend = createHerdrBackend({
-    client: fake.client,
-    responseRelay: relay,
-    responseUrl: "http://127.0.0.1:3001/api/pty-response",
-  });
-  return { backend, relay };
+  const backend = createHerdrBackend({ client: fake.client });
+  return { backend };
 }
 
 describe("herdr backend composition", () => {
@@ -94,11 +72,12 @@ describe("herdr backend composition", () => {
     const { backend } = makeBackend(fake);
 
     const info = await backend.createSession({ claudeUuid: UUID, cwd: "/tmp" });
-    settingsWritten.add(info.settingsPath);
 
     expect(info.name).toBe("ccm-3f2a9b01");
     expect(info.paneRef).toBe("p1");
-    expect(Object.keys(info).sort()).toEqual(["name", "paneRef", "settingsPath"]);
+    // No settingsPath: the port stopped carrying one when the hook pipeline
+    // that needed it was deleted.
+    expect(Object.keys(info).sort()).toEqual(["name", "paneRef"]);
     // One global stream, not one per pane: a filter carrying a pane_id could
     // never see the sessions the user starts in their own terminal.
     expect(fake.subscriptions).toEqual([[{ type: "pane.updated" }]]);
@@ -108,14 +87,9 @@ describe("herdr backend composition", () => {
 
   test("permissionMode passes through to the launched claude argv", async () => {
     const fake = makeFakeClient();
-    const backend = createHerdrBackend({
-      client: fake.client,
-      responseRelay: createPtyResponseRelay(),
-      permissionMode: "acceptEdits",
-    });
+    const backend = createHerdrBackend({ client: fake.client, permissionMode: "acceptEdits" });
 
     const info = await backend.createSession({ claudeUuid: UUID, cwd: "/tmp" });
-    settingsWritten.add(info.settingsPath);
 
     const start = fake.calls.find((call) => call.method === "agent.start");
     const args = (start?.params as { args: string[] }).args;
@@ -128,7 +102,6 @@ describe("herdr backend composition", () => {
     const fake = makeFakeClient();
     const { backend } = makeBackend(fake);
     const info = await backend.createSession({ claudeUuid: UUID, cwd: "/tmp" });
-    settingsWritten.add(info.settingsPath);
 
     const result = await backend.teardown(UUID);
 
@@ -140,13 +113,8 @@ describe("herdr backend composition", () => {
   test("teardownAll releases every session through the composed teardown", async () => {
     const fake = makeFakeClient();
     const { backend } = makeBackend(fake);
-    settingsWritten.add(
-      (await backend.createSession({ claudeUuid: UUID, cwd: "/tmp" })).settingsPath,
-    );
-    settingsWritten.add(
-      (await backend.createSession({ claudeUuid: "7c4d5e02-2222-4333-8444-5555", cwd: "/tmp" }))
-        .settingsPath,
-    );
+    await backend.createSession({ claudeUuid: UUID, cwd: "/tmp" });
+    await backend.createSession({ claudeUuid: "7c4d5e02-2222-4333-8444-5555", cwd: "/tmp" });
 
     await backend.teardownAll();
 
@@ -219,7 +187,6 @@ describe("herdr backend composition", () => {
           agent_session: { kind: "id", value: "a21273d4-77e6-43dc-b9cb-3647561d1192" },
         }),
       },
-      responseRelay: createPtyResponseRelay(),
     } as unknown as HerdrBackendOptions);
 
     const sessions = await backend.listSessionDescriptors();
@@ -245,11 +212,10 @@ describe("herdr backend composition", () => {
     expect(await backend.listSessionDescriptors()).toEqual([]);
   });
 
-  test("a prompt reaches the created pane and its reply comes back on the shared relay", async () => {
+  test("a prompt reaches the created pane, and nothing waits on a hook for the reply", async () => {
     const fake = makeFakeClient();
-    const { backend, relay } = makeBackend(fake);
-    const info = await backend.createSession({ claudeUuid: UUID, cwd: "/tmp" });
-    settingsWritten.add(info.settingsPath);
+    const { backend } = makeBackend(fake);
+    await backend.createSession({ claudeUuid: UUID, cwd: "/tmp" });
 
     const seen: Record<string, unknown>[] = [];
     backend.registerClient(UUID, (msg) => seen.push(msg));
@@ -260,23 +226,9 @@ describe("herdr backend composition", () => {
       ["p1", "line1\nline2"],
       ["p1", ["Enter"]],
     ]);
-
-    // The relay the caller passed in is the one the reply path awaits — this is
-    // the instance app.ts also hands to the Stop-hook HTTP endpoint.
-    expect(relay.hasPending(UUID)).toBe(true);
-    relay.resolveResponse(UUID, "hello");
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(seen.length).toBe(2);
-    expect(seen[0]).toMatchObject({
-      type: "stream_chunk",
-      sessionId: UUID,
-      chunk: {
-        type: "assistant",
-        message: { content: [{ type: "text", text: "hello" }], stop_reason: "end_turn" },
-      },
-    });
-    expect(seen[1]).toEqual({ type: "stream_end", sessionId: UUID });
+    // Injecting emits nothing by itself: the reply arrives later, read out of
+    // claude's transcript when herdr reports the turn settled.
+    expect(seen).toEqual([]);
   });
 });
 
@@ -330,7 +282,7 @@ describe("HerdrStartupGate", () => {
 
     expect(() => createApp(serverConfig)).not.toThrow();
 
-    const backend = createHerdrBackend({ responseRelay: createPtyResponseRelay() });
+    const backend = createHerdrBackend({});
     expect(backend.hasSession("x")).toEqual({ present: false });
     expect(backend.listLive()).toEqual([]);
   });
@@ -400,7 +352,6 @@ describe("TeardownOwnershipGuard", () => {
 
     const backend = createHerdrBackend({
       client: client as unknown as NonNullable<HerdrBackendOptions["client"]>,
-      responseRelay: createPtyResponseRelay(),
     });
     return { backend, calls };
   }

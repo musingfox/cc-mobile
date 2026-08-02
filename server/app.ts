@@ -2,10 +2,17 @@
  * app.ts — the composition root.
  *
  * Everything the server is made of is assembled here: the terminal backend, the
- * permission/response relays, the HTTP hook endpoints, the WS transport plugin,
- * and static file serving.
+ * WS transport plugin, uploads, and static file serving.
  * `createApp` returns the app *unlistened*, so wiring can be asserted without
  * binding a port; `index.ts` is reduced to parse-config → createApp → listen.
+ *
+ * There are no hook endpoints any more. cc-mobile used to POST claude's Stop and
+ * PreToolUse hooks back into this process to read replies and intercept
+ * permissions; since #29 both come from herdr directly — replies from claude's
+ * transcript file, permissions from the pane's own screen — which is what makes
+ * a session the user started in their own terminal work identically to one
+ * cc-mobile launched. Closing #28 with it: with no `/api/pty-response` route in
+ * the tree there is no startup window in which a hook POST can be lost.
  */
 
 import { existsSync } from "node:fs";
@@ -15,11 +22,7 @@ import { Elysia } from "elysia";
 import type { ServerConfig } from "./config";
 import { EventBuffer } from "./event-buffer";
 import { createHerdrBackend } from "./herdr/backend";
-import { buildUrl, stripBasePath } from "./path-utils";
-import { createPtyPermissionHandler } from "./pty-permission-endpoint";
-import { createPtyPermissionRelay } from "./pty-permission-relay";
-import { createPtyResponseHandler } from "./pty-response-endpoint";
-import { createPtyResponseRelay } from "./pty-response-relay";
+import { stripBasePath } from "./path-utils";
 import { SessionManager } from "./session-manager";
 import { createUploadPlugin } from "./upload";
 import { createUploadImagePlugin } from "./upload-image";
@@ -32,8 +35,7 @@ export const DIST_DIR = join(__dirname, "..", "dist", "client");
 
 /**
  * The terminal backend as the composition root uses it: everything the WS
- * transport needs, plus the lookup/shutdown surface the relays and signal
- * handlers drive.
+ * transport needs, plus the lookup/shutdown surface the signal handlers drive.
  */
 export interface AppBackend extends WsBackend {
   hasSession(claudeUuid: string): { present: boolean; paneRef?: string };
@@ -43,18 +45,16 @@ export interface AppBackend extends WsBackend {
 
 /**
  * Injection seam for tests (additive; production passes nothing). Substituting
- * a spy backend or relay factory exercises the wiring without spawning a pane or
- * binding a port.
+ * a spy backend exercises the wiring without spawning a pane or binding a port.
  *
  * `backendRef` is the exception — production passes it. `createApp` returns the
- * Elysia app, but `index.ts` needs the backend it built in order to remount
- * before listening, so it hands in a cell for createApp to fill. Late-bound
- * out-params are already how this file shares `clientSink`.
+ * Elysia app, but `index.ts` needs the backend it built, so it hands in a cell
+ * for createApp to fill. Late-bound out-params are already how this file shares
+ * `clientSink`.
  */
 export interface AppTestDeps {
   backend?: AppBackend;
   backendRef?: { current: AppBackend | null };
-  createTerminalPermissionRelay?: typeof createPtyPermissionRelay;
   sessionManager?: SessionManager;
 }
 
@@ -62,79 +62,28 @@ export interface AppTestDeps {
 export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
   const sessionManager =
     deps.sessionManager ?? new SessionManager({ permissionMode: serverConfig.permissionMode });
-  const makeTerminalPermissionRelay =
-    deps.createTerminalPermissionRelay ?? createPtyPermissionRelay;
-
-  const ptyPermApiPath = buildUrl(serverConfig.basePath, "/api/pty-permission");
-  const ptyResponseApiPath = buildUrl(serverConfig.basePath, "/api/pty-response");
 
   // Persistent across reconnects; the WS plugin appends to it and replays from it.
   const eventBuffer = new EventBuffer(500);
 
   // Late-bound handle on the live socket. The WS plugin sets it on open and
-  // clears it on close, which is what lets relays built here push to a client
-  // that does not exist yet.
+  // clears it on close, which is what lets collaborators built here push to a
+  // client that does not exist yet.
   const clientSink: ClientSink = { current: null };
-
-  // PTY response relay + HTTP handler — the Stop hook delivers the assistant
-  // reply here, resolving the in-flight drive() (ADR-011 readback).
-  const ptyResponseRelay = createPtyResponseRelay();
-  const ptyResponseHttpHandler = createPtyResponseHandler({ relay: ptyResponseRelay });
-
-  // Hook URLs point at this server's own port + basePath, so a hook fired from
-  // inside a terminal pane reaches the live process.
-  const terminalResponseUrl = `http://127.0.0.1:${serverConfig.port}${ptyResponseApiPath}`;
-  const terminalPermissionUrl = `http://127.0.0.1:${serverConfig.port}${ptyPermApiPath}`;
 
   // herdr is the only default backend (ADR-015 / plan D1). Its transport
   // connects lazily, so constructing the app here contacts no daemon —
   // index.ts gates on daemon reachability before it listens.
   const backend: AppBackend =
-    deps.backend ??
-    createHerdrBackend({
-      responseUrl: terminalResponseUrl,
-      permissionUrl: terminalPermissionUrl,
-      permissionMode: serverConfig.permissionMode,
-      responseRelay: ptyResponseRelay,
-    });
+    deps.backend ?? createHerdrBackend({ permissionMode: serverConfig.permissionMode });
 
   if (deps.backendRef) deps.backendRef.current = backend;
 
   // No shutdown signal handler: pane survival across a stop is the persistence
   // default (plan D2). A SIGTERM from pm2 or a deploy must leave the panes — and
-  // the live claude in them — alone, so the next startup can remount them.
-  // `backend.teardownAll` stays on the port for explicit callers; only the
-  // signal wiring is gone. Panes whose claude did die are collected by the
-  // startup orphan scan instead.
-
-  // Independent terminal permission relay; sendToClient goes through the
-  // claudeUuid→sink map so a permission_request only reaches the originating
-  // client. 90s rather than the relay's 600s default: an unattended terminal prompt
-  // should not hold a turn open for ten minutes.
-  const terminalPermissionRelay = makeTerminalPermissionRelay(
-    (sessionId, requestId, tool) => {
-      const sink = backend.getClient(sessionId);
-      if (sink) {
-        // sink is the sendBuffered wrapper, which already appends to the event
-        // buffer; appending here too would replay the prompt twice.
-        sink({
-          type: "permission_request",
-          sessionId,
-          requestId,
-          tool,
-        });
-      }
-    },
-    { timeoutMs: 90000 },
-  );
-
-  // Permission requests arrive over HTTP from the hook. The terminal backend is
-  // the only session owner left (#25), so there is nothing to route between:
-  // an unknown session is a 404, never a second relay.
-  const ptyPermissionHttpHandler = createPtyPermissionHandler({
-    relay: terminalPermissionRelay,
-    hasSession: (sessionId: string) => backend.hasSession(sessionId).present,
-  });
+  // the live claude in them — alone. The next startup rediscovers nothing and
+  // needs to: the session list is a live `agent.list` query (Decision M12).
+  // `backend.teardownAll` stays on the port for explicit callers.
 
   return new Elysia({
     websocket: {
@@ -142,16 +91,7 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
       sendPings: true,
     },
   })
-    .post(ptyPermApiPath, ({ request }) => ptyPermissionHttpHandler(request))
-    .post(ptyResponseApiPath, ({ request }) => ptyResponseHttpHandler(request))
-    .use(
-      createWsPlugin(sessionManager, serverConfig, {
-        backend,
-        terminalPermissionRelay,
-        eventBuffer,
-        clientSink,
-      }),
-    )
+    .use(createWsPlugin(sessionManager, serverConfig, { backend, eventBuffer, clientSink }))
     .use(createUploadPlugin(serverConfig))
     .use(createUploadImagePlugin(serverConfig))
     .get("*", async ({ request }) => {

@@ -1,5 +1,5 @@
 /**
- * registry.test.ts — HerdrCreateSession + HerdrTeardown.
+ * registry.test.ts — HerdrCreateSession + HerdrTeardown + SelfLaunchNativeArgv.
  *
  * Every case runs against a fake herdr client: no daemon, no socket. The
  * assertions that matter most are the exact `agent.start` params (the daemon
@@ -7,9 +7,8 @@
  * the failure path leaving nothing behind.
  */
 
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { readFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { claudeUuidFromWorkspaceLabel, createHerdrRegistry, workspaceLabelFor } from "./registry";
@@ -57,30 +56,16 @@ function makeFakeClient(
 function makeRegistry(fake: ReturnType<typeof makeFakeClient>) {
   return createHerdrRegistry({
     client: fake.client,
-    responseUrl: "http://127.0.0.1:3001/api/pty-response",
     // Instant, non-advancing clock: readiness must never make these tests wait.
     sleep: async () => {},
     now: () => 0,
   });
 }
 
-const writtenSettings = new Set<string>();
-
-function trackSettings(path: string) {
-  writtenSettings.add(path);
-  return path;
+/** The path the deleted hook pipeline used to write a per-uuid settings file to. */
+function formerSettingsPath(claudeUuid: string): string {
+  return join(tmpdir(), `ccm-settings-${claudeUuid}.json`);
 }
-
-afterEach(async () => {
-  for (const path of writtenSettings) {
-    try {
-      if (existsSync(path)) await unlink(path);
-    } catch {
-      // ignore
-    }
-  }
-  writtenSettings.clear();
-});
 
 describe("HerdrCreateSession", () => {
   test("launches via workspace.create → agent.start with the verbatim claude argv", async () => {
@@ -88,11 +73,11 @@ describe("HerdrCreateSession", () => {
     const registry = makeRegistry(fake);
 
     const result = await registry.createSession({ claudeUuid: UUID, cwd: "/tmp" });
-    trackSettings(result.settingsPath);
 
     expect(result.agentName).toBe("ccm-3f2a9b01");
     expect(result.paneId).toBe("p1");
-    expect(result.settingsPath).toMatch(/ccm-settings-3f2a9b01-.*\.json$/);
+    // The result carries no settings path any more: there is no settings file.
+    expect(Object.keys(result).sort()).toEqual(["agentName", "paneId"]);
     // herdr rejects agent names longer than 32 chars.
     expect(result.agentName.length).toBeLessThanOrEqual(32);
 
@@ -106,30 +91,34 @@ describe("HerdrCreateSession", () => {
       name: "ccm-3f2a9b01",
       kind: "claude",
       pane_id: "p1",
-      args: [
-        "--permission-mode",
-        "default",
-        "--settings",
-        result.settingsPath,
-        "--session-id",
-        UUID,
-      ],
+      // A plain claude: no --settings, therefore no cc-mobile hooks. Replies
+      // come from the transcript and permissions from the pane's own screen,
+      // which is what makes this session indistinguishable from one the user
+      // started in their own terminal (Decision M6).
+      args: ["--permission-mode", "default", "--session-id", UUID],
     });
     expect(registry.hasSession(UUID)).toEqual({ present: true, paneRef: "p1" });
+  });
+
+  test("writes no settings file anywhere", async () => {
+    const fake = makeFakeClient();
+    const registry = makeRegistry(fake);
+
+    await registry.createSession({ claudeUuid: UUID, cwd: "/tmp" });
+
+    expect(existsSync(formerSettingsPath(UUID))).toBe(false);
   });
 
   test("options.permissionMode overrides the argv value", async () => {
     const fake = makeFakeClient();
     const registry = createHerdrRegistry({
       client: fake.client,
-      responseUrl: "http://127.0.0.1:3001/api/pty-response",
       permissionMode: "plan",
       sleep: async () => {},
       now: () => 0,
     });
 
-    const result = await registry.createSession({ claudeUuid: UUID, cwd: "/tmp" });
-    trackSettings(result.settingsPath);
+    await registry.createSession({ claudeUuid: UUID, cwd: "/tmp" });
 
     const startParams = fake.calls[1]?.params as { args: string[] };
     const pmIdx = startParams.args.indexOf("--permission-mode");
@@ -141,8 +130,7 @@ describe("HerdrCreateSession", () => {
     const fake = makeFakeClient();
     const registry = makeRegistry(fake);
 
-    const first = await registry.createSession({ claudeUuid: UUID, cwd: "/tmp" });
-    trackSettings(first.settingsPath);
+    await registry.createSession({ claudeUuid: UUID, cwd: "/tmp" });
     const callsAfterFirst = fake.calls.length;
 
     await expect(registry.createSession({ claudeUuid: UUID, cwd: "/tmp" })).rejects.toThrow(
@@ -151,27 +139,7 @@ describe("HerdrCreateSession", () => {
     expect(fake.calls.length).toBe(callsAfterFirst);
   });
 
-  test("writes a settings file wiring the Stop hook to the response URL", async () => {
-    const fake = makeFakeClient();
-    const registry = makeRegistry(fake);
-
-    const result = await registry.createSession({ claudeUuid: UUID, cwd: "/tmp" });
-    trackSettings(result.settingsPath);
-
-    const settings = JSON.parse(await readFile(result.settingsPath, "utf8"));
-    const command = settings.hooks.Stop[0].hooks[0].command;
-    expect(command).toContain("http://127.0.0.1:3001/api/pty-response");
-    expect(command).toContain("pty-stop-hook.ts");
-
-    // The hook path must resolve to a file that actually exists — a wrong
-    // relative base would still satisfy the substring check above but would
-    // break every reply at runtime.
-    const hookPath = command.match(/bun '([^']+)'/)?.[1];
-    expect(hookPath).toBeDefined();
-    expect(existsSync(hookPath)).toBe(true);
-  });
-
-  test("cleans up the workspace and settings file when agent.start fails", async () => {
+  test("closes the workspace when agent.start fails, with nothing to unlink", async () => {
     const boom = new Error("agent.start exploded");
     const fake = makeFakeClient({
       "agent.start": async () => {
@@ -179,7 +147,6 @@ describe("HerdrCreateSession", () => {
       },
     });
     const registry = makeRegistry(fake);
-    const settingsPath = trackSettings(join(tmpdir(), `ccm-settings-${UUID}.json`));
 
     const caught = await registry
       .createSession({ claudeUuid: UUID, cwd: "/tmp" })
@@ -189,7 +156,7 @@ describe("HerdrCreateSession", () => {
     expect(caught).toBe(boom);
     const closeCall = fake.calls.find((call) => call.method === "workspace.close");
     expect(closeCall?.params).toEqual({ workspace_id: "w1" });
-    expect(existsSync(settingsPath)).toBe(false);
+    expect(existsSync(formerSettingsPath(UUID))).toBe(false);
     expect(registry.hasSession(UUID)).toEqual({ present: false });
   });
 
@@ -197,7 +164,6 @@ describe("HerdrCreateSession", () => {
     const fake = makeFakeClient({}, async () => ({ interactive_ready: false }));
     const registry = createHerdrRegistry({
       client: fake.client,
-      responseUrl: "http://127.0.0.1:3001/api/pty-response",
       readinessBudgetMs: 900,
       readinessPollMs: 300,
       sleep: async () => {},
@@ -209,14 +175,12 @@ describe("HerdrCreateSession", () => {
         };
       })(),
     });
-    const settingsPath = trackSettings(join(tmpdir(), `ccm-settings-${UUID}.json`));
 
     await expect(registry.createSession({ claudeUuid: UUID, cwd: "/tmp" })).rejects.toThrow(
       /interactive_ready/,
     );
 
     expect(fake.calls.some((call) => call.method === "workspace.close")).toBe(true);
-    expect(existsSync(settingsPath)).toBe(false);
     expect(registry.hasSession(UUID)).toEqual({ present: false });
   });
 });
@@ -228,8 +192,7 @@ describe("PersistentSessionLabel", () => {
     const fake = makeFakeClient();
     const registry = makeRegistry(fake);
 
-    const result = await registry.createSession({ claudeUuid: mixedCase, cwd: "/tmp" });
-    trackSettings(result.settingsPath);
+    await registry.createSession({ claudeUuid: mixedCase, cwd: "/tmp" });
 
     const createParams = fake.calls[0]?.params as { label: string };
     expect(createParams.label).toBe(`ccm-${lower}`);
@@ -256,7 +219,6 @@ describe("adoptSession", () => {
     workspaceId: "ws-1",
     paneId: "pn-1",
     agentName: "ccm-3f2a9b01",
-    settingsPath: "/tmp/ccm-settings-adopt.json",
   };
 
   test("registers a pane this process did not create, issuing no RPC", () => {
@@ -268,7 +230,7 @@ describe("adoptSession", () => {
     expect(registry.hasSession(UUID)).toEqual({ present: true, paneRef: "pn-1" });
     expect(registry.resolvePane(UUID)).toBe("pn-1");
     expect(registry.listSessions()).toEqual([UUID]);
-    expect(registry.lookup(UUID)?.settingsPath).toBe(entry.settingsPath);
+    expect(registry.lookup(UUID)?.paneId).toBe("pn-1");
     // Adoption reads state that already exists; it must not touch the daemon.
     expect(fake.calls).toEqual([]);
   });
@@ -300,19 +262,17 @@ describe("adoptSession", () => {
 });
 
 describe("HerdrTeardown", () => {
-  test("closes the workspace, unlinks settings and deregisters the uuid", async () => {
+  test("closes the workspace and deregisters the uuid", async () => {
     const fake = makeFakeClient();
     const registry = makeRegistry(fake);
 
-    const created = await registry.createSession({ claudeUuid: UUID, cwd: "/tmp" });
-    trackSettings(created.settingsPath);
+    await registry.createSession({ claudeUuid: UUID, cwd: "/tmp" });
 
     const result = await registry.teardown(UUID);
 
     expect(result).toEqual({ killed: true });
     const closeCall = fake.calls.find((call) => call.method === "workspace.close");
     expect(closeCall?.params).toEqual({ workspace_id: "w1" });
-    expect(existsSync(created.settingsPath)).toBe(false);
     expect(registry.hasSession(UUID)).toEqual({ present: false });
   });
 
@@ -334,8 +294,7 @@ describe("HerdrTeardown", () => {
     });
     const registry = makeRegistry(fake);
 
-    const created = await registry.createSession({ claudeUuid: UUID, cwd: "/tmp" });
-    trackSettings(created.settingsPath);
+    await registry.createSession({ claudeUuid: UUID, cwd: "/tmp" });
 
     const result = await registry.teardown(UUID);
 
@@ -347,8 +306,8 @@ describe("HerdrTeardown", () => {
     const fake = makeFakeClient();
     const registry = makeRegistry(fake);
 
-    trackSettings((await registry.createSession({ claudeUuid: UUID, cwd: "/tmp" })).settingsPath);
-    trackSettings((await registry.createSession({ claudeUuid: UUID2, cwd: "/tmp" })).settingsPath);
+    await registry.createSession({ claudeUuid: UUID, cwd: "/tmp" });
+    await registry.createSession({ claudeUuid: UUID2, cwd: "/tmp" });
     expect(registry.listSessions().length).toBe(2);
 
     await registry.teardownAll();

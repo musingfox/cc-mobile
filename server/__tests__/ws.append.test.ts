@@ -120,7 +120,7 @@ describe("append_user_message over a fresh connection", () => {
   test("answers a typed session_not_found instead of appearing to succeed", async () => {
     harness = await startWsHarness(
       {
-        createSession: async () => ({ name: "n", paneRef: "p1", settingsPath: "/tmp/s" }),
+        createSession: async () => ({ name: "n", paneRef: "p1" }),
         teardown: async () => ({ killed: false }),
         listLive: () => [],
         send: async () => {},

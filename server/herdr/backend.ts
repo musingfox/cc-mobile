@@ -10,7 +10,6 @@
  * surprise on the user's first tap.
  */
 
-import type { createPtyResponseRelay } from "../pty-response-relay";
 import type { ClientSink, TerminalBackend, TerminalSessionInfo } from "../terminal-backend";
 import { createTranscriptDelivery } from "../transcript/delivery";
 import { resolveTranscriptPath } from "../transcript/path";
@@ -24,10 +23,6 @@ import { listClaudeSessions, type SessionDescriptor, type SessionListingClient }
 import { resolveSocketPath } from "./transport";
 
 export interface HerdrBackendOptions {
-  /** Shared with the HTTP Stop-hook endpoint — same instance, or replies never land. */
-  responseRelay: ReturnType<typeof createPtyResponseRelay>;
-  responseUrl?: string;
-  permissionUrl?: string;
   /** claude --permission-mode for launched sessions (default "default"). */
   permissionMode?: string;
   /**
@@ -88,8 +83,6 @@ export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalB
 
   const registry = createHerdrRegistry({
     client,
-    responseUrl: options.responseUrl,
-    permissionUrl: options.permissionUrl,
     permissionMode: options.permissionMode,
     readinessBudgetMs: options.readinessBudgetMs,
     readinessPollMs: options.readinessPollMs,
@@ -105,7 +98,6 @@ export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalB
       (await listSessionDescriptors())
         .filter((session) => session.drivable)
         .map((session) => session.sessionId),
-    responseRelay: options.responseRelay,
   });
 
   async function listSessionDescriptors(): Promise<SessionDescriptor[]> {
@@ -114,20 +106,6 @@ export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalB
       client: client as SessionListingClient,
       suppressLabel: options.suppressSessionLabel,
     });
-  }
-
-  /**
-   * True while this process still has the hook chain armed for a session: its
-   * Stop hook resolves a waiter that emits the reply itself, so reading the same
-   * turn out of the transcript would deliver it twice (Decision M7). Sessions
-   * launched by an earlier process — and every foreign pane — have no live
-   * waiter, so they read back from the transcript today.
-   */
-  function legacyReadback(sessionId: string): boolean {
-    if (registry.hasSession(sessionId).present) return true;
-    return registry
-      .listSessions()
-      .some((claudeUuid) => registry.resolvePane(claudeUuid) === sessionId);
   }
 
   const delivery = createTranscriptDelivery({
@@ -140,7 +118,6 @@ export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalB
     },
     // Late-bound: a reconnect rebinds the session to a fresh sink.
     getSink: (sessionId) => routing.getClient(sessionId),
-    legacyReadback,
   });
 
   /**
@@ -202,7 +179,6 @@ export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalB
     // A session this process launched: routed by uuid, torn down as before.
     if (registry.hasSession(sessionKey).present) {
       const paneId = registry.resolvePane(sessionKey);
-      // Kill first, then cancel the waiter.
       const result = await registry.teardown(sessionKey);
       routing.teardown(sessionKey);
       forgetSession(sessionKey);
@@ -235,11 +211,7 @@ export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalB
       const info = await registry.createSession(input);
       // Non-fatal by construction: start() never rejects.
       await ensureEvents();
-      return {
-        name: info.agentName,
-        paneRef: info.paneId,
-        settingsPath: info.settingsPath,
-      };
+      return { name: info.agentName, paneRef: info.paneId };
     },
     hasSession: (claudeUuid) => registry.hasSession(claudeUuid),
     listLive: () => registry.listSessions(),

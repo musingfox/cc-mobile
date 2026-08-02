@@ -86,6 +86,16 @@ describe("DeadModuleResidueScan — deleted modules", () => {
     `Session${"List"}Item`,
     // The guard the deleted permission bridge put ahead of every WS case.
     `No permission ${"handler"}`,
+    // #29: the self-built hook pipeline. Replies come from the transcript and
+    // permissions from the pane's screen, so nothing may reach for a hook again.
+    `pty${"-"}stop-hook`,
+    `pty${"-"}permission-hook`,
+    `pty${"-"}response-relay`,
+    `pty${"-"}permission-relay`,
+    `pty${"-"}response-endpoint`,
+    `pty${"-"}permission-endpoint`,
+    `claude${"-"}settings`,
+    `build${"Claude"}Settings`,
   ];
 
   test.each(deletedModules)("no source file references %s", (pattern) => {
