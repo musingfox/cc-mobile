@@ -107,6 +107,62 @@ describe("TranscriptRecordToChunk", () => {
     expect(transcriptRecordToChunk({ type: "attachment" })).toBeNull();
   });
 
+  it("renders nothing for a sub-agent's own turns", () => {
+    expect(
+      transcriptRecordToChunk({
+        type: "assistant",
+        isSidechain: true,
+        message: { role: "assistant", content: [{ type: "text", text: "sub-agent thinking" }] },
+      }),
+    ).toBeNull();
+    expect(
+      transcriptRecordToChunk({
+        type: "user",
+        isSidechain: true,
+        message: { role: "user", content: "the Task prompt" },
+      }),
+    ).toBeNull();
+  });
+
+  it("still renders a main-agent turn that carries isSidechain: false", () => {
+    expect(
+      transcriptRecordToChunk({
+        type: "user",
+        isSidechain: false,
+        message: { role: "user", content: "hello" },
+      }),
+    ).toEqual({ type: "user", message: { role: "user", content: "hello" } });
+  });
+
+  it("renders nothing for text claude injected on the user's behalf", () => {
+    expect(
+      transcriptRecordToChunk({
+        type: "user",
+        isMeta: true,
+        message: {
+          role: "user",
+          content: [
+            { type: "text", text: "<local-command-caveat>Caveat: …</local-command-caveat>" },
+          ],
+        },
+      }),
+    ).toBeNull();
+  });
+
+  it("renders nothing for the post-compaction continuation record", () => {
+    expect(
+      transcriptRecordToChunk({
+        type: "user",
+        isCompactSummary: true,
+        isVisibleInTranscriptOnly: true,
+        message: {
+          role: "user",
+          content: "This session is being continued from a previous conversation…",
+        },
+      }),
+    ).toBeNull();
+  });
+
   it("renders nothing for an unrecognised or malformed record", () => {
     expect(transcriptRecordToChunk({ type: "brand-new-record-kind" })).toBeNull();
     expect(transcriptRecordToChunk({ type: "assistant" })).toBeNull();
