@@ -12,7 +12,12 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { composerHasTypedText, isHorizontalRule, promptBoxBody } from "./prompt-box";
+import {
+  composerHasTypedText,
+  isHorizontalRule,
+  ompComposerText,
+  promptBoxBody,
+} from "./prompt-box";
 
 const RULE = "─".repeat(60);
 const BLOCKED_SCREEN = readFileSync(
@@ -70,5 +75,53 @@ describe("composerHasTypedText", () => {
     // Fail-open: absence of evidence that a human is typing is not evidence
     // that they are.
     expect(composerHasTypedText(BLOCKED_SCREEN)).toBe(false);
+  });
+});
+
+/**
+ * omp's composer, captured live (spike 2026-08-06). Its typed text is drawn
+ * INSIDE the bottom border of the status box, with no caret anywhere — so the
+ * claude matcher above cannot see it however the region is located.
+ */
+describe("composerHasTypedText — omp", () => {
+  function ompScreen(bottomBorderContent: string): string {
+    return [
+      "╭─── omp v17.2.9 ──────────────────────────────────────╮",
+      "│      Welcome back!       │ Tips                      │",
+      "╰──────────────────────────┴───────────────────────────╯",
+      "",
+      "──────────────────────────────────────────────────────────",
+      " Update Available",
+      " New version 17.2.10 is available. Run: omp update",
+      "──────────────────────────────────────────────────────────",
+      "",
+      "╭──  Grok 4.5++ ·  high   ~/repo   main   4.7%/500K ──╮",
+      `╰─ ${bottomBorderContent}                                 ─╯`,
+    ].join("\n");
+  }
+
+  test("an empty omp composer is not typed-in", () => {
+    expect(composerHasTypedText(ompScreen(""))).toBe(false);
+  });
+
+  test("a half-typed omp composer is typed-in", () => {
+    expect(composerHasTypedText(ompScreen("half typed thing"))).toBe(true);
+  });
+
+  test("the Update Available banner is not mistaken for the composer", () => {
+    // This is the pre-#33 failure exactly: the last two horizontal rules on an
+    // omp screen fence that banner, which holds no caret, so the guard reported
+    // "nothing typed" for every omp screen — and the phone would overwrite a
+    // line the user was still writing.
+    expect(promptBoxBody(ompScreen("half typed thing"))).toEqual([
+      " Update Available",
+      " New version 17.2.10 is available. Run: omp update",
+    ]);
+    expect(ompComposerText(ompScreen("half typed thing"))).toBe("half typed thing");
+  });
+
+  test("an omp screen with no status box at all reports nothing typed", () => {
+    expect(ompComposerText("just some output\nand more")).toBeNull();
+    expect(composerHasTypedText("just some output\nand more")).toBe(false);
   });
 });

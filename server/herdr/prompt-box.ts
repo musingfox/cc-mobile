@@ -19,6 +19,12 @@
  * evidence that they are, and the alternative — refusing every prompt whose
  * screen we cannot parse — would make the whole feature unusable the first time
  * claude changes its box drawing.
+ *
+ * Since #33 omp's composer is located too, by a different rule — see
+ * `ompComposerText`. Before that this module silently failed open on every omp
+ * screen: it located the "Update Available" banner as the box and found no
+ * caret in it, so the phone would overwrite a half-typed line in the terminal
+ * without noticing.
  */
 
 /**
@@ -71,14 +77,52 @@ export function promptBoxBody(text: string): string[] | null {
 const CARET_LINE = /^\s*[❯>]\s?(.*)$/;
 
 /**
+ * omp's composer: the bottom border of its status box, with whatever has been
+ * typed drawn *inside the border line itself* (spike 2026-08-06):
+ *
+ *     ╭──   Grok 4.5++ ·  high   ~/repo   main   4.7%/500K ────────────╮
+ *     ╰─ half typed thing                                              ─╯
+ *
+ * Two things follow, and both matter. There is no caret anywhere, so the claude
+ * matcher above returns `false` however the region is located — which is why
+ * this needed a matcher and not only a locator (#33). And the region is a
+ * single line, not a body between rules: omp's only horizontal rules belong to
+ * the transient "Update Available" banner, so `promptBoxBody` locates that
+ * banner instead and reports a composer nobody is typing in.
+ */
+const OMP_COMPOSER_LINE = /^\s*╰─(.*?)─╯\s*$/;
+
+/**
+ * The text omp shows in its composer, or `null` when this screen has no omp
+ * composer on it. Empty string means the composer is there and empty.
+ */
+export function ompComposerText(text: string): string | null {
+  const lines = text.split("\n");
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const match = OMP_COMPOSER_LINE.exec(lines[i] ?? "");
+    if (match?.[1] !== undefined) return match[1].trim();
+  }
+  return null;
+}
+
+/**
  * True only when the composer positively shows typed text.
  *
  * Note this is asked ONLY of the box region: the same caret marks every
  * submitted turn in the scrollback above it (`❯ Run this exact bash command…`),
  * so a whole-screen search would read a session's own history as half-typed
  * input and refuse every prompt forever.
+ *
+ * Both terminals are checked on the same screen, and nothing says which agent
+ * drew it. That is deliberate — the shapes cannot collide (claude has no
+ * `╰─…─╯` composer, omp has no caret line inside a rule-bounded box), and the
+ * caller is the send path, which would otherwise have to resolve a kind before
+ * every prompt it injects.
  */
 export function composerHasTypedText(text: string): boolean {
+  const omp = ompComposerText(text);
+  if (omp !== null) return omp.length > 0;
+
   const body = promptBoxBody(text);
   if (!body) return false;
   return body.some((line) => {
