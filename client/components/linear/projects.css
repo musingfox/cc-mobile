@@ -191,6 +191,9 @@
 /* Footer (shared) ------------------------------------------ */
 
 .lin-projects-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   padding: 10px 16px;
   background: #17171a;
   border-top: 1px solid rgba(255, 255, 255, 0.07);
