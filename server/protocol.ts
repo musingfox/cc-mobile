@@ -179,8 +179,14 @@ const StreamEndMessage = z.object({
 const PermissionOptionSchema = z.object({
   id: z.string(),
   label: z.string(),
-  /** The key the server presses in the pane when this option is chosen. */
-  keystroke: z.string(),
+  /**
+   * The key the server presses in the pane when this option is chosen — where
+   * a single key chooses it. Absent on omp (#33), whose options are unnumbered
+   * and reached by arrow keys, so the keys depend on where the terminal's own
+   * cursor is when the answer arrives. The client never reads this field; it
+   * answers with `optionId` and the server works out the keystrokes.
+   */
+  keystroke: z.string().optional(),
 });
 
 /**

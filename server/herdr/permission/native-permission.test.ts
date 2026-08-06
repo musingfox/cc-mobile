@@ -257,3 +257,99 @@ describe("native permission across a disconnect", () => {
     expect(h.permission.pendingCount()).toBe(0);
   });
 });
+
+/**
+ * The same flow on an omp pane. What differs is the answer: omp's options carry
+ * no key of their own, so the keystrokes are a distance measured against the
+ * screen at answer time, not at emit time.
+ */
+describe("PermissionAnswerKeySend — omp", () => {
+  // U+F054, the Nerd Font chevron omp draws in front of the selected row.
+  // Written as an escape: the glyph itself is invisible in most editors and
+  // does not survive every way a file gets written.
+  const CURSOR = "\uF054";
+
+  function ompScreen(selected: 0 | 1): string {
+    return [
+      "──────────────────────────────────────────────────────",
+      "",
+      " Allow tool: bash",
+      " Command: echo hello",
+      "",
+      selected === 0 ? ` ${CURSOR} Approve` : "   Approve",
+      selected === 1 ? ` ${CURSOR} Deny` : "   Deny",
+      "",
+      " up/down navigate  enter select  esc cancel",
+      "",
+      "──────────────────────────────────────────────────────",
+    ].join("\n");
+  }
+
+  test("an omp prompt reaches the phone with the terminal's own two options", async () => {
+    const h = harness();
+    h.screen.text = ompScreen(0);
+
+    await h.permission.onStatus(PANE, "blocked");
+
+    const request = h.sent.find((msg) => msg.type === "permission_request");
+    expect(request?.tool).toEqual({ name: "bash", parameters: { text: "Command: echo hello" } });
+    expect(request?.options).toEqual([
+      { id: "0", label: "Approve" },
+      { id: "1", label: "Deny" },
+    ]);
+  });
+
+  test("choosing Deny travels down from the cursor and presses Enter", async () => {
+    const h = harness();
+    h.screen.text = ompScreen(0);
+    await h.permission.onStatus(PANE, "blocked");
+
+    await h.permission.resolve("r1", { optionId: "1" });
+
+    expect(h.keys).toEqual([{ pane: PANE, keys: ["Down", "Enter"] }]);
+  });
+
+  test("the distance is measured when the answer lands, not when it was shown", async () => {
+    const h = harness();
+    h.screen.text = ompScreen(0);
+    await h.permission.onStatus(PANE, "blocked");
+    // A human at the terminal moved the selection while the phone was deciding.
+    // Same question, so the answer still goes — but from where the cursor IS.
+    h.screen.text = ompScreen(1);
+
+    await h.permission.resolve("r1", { optionId: "0" });
+
+    expect(h.keys).toEqual([{ pane: PANE, keys: ["Up", "Enter"] }]);
+  });
+
+  test("the legacy allow form takes omp's first option, not a digit", async () => {
+    const h = harness();
+    h.screen.text = ompScreen(1);
+    await h.permission.onStatus(PANE, "blocked");
+
+    await h.permission.resolve("r1", { allow: true });
+
+    expect(h.keys).toEqual([{ pane: PANE, keys: ["Up", "Enter"] }]);
+  });
+
+  test("the legacy deny form still presses esc, which is what omp labels it", async () => {
+    const h = harness();
+    h.screen.text = ompScreen(0);
+    await h.permission.onStatus(PANE, "blocked");
+
+    await h.permission.resolve("r1", { allow: false });
+
+    expect(h.keys).toEqual([{ pane: PANE, keys: ["esc"] }]);
+  });
+
+  test("an option this prompt does not offer sends nothing", async () => {
+    const h = harness();
+    h.screen.text = ompScreen(0);
+    await h.permission.onStatus(PANE, "blocked");
+
+    await h.permission.resolve("r1", { optionId: "7" });
+
+    expect(h.keys).toEqual([]);
+    expect(h.sent.some((msg) => msg.code === "permission_option_unknown")).toBe(true);
+  });
+});

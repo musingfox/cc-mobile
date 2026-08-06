@@ -16,7 +16,13 @@
  * Arming state is never trusted at fire time.
  */
 
-import { type ParsedPrompt, type PromptOption, parseBlockedPrompt } from "./prompt-parse";
+import { ompAnswerKeys } from "./omp-prompt";
+import {
+  type ParsedPrompt,
+  type PromptDialect,
+  type PromptOption,
+  parseBlockedPrompt,
+} from "./prompt-parse";
 
 export type ClientSink = (msg: Record<string, unknown>) => void;
 
@@ -71,6 +77,11 @@ export interface PendingNativePermission {
   /** herdr `pane_id` — the wire session key and the send target (Decision H5). */
   sessionId: string;
   fingerprint: string;
+  /**
+   * Whose prompt this is. Absent when the screen could not be parsed at all,
+   * where the only offered action is Cancel and `esc` is the only key sent.
+   */
+  dialect?: PromptDialect;
   /** The pane revision the prompt was read at; a staleness cursor for diagnostics. */
   paneRevision: number;
   origin: "self" | "foreign";
@@ -145,6 +156,7 @@ export function createNativePermission(options: NativePermissionOptions) {
       requestId,
       sessionId,
       fingerprint: parsed?.fingerprint ?? UNPARSED_FINGERPRINT,
+      ...(parsed ? { dialect: parsed.dialect } : {}),
       paneRevision: sample.revision,
       origin,
       options: parsed ? parsed.options : CANCEL_ONLY_OPTIONS,
@@ -267,8 +279,9 @@ export function createNativePermission(options: NativePermissionOptions) {
     const entry = pending.get(sessionId);
     if (!entry) return false;
 
-    const keystroke = keystrokeFor(entry, answer);
-    if (!keystroke) {
+    // Checked before the guard read so an option this prompt does not offer is
+    // refused without an RPC — the guard's job is freshness, not validation.
+    if (!offeredOption(entry, answer)) {
       sendError(
         sessionId,
         "permission_option_unknown",
@@ -288,8 +301,22 @@ export function createNativePermission(options: NativePermissionOptions) {
       return true;
     }
 
+    // Derived from the guard's own read, never from the emit-time snapshot: on
+    // omp the answer is a distance to travel, and a human at the terminal may
+    // have moved the cursor since the phone was shown this prompt.
+    const keys = keysFor(entry, answer, guard.parsed);
+    if (!keys) {
+      drop(sessionId);
+      sendError(
+        sessionId,
+        "permission_prompt_stale",
+        "The terminal's selection could not be read; nothing was sent.",
+      );
+      return true;
+    }
+
     try {
-      await client.paneSendKeys(sessionId, [keystroke]);
+      await client.paneSendKeys(sessionId, keys);
     } catch (error) {
       warn(`${sessionId}: pane.send_keys failed: ${describe(error)}`);
       sendError(
@@ -303,24 +330,61 @@ export function createNativePermission(options: NativePermissionOptions) {
     return true;
   }
 
-  /**
-   * Which key answers this request.
-   *
-   * The legacy `{allow}` form is mapped conservatively (Decision M14): a denial
-   * becomes `esc`, and an approval becomes the terminal's FIRST option — the
-   * one-shot "Yes". An old client's "allow for this session" therefore approves
-   * once rather than granting a standing permission nobody re-confirmed.
-   */
-  function keystrokeFor(
+  /** Which of this prompt's options the answer names; `undefined` for none. */
+  function chosenIndex(
     entry: PendingNativePermission,
     answer: { optionId?: string; allow?: boolean },
-  ): string | undefined {
+  ): number | undefined {
     if (answer.optionId !== undefined) {
-      return entry.options.find((option) => option.id === answer.optionId)?.keystroke;
+      const index = entry.options.findIndex((option) => option.id === answer.optionId);
+      return index === -1 ? undefined : index;
     }
-    if (answer.allow === false) return "esc";
-    if (answer.allow === true) return entry.options[0]?.keystroke;
+    // The legacy `{allow}` form, mapped conservatively (Decision M14): an
+    // approval becomes the terminal's FIRST option — the one-shot "Yes" — so an
+    // old client's "allow for this session" approves once rather than granting
+    // a standing permission nobody re-confirmed. A denial is `esc` and needs no
+    // option at all.
+    if (answer.allow === true) return entry.options.length > 0 ? 0 : undefined;
     return undefined;
+  }
+
+  /** Whether this answer names something this prompt actually offers. */
+  function offeredOption(
+    entry: PendingNativePermission,
+    answer: { optionId?: string; allow?: boolean },
+  ): boolean {
+    if (answer.allow === false) return true;
+    return chosenIndex(entry, answer) !== undefined;
+  }
+
+  /**
+   * The keys that answer this request, read against the screen as it is NOW.
+   *
+   * `esc` stays the one automated answer and needs no option: it is what a
+   * denial means on both terminals, and what omp itself labels the key
+   * (`esc cancel`, spike 2026-08-06 — after which omp wrote a
+   * `Tool call denied by user` result and carried the turn on).
+   *
+   * `undefined` means "cannot be determined safely" and blocks the send. That
+   * happens on omp when the current selection could not be read: Enter would
+   * then choose whatever the cursor happens to sit on, which on a two-option
+   * Approve/Deny prompt is a coin flip between allowing and refusing a tool.
+   */
+  function keysFor(
+    entry: PendingNativePermission,
+    answer: { optionId?: string; allow?: boolean },
+    fresh: ParsedPrompt | null,
+  ): string[] | undefined {
+    if (answer.optionId === undefined && answer.allow === false) return ["esc"];
+
+    const index = chosenIndex(entry, answer);
+    if (index === undefined) return undefined;
+
+    if (entry.dialect === "omp") {
+      return ompAnswerKeys(index, fresh?.selectedIndex);
+    }
+    const keystroke = entry.options[index]?.keystroke;
+    return keystroke ? [keystroke] : undefined;
   }
 
   /**
@@ -331,19 +395,29 @@ export function createNativePermission(options: NativePermissionOptions) {
    * terminal between emit and tap would let "press 2" approve something the user
    * on the phone never saw. Any RPC failure counts as "cannot prove it is
    * current" and blocks the keystroke.
+   *
+   * Returns the fresh parse (rather than just "yes") because the answer itself
+   * is computed from it: an omp keystroke is a distance from wherever the
+   * terminal's cursor is at this moment. `null` on an unparseable screen whose
+   * fingerprint nonetheless matches — that pairing only answers with `esc`,
+   * which needs nothing read.
    */
-  async function guardStillCurrent(entry: PendingNativePermission): Promise<boolean> {
+  async function guardStillCurrent(
+    entry: PendingNativePermission,
+  ): Promise<{ ok: true; parsed: ParsedPrompt | null } | undefined> {
     try {
       const agent = await client.agentGet(entry.sessionId);
-      if (agent.agent_status !== "blocked") return false;
+      if (agent.agent_status !== "blocked") return undefined;
     } catch (error) {
       warn(`${entry.sessionId}: agent.get failed, refusing to send keys: ${describe(error)}`);
-      return false;
+      return undefined;
     }
 
     const sample = await readPrompt(entry.sessionId);
-    if (!sample) return false;
-    return (sample.parsed?.fingerprint ?? UNPARSED_FINGERPRINT) === entry.fingerprint;
+    if (!sample) return undefined;
+    if ((sample.parsed?.fingerprint ?? UNPARSED_FINGERPRINT) !== entry.fingerprint)
+      return undefined;
+    return { ok: true, parsed: sample.parsed };
   }
 
   /**
