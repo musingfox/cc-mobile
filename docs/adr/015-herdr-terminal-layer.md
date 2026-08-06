@@ -141,3 +141,19 @@ herdr integration install claude
 - 「hook 讀回複用 ADR-011 的機制」**作廢**：讀回改自 transcript，權限改自螢幕。
 - ToS §3(7)「無 client = 全 deny + 行程暫停」的意圖以 `UnattendedDenyForSelfLaunched` 承接並收窄（見上）：自動送出的鍵只有 `esc`，永遠不會是同意。
 - `events.subscribe` 改為單一全域 `pane.updated` 訂閱（M5）：`pane.agent_status_changed` 需要 `pane_id`，對還沒列舉過的 pane 不可能訂閱。
+
+## 2026-08-06 增修：列表放寬到所有 agent 種類（#30）
+
+### 列表不再以種類過濾
+
+`agent.list` 回來的條目一律列出，不再只留 `agent === "claude"`。#29 的 H1 說「機器上每一個 claude 都看得到」，而使用者真正要的是「機器上每一個 agent 都看得到」——過濾掉別種 agent 等於把一個活著的 session 從手機上抹掉，只因為 cc-mobile 讀不回它的對話。
+
+herdr 回報的種類（`agent`）**原樣**進 descriptor 與 wire，不做 enum、不做正規化：herdr 0.8.0 的 label 清單有 21 個且隨版本增減，複製一份到這裡只會讓 daemon 端新增一個標籤就讓 parse 失敗。這與 `ReportedAgentStatusSchema`（schema.ts）同一條理由。
+
+herdr 沒說出種類時（欄位缺席或空字串），descriptor **不帶** `agent` 鍵。缺席是「偵測未完成」，不是「這是 claude」——預設成 claude 會讓查表找錯檔案。
+
+### `readable` 的新語意，仍然只是揭露
+
+`readable = 有 transcript key 且該種類有註冊的 reader`。reader 註冊表（`server/agents/transcript-readers.ts`）目前只有 claude 一筆；omp 的 reader 是 #32。未偵測出的種類靠查表自然落空，沒有為它另寫的特例分支。
+
+`readable` 的地位比照 H4 的 `gated`：**只揭露，不封鎖**。程式碼中沒有任何路徑因為 `readable === false` 而拒絕驅動、拒絕讀回或拒絕權限流程；實際讀不到只來自註冊表回 `null`，卡片上是一個 `no readback` 標示。`drivable` 依然硬編 `true`，種類永遠不會把它打成 `false`。

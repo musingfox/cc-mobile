@@ -211,6 +211,36 @@ describe("GlobalClaudeSessionListing", () => {
     expect(Object.keys(sessions[0] ?? {})).not.toContain("agent");
   });
 
+  test("marks a session readable only when its kind has a reader and it has a key", async () => {
+    const { client } = fakeClient({
+      agents: [
+        agentEntry(),
+        agentEntry({ pane_id: "w4A:p1", workspace_id: "w4A", agent_session: undefined }),
+        agentEntry({ pane_id: "w6C:p1", workspace_id: "w6C", agent: "omp" }),
+        agentEntry({ pane_id: "w9:p1", workspace_id: "w9", agent: undefined }),
+      ],
+      workspaces: [
+        workspace("w3V", "dev"),
+        workspace("w4A", "dev"),
+        workspace("w6C", "dev"),
+        workspace("w9", "dev"),
+      ],
+    });
+
+    const sessions = await listClaudeSessions({ client, warn: () => {} });
+
+    // claude with a transcript key: the one case cc-mobile can read back.
+    expect(sessions[0]?.readable).toBe(true);
+    // claude with no key: nothing to open.
+    expect(sessions[1]?.readable).toBe(false);
+    // A key exists, but no reader is registered for omp (#32) — and the flag
+    // costs the pane nothing else: it still takes a prompt.
+    expect(sessions[2]).toMatchObject({ readable: false, drivable: true });
+    // No kind reported: the reader lookup misses, exactly as an unregistered
+    // kind does. There is no branch here that names "undetected".
+    expect(sessions[3]?.readable).toBe(false);
+  });
+
   test("omits a pane whose claude has exited and keeps the rest", async () => {
     const { client } = fakeClient({
       agents: [agentEntry(), agentEntry({ pane_id: "w4A:p1", workspace_id: "w4A" })],
