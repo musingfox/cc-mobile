@@ -95,7 +95,12 @@ a page reload.
 { type: "capabilities", sessionId: string, commands: string[], agents: string[], model: string }
 { type: "terminal_created", claudeUuid: string, terminalName: string, paneRef: string }
 { type: "terminal_teardown_result", claudeUuid: string, killed: boolean }
-{ type: "terminal_sessions", claudeUuids: string[], unknownUuids: string[],
+{ type: "terminal_sessions",
+  sessions: { sessionId: string, agent?: string, agentSessionValue: string | null,
+              cwd: string, origin: "self" | "foreign", drivable: boolean,
+              readable: boolean, gated: boolean,
+              state?: "idle" | "running" | "requires_action" }[],
+  claudeUuids: string[],
   states?: Record<string, "idle" | "running" | "requires_action"> }
 { type: "session_state", sessionId: string, state: "idle" | "running" | "requires_action" }
 { type: "error", code: string, message: string, sessionId?: string }
@@ -105,8 +110,26 @@ a page reload.
 `terminal_sessions` doubles as the status bootstrap: `states` carries what herdr
 says each live session is doing, read from one `session.snapshot` call. It is
 optional — a daemon hiccup degrades it to `{}` rather than failing the reply —
-and a uuid absent from the map means "no claim", never "idle". `session_created`,
-`session_list` and `session_history` were removed in #26 and are refused.
+and a pane id absent from the map means "no claim", never "idle". `claudeUuids`
+mirrors `sessions[].sessionId`; the name is outdated (they are pane ids of every
+kind of agent since #30) and kept so a cached bundle keeps reconciling.
+`unknownUuids` was removed in #29 with the startup remount scan that produced it.
+`session_created`, `session_list` and `session_history` were removed in #26 and
+are refused.
+
+`sessions[]` lists **every** pane herdr's `agent.list` returns, whatever kind of
+agent is running in it (#30). `agent` is the kind herdr detected, passed through
+verbatim — no enum and no normalisation, because the daemon's label vocabulary is
+its own and grows between versions, and a label this build has not heard of must
+not fail the parse. **An absent `agent` means herdr has not detected a kind yet;
+it must never be read as claude.** The value is snapshot-time: no message ever
+pushes a kind on its own, so a detection that completes later reaches the client
+only when it asks for the list again (i.e. on reconnect).
+
+`readable:true` means the session has a transcript key **and** its kind has a
+registered transcript reader (claude today; omp is #32). Like `gated` it is
+disclosure only — nothing refuses to drive, read back or ask permission because
+it is `false`, and `drivable` stays `true` for every kind.
 
 Note: `stream_chunk.chunk` contains raw claude message objects (e.g., `{ type: "assistant", message: { content: [...] } }`). The frontend's `extractTextFromChunk()` parses these into displayable text.
 

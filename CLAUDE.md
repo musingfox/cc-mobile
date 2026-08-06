@@ -94,13 +94,30 @@ are.
 
 Since #29 the session key on the wire is herdr's `pane_id`, not a claude uuid: it
 exists for every pane and survives a `/clear`. `terminal_sessions` carries
-`sessions[]` — one descriptor per claude running **anywhere on the machine**,
+`sessions[]` — one descriptor per **agent** running **anywhere on the machine**,
 including ones the user started in their own terminal — with
-`{sessionId, agentSessionValue, cwd, origin, drivable, readable, gated, state?}`.
-`gated:false` means that pane's claude runs with no permission gate; it is a
-badge, never a lock (the composer stays enabled). `unknownUuids` is gone with the
-startup remount scan that produced it; `claudeUuids` mirrors `sessions[].sessionId`
-and `states` is pane-keyed.
+`{sessionId, agent?, agentSessionValue, cwd, origin, drivable, readable, gated, state?}`.
+
+Since #30 the listing is no longer filtered to claude: every entry herdr's
+`agent.list` returns is listed, and `agent` names the kind it detected
+("claude", "omp", …) **verbatim** — no enum, no normalisation, since herdr's
+label vocabulary is its own and grows between versions. **An absent `agent` means
+herdr has not detected a kind yet; it never means claude.** It is a snapshot-time
+value — nothing pushes a kind on its own, so a late detection is picked up the
+next time the client asks for the list.
+
+`readable:true` now means "there is a transcript key **and** that kind has a
+registered reader" (only claude has one; omp is #32). Like `gated`, `readable` is
+a badge and never a lock: `drivable` stays `true` whatever the kind, and the
+composer stays enabled. `unknownUuids` is gone with the startup remount scan that
+produced it; `claudeUuids` mirrors `sessions[].sessionId` (an outdated name kept
+for cached bundles — it holds pane ids of every kind now) and `states` is
+pane-keyed.
+
+Until #33 a pane whose kind is known to be something other than claude does not
+enter the permission flow: `blocked` there is not turned into a
+`permission_request`, because the screen parser and its keystrokes are claude's.
+A pane whose kind herdr has not reported is still forwarded.
 
 Refused by the Zod gate: `list_sessions`, `resume_session`, `set_session_title`,
 `session_list`, `session_history`, `session_created` (all #26), plus #25's

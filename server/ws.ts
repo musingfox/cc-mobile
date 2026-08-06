@@ -46,6 +46,8 @@ export interface WsBackend extends TerminalControlBackend {
   listSessionDescriptors?(): Promise<
     {
       sessionId: string;
+      /** The kind herdr detected; absent when it has not detected one. */
+      agent?: string;
       agentSessionValue: string | null;
       cwd: string;
       origin: "self" | "foreign";
@@ -433,6 +435,11 @@ export function createWsPlugin(
               // wire.
               sessions: sessions.map((session) => ({
                 sessionId: session.sessionId,
+                // Same rule as `state`: the key exists only when there is
+                // something to say. An `agent: undefined` on the wire would
+                // read as "detected nothing", which is a claim herdr did not
+                // make.
+                ...(session.agent ? { agent: session.agent } : {}),
                 agentSessionValue: session.agentSessionValue,
                 cwd: session.cwd,
                 origin: session.origin,

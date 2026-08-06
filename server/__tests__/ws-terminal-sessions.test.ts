@@ -129,6 +129,36 @@ describe("TerminalSessionsPayload — handler", () => {
     expect(harness.received.some((msg) => msg.type === "event")).toBe(false);
   });
 
+  test("each card is told which kind of agent it is looking at", async () => {
+    harness = await startWsHarness(
+      backendListing([
+        descriptor({ agent: "claude" }),
+        descriptor({ sessionId: "w6C:p1", origin: "foreign", agent: "omp" }),
+      ]),
+    );
+
+    harness.send({ type: "list_terminal_sessions" });
+    const reply = await harness.waitFor((msg) => msg.type === "terminal_sessions");
+
+    const sessions = reply.sessions as Record<string, unknown>[];
+    expect(sessions[0]?.agent).toBe("claude");
+    expect(sessions[1]?.agent).toBe("omp");
+    // The id mirror is kind-blind: it is every listed pane, claude or not.
+    expect(reply.claudeUuids).toEqual(["w3V:p1", "w6C:p1"]);
+  });
+
+  test("a pane whose kind herdr has not detected carries no kind at all", async () => {
+    harness = await startWsHarness(backendListing([descriptor()]));
+
+    harness.send({ type: "list_terminal_sessions" });
+    const reply = await harness.waitFor((msg) => msg.type === "terminal_sessions");
+
+    const sessions = reply.sessions as Record<string, unknown>[];
+    // Not `agent: undefined`: an absent key is the only way to say "herdr has
+    // not said", which the client must not round down to claude.
+    expect(Object.keys(sessions[0] ?? {})).not.toContain("agent");
+  });
+
   test("no live sessions answers with an empty list, not silence", async () => {
     harness = await startWsHarness(backendListing([]));
 
@@ -184,6 +214,23 @@ describe("TerminalSessionsPayload — handler", () => {
     // freeze every restored card instead of just dimming it.
     expect(reply.states).toEqual({});
     expect(reply.claudeUuids).toEqual(["w3V:p1"]);
+    expect(harness.received.some((msg) => msg.type === "error")).toBe(false);
+  });
+
+  test("a listing failure answers an empty list rather than an error frame", async () => {
+    harness = await startWsHarness({
+      ...backendListing([]),
+      listSessionDescriptors: async () => {
+        throw new Error("socket closed");
+      },
+    });
+
+    harness.send({ type: "list_terminal_sessions" });
+    const reply = await harness.waitFor((msg) => msg.type === "terminal_sessions");
+
+    expect(reply.sessions).toEqual([]);
+    // An error frame here would surface as a failed action on a screen the user
+    // only asked to refresh; "nothing is running" is the answer they can act on.
     expect(harness.received.some((msg) => msg.type === "error")).toBe(false);
   });
 

@@ -141,6 +141,52 @@ describe("ServerMessage schema", () => {
     });
     expect(result.success).toBe(true);
   });
+  test("a session descriptor's agent kind survives the parse verbatim", () => {
+    const result = ServerMessage.safeParse({
+      type: "terminal_sessions",
+      sessions: [
+        {
+          sessionId: "w6C:p1",
+          agentSessionValue: null,
+          cwd: "/repo",
+          origin: "foreign",
+          drivable: true,
+          readable: false,
+          gated: true,
+          agent: "omp",
+        },
+      ],
+      claudeUuids: ["w6C:p1"],
+    });
+
+    // z.object strips what it does not declare, so an undeclared `agent` would
+    // never reach the phone at all — the field has to be in the schema.
+    expect(result.success).toBe(true);
+    const sessions = result.success && "sessions" in result.data ? result.data.sessions : [];
+    expect(sessions[0]?.agent).toBe("omp");
+  });
+
+  test("a non-string agent kind is refused", () => {
+    const result = ServerMessage.safeParse({
+      type: "terminal_sessions",
+      sessions: [
+        {
+          sessionId: "w6C:p1",
+          agentSessionValue: null,
+          cwd: "/repo",
+          origin: "foreign",
+          drivable: true,
+          readable: false,
+          gated: true,
+          agent: 42,
+        },
+      ],
+      claudeUuids: ["w6C:p1"],
+    });
+
+    expect(result.success).toBe(false);
+  });
+
   test("server_config invalid permissionMode", () => {
     const result = ServerMessage.safeParse({
       type: "server_config",

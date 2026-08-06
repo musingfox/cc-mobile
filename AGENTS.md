@@ -76,6 +76,27 @@ bootstrap: it carries an optional `states` map (`claudeUuid` → `idle` |
 `running` | `requires_action`) so the phone's first paint after a reload is
 correct without waiting for a status event.
 
+`terminal_sessions.sessions[]` carries one descriptor per **agent** running
+anywhere on the machine, keyed by herdr's `pane_id` — `{sessionId, agent?,
+agentSessionValue, cwd, origin, drivable, readable, gated, state?}`. Since #30
+nothing is filtered by kind: every entry `agent.list` returns is listed, and
+`agent` names the detected kind ("claude", "omp", …) **verbatim** — no enum, no
+normalisation, since herdr's label vocabulary is its own and grows between
+versions. **An absent `agent` means herdr has not detected a kind yet; it never
+means claude.** It is a snapshot-time value, refreshed only when the client asks
+for the list again.
+
+`readable:true` means "there is a transcript key **and** that kind has a
+registered reader" (only claude has one; omp is #32). Like `gated`, it is a badge
+and never a lock: `drivable` stays `true` whatever the kind. `claudeUuids`
+mirrors `sessions[].sessionId` — an outdated name kept for cached bundles, since
+it now holds pane ids of every kind.
+
+Until #33 a pane whose kind is known to be something other than claude does not
+enter the permission flow: `blocked` there is not turned into a
+`permission_request`, because the screen parser and its keystrokes are claude's.
+A pane whose kind herdr has not reported is still forwarded.
+
 Refused by the Zod gate: `list_sessions`, `resume_session`, `set_session_title`,
 `session_list`, `session_history`, `session_created` (all #26), plus #25's
 `new_session`, `send`, `command`, `pty_send`, `get_session_info`,

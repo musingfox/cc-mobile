@@ -296,19 +296,36 @@ const SessionStateMessage = z.object({
 });
 
 /**
- * One live claude, as the daemon reports it. `sessionId` is herdr's `pane_id`
- * (Decision H5): it exists for every pane, including ones with no claude session
- * uuid, and it survives a `/clear` that rotates `agentSessionValue`.
+ * One live agent pane, as the daemon reports it. `sessionId` is herdr's
+ * `pane_id` (Decision H5): it exists for every pane, including ones with no
+ * agent session uuid, and it survives a `/clear` that rotates
+ * `agentSessionValue`.
  *
  * The three flags are what let a card render honestly instead of guessing:
- * `readable:false` means replies cannot be read back (no transcript key),
- * `origin:"foreign"` means the user opened it in their own terminal (so no close
- * affordance — Decision M13), and `gated:false` means claude runs there with no
- * permission gate. `gated` is a warning, never a lock: such panes stay drivable
- * by the owner's own ruling (Decision H4).
+ * `readable:false` means replies cannot be read back (no transcript key, or no
+ * reader for that kind), `origin:"foreign"` means the user opened it in their
+ * own terminal (so no close affordance — Decision M13), and `gated:false` means
+ * the agent runs there with no permission gate. `gated` is a warning, never a
+ * lock: such panes stay drivable by the owner's own ruling (Decision H4).
  */
 const TerminalSessionDescriptor = z.object({
   sessionId: z.string(),
+  /**
+   * Which kind of agent herdr detected in that pane ("claude", "omp", …),
+   * verbatim and never normalised — the daemon's vocabulary is its own and
+   * grows between versions, so no enum may refuse a label this build has not
+   * heard of.
+   *
+   * **Absent means herdr has not detected a kind yet — never "assume claude".**
+   * A client that defaults it would label a pane wrongly and, worse, invite the
+   * server to go looking for a claude transcript that does not exist.
+   *
+   * Snapshot-time value: it is whatever the daemon said when this listing was
+   * built. Nothing in the tree pushes a kind on its own — no event, no
+   * `session_state` field — so a pane whose detection completes later is
+   * corrected the next time the client asks for the list (i.e. on reconnect).
+   */
+  agent: z.string().optional(),
   agentSessionValue: z.string().nullable(),
   cwd: z.string(),
   origin: z.enum(["self", "foreign"]),
@@ -321,12 +338,19 @@ const TerminalSessionDescriptor = z.object({
 /** Reply to list_terminal_sessions. Empty list means "none live", not "unknown". */
 const TerminalSessionsMessage = z.object({
   type: z.literal("terminal_sessions"),
-  /** Every claude on the machine, foreign ones included (Decision H1). */
+  /**
+   * Every agent pane on the machine, foreign ones included (Decision H1) and
+   * whatever kind is running in them (#30).
+   */
   sessions: z.array(TerminalSessionDescriptor),
   /**
    * The same sessions as bare ids, in the same order — `sessions.map(s =>
    * s.sessionId)`. Kept so a client that only reconciles ids keeps working;
    * `unknownUuids` is gone with the remount scan that produced it (M12).
+   *
+   * The name is outdated and kept anyway: these are pane ids of every kind of
+   * agent since #30, not claude uuids. Renaming it would break every cached
+   * PWA bundle for a field that is already only a mirror.
    */
   claudeUuids: z.array(z.string()),
   /**
