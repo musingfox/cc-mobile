@@ -35,6 +35,8 @@ interface SessionRowItem {
   ungated: boolean;
   /** Replies cannot be read back: herdr has no transcript key for that pane. */
   unreadable: boolean;
+  /** Another agent runs there, in herdr's wording. Absent when unknown. */
+  agent?: string;
   onClick: () => void;
 }
 
@@ -60,6 +62,9 @@ export default function ProjectDetailScreen({ cwd, onNavigate, onBack }: Props) 
         foreign: s.descriptor?.origin === "foreign",
         ungated: s.descriptor?.gated === false,
         unreadable: s.descriptor?.readable === false,
+        // Only a kind herdr actually reported, and only when it is not claude:
+        // an unlabelled pane stays unlabelled rather than being guessed at.
+        agent: s.descriptor?.agent !== "claude" ? s.descriptor?.agent : undefined,
         onClick: () => {
           setActiveSession(id);
           onNavigate("chat");
@@ -156,6 +161,7 @@ export default function ProjectDetailScreen({ cwd, onNavigate, onBack }: Props) 
                         <span className="lin-session-badge is-warn">no permission gate</span>
                       )}
                       {r.unreadable && <span className="lin-session-badge">no readback</span>}
+                      {r.agent && <span className="lin-session-badge">{r.agent}</span>}
                     </span>
                     <span className={`lin-session-live ${r.live ? "is-live" : "is-idle"}`}>
                       ● {r.live ? "Live" : "Active"}

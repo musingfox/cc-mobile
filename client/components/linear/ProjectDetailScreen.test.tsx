@@ -157,4 +157,71 @@ describe("ProjectDetailScreen session disclosure badges", () => {
 
     expect(badgeText(container)).toEqual([]);
   });
+
+  test("a session running another agent is marked with that agent's name", () => {
+    useAppStore.getState().upsertListedSession({
+      sessionId: "w6C:p1",
+      cwd: "/a",
+      origin: "foreign",
+      drivable: true,
+      readable: false,
+      gated: true,
+      agent: "omp",
+    });
+
+    const { container } = renderScreen("/a");
+
+    expect(badgeText(container)).toContain("omp");
+  });
+
+  test("the agent badge joins the existing disclosures rather than replacing them", () => {
+    useAppStore.getState().upsertListedSession({
+      sessionId: "w6C:p1",
+      cwd: "/a",
+      origin: "foreign",
+      drivable: true,
+      readable: false,
+      gated: true,
+      agent: "omp",
+    });
+
+    const { container } = renderScreen("/a");
+
+    expect(badgeText(container)).toEqual(["terminal", "no readback", "omp"]);
+  });
+
+  test("a claude session is not singled out with a kind badge", () => {
+    useAppStore.getState().upsertListedSession({
+      sessionId: "w1:p1",
+      cwd: "/a",
+      origin: "self",
+      drivable: true,
+      readable: true,
+      gated: true,
+      agent: "claude",
+    });
+
+    const { container } = renderScreen("/a");
+
+    expect(badgeText(container)).toEqual([]);
+  });
+
+  test("an unlabelled session gets no kind badge and no guessed name", () => {
+    // herdr has not worked out what runs there. The card says nothing rather
+    // than assuming claude.
+    useAppStore.getState().upsertListedSession({
+      sessionId: "w9:p1",
+      cwd: "/a",
+      origin: "foreign",
+      drivable: true,
+      readable: true,
+      gated: true,
+    });
+
+    const { container } = renderScreen("/a");
+
+    expect(badgeText(container)).toEqual(["terminal"]);
+    expect(container.textContent).not.toContain("unknown");
+    expect(container.textContent).not.toContain("claude");
+  });
 });
