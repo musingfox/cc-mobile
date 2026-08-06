@@ -1,20 +1,25 @@
 // Wire fixtures for the herdr socket client unit tests.
 //
 // Provenance: shapes captured from a LIVE herdr daemon (0.7.5, protocol 17) via
-// read-only probe scripts (see docs referenced by issue #20). Constants marked
-// "derived" are constructed from live samples where no live capture of that
-// exact case exists; the field sets stay verbatim. Values (ids, paths, labels,
-// titles) are SANITIZED to neutral fake data — field names, types, nesting,
-// discriminator values, entry counts and byte-length class are unchanged.
+// read-only probe scripts (see docs referenced by issue #20). PONG_LINE was
+// recaptured at 0.8.0 / protocol 19; the rest still carry their 0.7.5 capture,
+// which stays valid because every method and result shape cc-mobile uses is
+// byte-identical between herdr v0.7.5 and v0.8.0 (both bumps in between touched
+// only the bincode terminal-attach wire — see SUPPORTED_PROTOCOL in client.ts).
+// Constants marked "derived" are constructed from live samples where no live
+// capture of that exact case exists; the field sets stay verbatim. Values (ids,
+// paths, labels, titles) are SANITIZED to neutral fake data — field names,
+// types, nesting, discriminator values, entry counts and byte-length class are
+// unchanged.
 //
 // Every constant is one complete response line WITHOUT the trailing "\n"
 // (the daemon terminates each response with a single newline).
 
-/** Live: ping -> pong (version 0.7.5, protocol 17). */
+/** Live: ping -> pong (version 0.8.0, protocol 19). */
 export const PONG_LINE =
-  '{"id":"fx","result":{"type":"pong","version":"0.7.5","protocol":17,"capabilities":{"live_handoff":true,"detached_server_daemon":true}}}';
+  '{"id":"fx","result":{"type":"pong","version":"0.8.0","protocol":19,"capabilities":{"live_handoff":true,"detached_server_daemon":true}}}';
 
-/** Derived from PONG_LINE: protocol bumped to 18 (incompatible daemon). */
+/** Derived from PONG_LINE: protocol left at 18 (incompatible daemon). */
 export const PONG_PROTOCOL_18_LINE =
   '{"id":"fx","result":{"type":"pong","version":"0.7.5","protocol":18,"capabilities":{"live_handoff":true,"detached_server_daemon":true}}}';
 

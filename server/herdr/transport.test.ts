@@ -48,7 +48,7 @@ describe("herdr transport (RpcRoundTrip)", () => {
     const result = (await transport.request("ping", {})) as Record<string, unknown>;
 
     expect(result.type).toBe("pong");
-    expect(result.version).toBe("0.7.5");
+    expect(result.version).toBe("0.8.0");
   });
 
   it("T2: line-buffers a ~13KB response delivered in 8192-byte chunks", async () => {

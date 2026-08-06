@@ -245,7 +245,7 @@ describe("HerdrStartupGate", () => {
       },
     });
 
-    await expect(verifyHerdrStartup(client)).rejects.toThrow(/protocol 17/);
+    await expect(verifyHerdrStartup(client)).rejects.toThrow(/protocol 19/);
   });
 
   test("rejects naming the socket path when the daemon is unreachable", async () => {
@@ -267,8 +267,8 @@ describe("HerdrStartupGate", () => {
       transport: {
         request: async () => ({
           type: "pong",
-          version: "0.7.5",
-          protocol: 17,
+          version: "0.8.0",
+          protocol: 19,
           capabilities: {},
         }),
       },

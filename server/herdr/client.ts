@@ -28,8 +28,19 @@ import {
   resolveSocketPath,
 } from "./transport";
 
-/** The single herdr wire protocol version this client understands (see ADR-015 / issue #20). */
-export const SUPPORTED_PROTOCOL = 17;
+/**
+ * The single herdr wire protocol version this client understands (see ADR-015 / issue #20).
+ *
+ * herdr counts one number for two protocols: the bincode terminal-attach wire
+ * and this JSON-RPC socket API. 17 -> 18 (e7fc85bf, kitty key releases) and
+ * 18 -> 19 (b76adc15, input lease lifecycle) both changed only the former,
+ * which cc-mobile never speaks -- every method and result shape used here is
+ * byte-identical between herdr v0.7.5 and v0.8.0. So a bump usually means
+ * nothing to us, and the equality check stays strict anyway: herdr's own
+ * client does the same (src/cli/protocol_guard.rs), and a floor check would
+ * trade one clear boot error for Zod failures scattered across call sites.
+ */
+export const SUPPORTED_PROTOCOL = 19;
 
 /** Default daemon-side wait budget when the caller passes no timeout_ms. */
 const DEFAULT_AGENT_WAIT_TIMEOUT_MS = 60_000;
