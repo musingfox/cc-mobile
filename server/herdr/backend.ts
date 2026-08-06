@@ -155,6 +155,7 @@ export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalB
       return resolveAgentTranscriptPath({
         agent: match.agent,
         sessionValue: match.agentSessionValue,
+        sessionKind: match.agentSessionKind,
         cwd: match.cwd,
       });
     },

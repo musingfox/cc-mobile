@@ -216,7 +216,7 @@ describe("GlobalClaudeSessionListing", () => {
       agents: [
         agentEntry(),
         agentEntry({ pane_id: "w4A:p1", workspace_id: "w4A", agent_session: undefined }),
-        agentEntry({ pane_id: "w6C:p1", workspace_id: "w6C", agent: "omp" }),
+        agentEntry({ pane_id: "w6C:p1", workspace_id: "w6C", agent: "codex" }),
         agentEntry({ pane_id: "w9:p1", workspace_id: "w9", agent: undefined }),
       ],
       workspaces: [
@@ -233,12 +233,75 @@ describe("GlobalClaudeSessionListing", () => {
     expect(sessions[0]?.readable).toBe(true);
     // claude with no key: nothing to open.
     expect(sessions[1]?.readable).toBe(false);
-    // A key exists, but no reader is registered for omp (#32) — and the flag
-    // costs the pane nothing else: it still takes a prompt.
+    // A key exists, but no reader is registered for codex — and the flag costs
+    // the pane nothing else: it still takes a prompt.
     expect(sessions[2]).toMatchObject({ readable: false, drivable: true });
     // No kind reported: the reader lookup misses, exactly as an unregistered
     // kind does. There is no branch here that names "undetected".
     expect(sessions[3]?.readable).toBe(false);
+  });
+
+  test("a path-key session is readable only once its file is actually there", async () => {
+    // omp reports its transcript path the instant it launches, but writes the
+    // file only when the first turn starts — a fresh omp nobody has spoken to
+    // has a key and no file for as long as it stays quiet (probe 2026-08-06:
+    // still absent after 120s of idling). Claiming readable there would promise
+    // a conversation that does not exist.
+    const OMP_PATH = "/home/u/.omp/agent/sessions/-dev/2026-08-06T13-53-02Z_019fd759.jsonl";
+    const ompSession = { agent: "omp", kind: "path", source: "herdr:omp", value: OMP_PATH };
+    const agents = [agentEntry({ agent: "omp", agent_session: ompSession })];
+
+    const before = await listClaudeSessions({
+      client: fakeClient({ agents }).client,
+      warn: () => {},
+      exists: async () => false,
+    });
+    expect(before[0]).toMatchObject({ readable: false, drivable: true });
+
+    // Same pane, same key, after the first turn wrote the file.
+    const after = await listClaudeSessions({
+      client: fakeClient({ agents }).client,
+      warn: () => {},
+      exists: async (path) => path === OMP_PATH,
+    });
+    expect(after[0]?.readable).toBe(true);
+  });
+
+  test("a claude key costs no fs call, so the listing never pays for the scan", async () => {
+    let checked = 0;
+
+    const sessions = await listClaudeSessions({
+      client: fakeClient({ agents: [agentEntry()] }).client,
+      warn: () => {},
+      exists: async () => {
+        checked += 1;
+        return false;
+      },
+    });
+
+    // An `id` key would need the multi-directory scan to answer "is it there",
+    // on every listing for every pane. It is not asked.
+    expect(sessions[0]?.readable).toBe(true);
+    expect(checked).toBe(0);
+  });
+
+  test("carries the session key's kind for the reader, but keeps it off the wire", async () => {
+    const OMP_PATH = "/home/u/.omp/agent/sessions/-dev/x.jsonl";
+    const { client } = fakeClient({
+      agents: [
+        agentEntry({
+          agent: "omp",
+          agent_session: { agent: "omp", kind: "path", source: "herdr:omp", value: OMP_PATH },
+        }),
+      ],
+    });
+
+    const sessions = await listClaudeSessions({ client, warn: () => {}, exists: async () => true });
+
+    // The reader needs it to know the key IS the file; ws.ts projects the wire
+    // fields by name, so it never reaches the phone.
+    expect(sessions[0]?.agentSessionKind).toBe("path");
+    expect(sessions[0]?.agentSessionValue).toBe(OMP_PATH);
   });
 
   test("omits a pane whose claude has exited and keeps the rest", async () => {

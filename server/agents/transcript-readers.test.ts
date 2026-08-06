@@ -50,7 +50,7 @@ describe("AgentTranscriptReaderRegistry", () => {
     const { fs, counts } = countingFs([`${PROJECTS}/-repo/${SESSION}.jsonl`], ["-repo"]);
 
     const resolved = await resolveAgentTranscriptPath({
-      agent: "omp",
+      agent: "codex",
       sessionValue: SESSION,
       cwd: "/repo",
       projectsDir: PROJECTS,
@@ -62,7 +62,55 @@ describe("AgentTranscriptReaderRegistry", () => {
     expect(resolved).toBeNull();
     expect(counts.readdir).toBe(0);
     expect(counts.exists).toBe(0);
-    expect(hasTranscriptReader("omp")).toBe(false);
+    expect(hasTranscriptReader("codex")).toBe(false);
+  });
+
+  test("an omp path key is the answer, with no directory scan at all", async () => {
+    // Live shape (probe 2026-08-06): herdr hands omp's file back directly,
+    // `{value:"/abs/….jsonl", agent:"omp", kind:"path", source:"herdr:omp"}`.
+    const OMP_PATH = "/home/u/.omp/agent/sessions/-repo/2026-08-06T13-53-02-265Z_019fd759.jsonl";
+    const { fs, counts } = countingFs([], []);
+
+    const resolved = await resolveAgentTranscriptPath({
+      agent: "omp",
+      sessionValue: OMP_PATH,
+      sessionKind: "path",
+      cwd: "/repo",
+      projectsDir: PROJECTS,
+      fs,
+    });
+
+    expect(resolved).toBe(OMP_PATH);
+    // The whole point of the path key: claude's derive-and-scan never runs.
+    expect(counts.readdir).toBe(0);
+    expect(counts.exists).toBe(0);
+    expect(hasTranscriptReader("omp")).toBe(true);
+  });
+
+  test("an omp key that is not an absolute path is refused rather than opened", async () => {
+    const { fs, counts } = countingFs([], []);
+
+    for (const [sessionKind, sessionValue] of [
+      // An id-kind key from a future herdr: locating it is claude's logic, and
+      // running that here would hunt through ~/.claude/projects for an omp.
+      ["id", SESSION],
+      // Relative or empty would resolve against the server's own cwd.
+      ["path", "sessions/x.jsonl"],
+      ["path", ""],
+      [undefined, "/abs/x.jsonl"],
+    ] as const) {
+      const resolved = await resolveAgentTranscriptPath({
+        agent: "omp",
+        sessionValue,
+        sessionKind,
+        cwd: "/repo",
+        projectsDir: PROJECTS,
+        fs,
+      });
+      expect(resolved).toBeNull();
+    }
+    expect(counts.readdir).toBe(0);
+    expect(counts.exists).toBe(0);
   });
 
   test("an undetected kind is not read back either, and never guessed as claude", async () => {

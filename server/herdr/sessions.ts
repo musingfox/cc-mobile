@@ -27,6 +27,7 @@
  */
 
 import { hasTranscriptReader } from "../agents/transcript-readers";
+import { defaultTranscriptFs } from "../transcript/path";
 import { type AgentState, STATE_BY_AGENT_STATUS } from "./agent-state";
 import { WORKSPACE_LABEL_PATTERN } from "./registry";
 import type { AgentInfo, PaneProcess, SessionSnapshot } from "./schema";
@@ -54,15 +55,23 @@ export interface SessionDescriptor {
   agent?: string;
   /** The agent's transcript key: `null` on a pane herdr has none for. */
   agentSessionValue: string | null;
+  /**
+   * What that key *is*, in herdr's words: `"path"` (the file itself — omp and
+   * pi) or `"id"` (a name the reader has to locate — claude). Server-side only,
+   * like `workspaceId`: it decides which reader logic runs, and the phone has
+   * no use for it. Absent when herdr did not say.
+   */
+  agentSessionKind?: string;
   cwd: string;
   /** "self" iff the workspace carries cc-mobile's `ccm-<uuid>` label. */
   origin: "self" | "foreign";
   /** Whether a prompt may be injected. Never gated on the permission mode (H4). */
   drivable: boolean;
   /**
-   * Whether replies can be read back: there is a transcript key AND this kind
-   * has a registered reader. Disclosure only, exactly like `gated` — nothing
-   * refuses to drive, read or ask permission because it is false.
+   * Whether replies can be read back: there is a transcript key, this kind has
+   * a registered reader, and — when the key is a path — the file is actually
+   * there. Disclosure only, exactly like `gated`: nothing refuses to drive,
+   * read or ask permission because it is false.
    */
   readable: boolean;
   /** Advisory: false means claude runs with no permission gate in that pane. */
@@ -83,6 +92,8 @@ export interface SessionListingOptions {
   /** Injectable so an e2e suite can assert on its own pane (Decision M9). */
   suppressLabel?: (label: string) => boolean;
   warn?: (message: string) => void;
+  /** fs seam for the path-kind readability check; must not reject. */
+  exists?: (path: string) => Promise<boolean>;
 }
 
 /**
@@ -115,6 +126,31 @@ function reportedKind(value: string | null | undefined): string | undefined {
 }
 
 /**
+ * Whether this pane's replies can be read back right now.
+ *
+ * Deliberately asymmetric on the last check. A `path` key names the file
+ * directly, so one `access()` answers "does the conversation exist yet" — and
+ * it has to be asked: omp reports its path the moment it launches and only
+ * writes the file when the first turn starts, so without this a brand-new omp
+ * would claim to be readable for the ~30s before there is anything to read
+ * (#32). An `id` key is claude's, and asking the same question there means the
+ * multi-directory scan `resolveTranscriptPath` does, on every listing, for
+ * every pane on the machine — for an answer that is effectively always yes,
+ * since claude has written the file by the time it has an id.
+ */
+async function isReadable(input: {
+  kind: string | undefined;
+  agentSessionKind: string | undefined;
+  agentSessionValue: string | null;
+  exists: (path: string) => Promise<boolean>;
+}): Promise<boolean> {
+  const { kind, agentSessionKind, agentSessionValue, exists } = input;
+  if (!hasTranscriptReader(kind) || agentSessionValue === null) return false;
+  if (agentSessionKind !== "path") return true;
+  return exists(agentSessionValue);
+}
+
+/**
  * Every agent pane the daemon knows about, newest listing wins. No kind is
  * filtered out: `agent.list` decides what exists, and this decides nothing.
  *
@@ -130,6 +166,7 @@ export async function listClaudeSessions(
   const suppressLabel =
     options.suppressLabel ?? ((label: string) => label.startsWith(E2E_LABEL_PREFIX));
   const warn = options.warn ?? ((message: string) => console.warn(`[herdr] sessions: ${message}`));
+  const exists = options.exists ?? defaultTranscriptFs.exists;
 
   let agents: AgentInfo[];
   try {
@@ -174,6 +211,7 @@ export async function listClaudeSessions(
       }
 
       const agentSessionValue = live.agent_session?.value ?? agent.agent_session?.value ?? null;
+      const agentSessionKind = live.agent_session?.kind ?? agent.agent_session?.kind;
       const state = STATE_BY_AGENT_STATUS[live.agent_status];
       // Live value first, exactly as the session key is taken: `agent.get` is
       // the fresher of the two reads, and detection can complete between them.
@@ -184,6 +222,7 @@ export async function listClaudeSessions(
         workspaceId: agent.workspace_id,
         ...(kind ? { agent: kind } : {}),
         agentSessionValue,
+        ...(agentSessionKind ? { agentSessionKind } : {}),
         cwd: live.cwd ?? live.foreground_cwd ?? cwdByPane.get(agent.pane_id) ?? "",
         origin: WORKSPACE_LABEL_PATTERN.test(label) ? "self" : "foreign",
         // Never gated on the kind: a pane running something cc-mobile cannot
@@ -192,7 +231,7 @@ export async function listClaudeSessions(
         drivable: true,
         // The lookup is the whole rule — an undetected kind falls out of it by
         // missing, with no branch of its own.
-        readable: hasTranscriptReader(kind) && agentSessionValue !== null,
+        readable: await isReadable({ kind, agentSessionKind, agentSessionValue, exists }),
         gated: await readGatedFlag(client, agent.pane_id, warn),
         ...(state ? { state } : {}),
       };

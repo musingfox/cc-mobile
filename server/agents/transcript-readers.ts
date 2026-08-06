@@ -10,7 +10,12 @@
  * is never touched on its behalf.
  *
  * Deliberately one map and one lookup: no plugin mechanism, no lifecycle hooks,
- * no config file. Registering a second reader (omp is #32) is one entry.
+ * no config file. Registering the second reader (omp, #32) was one entry.
+ *
+ * What differs between the two is the *key*, not the reading: claude gets an
+ * id it has to locate on disk, omp gets the path itself. The record formats
+ * differ too, but that is not routed here — see transcript/records.ts for why
+ * one mapper reads both.
  */
 
 import { resolveTranscriptPath, type TranscriptFs } from "../transcript/path";
@@ -24,6 +29,12 @@ export interface ResolveAgentTranscriptInput {
   agent?: string;
   /** The agent's own transcript key; `null` on a pane herdr has none for. */
   sessionValue: string | null;
+  /**
+   * What that key is, in herdr's words: `"path"` (the file itself) or `"id"`
+   * (a name to locate). herdr keeps a path only for `pi` and `omp`; every other
+   * agent gets an id. Absent when it did not say.
+   */
+  sessionKind?: string;
   /** The pane's cwd verbatim. */
   cwd: string;
   projectsDir?: string;
@@ -42,7 +53,25 @@ export interface AgentTranscriptReader {
  */
 const READERS = new Map<string | undefined, AgentTranscriptReader>([
   ["claude", { resolvePath: (input) => resolveTranscriptPath(input) }],
+  ["omp", { resolvePath: async (input) => pathKeyOrNull(input.sessionKind, input.sessionValue) }],
 ]);
+
+/**
+ * omp needs no resolution at all: herdr hands back the file itself
+ * (`kind:"path"`, probe 2026-08-06), so claude's derive-and-scan is not just
+ * unnecessary here, it would be wrong — it hunts through `~/.claude/projects`.
+ *
+ * Anything that is not an absolute path under a `path` key is refused rather
+ * than passed on: this value is opened for reading, and a relative or empty one
+ * would resolve against the server's cwd.
+ */
+function pathKeyOrNull(
+  sessionKind: string | undefined,
+  sessionValue: string | null,
+): string | null {
+  if (sessionKind !== "path" || !sessionValue?.startsWith("/")) return null;
+  return sessionValue;
+}
 
 /** The reader for a kind, or `undefined` when that kind cannot be read back. */
 export function transcriptReaderFor(agent: string | undefined): AgentTranscriptReader | undefined {
