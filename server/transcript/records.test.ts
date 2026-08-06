@@ -170,3 +170,94 @@ describe("TranscriptRecordToChunk", () => {
     expect(transcriptRecordToChunk(null)).toBeNull();
   });
 });
+
+/**
+ * The same function reading omp's vocabulary. Every record below is a real
+ * shape from an omp transcript on this machine (2026-08-06), trimmed to the
+ * fields the mapping reads.
+ */
+describe("TranscriptRecordToChunk — omp", () => {
+  it("turns an omp assistant message into the envelope the client already renders", () => {
+    const record = {
+      type: "message",
+      id: "c03690ca",
+      parentId: "dc4be613",
+      timestamp: "2026-08-05T07:12:41.000Z",
+      message: {
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: "weighing it up" },
+          { type: "text", text: "Done.", textSignature: "sig" },
+        ],
+      },
+    };
+
+    // `type` becomes the role, which is what the client's dispatcher switches
+    // on; the message rides through verbatim, thinking block and all.
+    expect(transcriptRecordToChunk(record)).toEqual({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: "weighing it up" },
+          { type: "text", text: "Done.", textSignature: "sig" },
+        ],
+      },
+    });
+  });
+
+  it("turns an omp user message into a user chunk", () => {
+    expect(
+      transcriptRecordToChunk({
+        type: "message",
+        message: {
+          role: "user",
+          content: [{ type: "text", text: "Reply with exactly: ACP-E1-OK" }],
+        },
+      }),
+    ).toEqual({
+      type: "user",
+      message: { role: "user", content: [{ type: "text", text: "Reply with exactly: ACP-E1-OK" }] },
+    });
+  });
+
+  it("renders nothing for omp's non-conversational roles", () => {
+    // The client renders text blocks on assistant records and nothing else, so
+    // these would be invisible traffic rather than visible content.
+    for (const role of ["toolResult", "developer", "fileMention", "bashExecution"]) {
+      expect(
+        transcriptRecordToChunk({ type: "message", message: { role, content: [] } }),
+      ).toBeNull();
+    }
+  });
+
+  it("renders nothing for omp's bookkeeping records", () => {
+    // All eleven types observed across this machine's omp transcripts, minus
+    // `message`. credential_pin carries a provider + hash; custom_message is
+    // advisor/plugin output that would otherwise read as the agent speaking.
+    const bookkeeping = [
+      { type: "credential_pin", provider: "xai-oauth", hash: "7ae00c2f" },
+      { type: "custom", customType: "session_exit", data: { reason: "sigterm" } },
+      { type: "custom_message", customType: "advisor", content: "<advisory/>", display: true },
+      { type: "custom_message", customType: "advisor", content: "hidden", display: false },
+      { type: "session", cwd: "/repo" },
+      { type: "title", title: "a chat" },
+      { type: "title_change", title: "a chat" },
+      { type: "model_change", model: "grok" },
+      { type: "thinking_level_change", level: "high" },
+      { type: "compaction" },
+      { type: "service_tier_change" },
+      { type: "ttsr_injection" },
+    ];
+
+    for (const record of bookkeeping) {
+      expect(transcriptRecordToChunk(record)).toBeNull();
+    }
+  });
+
+  it("renders nothing for a malformed omp record", () => {
+    expect(transcriptRecordToChunk({ type: "message" })).toBeNull();
+    expect(transcriptRecordToChunk({ type: "message", message: null })).toBeNull();
+    expect(transcriptRecordToChunk({ type: "message", message: { content: [] } })).toBeNull();
+  });
+});

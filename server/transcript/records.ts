@@ -27,6 +27,30 @@
  *   isCompactSummary — the "This session is being continued from a previous
  *                      conversation…" record written after a compaction, which
  *                      reads exactly like a user prompt and is not one.
+ *
+ * ── omp (#32) ───────────────────────────────────────────────────────────────
+ * omp writes a different vocabulary into its own file, and this one function
+ * reads both. It is not told which agent wrote the record and does not need to
+ * be: the two vocabularies do not overlap (omp puts every conversational record
+ * under `type:"message"` with the role *inside*; claude uses the role *as* the
+ * type), and which file gets read is already decided per kind by the reader
+ * registry in agents/transcript-readers.ts. A kind with no reader never
+ * produces a path, so its records never reach here to be misread.
+ *
+ * Types observed across every omp transcript on this machine (11 kinds, 2026-08-06):
+ * `message` is the only conversational one. `custom` (pure event data),
+ * `custom_message` (advisor/plugin output — `attribution:"agent"`, rendered as
+ * agent speech if forwarded, which nothing asks for), `session`, `title`,
+ * `title_change`, `model_change`, `thinking_level_change`, `compaction`,
+ * `service_tier_change`, `ttsr_injection` and `credential_pin` are all
+ * bookkeeping and yield `null`, exactly as claude's non-conversational types do.
+ *
+ * Of omp's six roles only `assistant` and `user` are forwarded. `toolResult`,
+ * `developer`, `fileMention` and `bashExecution` are dropped: the client renders
+ * `text` blocks on assistant records and nothing else, so forwarding them would
+ * add invisible traffic, not visible content. Its `thinking` and `toolCall`
+ * blocks ride along inside the content array and go unrendered — the same place
+ * claude's `thinking` and `tool_use` blocks are already in.
  */
 
 /** The `chunk` payload of a `stream_chunk` message. */
@@ -36,6 +60,20 @@ const RENDERABLE_TYPES = new Set(["user", "assistant"]);
 
 /** Flags that mark a conversational record as not part of the conversation. */
 const SUPPRESSING_FLAGS = ["isSidechain", "isMeta", "isCompactSummary"] as const;
+
+/** omp's single conversational record type; the role lives inside the message. */
+const OMP_RECORD_TYPE = "message";
+
+/**
+ * omp's `{type:"message", message:{role, content}}` in claude's envelope, so the
+ * client's existing dispatcher renders it with no client change at all.
+ */
+function ompRecordToChunk(message: unknown): TranscriptChunk | null {
+  if (typeof message !== "object" || message === null) return null;
+  const { role } = message as { role?: unknown };
+  if (typeof role !== "string" || !RENDERABLE_TYPES.has(role)) return null;
+  return { type: role, message };
+}
 
 /**
  * `null` for every record that must not be rendered. Never throws: a record
@@ -50,6 +88,7 @@ export function transcriptRecordToChunk(record: unknown): TranscriptChunk | null
   }
 
   const { type, message } = record as { type?: unknown; message?: unknown };
+  if (type === OMP_RECORD_TYPE) return ompRecordToChunk(message);
   if (typeof type !== "string" || !RENDERABLE_TYPES.has(type)) return null;
   // A conversational record with no message body carries nothing to show.
   if (typeof message !== "object" || message === null) return null;
