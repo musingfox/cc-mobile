@@ -107,7 +107,11 @@ export interface HerdrTerminalBackend extends TerminalBackend {
  */
 export function permissionAppliesTo(status: string, kind: string | undefined): boolean {
   if (status !== "blocked") return true;
-  return kind === undefined || kind === "claude";
+  // Only a kind we positively recognise as non-claude suppresses. Absent or
+  // empty both mean "herdr hasn't said yet", so both forward — the predicate is
+  // exported, and must not lean on its caller having filtered empties out.
+  if (!kind) return true;
+  return kind === "claude";
 }
 
 export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalBackend {

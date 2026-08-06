@@ -326,6 +326,14 @@ describe("NonClaudePermissionSuppression", () => {
     expect(permissionAppliesTo("blocked", "claude")).toBe(true);
     expect(permissionAppliesTo("blocked", undefined)).toBe(true);
   });
+
+  test("an empty kind forwards, the same as an absent one", () => {
+    // Today pane-events only ever hands over undefined or a non-empty string,
+    // but this predicate is exported: a caller passing herdr's raw label through
+    // must not have its prompt swallowed by an empty string reading as
+    // "known non-claude".
+    expect(permissionAppliesTo("blocked", "")).toBe(true);
+  });
 });
 
 describe("HerdrStartupGate", () => {
