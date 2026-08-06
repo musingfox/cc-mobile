@@ -65,6 +65,12 @@ export type SessionDescriptorFlags = {
   drivable: boolean;
   readable: boolean;
   gated: boolean;
+  /**
+   * Which agent runs in that pane, in herdr's own wording. Absent when herdr
+   * cannot tell — never defaulted to claude, since guessing would put the wrong
+   * name on a card.
+   */
+  agent?: string;
 };
 
 export type ModelInfo = {
