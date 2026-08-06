@@ -2,17 +2,19 @@ import { expect, it } from "bun:test";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createApp } from "../app";
+import { type AppBackend, createApp } from "../app";
 import type { ServerConfig } from "../config";
+import { createHerdrBackend } from "../herdr/backend";
 import { createHerdrClient } from "../herdr/client";
 import { OkResultSchema } from "../herdr/schema";
 import { resolveSocketPath } from "../herdr/transport";
 import {
+  AgentStartedResultSchema,
   createMessageCollector,
   openSocket,
-  PaneListResultSchema,
   reserveEphemeralPort,
   type ServerMsg,
+  WorkspaceCreatedResultSchema,
   waitUntil,
 } from "./e2e-harness";
 
@@ -26,6 +28,14 @@ import {
  *
  * The canary lives in a fresh temp dir, deliberately outside the session's cwd,
  * so claude has to ask before touching it.
+ *
+ * This suite starts its own claude with `--permission-mode default` rather than
+ * going through `terminal_create`, and that is the point rather than a detail:
+ * cc-mobile stopped passing any gating flag, so a session it launches runs at
+ * the machine's own claude settings — which on a developer's machine may well
+ * be `auto` with a long allow-list, and would never raise a prompt to answer.
+ * The prompts this flow exists for are the ones on panes configured to ask,
+ * which is exactly what this builds. Same shape as the omp suite.
  *
  * Runs only against a real daemon and burns one real claude turn. cwd = this
  * repo's root, a trusted directory (no trust dialog under default mode).
@@ -52,34 +62,67 @@ it.skipIf(!existsSync(socketPath))(
       allowedRoots: null,
       basePath: "",
     };
-    const app = createApp(serverConfig);
+    // Same deviation as the foreign suite: this asserts on a pane it labelled
+    // `ccme2e-`, which the production listing hides.
+    const backend = createHerdrBackend({ suppressSessionLabel: () => false }) as AppBackend;
+    const app = createApp(serverConfig, { backend });
     app.listen({ port, hostname: "127.0.0.1" });
 
     const client = createHerdrClient({ socketPath });
-    const claudeUuid = crypto.randomUUID();
     const canaryDir = mkdtempSync(join(tmpdir(), "ccme2e-canary-"));
     const canaryPath = join(canaryDir, "canary.txt");
 
     let ws: WebSocket | undefined;
     let workspaceId: string | undefined;
-    let tornDown = false;
 
     try {
+      // A claude configured to ask — the posture cc-mobile no longer imposes,
+      // and the only one where there is a prompt to answer.
+      const created = await client.call(
+        "workspace.create",
+        { label: `ccme2e-perm-${Date.now()}`, cwd: REPO_ROOT, focus: false },
+        WorkspaceCreatedResultSchema,
+      );
+      workspaceId = created.workspace.workspace_id;
+      const sessionId = created.root_pane.pane_id;
+
+      await client.call(
+        "agent.start",
+        {
+          name: `ccme2e${Date.now().toString(36).slice(-6)}`,
+          kind: "claude",
+          pane_id: sessionId,
+          args: ["--permission-mode", "default"],
+        },
+        AgentStartedResultSchema,
+      );
+
+      await waitUntil(
+        async () =>
+          (await client.agentGet(sessionId).catch(() => null))?.interactive_ready === true,
+        CREATE_DEADLINE_MS,
+        "the claude composer accepting input",
+      );
+
       ws = await openSocket(port);
       const collector = createMessageCollector(ws);
 
-      ws.send(JSON.stringify({ type: "terminal_create", claudeUuid, cwd: REPO_ROOT }));
-      const created = await collector.next(
-        (msg: ServerMsg) => msg.type === "terminal_created" || msg.type === "error",
+      // Asking for the listing is also what opens the pane event stream, and
+      // `blocked` only reaches the permission flow through it. A suite that
+      // launches its own pane has to ask — `terminal_create` would have done
+      // this implicitly.
+      ws.send(JSON.stringify({ type: "list_terminal_sessions" }));
+      const listed = await collector.next(
+        (msg: ServerMsg) => msg.type === "terminal_sessions",
         CREATE_DEADLINE_MS,
-        "terminal_created",
+        "terminal_sessions reply",
       );
-      expect(created.type).toBe("terminal_created");
-      const sessionId = created.sessionId as string;
-
-      const panes = await client.call("pane.list", {}, PaneListResultSchema);
-      workspaceId = panes.panes.find((pane) => pane.pane_id === sessionId)?.workspace_id;
-      expect(workspaceId).toBeDefined();
+      const mine = (listed.sessions as Array<Record<string, unknown>>).find(
+        (session) => session.sessionId === sessionId,
+      );
+      expect(mine?.agent).toBe("claude");
+      // Launched with `--permission-mode default`, so its own argv says it asks.
+      expect(mine?.gated).toBe(true);
 
       expect(existsSync(canaryPath)).toBe(false);
       ws.send(
@@ -131,23 +174,13 @@ it.skipIf(!existsSync(socketPath))(
       );
       expect(end.sessionId).toBe(sessionId);
       expect(existsSync(canaryPath)).toBe(false);
-
-      ws.send(JSON.stringify({ type: "terminal_teardown", sessionId }));
-      const teardown = await collector.next(
-        (msg: ServerMsg) => msg.type === "terminal_teardown_result" || msg.type === "error",
-        CREATE_DEADLINE_MS,
-        "terminal_teardown_result",
-      );
-      expect(teardown.type).toBe("terminal_teardown_result");
-      expect(teardown.killed).toBe(true);
-      tornDown = true;
     } finally {
       try {
         ws?.close();
       } catch {
         // socket already gone
       }
-      if (!tornDown && workspaceId !== undefined) {
+      if (workspaceId !== undefined) {
         await client
           .call("workspace.close", { workspace_id: workspaceId }, OkResultSchema)
           .catch(() => {});

@@ -181,6 +181,8 @@ pane 的種類由事件層記住（最後一次回報的值，空字串不算回
 
 每種 agent 自己的 argv（`registry.ts` 的 `argvFor`）：claude 的 `--permission-mode` / `--session-id` 是 claude 自己的旗標，omp 吃到會死。實測 2026-08-06：`agent.start {kind:"omp", args:[]}` 回 `argv:["omp"]`，且 pane 在 +3.0s 就 `interactive_ready`，既有的 readiness gate 不需要為種類加分支。
 
+> **後續修正（同日，見下方「cc-mobile 不再替 agent 決定設定」）**：`--permission-mode` 已從 argv 移除，claude 現在只帶 `--session-id`。上段對「argv 依種類分派」的描述仍然成立，但**兩種 agent 都不帶閘門旗標**。
+
 `server_config.availableAgents` 列出本機能啟動的種類，判準只有「執行檔在 PATH 上」。**沒有查 herdr 的 integration 狀態**：protocol 19 的方法清單只有 `integration.install`/`uninstall`，沒有 `status`，要查就得 shell out 到 herdr CLI，而 ADR-015 的立場是 socket 才是 trunk。裝整合仍是 CLAUDE.md 記載的一次性設定步驟。
 
 ### #32 omp 讀回：key 的**種類**才是分歧點
@@ -260,3 +262,9 @@ cc-mobile 從手機啟動 omp 時**不帶任何 approval 旗標**，沿用 omp �
 ### 相容性
 
 無相容視窗，比照 #25 / #26：快取的 PWA bundle 送出退休訊息會收到一則 `invalid_message`，重新載入頁面即恢復。舊 bundle 在 reconnect 時會送 `set_model` / `set_effort`，所以這則錯誤在升級後的第一次連線可能出現一次。
+
+### 連帶：90 秒無人看管的 `esc` 幾乎不再觸發
+
+那個自動拒絕只對 cc-mobile 自建的 pane 生效（Decision H2）。而自建的 claude 現在照使用者自己的設定跑——如果那份設定不會問（例如 `defaultMode: "auto"` 加一串 allow 規則，開發機上很常見），自建 pane 就不會出現待答提示，計時器也就沒有東西可以拒絕。
+
+邏輯本身沒動，也仍由 `server/unattended-permission.test.ts` 覆蓋。但 live e2e 的覆蓋面確實換了位置：`herdr-permission.e2e.test.ts` 現在自己起一個帶 `--permission-mode default` 的 claude（origin=foreign），因為那是唯一保證有提示可答的狀態。它測的因此是「使用者自己開的、會問的 session」——這也正是 #33 之後權限流真正服務的對象。
