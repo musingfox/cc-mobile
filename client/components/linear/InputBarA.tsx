@@ -7,6 +7,7 @@ import { uploadFile, uploadImage } from "../../services/upload-service";
 import { wsService } from "../../services/ws-service";
 import { useAppStore } from "../../stores/app-store";
 import { resizeImage } from "../../utils/image-resize";
+import { randomUuid } from "../../utils/uuid";
 import AttachmentSheet from "./AttachmentSheet";
 import { runSend } from "./send-flow";
 import "./input-bar.css";
@@ -162,7 +163,7 @@ const InputBarA = forwardRef<InputBarAHandle, Props>(function InputBarA(
           setFiles((prev) => [
             ...prev,
             {
-              id: crypto.randomUUID(),
+              id: randomUuid(),
               path: result.path,
               filename: result.filename,
               sizeKB: result.sizeKB,
@@ -183,7 +184,7 @@ const InputBarA = forwardRef<InputBarAHandle, Props>(function InputBarA(
           setImages((prev) => [
             ...prev,
             {
-              id: crypto.randomUUID(),
+              id: randomUuid(),
               base64: result.base64,
               mediaType: result.mediaType,
               preview,

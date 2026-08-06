@@ -7,6 +7,7 @@ import {
   useAppStore,
 } from "../stores/app-store";
 import { useSettingsStore } from "../stores/settings-store";
+import { randomUuid } from "../utils/uuid";
 import { hapticService } from "./haptic";
 import { notificationService } from "./notification";
 import { saveProject } from "./projects";
@@ -1148,7 +1149,7 @@ class WsService {
   createTerminalSession(cwd: string, agentKind?: string): string | null {
     if (!this.ws) return null;
 
-    const claudeUuid = crypto.randomUUID();
+    const claudeUuid = randomUuid();
     useAppStore.getState().addSession(claudeUuid, cwd, { ready: false });
     this.pendingTerminalCreates.add(claudeUuid);
     // Omitted rather than sent as undefined: the server reads an absent
