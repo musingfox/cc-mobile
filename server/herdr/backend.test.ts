@@ -285,16 +285,26 @@ describe("NonClaudePermissionSuppression", () => {
     };
   }
 
-  test("a pane running another agent raises no prompt when it blocks", async () => {
+  test("a pane running an agent with no parser raises no prompt when it blocks", async () => {
+    const h = eventDrivenBackend();
+    await h.open("w6C:p1");
+
+    await h.report("w6C:p1", "blocked", "codex");
+
+    // Not read, not parsed, not shown: on a screen no parser understands, the
+    // Cancel-only fallback would send `esc` on a guess about what that key does
+    // in that TUI.
+    expect(h.reads).toEqual([]);
+    expect(h.sent.some((msg) => msg.type === "permission_request")).toBe(false);
+  });
+
+  test("a blocked omp reaches the permission flow too, since #33 parses it", async () => {
     const h = eventDrivenBackend();
     await h.open("w6C:p1");
 
     await h.report("w6C:p1", "blocked", "omp");
 
-    // Not read, not parsed, not shown: claude's prompt parser and its
-    // keystrokes have no meaning on another agent's screen (#33).
-    expect(h.reads).toEqual([]);
-    expect(h.sent.some((msg) => msg.type === "permission_request")).toBe(false);
+    expect(h.reads).toEqual(["w6C:p1"]);
   });
 
   test("a blocked claude still reaches the permission flow", async () => {
@@ -318,12 +328,14 @@ describe("NonClaudePermissionSuppression", () => {
   });
 
   test("every non-blocked status is forwarded whatever the kind", () => {
-    expect(permissionAppliesTo("idle", "omp")).toBe(true);
-    expect(permissionAppliesTo("working", "omp")).toBe(true);
+    expect(permissionAppliesTo("idle", "codex")).toBe(true);
+    expect(permissionAppliesTo("working", "codex")).toBe(true);
     // Leaving `blocked` is what drops a pending prompt and disarms its 90 s
     // esc timer; filtering those by kind would strand both.
-    expect(permissionAppliesTo("blocked", "omp")).toBe(false);
+    expect(permissionAppliesTo("blocked", "codex")).toBe(false);
+    // The two kinds with a parser and a keystroke model of their own.
     expect(permissionAppliesTo("blocked", "claude")).toBe(true);
+    expect(permissionAppliesTo("blocked", "omp")).toBe(true);
     expect(permissionAppliesTo("blocked", undefined)).toBe(true);
   });
 

@@ -81,11 +81,12 @@ export interface HerdrTerminalBackend extends TerminalBackend {
 /**
  * Whether a pane's status report should reach the permission flow.
  *
- * That flow is claude's end to end: the screen parser reads claude's prompt box
- * and the answer is a keystroke aimed at claude's option list. So a pane known
- * to be running something else is held back until each agent has its own parser
- * (#33). Everything that is not `blocked` is forwarded whatever the kind — that
- * is how a pending prompt gets dropped and its 90 s `esc` timer cleared.
+ * The flow needs a parser that reads that agent's prompt and a keystroke model
+ * that answers it. Two exist (#33): claude's numbered list, and omp's cursor
+ * list. A pane known to be running anything else is held back, because for it
+ * the screen is unreadable and `esc` is a guess about what a key does.
+ * Everything that is not `blocked` is forwarded whatever the kind — that is how
+ * a pending prompt gets dropped and its 90 s `esc` timer cleared.
  *
  * A deny-list (block the kinds known not to be claude) rather than an allow-list
  * (forward only "claude"), for four reasons:
@@ -105,13 +106,16 @@ export interface HerdrTerminalBackend extends TerminalBackend {
  *  4. The one keystroke cc-mobile sends by itself — the 90 s unattended `esc` —
  *     only fires on panes cc-mobile launched, and those are always claude.
  */
+/** The kinds whose prompts cc-mobile can both read and answer. */
+const PARSEABLE_PROMPT_KINDS = new Set(["claude", "omp"]);
+
 export function permissionAppliesTo(status: string, kind: string | undefined): boolean {
   if (status !== "blocked") return true;
-  // Only a kind we positively recognise as non-claude suppresses. Absent or
+  // Only a kind we positively recognise as unsupported suppresses. Absent or
   // empty both mean "herdr hasn't said yet", so both forward — the predicate is
   // exported, and must not lean on its caller having filtered empties out.
   if (!kind) return true;
-  return kind === "claude";
+  return PARSEABLE_PROMPT_KINDS.has(kind);
 }
 
 export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalBackend {
