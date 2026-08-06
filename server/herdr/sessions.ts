@@ -103,11 +103,31 @@ export interface SessionListingOptions {
  * flag means claude's own default, which is gated.
  */
 export function permissionModeFromArgv(process: PaneProcess): string | undefined {
-  const argv = process.argv;
+  return flagValue(process.argv, "--permission-mode");
+}
+
+/**
+ * omp's equivalent, which spells the flag differently and takes
+ * `always-ask | write | yolo`. Its `--auto-approve` is the same posture as
+ * `yolo` and is a bare switch, so it is reported as `yolo` rather than as a
+ * value nobody wrote.
+ *
+ * Needed because omp's default is ungated — verified live 2026-08-06: with no
+ * flags at all it wrote a file without asking. So an omp pane carrying no flag
+ * is NOT the "asks before it acts" default claude's absent flag means, and
+ * `gated` has to say so.
+ */
+export function approvalModeFromArgv(process: PaneProcess): string | undefined {
+  if (process.argv?.includes("--auto-approve")) return "yolo";
+  return flagValue(process.argv, "--approval-mode");
+}
+
+/** Last occurrence of `--flag value` or `--flag=value`, whichever came later. */
+function flagValue(argv: string[] | null | undefined, flag: string): string | undefined {
   if (!argv) return undefined;
-  const inlineIndex = argv.findLastIndex((arg) => arg.startsWith("--permission-mode="));
-  const flagIndex = argv.lastIndexOf("--permission-mode");
-  if (inlineIndex > flagIndex) return argv[inlineIndex]?.slice("--permission-mode=".length);
+  const inlineIndex = argv.findLastIndex((arg) => arg.startsWith(`${flag}=`));
+  const flagIndex = argv.lastIndexOf(flag);
+  if (inlineIndex > flagIndex) return argv[inlineIndex]?.slice(flag.length + 1);
   if (flagIndex === -1) return undefined;
   return argv[flagIndex + 1];
 }
@@ -232,7 +252,7 @@ export async function listClaudeSessions(
         // The lookup is the whole rule — an undetected kind falls out of it by
         // missing, with no branch of its own.
         readable: await isReadable({ kind, agentSessionKind, agentSessionValue, exists }),
-        gated: await readGatedFlag(client, agent.pane_id, warn),
+        gated: await readGatedFlag(client, agent.pane_id, kind, warn),
         ...(state ? { state } : {}),
       };
     }),
@@ -242,13 +262,19 @@ export async function listClaudeSessions(
 }
 
 /**
- * Whether the claude in this pane still asks before it acts. An argv the daemon
+ * Whether the agent in this pane still asks before it acts. An argv the daemon
  * cannot read answers "gated": claiming a pane is ungated on no evidence would
  * put a warning badge on a session that has one.
+ *
+ * Each kind is read in its own vocabulary (#33). Not merely a second flag name:
+ * the defaults point opposite ways. claude with no flag asks; omp with no flag
+ * does not (live check 2026-08-06 — a default omp wrote a file without a
+ * prompt), so an unflagged omp is ungated and gets the badge that says so.
  */
 async function readGatedFlag(
   client: SessionListingClient,
   paneId: string,
+  kind: string | undefined,
   warn: (message: string) => void,
 ): Promise<boolean> {
   try {
@@ -256,6 +282,15 @@ async function readGatedFlag(
       process_info: { foreground_processes?: PaneProcess[] | null };
     }>("pane.process_info", { pane_id: paneId }, PaneProcessInfoResultSchema);
     const processes = info.process_info.foreground_processes ?? [];
+    if (kind === "omp") {
+      // `write` and `always-ask` both stop for something; `yolo` stops for
+      // nothing. An omp process with no flag at all runs at its own default,
+      // which is ungated.
+      return processes.some((process) => {
+        const mode = approvalModeFromArgv(process);
+        return mode === "write" || mode === "always-ask";
+      });
+    }
     return !processes.some((process) => permissionModeFromArgv(process) === "bypassPermissions");
   } catch (error) {
     warn(`${paneId}: pane.process_info failed, assuming gated: ${describe(error)}`);

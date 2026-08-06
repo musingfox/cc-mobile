@@ -365,6 +365,49 @@ describe("GlobalClaudeSessionListing", () => {
     expect(sessions[0]).toMatchObject({ gated: true, drivable: true });
   });
 
+  test("reads omp's gate in omp's own vocabulary, defaults included", async () => {
+    // Not merely a second flag name: the defaults point opposite ways. claude
+    // with no flag asks before acting; omp with no flag does not (live check
+    // 2026-08-06 — a default omp wrote a file without a prompt). So an unflagged
+    // omp is ungated, and the badge has to say so (#33).
+    const cases: [string[], boolean][] = [
+      [["omp"], false],
+      [["omp", "--approval-mode", "yolo"], false],
+      [["omp", "--auto-approve"], false],
+      [["omp", "--approval-mode", "write"], true],
+      [["omp", "--approval-mode", "always-ask"], true],
+      [["omp", "--approval-mode=always-ask"], true],
+    ];
+
+    for (const [argv, gated] of cases) {
+      const { client } = fakeClient({
+        agents: [agentEntry({ agent: "omp" })],
+        argvByPane: { "w3V:p1": argv },
+      });
+
+      const sessions = await listClaudeSessions({ client, warn: () => {} });
+
+      expect({ argv, gated: sessions[0]?.gated }).toEqual({ argv, gated });
+      // Disclosure, never a lock — the H4 ruling holds for every kind.
+      expect(sessions[0]?.drivable).toBe(true);
+    }
+  });
+
+  test("claude's own flag is never read off an omp pane, or the reverse", async () => {
+    // `--approval-mode yolo` on a claude means nothing; claude's absent
+    // `--permission-mode` still means gated.
+    const { client: claudeLike } = fakeClient({
+      argvByPane: { "w3V:p1": ["claude", "--approval-mode", "yolo"] },
+    });
+    expect((await listClaudeSessions({ client: claudeLike, warn: () => {} }))[0]?.gated).toBe(true);
+
+    const { client: ompLike } = fakeClient({
+      agents: [agentEntry({ agent: "omp" })],
+      argvByPane: { "w3V:p1": ["omp", "--permission-mode", "default"] },
+    });
+    expect((await listClaudeSessions({ client: ompLike, warn: () => {} }))[0]?.gated).toBe(false);
+  });
+
   test("reads ownership off the workspace label, with no in-process registry", async () => {
     const { client } = fakeClient({ workspaces: [workspace("w3V", `ccm-${SELF_UUID}`)] });
 
