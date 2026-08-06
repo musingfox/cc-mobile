@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LAUNCHABLE_AGENT_KINDS } from "./agents/kinds";
 
 // Content blocks for multimodal input
 const TextBlockSchema = z.object({
@@ -110,10 +111,16 @@ const TerminalSendMessage = z.object({
 // claudeUuid stays a loose string (matching TerminalSendMessage) rather than .uuid().
 // .min(1) preserves the empty-string rejection the hand-rolled ws.ts parser did
 // before these two joined the union.
+// `agentKind` is a closed enum, unlike the `agent` field on the session
+// descriptor, which is herdr's own label and stays a free string. The direction
+// is what differs: this value becomes the `kind` herdr executes, so a client
+// must not be able to name an arbitrary one. Absent → claude (#31), which is
+// what every bundle cached before #31 sends.
 const TerminalCreateMessage = z.object({
   type: z.literal("terminal_create"),
   claudeUuid: z.string().min(1),
   cwd: z.string().min(1),
+  agentKind: z.enum(LAUNCHABLE_AGENT_KINDS).optional(),
 });
 
 /**
@@ -260,6 +267,10 @@ const ServerConfigMessage = z.object({
     sessionId: z.string().optional(),
     allowedRoots: z.array(z.string()).nullable().optional(),
     homeDirectory: z.string().optional(),
+    // Which kinds this machine can actually launch (#31). Sent only in the
+    // reply to `get_server_config`; the four `set_*` echoes carry a partial
+    // config and the client merges field by field, so it is not dropped there.
+    availableAgents: z.array(z.enum(LAUNCHABLE_AGENT_KINDS)).optional(),
   }),
 });
 

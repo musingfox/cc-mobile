@@ -67,7 +67,7 @@ describe("WsRoutingWithoutPermissionHandler", () => {
 });
 
 describe("ServerConfigStillAnswered", () => {
-  test("get_server_config carries all five fields", async () => {
+  test("get_server_config carries all six fields", async () => {
     const h = await start();
 
     h.send({ type: "get_server_config" });
@@ -77,11 +77,16 @@ describe("ServerConfigStillAnswered", () => {
     expect(config.permissionMode).toBe("default");
     expect(Object.keys(config).sort()).toEqual([
       "allowedRoots",
+      // Which kinds this machine can launch (#31) — the phone's agent choice
+      // comes from here and nowhere else.
+      "availableAgents",
       "effort",
       "homeDirectory",
       "model",
       "permissionMode",
     ]);
+    // claude is what cc-mobile itself runs on, so it is always present here.
+    expect(config.availableAgents).toContain("claude");
   });
 });
 

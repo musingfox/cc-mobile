@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { Elysia, t } from "elysia";
+import { availableAgentKinds } from "./agents/kinds";
 import { type Capabilities, loadCachedCapabilities } from "./capabilities-cache";
 import type { ServerConfig } from "./config";
 import { listDirectories } from "./directory-listing";
@@ -301,6 +302,10 @@ export function createWsPlugin(
                 effort: sessionManager.getSelectedEffort(),
                 allowedRoots: serverConfig.allowedRoots,
                 homeDirectory: homedir(),
+                // Read per request rather than cached at boot: installing omp
+                // while the server runs should show up on the next reload, not
+                // require a restart (#31).
+                availableAgents: availableAgentKinds(),
               },
             });
             break;

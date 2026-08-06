@@ -10,6 +10,8 @@
  * backend's send routing turns into sink calls.
  */
 
+import type { LaunchableAgentKind } from "./agents/kinds";
+
 // ── Port ─────────────────────────────────────────────────────────────────────
 
 export type ClientSink = (msg: Record<string, unknown>) => void;
@@ -18,6 +20,8 @@ export type ClientSink = (msg: Record<string, unknown>) => void;
 export interface CreateSessionInput {
   claudeUuid: string;
   cwd: string;
+  /** Which agent to launch; absent means claude (#31). */
+  agentKind?: LaunchableAgentKind;
 }
 
 export interface TeardownResult {

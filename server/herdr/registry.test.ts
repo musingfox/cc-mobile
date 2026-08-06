@@ -100,6 +100,38 @@ describe("HerdrCreateSession", () => {
     expect(registry.hasSession(UUID)).toEqual({ present: true, paneRef: "p1" });
   });
 
+  test("agentKind:'omp' launches kind omp with no argv at all", async () => {
+    const fake = makeFakeClient();
+    const registry = makeRegistry(fake);
+
+    await registry.createSession({ claudeUuid: UUID, cwd: "/tmp", agentKind: "omp" });
+
+    // --permission-mode / --session-id are claude's flags; omp would die on
+    // them. Live probe 2026-08-06: args:[] acks with argv:["omp"].
+    expect(fake.calls[1]?.params).toEqual({
+      name: "ccm-3f2a9b01",
+      kind: "omp",
+      pane_id: "p1",
+      args: [],
+    });
+  });
+
+  test("an absent agentKind still launches claude with its full argv", async () => {
+    const fake = makeFakeClient();
+    const registry = makeRegistry(fake);
+
+    // What every PWA bundle cached before #31 sends.
+    await registry.createSession({ claudeUuid: UUID, cwd: "/tmp" });
+
+    expect((fake.calls[1]?.params as { kind: string }).kind).toBe("claude");
+    expect((fake.calls[1]?.params as { args: string[] }).args).toEqual([
+      "--permission-mode",
+      "default",
+      "--session-id",
+      UUID,
+    ]);
+  });
+
   test("writes no settings file anywhere", async () => {
     const fake = makeFakeClient();
     const registry = makeRegistry(fake);

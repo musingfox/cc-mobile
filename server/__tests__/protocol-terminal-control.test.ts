@@ -46,6 +46,45 @@ describe("ClientMessage — terminal_create", () => {
     const result = ClientMessage.safeParse({ type: "terminal_create", claudeUuid: "u1" });
     expect(result.success).toBe(false);
   });
+
+  it("accepts a supported agentKind and carries it through", () => {
+    const result = ClientMessage.safeParse({
+      type: "terminal_create",
+      claudeUuid: "u1",
+      cwd: "/tmp",
+      agentKind: "omp",
+    });
+    expect(result.success).toBe(true);
+    if (!result.success || result.data.type !== "terminal_create") return;
+    expect(result.data.agentKind).toBe("omp");
+  });
+
+  it("rejects a kind cc-mobile does not launch, so agent.start is never reached", () => {
+    // The whitelist lives in the gate rather than in the handler: `kind` is what
+    // herdr turns into an exec'd argv, so an unsupported value must not get as
+    // far as code that could pass it on (#31).
+    for (const agentKind of ["codex", "", "claude; rm -rf /"]) {
+      expect(
+        ClientMessage.safeParse({
+          type: "terminal_create",
+          claudeUuid: "u1",
+          cwd: "/tmp",
+          agentKind,
+        }).success,
+      ).toBe(false);
+    }
+  });
+
+  it("accepts an absent agentKind — every bundle cached before #31 sends none", () => {
+    const result = ClientMessage.safeParse({
+      type: "terminal_create",
+      claudeUuid: "u1",
+      cwd: "/tmp",
+    });
+    expect(result.success).toBe(true);
+    if (!result.success || result.data.type !== "terminal_create") return;
+    expect(result.data.agentKind).toBeUndefined();
+  });
 });
 
 describe("ClientMessage — terminal_teardown", () => {

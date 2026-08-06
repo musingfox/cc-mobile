@@ -1,8 +1,9 @@
 /**
- * registry.ts — HerdrCreateSession + HerdrTeardown: cc-mobile-owned claude
- * sessions living in herdr workspaces.
+ * registry.ts — HerdrCreateSession + HerdrTeardown: cc-mobile-owned agent
+ * sessions living in herdr workspaces. Since #31 the kind is the caller's
+ * choice (claude by default); its flags come from `argvFor` below.
  *
- * Lifecycle contract: a plain claude argv, duplicate-uuid rejection. Launch is
+ * Lifecycle contract: a plain agent argv, duplicate-uuid rejection. Launch is
  * herdr's two-step: `workspace.create` for a pane at a shell prompt, then
  * `agent.start` into that pane. The daemon assembles argv itself and passes
  * `args` through verbatim.
@@ -18,6 +19,7 @@
 
 import type { ZodType } from "zod";
 import { z } from "zod";
+import { DEFAULT_AGENT_KIND, type LaunchableAgentKind } from "../agents/kinds";
 import type { AgentGetFn } from "./readiness";
 import { waitForInteractiveReady } from "./readiness";
 
@@ -65,6 +67,8 @@ export interface HerdrRegistryOptions {
 export interface CreateSessionInput {
   claudeUuid: string;
   cwd: string;
+  /** Which agent to launch; absent means claude (#31). */
+  agentKind?: LaunchableAgentKind;
 }
 
 export interface HerdrCreateSessionResult {
@@ -111,8 +115,25 @@ export function createHerdrRegistry(options: HerdrRegistryOptions) {
 
   const sessions = new Map<string, HerdrSessionEntry>();
 
+  /**
+   * The flags each kind is launched with. `--permission-mode` and
+   * `--session-id` are claude's own CLI flags — omp does not take them, and
+   * passing them through would make every omp launch die on an unknown
+   * argument. Live probe 2026-08-06: `agent.start {kind:"omp", args:[]}` acks
+   * with `argv:["omp"]` and the pane reaches `interactive_ready` at ~3.0s, so
+   * the readiness gate below needs nothing kind-specific.
+   *
+   * ponytail: omp gets no permission flag at all rather than a guessed
+   * equivalent. Its permission handling is #33's whole subject.
+   */
+  function argvFor(kind: LaunchableAgentKind, claudeUuid: string): string[] {
+    if (kind !== "claude") return [];
+    return ["--permission-mode", permissionMode, "--session-id", claudeUuid];
+  }
+
   async function createSession(input: CreateSessionInput): Promise<HerdrCreateSessionResult> {
     const { claudeUuid, cwd } = input;
+    const agentKind = input.agentKind ?? DEFAULT_AGENT_KIND;
 
     if (sessions.has(claudeUuid)) {
       throw new Error(`already registered: ${claudeUuid}`);
@@ -137,9 +158,9 @@ export function createHerdrRegistry(options: HerdrRegistryOptions) {
         "agent.start",
         {
           name: agentName,
-          kind: "claude",
+          kind: agentKind,
           pane_id: paneId,
-          args: ["--permission-mode", permissionMode, "--session-id", claudeUuid],
+          args: argvFor(agentKind, claudeUuid),
         },
         AgentStartedResultSchema,
       );

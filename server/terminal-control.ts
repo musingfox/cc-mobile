@@ -11,6 +11,7 @@
  * what they call. The port satisfies this shape.
  */
 
+import type { LaunchableAgentKind } from "./agents/kinds";
 import { expandPath, validateAllowedPath, validateCwd } from "./path-utils";
 
 /** The slice of the terminal backend these handlers need. */
@@ -18,6 +19,7 @@ export interface TerminalControlBackend {
   createSession(params: {
     claudeUuid: string;
     cwd: string;
+    agentKind?: LaunchableAgentKind;
   }): Promise<{ name: string; paneRef: string }>;
   /**
    * Idempotent: an unknown session resolves to `{killed:false}` rather than
@@ -40,7 +42,7 @@ export interface TerminalControlDeps {
  * path_not_allowed / terminal_error.
  */
 export async function handleTerminalCreate(
-  msg: { claudeUuid: string; cwd: string },
+  msg: { claudeUuid: string; cwd: string; agentKind?: LaunchableAgentKind },
   deps: TerminalControlDeps,
 ): Promise<void> {
   const { backend, allowedRoots, send } = deps;
@@ -62,7 +64,11 @@ export async function handleTerminalCreate(
       return;
     }
 
-    const info = await backend.createSession({ claudeUuid: msg.claudeUuid, cwd });
+    const info = await backend.createSession({
+      claudeUuid: msg.claudeUuid,
+      cwd,
+      agentKind: msg.agentKind,
+    });
     send({
       type: "terminal_created",
       claudeUuid: msg.claudeUuid,
