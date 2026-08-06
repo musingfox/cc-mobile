@@ -38,6 +38,12 @@ interface SessionRowItem {
   /** Another agent runs there, in herdr's wording. Absent when unknown. */
   agent?: string;
   onClick: () => void;
+  /**
+   * Absent on a session the user opened in their own terminal: closing it would
+   * take down the terminal they are sitting in, so the server refuses it and
+   * the control is not offered rather than offered and then denied.
+   */
+  onClose?: () => void;
 }
 
 export default function ProjectDetailScreen({ cwd, onNavigate, onBack }: Props) {
@@ -55,12 +61,13 @@ export default function ProjectDetailScreen({ cwd, onNavigate, onBack }: Props) 
 
     for (const [id, s] of sessions.entries()) {
       if (s.cwd !== cwd) continue;
+      const foreign = s.descriptor?.origin === "foreign";
       items.push({
         key: `mem-${id}`,
         title: s.messages.length > 0 ? `${s.messages.length} msgs` : "new session",
         age: id === activeSessionId ? "current" : "open",
         live: s.agentState === "running",
-        foreign: s.descriptor?.origin === "foreign",
+        foreign,
         ungated: s.descriptor?.gated === false,
         unreadable: s.descriptor?.readable === false,
         // Only a kind herdr actually reported, and only when it is not claude:
@@ -70,6 +77,19 @@ export default function ProjectDetailScreen({ cwd, onNavigate, onBack }: Props) 
           setActiveSession(id);
           onNavigate("chat");
         },
+        // ponytail: the platform's own dialog rather than a sheet component
+        // this codebase does not have. Closing kills the agent in that pane and
+        // the conversation with it, and a mis-tap while scrolling a list is
+        // exactly how that happens — so it asks. Swap for a sheet if the native
+        // alert reads wrong inside the installed PWA.
+        onClose: foreign
+          ? undefined
+          : () => {
+              if (!window.confirm("Close this session? The agent running in it will be stopped.")) {
+                return;
+              }
+              wsService.closeSession(id);
+            },
       });
     }
 
@@ -169,6 +189,16 @@ export default function ProjectDetailScreen({ cwd, onNavigate, onBack }: Props) 
                     </span>
                   </div>
                 </button>
+                {r.onClose && (
+                  <button
+                    type="button"
+                    className="lin-session-close"
+                    onClick={r.onClose}
+                    aria-label={`Close session ${r.title}`}
+                  >
+                    <Icon name="close" size={14} color={T.fg3} />
+                  </button>
+                )}
               </div>
             ))
           )}

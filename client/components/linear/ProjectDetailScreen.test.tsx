@@ -307,3 +307,96 @@ describe("ProjectDetailScreen new-session footer", () => {
     expect(created).toEqual([["/a", undefined]]);
   });
 });
+
+/**
+ * Closing a session. The control was dropped in the Linear redesign (c28f88b)
+ * and `wsService.closeSession` sat with no caller from then on; this is that
+ * caller. Closing kills the agent in the pane, so the two things worth pinning
+ * are that it asks first and that it is not offered where the server would
+ * refuse it anyway (Decision M13).
+ */
+describe("ProjectDetailScreen close control", () => {
+  const closed: string[] = [];
+  const originalClose = wsService.closeSession;
+  const originalConfirm = window.confirm;
+  let answer = true;
+
+  beforeEach(() => {
+    localStorage.clear();
+    closed.length = 0;
+    answer = true;
+    wsService.closeSession = ((sessionId: string) => {
+      closed.push(sessionId);
+    }) as typeof wsService.closeSession;
+    window.confirm = (() => answer) as typeof window.confirm;
+    useAppStore.setState({
+      sessions: new Map(),
+      activeSessionId: null,
+      connectionState: "connected",
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    localStorage.clear();
+    wsService.closeSession = originalClose;
+    window.confirm = originalConfirm;
+  });
+
+  function closeButtons(container: HTMLElement): HTMLButtonElement[] {
+    return Array.from(container.querySelectorAll(".lin-session-close"));
+  }
+
+  test("a session cc-mobile owns can be closed from its row", () => {
+    useAppStore.getState().upsertListedSession({
+      sessionId: "w1:p1",
+      cwd: "/a",
+      origin: "self",
+      drivable: true,
+      readable: true,
+      gated: true,
+    });
+
+    const { container } = renderScreen("/a");
+    const buttons = closeButtons(container);
+    expect(buttons.length).toBe(1);
+    buttons[0]?.click();
+
+    expect(closed).toEqual(["w1:p1"]);
+  });
+
+  test("declining the confirmation closes nothing", () => {
+    answer = false;
+    useAppStore.getState().upsertListedSession({
+      sessionId: "w1:p1",
+      cwd: "/a",
+      origin: "self",
+      drivable: true,
+      readable: true,
+      gated: true,
+    });
+
+    const { container } = renderScreen("/a");
+    closeButtons(container)[0]?.click();
+
+    expect(closed).toEqual([]);
+  });
+
+  test("a session the user opened in their own terminal offers no close control", () => {
+    useAppStore.getState().upsertListedSession({
+      sessionId: "w9:p1",
+      cwd: "/a",
+      origin: "foreign",
+      drivable: true,
+      readable: true,
+      gated: true,
+    });
+
+    const { container } = renderScreen("/a");
+
+    expect(closeButtons(container).length).toBe(0);
+    // The row itself stays open-able — this is a missing control, not a locked
+    // card.
+    expect(container.querySelectorAll(".lin-session-row").length).toBe(1);
+  });
+});

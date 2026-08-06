@@ -142,6 +142,26 @@
   background: rgba(255, 255, 255, 0.06);
 }
 
+/* Sits in the slot the row-wrap's flex layout already leaves beside the row.
+   44px wide and full row height: a mis-tap here stops an agent mid-turn, so it
+   gets a real touch target rather than an icon-sized one. */
+.lin-session-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  align-self: stretch;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.lin-session-close:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
 .lin-session-row {
   position: relative;
   display: flex;
