@@ -170,3 +170,54 @@ herdr 沒說出種類時（欄位缺席或空字串），descriptor **不帶** `
 4. cc-mobile 唯一自己送出的鍵（90 秒無人看管的 `esc`）只對自建 pane 生效，而自建 pane 必然是 claude。
 
 pane 的種類由事件層記住（最後一次回報的值，空字串不算回報），部分更新省略該欄位不會抹掉它；`forget()` 會清掉，因此重用的 pane id 從零開始。
+
+---
+
+## 2026-08-06 增修：手機開任意 agent、omp 讀回、omp 權限流（#31–#33）
+
+### #31 `terminal_create` 帶 `agentKind`
+
+`agent.start` 的 `kind` 從寫死的 `"claude"` 變成呼叫端指定。方向決定了型別強度：#30 的 `agent` 是**入站**的 herdr 標籤，用 `z.string()` 讓未知值通過；`agentKind` 是**出站**進 `agent.start` 的執行識別字，用 `z.enum`（`server/agents/kinds.ts`），未列出的種類在 Zod 閘門就被拒，連 workspace 都不會建。缺席 → claude，所以 #31 前快取的 PWA bundle 照舊。
+
+每種 agent 自己的 argv（`registry.ts` 的 `argvFor`）：claude 的 `--permission-mode` / `--session-id` 是 claude 自己的旗標，omp 吃到會死。實測 2026-08-06：`agent.start {kind:"omp", args:[]}` 回 `argv:["omp"]`，且 pane 在 +3.0s 就 `interactive_ready`，既有的 readiness gate 不需要為種類加分支。
+
+`server_config.availableAgents` 列出本機能啟動的種類，判準只有「執行檔在 PATH 上」。**沒有查 herdr 的 integration 狀態**：protocol 19 的方法清單只有 `integration.install`/`uninstall`，沒有 `status`，要查就得 shell out 到 herdr CLI，而 ADR-015 的立場是 socket 才是 trunk。裝整合仍是 CLAUDE.md 記載的一次性設定步驟。
+
+### #32 omp 讀回：key 的**種類**才是分歧點
+
+herdr 對 omp 直接給檔案路徑（`agent_session.kind === "path"`，只有 `pi` 和 `omp` 有），對 claude 給 id。所以 claude 的推導＋掃描對 omp 不只是多餘，而是**錯的**——它會拿 omp 的 key 去翻 `~/.claude/projects`。key 的 kind 因此要送到 reader（`SessionDescriptor.agentSessionKind`，server 端專用，`ws.ts` 按名投影所以不上 wire）。
+
+`readable` 多了一個非對稱的檢查：**path key 才驗檔案存在**。omp 在 `agent.start` 當下就回報路徑，但檔案要等第一輪 turn 才寫——實測純閒置 120 秒後檔案仍不存在（票上原寫的「約 30 秒」是錯的，條件是第一輪對話而非時間）。不驗就會對一個還沒有內容的 session 宣稱可讀。claude 的 id key 不驗：那要跑 `resolveTranscriptPath` 的多目錄掃描，每次列表、每個 pane 都付，而答案在有 id 時必然是「在」。
+
+記錄格式的分歧**不做分派**：一個 mapper 讀兩種詞彙，而且不知道是誰寫的。兩套詞彙不重疊（omp 把所有對話記錄放在 `type:"message"` 底下、role 在裡面；claude 拿 role 當 type），而「讀哪個檔」早就由 reader 註冊表按種類決定了——沒有 reader 的種類拿不到路徑，記錄根本到不了 mapper。票上契約 5 要求「依 agent 欄位分派」，目的（不支援的 agent 不投遞）已由路徑解析達成，手段不同。
+
+### #33 omp 權限流：兩套鍵盤模型
+
+deny-list 改成「有解析器的種類才進流程」＝ claude + omp，未回報種類仍放行（理由同上文四點，未變）。
+
+實測推翻了票上兩個設計前提（spike 2026-08-06，omp 17.2.9）：
+
+- **選項不是四項固定集合**。bundle 裡的 `allow_once`/`allow_always`/`reject_once`/`reject_always` 是常數定義，實際 TUI 對 bash 只畫兩項（Approve / Deny）。所以照 claude 的規則**解析**，不用先驗集合，也不因為解不出四項就判定 unparseable。
+- **提示同樣被水平規則上下包夾**，形狀跟 claude 同構。但規則不是 marker：omp 螢幕上還有別的規則（Update Available 橫幅），所以認的是 `Allow tool: `。
+
+該 marker 同時是**分類器**：omp 的 extension 對 API 失敗也回報 `blocked`（429 重試耗盡在 `agent_status` 上跟待答權限完全一樣），沒有 marker 的 blocked 是狀態不是問題，回 `null` 就不會在手機上冒出一張答不了的權限卡。
+
+答題是**距離**不是鍵。omp 的選項沒有編號，靠游標（U+F054，Nerd Font 圖示）標示選中項，所以答案是「從游標現在的位置移動到目標再 Enter」。距離必須用**答題當下**重讀的螢幕算——`guardStillCurrent` 本來就會重讀來驗 fingerprint，改成回傳那次的解析結果即可，不多一次 RPC。游標位置**不進 fingerprint**：終端機前的人移動選擇不代表問題變了，算進去會讓每個手機答案都變成 stale。清單**不 wrap**（實測：在最後一項按 Down 停在原地），所以負方向真的需要 `Up`。讀不到游標位置就不送鍵——那時按 Enter 等於在 Approve/Deny 之間擲硬幣。
+
+因此 `PermissionOption.keystroke` 在 wire 上改為 optional，omp 不帶；client 兩種都用 `optionId` 回答。
+
+`esc` 對 omp **啟用**。omp 自己在螢幕上標 `esc cancel`，實測按下去後 transcript 寫入 `role=toolResult isError=true "Tool call denied by user: bash"`，assistant 接著回覆，turn 正常收尾。票上「行為不明就先不送」的退路沒有用到。
+
+**佇列不需要建模**。票擔心 omp 的 `blockedCount` 引用計數意味著可能同時有多個待答權限。結構上不成立：TUI 一次只畫一個提示，而 cc-mobile 讀的就是螢幕——螢幕本身就是佇列。答完一個之後下一個 `blocked` 會照常觸發下一張卡。
+
+### 注入防護：locator 和 matcher 都要修
+
+`prompt-box.ts` 找「最後兩條水平規則之間」，在 omp 螢幕上抓到的是 Update Available 橫幅。但只修定位不夠：omp 把打到一半的字畫在狀態框的**下邊框行內**（`╰─ half typed thing ─╯`），**完全沒有 caret**，所以 claude 的 `❯`/`>` 比對怎麼定位都回 `false`。兩者都修才真的擋得住覆寫。修之前這是靜默失效——不會 crash，只是手機會直接蓋掉終端機前面的人打到一半的字。
+
+### `gated` 改用各自的詞彙
+
+`permissionModeFromArgv` 只認 `--permission-mode`，omp 的旗標是 `--approval-mode`（`always-ask|write|yolo`，另有 `--auto-approve` 等同 yolo）。不只是名字不同，**預設方向相反**：claude 沒帶旗標是「會問」，omp 沒帶旗標是「不問」（實測：預設的 omp 直接寫檔沒問）。所以沒帶旗標的 omp 是 ungated，徽章要照實說。
+
+### 範圍邊界：手機開的 omp 不帶 approval 旗標（使用者裁決）
+
+cc-mobile 從手機啟動 omp 時**不帶任何 approval 旗標**，沿用 omp 自己的預設（不閘門）。使用者裁決，2026-08-06。連帶結果：#33 處理的是**使用者自己在終端機用 `--approval-mode always-ask` / `write` 開的 omp**；手機開的 omp 不受保護，也不會產生權限提示。要改變這點只需在 `argvFor` 加一個 omp 旗標，是一行的事——但那是安全姿態的選擇，不是實作細節。

@@ -131,10 +131,27 @@ produced it; `claudeUuids` mirrors `sessions[].sessionId` (an outdated name kept
 for cached bundles — it holds pane ids of every kind now) and `states` is
 pane-keyed.
 
-Until #33 a pane whose kind is known to be something other than claude does not
-enter the permission flow: `blocked` there is not turned into a
-`permission_request`, because the screen parser and its keystrokes are claude's.
-A pane whose kind herdr has not reported is still forwarded.
+Since #33 two kinds enter the permission flow: claude and omp. A pane whose kind
+is known to be anything else does not — `blocked` there is not turned into a
+`permission_request`, because on a screen no parser understands even the
+Cancel-only fallback would send `esc` as a guess about what that key does. A
+pane whose kind herdr has not reported is still forwarded.
+
+The two prompts share nothing but the trigger. claude prints numbered options
+and takes the digit; omp prints an unnumbered list with a cursor glyph
+(`server/herdr/permission/omp-prompt.ts`) and takes arrow keys plus Enter, so
+its answer is a **distance** measured against the screen at answer time, not at
+emit time — a human at the terminal may have moved the selection. omp's marker
+`Allow tool: ` doubles as the classifier: its extension reports `blocked` for
+API failures too, and a blocked screen without that marker is a state, not a
+question. `PermissionOption.keystroke` is therefore optional on the wire, absent
+for omp; the client answers with `optionId` either way.
+
+`gated` is read in each kind's own vocabulary, and the defaults point opposite
+ways: claude with no flag asks, omp with no flag does not (verified live —
+a default omp writes files without asking). cc-mobile launches omp with no
+approval flag by choice, so the prompts #33 handles are the ones on panes the
+user started themselves with `--approval-mode always-ask` / `write`.
 
 Refused by the Zod gate: `list_sessions`, `resume_session`, `set_session_title`,
 `session_list`, `session_history`, `session_created` (all #26), plus #25's

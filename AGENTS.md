@@ -101,10 +101,15 @@ and never a lock: `drivable` stays `true` whatever the kind. `claudeUuids`
 mirrors `sessions[].sessionId` — an outdated name kept for cached bundles, since
 it now holds pane ids of every kind.
 
-Until #33 a pane whose kind is known to be something other than claude does not
-enter the permission flow: `blocked` there is not turned into a
-`permission_request`, because the screen parser and its keystrokes are claude's.
-A pane whose kind herdr has not reported is still forwarded.
+Since #33 claude and omp both enter the permission flow; a pane of any other
+known kind does not, and one of unreported kind still does. claude's prompt is
+numbered and answered with a digit; omp's (`permission/omp-prompt.ts`) is a
+cursor list answered with arrow keys plus Enter, so the keystrokes are a
+distance computed against the screen at answer time. omp's `Allow tool: ` marker
+also classifies: its extension reports `blocked` for API failures, and a blocked
+screen without the marker raises no prompt. `gated` reads each kind's own flag
+(`--permission-mode` vs `--approval-mode`), whose defaults point opposite ways —
+an unflagged omp is ungated.
 
 Refused by the Zod gate: `list_sessions`, `resume_session`, `set_session_title`,
 `session_list`, `session_history`, `session_created` (all #26), plus #25's
