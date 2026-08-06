@@ -8,7 +8,12 @@
 import { describe, expect, test } from "bun:test";
 import { createApp } from "../app";
 import { parseServerConfig } from "../config";
-import { createHerdrBackend, type HerdrBackendOptions, verifyHerdrStartup } from "./backend";
+import {
+  createHerdrBackend,
+  type HerdrBackendOptions,
+  permissionAppliesTo,
+  verifyHerdrStartup,
+} from "./backend";
 import { createHerdrClient } from "./client";
 import { HerdrTransportError } from "./errors";
 
@@ -229,6 +234,97 @@ describe("herdr backend composition", () => {
     // Injecting emits nothing by itself: the reply arrives later, read out of
     // claude's transcript when herdr reports the turn settled.
     expect(seen).toEqual([]);
+  });
+});
+
+// ── NonClaudePermissionSuppression ───────────────────────────────────────────
+
+describe("NonClaudePermissionSuppression", () => {
+  /** A backend whose event stream a test can drive, recording what it reads. */
+  function eventDrivenBackend() {
+    const reads: string[] = [];
+    let emit: ((event: { event: string; data: unknown }) => void) | undefined;
+
+    const client = {
+      call: async () => ({ type: "ok" }),
+      agentGet: async () => ({ agent_status: "blocked" }),
+      // The first thing the permission flow does with a `blocked` pane: read
+      // its screen. No read means it was never asked.
+      paneRead: async (params: { pane_id: string }) => {
+        reads.push(params.pane_id);
+        return { text: "", revision: 1 };
+      },
+      paneSendText: async () => {},
+      paneSendKeys: async () => {},
+      subscribeEvents: async (options: {
+        onEvent: (event: { event: string; data: unknown }) => void;
+      }) => {
+        emit = options.onEvent;
+        return { stop: () => {} };
+      },
+    } as unknown as NonNullable<HerdrBackendOptions["client"]>;
+
+    const backend = createHerdrBackend({ client });
+    const sent: Record<string, unknown>[] = [];
+
+    return {
+      backend,
+      reads,
+      sent,
+      async open(sessionId: string) {
+        backend.registerClient(sessionId, (msg) => sent.push(msg));
+        await backend.listSessionDescriptors();
+      },
+      async report(paneId: string, status: string, agent?: string) {
+        emit?.({
+          event: "pane_updated",
+          data: { pane: { pane_id: paneId, agent_status: status, ...(agent ? { agent } : {}) } },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      },
+    };
+  }
+
+  test("a pane running another agent raises no prompt when it blocks", async () => {
+    const h = eventDrivenBackend();
+    await h.open("w6C:p1");
+
+    await h.report("w6C:p1", "blocked", "omp");
+
+    // Not read, not parsed, not shown: claude's prompt parser and its
+    // keystrokes have no meaning on another agent's screen (#33).
+    expect(h.reads).toEqual([]);
+    expect(h.sent.some((msg) => msg.type === "permission_request")).toBe(false);
+  });
+
+  test("a blocked claude still reaches the permission flow", async () => {
+    const h = eventDrivenBackend();
+    await h.open("w3V:p1");
+
+    await h.report("w3V:p1", "blocked", "claude");
+
+    expect(h.reads).toEqual(["w3V:p1"]);
+  });
+
+  test("a pane of unreported kind is treated as claude, not as suspect", async () => {
+    const h = eventDrivenBackend();
+    await h.open("w9:p1");
+
+    await h.report("w9:p1", "blocked");
+
+    // Detection lags the first status report, and a swallowed prompt cannot be
+    // recovered inside that turn — see permissionAppliesTo.
+    expect(h.reads).toEqual(["w9:p1"]);
+  });
+
+  test("every non-blocked status is forwarded whatever the kind", () => {
+    expect(permissionAppliesTo("idle", "omp")).toBe(true);
+    expect(permissionAppliesTo("working", "omp")).toBe(true);
+    // Leaving `blocked` is what drops a pending prompt and disarms its 90 s
+    // esc timer; filtering those by kind would strand both.
+    expect(permissionAppliesTo("blocked", "omp")).toBe(false);
+    expect(permissionAppliesTo("blocked", "claude")).toBe(true);
+    expect(permissionAppliesTo("blocked", undefined)).toBe(true);
   });
 });
 

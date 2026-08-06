@@ -78,6 +78,38 @@ export interface HerdrTerminalBackend extends TerminalBackend {
   resumePermissions(): Promise<void>;
 }
 
+/**
+ * Whether a pane's status report should reach the permission flow.
+ *
+ * That flow is claude's end to end: the screen parser reads claude's prompt box
+ * and the answer is a keystroke aimed at claude's option list. So a pane known
+ * to be running something else is held back until each agent has its own parser
+ * (#33). Everything that is not `blocked` is forwarded whatever the kind — that
+ * is how a pending prompt gets dropped and its 90 s `esc` timer cleared.
+ *
+ * A deny-list (block the kinds known not to be claude) rather than an allow-list
+ * (forward only "claude"), for four reasons:
+ *
+ *  1. An unreported kind is most often a claude whose detection has not landed
+ *     yet — herdr fills `agent` from its own probe, which can trail the first
+ *     status report.
+ *  2. An allow-list's mistake is unrecoverable: swallow one `blocked` and
+ *     pane-events' `status === previous` early return (pane-events.ts) means the
+ *     same status is never re-announced, so nothing retries for the rest of that
+ *     turn. `resumePermissions()` cannot save it either — the prompt was never
+ *     pending. A deny-list's mistake is merely a prompt shown for a pane whose
+ *     kind arrives late.
+ *  3. The cost of the deny-list being wrong is bounded: a non-claude screen that
+ *     the parser cannot read degrades to a Cancel-only sheet, which sends `esc`
+ *     at worst.
+ *  4. The one keystroke cc-mobile sends by itself — the 90 s unattended `esc` —
+ *     only fires on panes cc-mobile launched, and those are always claude.
+ */
+export function permissionAppliesTo(status: string, kind: string | undefined): boolean {
+  if (status !== "blocked") return true;
+  return kind === undefined || kind === "claude";
+}
+
 export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalBackend {
   const client = options.client ?? createHerdrClient();
 
@@ -163,7 +195,10 @@ export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalB
       ? { snapshot: () => sessionSnapshot.call(client) }
       : {}),
     permission: {
-      onStatus: (sessionId, status) => permission.onStatus(sessionId, status),
+      onStatus: (sessionId, status, kind) => {
+        if (!permissionAppliesTo(status, kind)) return;
+        return permission.onStatus(sessionId, status);
+      },
     },
     transcript: {
       attach: (sessionId) => delivery.attach(sessionId),

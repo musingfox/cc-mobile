@@ -157,3 +157,16 @@ herdr 沒說出種類時（欄位缺席或空字串），descriptor **不帶** `
 `readable = 有 transcript key 且該種類有註冊的 reader`。reader 註冊表（`server/agents/transcript-readers.ts`）目前只有 claude 一筆；omp 的 reader 是 #32。未偵測出的種類靠查表自然落空，沒有為它另寫的特例分支。
 
 `readable` 的地位比照 H4 的 `gated`：**只揭露，不封鎖**。程式碼中沒有任何路徑因為 `readable === false` 而拒絕驅動、拒絕讀回或拒絕權限流程；實際讀不到只來自註冊表回 `null`，卡片上是一個 `no readback` 標示。`drivable` 依然硬編 `true`，種類永遠不會把它打成 `false`。
+
+### 非 claude 的 `blocked` 暫不進權限流程（#33 前的收斂）
+
+權限流程從頭到尾是 claude 的：螢幕解析器讀的是 claude 的提示框，答案是打在 claude 選項清單上的一個鍵。因此**已知**跑著別種 agent 的 pane 進入 `blocked` 時不生成 `permission_request`——這是暫時收斂，等每種 agent 有自己的解析器（#33）就解除。非 `blocked` 的狀態一律照常轉發，pending 才清得掉、90 秒 `esc` 計時器才解除得了。
+
+判斷用 **deny-list（只擋已知非 claude），未知種類放行**，不是 allow-list，理由四點：
+
+1. 沒回報種類的 pane 多半就是偵測還沒完成的 claude——herdr 的 `agent` 來自它自己的探測，可能落後第一則狀態回報。
+2. allow-list 錯了救不回來：吞掉一次 `blocked` 後，`pane-events.ts` 的 `status === previous` 早退讓同一個狀態不再重新宣告，整輪都不會重試；`resumePermissions()` 也救不了，因為那則提示從來沒進過 pending。deny-list 錯了只是替一個種類晚到的 pane 多顯示一張提示。
+3. 誤觸的代價有界：解析不出選項的螢幕會退成只有 Cancel 的表單，最壞送出 `esc`。
+4. cc-mobile 唯一自己送出的鍵（90 秒無人看管的 `esc`）只對自建 pane 生效，而自建 pane 必然是 claude。
+
+pane 的種類由事件層記住（最後一次回報的值，空字串不算回報），部分更新省略該欄位不會抹掉它；`forget()` 會清掉，因此重用的 pane id 從零開始。
