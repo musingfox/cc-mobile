@@ -220,6 +220,28 @@ it.skipIf(!existsSync(socketPath))(
       console.log(`[e2e] step 3 attach identity ccm-${uuid8} in ${Date.now() - t3}ms`);
 
       // Step 4: second turn on the SAME session — multi-turn on one live pane.
+      //
+      // `stream_end` says the turn's text is all here, NOT that the pane will
+      // accept the next one. The two herdr signals cc-mobile reads disagree for
+      // a few hundred ms at a turn boundary: delivery fires on an `idle` from
+      // the `pane.updated` stream, while `send-routing`'s readiness gate asks
+      // `agent.get` — which was still answering `working` 57ms earlier and
+      // answers it again ~290ms later, with the daemon's own
+      // `state_change_seq` never leaving the turn. A human takes far longer
+      // than that window to type a reply; this test does not, so it waits for
+      // the signal the gate actually consults.
+      await waitUntil(
+        async () => {
+          const status = await client
+            .agentGet(paneRef)
+            .then((a) => a.agent_status)
+            .catch(() => undefined);
+          return status === "idle" || status === "done";
+        },
+        SCREEN_DEADLINE_MS,
+        "step 4 the pane settled per agent.get (what the readiness gate reads)",
+      );
+
       const t4 = Date.now();
       ws.send(
         JSON.stringify({ type: "terminal_send", claudeUuid: sessionId, content: PROMPT_TURN_2 }),
