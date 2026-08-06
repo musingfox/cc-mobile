@@ -116,10 +116,17 @@ herdr has not detected a kind yet; it never means claude.** It is a snapshot-tim
 value — nothing pushes a kind on its own, so a late detection is picked up the
 next time the client asks for the list.
 
-`readable:true` now means "there is a transcript key **and** that kind has a
-registered reader" (only claude has one; omp is #32). Like `gated`, `readable` is
-a badge and never a lock: `drivable` stays `true` whatever the kind, and the
-composer stays enabled. `unknownUuids` is gone with the startup remount scan that
+`readable:true` means "there is a transcript key, that kind has a registered
+reader (claude and omp since #32), **and** — when the key is a path — the file
+is actually there". That last check is asymmetric on purpose: herdr gives omp
+the path itself (`agent_session.kind === "path"`), and omp reports it at launch
+but writes the file only when the first turn starts, so an omp nobody has
+spoken to has a key and no file indefinitely (probe 2026-08-06: still absent
+after 120s). One `access()` answers that. claude's key is an `id`, and asking
+the same question there means the multi-directory scan on every listing for
+every pane — not paid, since claude has written the file by the time it has an
+id. Like `gated`, `readable` is a badge and never a lock: `drivable` stays
+`true` whatever the kind, and the composer stays enabled. `unknownUuids` is gone with the startup remount scan that
 produced it; `claudeUuids` mirrors `sessions[].sessionId` (an outdated name kept
 for cached bundles — it holds pane ids of every kind now) and `states` is
 pane-keyed.

@@ -92,8 +92,11 @@ versions. **An absent `agent` means herdr has not detected a kind yet; it never
 means claude.** It is a snapshot-time value, refreshed only when the client asks
 for the list again.
 
-`readable:true` means "there is a transcript key **and** that kind has a
-registered reader" (only claude has one; omp is #32). Like `gated`, it is a badge
+`readable:true` means "there is a transcript key, that kind has a registered
+reader (claude and omp since #32), and — for a `path` key — the file exists".
+The last check is asymmetric: omp reports its path at launch and writes the file
+only on the first turn, so one `access()` is paid there; claude's `id` key would
+cost a directory scan per listing and is not checked. Like `gated`, it is a badge
 and never a lock: `drivable` stays `true` whatever the kind. `claudeUuids`
 mirrors `sessions[].sessionId` — an outdated name kept for cached bundles, since
 it now holds pane ids of every kind.

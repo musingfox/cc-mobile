@@ -140,12 +140,27 @@ it must never be read as claude.** The value is snapshot-time: no message ever
 pushes a kind on its own, so a detection that completes later reaches the client
 only when it asks for the list again (i.e. on reconnect).
 
-`readable:true` means the session has a transcript key **and** its kind has a
-registered transcript reader (claude today; omp is #32). Like `gated` it is
+`readable:true` means the session has a transcript key, its kind has a
+registered transcript reader (claude and omp since #32), **and** — when the key
+is a path rather than an id — the file that path names exists. Like `gated` it is
 disclosure only — nothing refuses to drive, read back or ask permission because
 it is `false`, and `drivable` stays `true` for every kind.
 
-Note: `stream_chunk.chunk` contains raw claude message objects (e.g., `{ type: "assistant", message: { content: [...] } }`). The frontend's `extractTextFromChunk()` parses these into displayable text.
+That last check is the one flag here that legitimately changes for a pane that
+did not change. herdr reports omp's transcript **path** (`agent_session.kind ===
+"path"`, only `pi` and `omp` get one) the moment the agent launches, but omp
+creates the file when the first turn starts — a fresh omp nobody has spoken to
+has a key and no file for as long as it stays quiet (probe 2026-08-06: still
+absent after 120s idle). So a new omp lists unreadable, and the same pane lists
+readable once it has said something. claude's `id` key is not checked the same
+way: answering it means `resolveTranscriptPath`'s directory scan, on every
+listing for every pane, for an answer that is always yes by the time an id
+exists.
+
+The key kind is server-side only — `ws.ts` projects the wire fields by name, so
+`agentSessionKind` never reaches the phone.
+
+Note: `stream_chunk.chunk` contains raw claude message objects (e.g., `{ type: "assistant", message: { content: [...] } }`). The frontend's `extractTextFromChunk()` parses these into displayable text. omp's records are mapped into that same envelope by `server/transcript/records.ts` — one mapper reads both vocabularies, since they do not overlap (omp puts every conversational record under `type:"message"` with the role inside; claude uses the role as the type) and which file is read is already decided per kind by the reader registry.
 
 ## Project Structure
 
