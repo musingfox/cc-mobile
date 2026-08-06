@@ -41,6 +41,9 @@ describe("wsService terminal session create", () => {
     getInternal().ws = prevWs;
     getInternal().pendingTerminalCreates.clear();
     toastService.error = originalToastError;
+    // The store is a module singleton shared with every other test file — a
+    // leftover agent list changes what ProjectDetailScreen renders over there.
+    useAppStore.setState({ availableAgents: [] });
   });
 
   test("createTerminalSession emits one terminal_create and adds a not-ready session", () => {
@@ -57,6 +60,26 @@ describe("wsService terminal session create", () => {
     expect(session).toBeDefined();
     expect(session?.cwd).toBe("/tmp");
     expect(session?.terminal?.ready).toBe(false);
+  });
+
+  test("an agent kind rides along on terminal_create when one is chosen", () => {
+    const claudeUuid = wsService.createTerminalSession("/tmp", "omp");
+
+    const payload = JSON.parse(fake.send.mock.calls[0][0] as string);
+    expect(payload).toEqual({ type: "terminal_create", claudeUuid, cwd: "/tmp", agentKind: "omp" });
+  });
+
+  test("server_config's availableAgents reaches the store, and a partial config leaves it alone", () => {
+    getInternal().handleMessage({
+      type: "server_config",
+      config: { availableAgents: ["claude", "omp"] },
+    });
+    expect(useAppStore.getState().availableAgents).toEqual(["claude", "omp"]);
+
+    // A set_model echo carries no agent list — losing it here would empty the
+    // footer's agent choice for the rest of the connection.
+    getInternal().handleMessage({ type: "server_config", config: { model: "opus" } });
+    expect(useAppStore.getState().availableAgents).toEqual(["claude", "omp"]);
   });
 
   test("terminal_created flips the session to ready", () => {

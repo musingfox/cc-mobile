@@ -1131,6 +1131,7 @@ class WsService {
           allowedRoots?: string[] | null;
           homeDirectory?: string;
           sessionId?: string;
+          availableAgents?: string[];
         };
         const settingsStore = useSettingsStore.getState();
         if (config?.permissionMode) {
@@ -1156,6 +1157,11 @@ class WsService {
             homeDirectory: config.homeDirectory ?? "~",
           });
         }
+        // Only the get_server_config reply carries this; the set_* echoes send a
+        // partial config, so an absent field must leave the list alone.
+        if (Array.isArray(config?.availableAgents)) {
+          store.setAvailableAgents(config.availableAgents.filter((k) => typeof k === "string"));
+        }
         break;
       }
 
@@ -1177,13 +1183,19 @@ class WsService {
    * the server takes seconds to pass its readiness gate.
    * Returns the generated claudeUuid, or null when the socket is down.
    */
-  createTerminalSession(cwd: string): string | null {
+  createTerminalSession(cwd: string, agentKind?: string): string | null {
     if (!this.ws) return null;
 
     const claudeUuid = crypto.randomUUID();
     useAppStore.getState().addSession(claudeUuid, cwd, { ready: false });
     this.pendingTerminalCreates.add(claudeUuid);
-    this.sendMessage({ type: "terminal_create", claudeUuid, cwd });
+    // Omitted rather than sent as undefined: the server reads an absent
+    // agentKind as claude (#31), which is also what an older bundle sends.
+    this.sendMessage(
+      agentKind
+        ? { type: "terminal_create", claudeUuid, cwd, agentKind }
+        : { type: "terminal_create", claudeUuid, cwd },
+    );
 
     return claudeUuid;
   }

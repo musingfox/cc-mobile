@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { cleanup, render } from "@testing-library/react";
+import { wsService } from "../../services/ws-service";
 import { useAppStore } from "../../stores/app-store";
 import ProjectDetailScreen from "./ProjectDetailScreen";
 
@@ -223,5 +224,86 @@ describe("ProjectDetailScreen session disclosure badges", () => {
     expect(badgeText(container)).toEqual(["terminal"]);
     expect(container.textContent).not.toContain("unknown");
     expect(container.textContent).not.toContain("claude");
+  });
+});
+
+/**
+ * The new-session footer. The agent choice only exists when the machine has
+ * more than one launchable kind — with one, the footer is the single button it
+ * has always been.
+ */
+describe("ProjectDetailScreen new-session footer", () => {
+  const created: Array<[string, string | undefined]> = [];
+  const originalCreate = wsService.createTerminalSession;
+
+  beforeEach(() => {
+    localStorage.clear();
+    created.length = 0;
+    wsService.createTerminalSession = ((cwd: string, agentKind?: string) => {
+      created.push([cwd, agentKind]);
+      return "u-new";
+    }) as typeof wsService.createTerminalSession;
+    useAppStore.setState({
+      sessions: new Map(),
+      activeSessionId: null,
+      connectionState: "connected",
+      availableAgents: [],
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    localStorage.clear();
+    wsService.createTerminalSession = originalCreate;
+    useAppStore.setState({ availableAgents: [] });
+  });
+
+  function ctas(container: HTMLElement): HTMLButtonElement[] {
+    return Array.from(container.querySelectorAll(".lin-projects-cta"));
+  }
+
+  test("one launchable kind keeps the single unchanged button", () => {
+    useAppStore.setState({ availableAgents: ["claude"] });
+
+    const { container } = renderScreen("/a");
+
+    const buttons = ctas(container);
+    expect(buttons.length).toBe(1);
+    expect(buttons[0]?.textContent).toContain("New session in this project");
+  });
+
+  test("before server_config arrives the footer is the same single button", () => {
+    const { container } = renderScreen("/a");
+
+    expect(ctas(container).length).toBe(1);
+  });
+
+  test("two kinds give one button each, naming the kind", () => {
+    useAppStore.setState({ availableAgents: ["claude", "omp"] });
+
+    const { container } = renderScreen("/a");
+
+    expect(ctas(container).map((b) => b.textContent)).toEqual([
+      "New claude session",
+      "New omp session",
+    ]);
+  });
+
+  test("tapping a kind's button starts that kind", () => {
+    useAppStore.setState({ availableAgents: ["claude", "omp"] });
+
+    const { container } = renderScreen("/a");
+    ctas(container)[1]?.click();
+
+    expect(created).toEqual([["/a", "omp"]]);
+  });
+
+  test("the single button sends no kind at all, so the server's default applies", () => {
+    useAppStore.setState({ availableAgents: ["claude"] });
+
+    const { container } = renderScreen("/a");
+    ctas(container)[0]?.click();
+
+    expect(created).toEqual([["/a", undefined]]);
   });
 });

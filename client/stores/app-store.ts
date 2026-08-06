@@ -350,6 +350,14 @@ interface AppState {
   setIsLoadingDirectories: (loading: boolean) => void;
   setServerPaths: (paths: ServerPaths) => void;
 
+  /**
+   * Agent kinds this machine can launch, from server_config (#31). Empty until
+   * the server answers — which reads as "offer the plain New session button",
+   * not as "nothing can be started".
+   */
+  availableAgents: string[];
+  setAvailableAgents: (kinds: string[]) => void;
+
   // Ember UI screen state
   activeScreen: ScreenName;
   setActiveScreen: (screen: ScreenName) => void;
@@ -804,6 +812,9 @@ export const useAppStore = create<AppState>((set) => ({
   setDirectoryListing: (directoryListing) => set({ directoryListing }),
   setIsLoadingDirectories: (isLoadingDirectories) => set({ isLoadingDirectories }),
   setServerPaths: (serverPaths) => set({ serverPaths }),
+
+  availableAgents: [],
+  setAvailableAgents: (availableAgents) => set({ availableAgents }),
 
   activeScreen: "chat",
   setActiveScreen: (activeScreen) => set({ activeScreen }),

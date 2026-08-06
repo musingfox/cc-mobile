@@ -44,6 +44,7 @@ export default function ProjectDetailScreen({ cwd, onNavigate, onBack }: Props) 
   const sessions = useAppStore((s) => s.sessions);
   const activeSessionId = useAppStore((s) => s.activeSessionId);
   const setActiveSession = useAppStore((s) => s.setActiveSession);
+  const availableAgents = useAppStore((s) => s.availableAgents);
 
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -75,8 +76,8 @@ export default function ProjectDetailScreen({ cwd, onNavigate, onBack }: Props) 
     return items;
   }, [sessions, cwd, activeSessionId, setActiveSession, onNavigate]);
 
-  const handleNewSession = () => {
-    wsService.createTerminalSession(cwd);
+  const handleNewSession = (agentKind?: string) => {
+    wsService.createTerminalSession(cwd, agentKind);
     onNavigate("chat");
   };
 
@@ -174,11 +175,28 @@ export default function ProjectDetailScreen({ cwd, onNavigate, onBack }: Props) 
         </section>
       </div>
 
+      {/* One button per launchable agent — but only once there is a choice to
+          make. With a single kind (or before server_config arrives) this is
+          byte-for-byte the button that was always here. */}
       <footer className="lin-projects-footer">
-        <button type="button" className="lin-projects-cta" onClick={handleNewSession}>
-          <Icon name="plus" size={13} color={T.fg2} />
-          <span>New session in this project</span>
-        </button>
+        {availableAgents.length > 1 ? (
+          availableAgents.map((kind) => (
+            <button
+              key={kind}
+              type="button"
+              className="lin-projects-cta"
+              onClick={() => handleNewSession(kind)}
+            >
+              <Icon name="plus" size={13} color={T.fg2} />
+              <span>New {kind} session</span>
+            </button>
+          ))
+        ) : (
+          <button type="button" className="lin-projects-cta" onClick={() => handleNewSession()}>
+            <Icon name="plus" size={13} color={T.fg2} />
+            <span>New session in this project</span>
+          </button>
+        )}
       </footer>
     </div>
   );
