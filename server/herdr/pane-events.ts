@@ -57,7 +57,12 @@ export interface PaneEventTranscript {
 
 /** The permission side of the wiring; `blocked` is what raises a prompt. */
 export interface PaneEventPermission {
-  onStatus(sessionId: string, status: string): Promise<void> | void;
+  /**
+   * `kind` is the last agent kind this pane reported, `undefined` while herdr
+   * has reported none — the caller decides what an unknown kind means, this
+   * module only remembers what was said.
+   */
+  onStatus(sessionId: string, status: string, kind?: string): Promise<void> | void;
 }
 
 /** Handle returned by the injected interval scheduler. */
@@ -113,6 +118,8 @@ interface PaneState {
   sessionValue?: string | null;
   /** Last `state_change_seq` seen for this pane; see `observe`. */
   seq?: number;
+  /** Last agent kind this pane reported; see `observe`. */
+  kind?: string;
 }
 
 /** Pane fields, wherever this event kind happens to put them. */
@@ -217,6 +224,15 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
       }
     }
 
+    // ── kind ────────────────────────────────────────────────────────────────
+    // Sticky, for the same reason the session value is: a partial report omits
+    // the field, and forgetting the kind there would make the next `blocked`
+    // look like a pane herdr has said nothing about. An empty string is the
+    // daemon saying "not detected", so it is not a report either. `forget()`
+    // clears it, which is what makes a reused pane id start from nothing.
+    const reportedKind = typeof pane.agent === "string" ? pane.agent : undefined;
+    if (reportedKind) state.kind = reportedKind;
+
     // ── status ──────────────────────────────────────────────────────────────
     const status = typeof pane.agent_status === "string" ? pane.agent_status : undefined;
     // The daemon's own transition counter for this agent, when the carrier had
@@ -255,7 +271,7 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
     run(transcript?.onStatus(sessionId, status));
     // `blocked` is claude asking for permission; every other status means
     // whatever was pending has been answered by someone.
-    run(permission?.onStatus(sessionId, status));
+    run(permission?.onStatus(sessionId, status, state.kind));
     // Deliver on ARRIVAL at a settled status — not on "left working" — so a
     // watcher that started mid-turn still reads that turn out (previous is
     // undefined then, and the fresh cursor sits at end of file, so it costs

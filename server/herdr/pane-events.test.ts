@@ -30,6 +30,8 @@ function harness(
   const sent: Record<string, Record<string, unknown>[]> = {};
   const transcriptCalls: string[] = [];
   const errors: Error[] = [];
+  /** Every status the permission side was told about, with the kind it got. */
+  const permissionCalls: { sessionId: string; status: string; kind?: string }[] = [];
   let emit: ((event: { event: string; data: unknown }) => void) | undefined;
   let resync: ((snapshot: unknown) => void) | undefined;
   const subscriptions: unknown[] = [];
@@ -86,6 +88,11 @@ function harness(
       ticks.delete(handle as number);
     },
     transcript,
+    permission: {
+      onStatus: (sessionId: string, status: string, kind?: string) => {
+        permissionCalls.push({ sessionId, status, kind });
+      },
+    },
     onError: (error: Error) => {
       errors.push(error);
     },
@@ -96,6 +103,7 @@ function harness(
     sent,
     errors,
     transcriptCalls,
+    permissionCalls,
     subscriptions,
     stopCalls: () => stopCalls,
     timerCount: () => ticks.size,
@@ -639,6 +647,79 @@ describe("PaneEventIdentityChange", () => {
       "attach:w3V:p1",
       "attach:w3V:p1",
     ]);
+  });
+});
+
+describe("PaneKindStickyObservation", () => {
+  /** The kind reported alongside the `blocked` the permission side saw. */
+  function kindAtBlocked(h: ReturnType<typeof harness>) {
+    return h.permissionCalls.find((call) => call.status === "blocked")?.kind;
+  }
+
+  test("remembers the kind a later partial update leaves out", async () => {
+    const h = harness();
+    await h.events.start();
+
+    h.emit({
+      event: "pane_updated",
+      data: { pane: { pane_id: "w6C:p1", agent: "omp", agent_status: "idle" } },
+    });
+    // A `pane.agent_status_changed` carries the status and little else; losing
+    // the kind here would make this look like a pane herdr never described.
+    h.emit({
+      event: "pane_updated",
+      data: { pane: { pane_id: "w6C:p1", agent_status: "blocked" } },
+    });
+    await flush();
+
+    expect(kindAtBlocked(h)).toBe("omp");
+  });
+
+  test("reports no kind for a pane that never reported one", async () => {
+    const h = harness();
+    await h.events.start();
+
+    h.emit({
+      event: "pane_updated",
+      data: { pane: { pane_id: "w9:p1", agent_status: "blocked" } },
+    });
+    await flush();
+
+    expect(h.permissionCalls).toHaveLength(1);
+    expect(kindAtBlocked(h)).toBeUndefined();
+  });
+
+  test("an empty kind is not a report, and is not carried as a kind either", async () => {
+    const h = harness();
+    await h.events.start();
+
+    h.emit({
+      event: "pane_updated",
+      data: { pane: { pane_id: "w9:p1", agent: "", agent_status: "blocked" } },
+    });
+    await flush();
+
+    expect(kindAtBlocked(h)).toBeUndefined();
+  });
+
+  test("a forgotten pane id starts from nothing, kind included", async () => {
+    const h = harness();
+    await h.events.start();
+
+    h.emit({
+      event: "pane_updated",
+      data: { pane: { pane_id: "w6C:p1", agent: "omp", agent_status: "idle" } },
+    });
+    h.events.forget("w6C:p1");
+    h.emit({
+      event: "pane_updated",
+      data: { pane: { pane_id: "w6C:p1", agent_status: "blocked" } },
+    });
+    await flush();
+
+    // herdr reuses pane ids; carrying the old tenant's kind into a new one
+    // would decide the new pane's permission handling on stale evidence.
+    expect(kindAtBlocked(h)).toBeUndefined();
   });
 });
 
