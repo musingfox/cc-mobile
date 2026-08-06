@@ -63,28 +63,14 @@ const GetServerConfigMessage = z.object({
   type: z.literal("get_server_config"),
 });
 
-const SetPermissionModeMessage = z.object({
-  type: z.literal("set_permission_mode"),
-  mode: z.enum(["default", "acceptEdits", "auto", "bypassPermissions", "dontAsk", "plan"]),
-  sessionId: z.string().optional(),
-});
-
-const SetEnvVarsMessage = z.object({
-  type: z.literal("set_env_vars"),
-  envVars: z.record(z.string()),
-});
-
-const SetModelMessage = z.object({
-  type: z.literal("set_model"),
-  model: z.string(),
-  sessionId: z.string().optional(),
-});
-
-const SetEffortMessage = z.object({
-  type: z.literal("set_effort"),
-  effort: z.enum(["low", "medium", "high", "max"]).nullable(),
-});
-
+/**
+ * `set_permission_mode`, `set_env_vars`, `set_model` and `set_effort` are gone.
+ * They were accepted and echoed but reached nothing — herdr receives none of
+ * it, and an agent's gating, model and effort are the agent's own settings,
+ * which cc-mobile stopped deciding. Refused by the gate now, exactly like
+ * #25's and #26's retired names: no compatibility window, a cached PWA bundle
+ * recovers with a page reload.
+ */
 const ListDirectoriesMessage = z.object({
   type: z.literal("list_directories"),
   path: z.string(),
@@ -147,10 +133,6 @@ export const ClientMessage = z.discriminatedUnion("type", [
   PermissionMessage,
   InterruptMessage,
   GetServerConfigMessage,
-  SetPermissionModeMessage,
-  SetEnvVarsMessage,
-  SetModelMessage,
-  SetEffortMessage,
   ListDirectoriesMessage,
   ReconnectMessage,
   AppendUserMessageSchema,
@@ -266,11 +248,9 @@ const CapabilitiesMessage = z.object({
 
 const ServerConfigMessage = z.object({
   type: z.literal("server_config"),
+  // Only what the server knows and the client cannot. The agent-setting fields
+  // (permissionMode, model, effort) went with the messages that set them.
   config: z.object({
-    permissionMode: z
-      .enum(["default", "acceptEdits", "auto", "bypassPermissions", "dontAsk", "plan"])
-      .optional(),
-    sessionId: z.string().optional(),
     allowedRoots: z.array(z.string()).nullable().optional(),
     homeDirectory: z.string().optional(),
     // Which kinds this machine can actually launch (#31). Sent only in the

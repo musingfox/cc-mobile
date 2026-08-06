@@ -8,14 +8,16 @@
  *     first message must be answered. (The source-level half of that contract —
  *     that the guard's message string is gone tree-wide — is asserted in
  *     dead-code-residue.test.ts.)
- *   ServerConfigStillAnswered — the settings screen still gets all five fields.
- *   NoOpConfigMessagesAccepted — the settings that no longer reach a pane are
- *     still *accepted*, not rejected. Pinned deliberately (plan D3) so this
- *     no-op state reads as intentional rather than as a regression.
+ *   ServerConfigStillAnswered — the settings screen still gets what the server
+ *     alone knows.
+ *   RetiredConfigMessagesRefused — the settings that never reached a pane are
+ *     now refused by the gate rather than accepted and echoed. They were kept
+ *     accepted for a while so the settings UI would not error; the UI that sent
+ *     them is gone.
  *
  * Assertions are on the frames the socket actually receives, not on
  * `ServerMessage.parse` output: `get_server_config` replies with a bare
- * `ws.send`, and the schema's `config` object would strip `model` / `effort`.
+ * `ws.send`.
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
@@ -38,7 +40,7 @@ const backendStub = {
   cleanupByOwner: () => {},
 };
 
-async function start(sessionManager = new SessionManager({ permissionMode: "default" })) {
+async function start(sessionManager = new SessionManager()) {
   harness = await startWsHarness(backendStub, testServerConfig, { sessionManager });
   return harness;
 }
@@ -67,82 +69,47 @@ describe("WsRoutingWithoutPermissionHandler", () => {
 });
 
 describe("ServerConfigStillAnswered", () => {
-  test("get_server_config carries all six fields", async () => {
+  test("get_server_config carries only what the server alone knows", async () => {
     const h = await start();
 
     h.send({ type: "get_server_config" });
     const reply = await h.waitFor((m) => m.type === "server_config");
     const config = reply.config as Record<string, unknown>;
 
-    expect(config.permissionMode).toBe("default");
     expect(Object.keys(config).sort()).toEqual([
       "allowedRoots",
       // Which kinds this machine can launch (#31) — the phone's agent choice
       // comes from here and nowhere else.
       "availableAgents",
-      "effort",
       "homeDirectory",
-      "model",
-      "permissionMode",
     ]);
     // claude is what cc-mobile itself runs on, so it is always present here.
     expect(config.availableAgents).toContain("claude");
+    // An agent's own settings are its own: the server neither sets nor reports
+    // them here any more.
+    for (const gone of ["permissionMode", "model", "effort"]) {
+      expect(Object.hasOwn(config, gone)).toBe(false);
+    }
   });
 });
 
-describe("NoOpConfigMessagesAccepted", () => {
-  test("set_model echoes the new model back and raises no error", async () => {
+describe("RetiredConfigMessagesRefused", () => {
+  test.each([
+    ["set_model", { type: "set_model", model: "opus" }],
+    ["set_effort", { type: "set_effort", effort: "high" }],
+    ["set_env_vars", { type: "set_env_vars", envVars: { FOO: "bar" } }],
+    ["set_permission_mode", { type: "set_permission_mode", mode: "acceptEdits" }],
+  ])("%s is refused by the gate, not echoed", async (_name, message) => {
     const h = await start();
 
-    h.send({ type: "set_model", model: "opus" });
-
-    const reply = await h.waitFor((m) => m.type === "server_config");
-    expect((reply.config as Record<string, unknown>).model).toBe("opus");
-    expect(errorFrames(h)).toEqual([]);
-  });
-
-  test("set_effort echoes the new effort back and raises no error", async () => {
-    const h = await start();
-
-    h.send({ type: "set_effort", effort: "high" });
-
-    const reply = await h.waitFor((m) => m.type === "server_config");
-    expect((reply.config as Record<string, unknown>).effort).toBe("high");
-    expect(errorFrames(h)).toEqual([]);
-  });
-
-  test("set_env_vars is accepted silently — no reply, no error", async () => {
-    const h = await start();
-
-    h.send({ type: "set_env_vars", envVars: { FOO: "bar" } });
-    // Round-trip a message that does reply, to prove the first one was processed.
-    h.send({ type: "get_server_config" });
-    await h.waitFor((m) => m.type === "server_config");
-
-    expect(errorFrames(h)).toEqual([]);
-  });
-
-  test("set_permission_mode without a sessionId echoes the mode back", async () => {
-    const h = await start();
-
-    h.send({ type: "set_permission_mode", mode: "acceptEdits" });
-
-    const reply = await h.waitFor((m) => m.type === "server_config");
-    expect((reply.config as Record<string, unknown>).permissionMode).toBe("acceptEdits");
-    expect(errorFrames(h)).toEqual([]);
-  });
-
-  test("set_permission_mode for an unknown sessionId still errors (kept behaviour)", async () => {
-    const h = await start();
-
-    h.send({ type: "set_permission_mode", mode: "plan", sessionId: "ghost" });
+    h.send(message as Record<string, unknown>);
 
     const reply = await h.waitFor((m) => m.type === "error");
-    expect(reply.code).toBe("session_not_found");
+    expect(reply.code).toBe("invalid_message");
   });
 
   test("append_user_message on a known session raises no error", async () => {
-    const sessionManager = new SessionManager({ permissionMode: "default" });
+    const sessionManager = new SessionManager();
     await sessionManager.createSession("s1", "/tmp");
     const h = await start(sessionManager);
 
@@ -156,7 +123,7 @@ describe("NoOpConfigMessagesAccepted", () => {
 
 describe("StopTaskReportsNoActiveQuery", () => {
   test("stop_task on a known session answers no_active_query", async () => {
-    const sessionManager = new SessionManager({ permissionMode: "default" });
+    const sessionManager = new SessionManager();
     await sessionManager.createSession("s1", "/tmp");
     const h = await start(sessionManager);
 

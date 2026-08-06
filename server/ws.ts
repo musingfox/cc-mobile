@@ -294,88 +294,18 @@ export function createWsPlugin(
           }
 
           case "get_server_config": {
+            // Only what the server knows and the client cannot. An agent's
+            // gating, model and effort are the agent's own settings: cc-mobile
+            // neither sets them nor reports them here.
             ws.send({
               type: "server_config",
               config: {
-                permissionMode: sessionManager.getPermissionMode(),
-                model: sessionManager.getSelectedModel(),
-                effort: sessionManager.getSelectedEffort(),
                 allowedRoots: serverConfig.allowedRoots,
                 homeDirectory: homedir(),
                 // Read per request rather than cached at boot: installing omp
                 // while the server runs should show up on the next reload, not
                 // require a restart (#31).
                 availableAgents: availableAgentKinds(),
-              },
-            });
-            break;
-          }
-
-          // TODO(#25-followup, #26): set_permission_mode / set_env_vars /
-          // set_model / set_effort record state and echo it back, but herdr
-          // receives none of it — the pane's mode comes from the argv app.ts
-          // built at startup. Since #26 emptied the session map for good, the
-          // per-session branch below always answers `session_not_found`; only
-          // the global branch still records anything. These stay accepted
-          // (rather than rejected) so the settings UI does not error at the
-          // user; making the UI honest is a separate ticket.
-          case "set_permission_mode": {
-            if (message.sessionId) {
-              if (!sessionManager.hasSession(message.sessionId)) {
-                ws.send({
-                  type: "error",
-                  code: "session_not_found",
-                  message: `Session ${message.sessionId} not found`,
-                  sessionId: message.sessionId,
-                });
-                break;
-              }
-
-              sessionManager.setSessionPermissionMode(message.sessionId, message.mode);
-              ws.send({
-                type: "server_config",
-                config: {
-                  permissionMode: message.mode,
-                  sessionId: message.sessionId,
-                },
-              });
-              break;
-            }
-
-            sessionManager.setPermissionMode(message.mode);
-            // Echo back updated config
-            ws.send({
-              type: "server_config",
-              config: {
-                permissionMode: message.mode,
-              },
-            });
-            break;
-          }
-
-          case "set_env_vars": {
-            sessionManager.setEnvVars(message.envVars);
-            break;
-          }
-
-          case "set_model": {
-            sessionManager.setModel(message.model);
-            ws.send({
-              type: "server_config",
-              config: {
-                model: sessionManager.getSelectedModel(),
-                effort: sessionManager.getSelectedEffort(),
-              },
-            });
-            break;
-          }
-
-          case "set_effort": {
-            sessionManager.setEffort(message.effort);
-            ws.send({
-              type: "server_config",
-              config: {
-                effort: sessionManager.getSelectedEffort(),
               },
             });
             break;

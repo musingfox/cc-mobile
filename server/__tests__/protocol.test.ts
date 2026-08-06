@@ -47,15 +47,8 @@ describe("ClientMessage schema", () => {
     expect(result.success).toBe(true);
   });
 
-  test("12: set_env_vars valid", () => {
-    const result = ClientMessage.safeParse({ type: "set_env_vars", envVars: { A: "1" } });
-    expect(result.success).toBe(true);
-  });
-
-  test("13: set_env_vars with invalid envVars fails", () => {
-    const result = ClientMessage.safeParse({ type: "set_env_vars", envVars: ["invalid"] });
-    expect(result.success).toBe(false);
-  });
+  // set_env_vars and the other agent-settings messages are retired; that they
+  // are refused is pinned in protocol-retired-messages.test.ts.
 
   test("append_user_message valid with string content", () => {
     const result = ClientMessage.safeParse({
@@ -187,11 +180,14 @@ describe("ServerMessage schema", () => {
     expect(result.success).toBe(false);
   });
 
-  test("server_config invalid permissionMode", () => {
+  test("server_config drops an agent-settings field it no longer carries", () => {
     const result = ServerMessage.safeParse({
       type: "server_config",
-      config: { permissionMode: "invalid" },
+      config: { homeDirectory: "/home/u", permissionMode: "acceptEdits" },
     });
-    expect(result.success).toBe(false);
+
+    expect(result.success).toBe(true);
+    if (!result.success || result.data.type !== "server_config") return;
+    expect(Object.hasOwn(result.data.config, "permissionMode")).toBe(false);
   });
 });

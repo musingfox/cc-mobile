@@ -3,7 +3,9 @@
  * RetiredHistoryMessagesRejected.
  *
  * #25 removed the SDK query path and the messages that only ever fed it; #26
- * removed the browse-past-conversations path on top of it. There
+ * removed the browse-past-conversations path on top of it; the agent-settings
+ * controls followed, once it was settled that an agent's mode, model and effort
+ * are the agent's own settings rather than cc-mobile's to decide. There
  * is no compatibility window (plan D4): a stale bundle sending an old name is
  * refused by the Zod gate and gets `{code:"invalid_message"}` back, which the
  * client already surfaces. The failure is loud, and the user's fix is a reload.
@@ -36,6 +38,13 @@ describe("RetiredMessageTypesRejected", () => {
       "set_session_title",
       { type: "set_session_title", sdkSessionId: "abc", title: "t", dir: "/x" },
     ],
+    // The agent-settings controls. They were accepted and echoed long after
+    // they stopped reaching anything, purely so the settings UI would not error
+    // at the user; that UI is gone too.
+    ["set_permission_mode", { type: "set_permission_mode", mode: "acceptEdits" }],
+    ["set_model", { type: "set_model", model: "opus" }],
+    ["set_effort", { type: "set_effort", effort: "high" }],
+    ["set_env_vars", { type: "set_env_vars", envVars: { FOO: "bar" } }],
   ])("client message %s no longer parses", (_name, payload) => {
     expect(ClientMessage.safeParse(payload).success).toBe(false);
   });
@@ -84,7 +93,7 @@ describe("RetiredHistoryMessagesRejected over the socket", () => {
         cleanupByOwner: () => {},
       },
       testServerConfig,
-      { sessionManager: new SessionManager({ permissionMode: "default" }) },
+      { sessionManager: new SessionManager() },
     );
 
     harness.send({ type: "list_sessions" });
