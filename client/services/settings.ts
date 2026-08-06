@@ -5,10 +5,6 @@ export interface Settings {
   theme: Theme;
   notificationsEnabled: boolean;
   hapticsEnabled: boolean;
-  envVars: Record<string, string>;
-  model: string;
-  effort: string | null;
-  permissionMode: string;
 }
 
 const SETTINGS_KEY = "cc-mobile-settings";
@@ -18,10 +14,6 @@ const defaultSettings: Settings = {
   theme: "dark",
   notificationsEnabled: false,
   hapticsEnabled: false,
-  envVars: {},
-  model: "",
-  effort: null,
-  permissionMode: "auto",
 };
 
 export function saveSettings(settings: Settings): void {
@@ -38,11 +30,6 @@ export function loadSettings(): Settings {
     if (!stored) return defaultSettings;
     const parsed = JSON.parse(stored);
 
-    let envVars = defaultSettings.envVars;
-    if (parsed.envVars && typeof parsed.envVars === "object" && !Array.isArray(parsed.envVars)) {
-      envVars = parsed.envVars;
-    }
-
     return {
       defaultCwd:
         typeof parsed.defaultCwd === "string" ? parsed.defaultCwd : defaultSettings.defaultCwd,
@@ -57,15 +44,6 @@ export function loadSettings(): Settings {
         typeof parsed.hapticsEnabled === "boolean"
           ? parsed.hapticsEnabled
           : defaultSettings.hapticsEnabled,
-      envVars,
-      model: typeof parsed.model === "string" ? parsed.model : defaultSettings.model,
-      effort:
-        parsed.effort === null || typeof parsed.effort === "string"
-          ? parsed.effort
-          : defaultSettings.effort,
-      // Global mode is fixed to "auto"; per-session overrides live in app-store.
-      // Persisted values are ignored so stale pre-"auto" settings can't stick.
-      permissionMode: defaultSettings.permissionMode,
     };
   } catch (error) {
     console.error("[settings] failed to load, using defaults:", error);

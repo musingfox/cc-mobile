@@ -164,10 +164,6 @@ describe("Settings schema", () => {
       theme: "light",
       notificationsEnabled: true,
       hapticsEnabled: true,
-      envVars: {},
-      model: "claude-sonnet-4-6",
-      effort: null,
-      permissionMode: "default",
     });
     const s = loadSettings();
     expect(s.notificationsEnabled).toBe(true);

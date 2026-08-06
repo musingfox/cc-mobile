@@ -29,14 +29,10 @@ describe("settings service", () => {
       theme: "light",
       notificationsEnabled: false,
       hapticsEnabled: false,
-      envVars: {},
-      model: "claude-sonnet-4-6",
-      effort: null,
-      permissionMode: "auto",
     });
     const stored = mockStorage.get("cc-mobile-settings");
     expect(stored).toBe(
-      '{"defaultCwd":"/tmp","theme":"light","notificationsEnabled":false,"hapticsEnabled":false,"envVars":{},"model":"claude-sonnet-4-6","effort":null,"permissionMode":"auto"}',
+      '{"defaultCwd":"/tmp","theme":"light","notificationsEnabled":false,"hapticsEnabled":false}',
     );
   });
 
@@ -48,10 +44,6 @@ describe("settings service", () => {
       theme: "dark",
       notificationsEnabled: false,
       hapticsEnabled: false,
-      envVars: {},
-      model: "",
-      effort: null,
-      permissionMode: "auto",
     });
   });
 
@@ -63,17 +55,16 @@ describe("settings service", () => {
       theme: "dark",
       notificationsEnabled: false,
       hapticsEnabled: false,
-      envVars: {},
-      model: "",
-      effort: null,
-      permissionMode: "auto",
     });
   });
 
-  test("loadSettings returns saved values (stale permissionMode coerced to auto)", () => {
+  test("loadSettings returns saved values, ignoring keys it no longer carries", () => {
+    // A bundle from before the agent-settings controls were removed wrote
+    // model/effort/permissionMode/envVars here. They are read past, not
+    // migrated: nothing consumes them any more.
     mockStorage.set(
       "cc-mobile-settings",
-      '{"defaultCwd":"/workspace","theme":"claude","permissionMode":"default"}',
+      '{"defaultCwd":"/workspace","theme":"claude","permissionMode":"default","model":"opus","envVars":{"A":"1"}}',
     );
     const result = loadSettings();
     expect(result).toEqual({
@@ -81,10 +72,6 @@ describe("settings service", () => {
       theme: "claude",
       notificationsEnabled: false,
       hapticsEnabled: false,
-      envVars: {},
-      model: "",
-      effort: null,
-      permissionMode: "auto",
     });
   });
 });

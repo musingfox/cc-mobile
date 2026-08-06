@@ -71,7 +71,6 @@ export default function DebugOverlay() {
               usage: state.sessions.get(state.activeSessionId)?.usage ?? null,
             }
           : null,
-        permissionMode: state.permissionMode,
         capabilities: state.capabilities,
       };
       setStoreSnapshot(JSON.stringify(snapshot, null, 2));

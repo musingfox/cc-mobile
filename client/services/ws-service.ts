@@ -283,16 +283,6 @@ export function deriveContextUsage(
   return { totalTokens, maxTokens: effectiveMax, percentage };
 }
 
-export function handleModelNotFoundError(chunk: Record<string, unknown>): boolean {
-  if (chunk.type !== "assistant") return false;
-  if (chunk.error !== "model_not_found") return false;
-  const currentModel = useSettingsStore.getState().model;
-  if (!currentModel) return false;
-  toastService.error(`Model ${currentModel} unavailable, falling back to device default`);
-  useSettingsStore.getState().setModel("");
-  return true;
-}
-
 export function extractTextFromChunk(chunk: Record<string, unknown>): string | null {
   if (chunk.type === "assistant") {
     const message = chunk.message as
@@ -420,16 +410,10 @@ class WsService {
       store.setConnectionState("connected");
       this.reconnectDelay = 1000;
       this.ws = ws;
-      // Request current server config (including permission mode)
+      // Which paths are allowed, and which agents this machine can launch.
+      // Nothing is pushed the other way any more: an agent's model, effort and
+      // gating are its own settings, not cc-mobile's to restore.
       this.sendMessage({ type: "get_server_config" });
-      // Restore persisted preferences to server
-      const settings = useSettingsStore.getState();
-      this.setEnvVars(settings.envVars);
-      this.setModel(settings.model);
-      this.setEffort(settings.effort as "low" | "medium" | "high" | "max" | null);
-      if (settings.permissionMode !== "default") {
-        this.setPermissionMode(settings.permissionMode);
-      }
 
       // Send reconnect with per-session cursors so the server replays the events
       // missed during the drop for EACH session independently (eventIds are
@@ -876,7 +860,6 @@ class WsService {
         // signals a new turn, so any active tools NOT listed in this message's
         // content are leftovers that the SDK already finished executing.
         if (chunk.type === "assistant") {
-          handleModelNotFoundError(chunk);
           const message = chunk.message as { content?: Array<Record<string, unknown>> } | undefined;
           const currentTurnToolIds = new Set<string>();
           if (message?.content) {
@@ -1124,41 +1107,20 @@ class WsService {
       }
 
       case "server_config": {
+        // Only what the server knows and the client cannot: which paths are
+        // allowed, and which agents this machine can launch. An agent's mode,
+        // model and effort are its own settings and no longer travel here.
         const config = msg.config as {
-          permissionMode?: string;
-          model?: string;
-          effort?: string | null;
           allowedRoots?: string[] | null;
           homeDirectory?: string;
-          sessionId?: string;
           availableAgents?: string[];
         };
-        const settingsStore = useSettingsStore.getState();
-        if (config?.permissionMode) {
-          if (config.sessionId) {
-            // Per-session override echo — do NOT touch global default
-            store.setSessionPermissionMode(config.sessionId, config.permissionMode);
-          } else {
-            store.setPermissionMode(config.permissionMode);
-            settingsStore.setPermissionMode(config.permissionMode);
-          }
-        }
-        if (config?.model) {
-          store.setSelectedModel(config.model);
-          settingsStore.setModel(config.model);
-        }
-        if (config?.effort !== undefined) {
-          store.setSelectedEffort(config.effort);
-          settingsStore.setEffort(config.effort);
-        }
         if (config?.allowedRoots !== undefined || config?.homeDirectory) {
           store.setServerPaths({
             allowedRoots: config.allowedRoots ?? null,
             homeDirectory: config.homeDirectory ?? "~",
           });
         }
-        // Only the get_server_config reply carries this; the set_* echoes send a
-        // partial config, so an absent field must leave the list alone.
         if (Array.isArray(config?.availableAgents)) {
           store.setAvailableAgents(config.availableAgents.filter((k) => typeof k === "string"));
         }
@@ -1360,26 +1322,6 @@ class WsService {
   stopTask(sessionId: string, taskId: string) {
     if (!this.ws) return;
     this.sendMessage({ type: "stop_task", sessionId, taskId });
-  }
-
-  setPermissionMode(mode: string, sessionId?: string) {
-    if (!this.ws) return;
-    this.sendMessage({ type: "set_permission_mode", mode, ...(sessionId && { sessionId }) });
-  }
-
-  setModel(model: string, sessionId?: string) {
-    if (!this.ws) return;
-    this.sendMessage({ type: "set_model", model, ...(sessionId && { sessionId }) });
-  }
-
-  setEffort(effort: "low" | "medium" | "high" | "max" | null) {
-    if (!this.ws) return;
-    this.sendMessage({ type: "set_effort", effort });
-  }
-
-  setEnvVars(envVars: Record<string, string>) {
-    if (!this.ws) return;
-    this.sendMessage({ type: "set_env_vars", envVars });
   }
 
   listDirectories(path: string) {

@@ -33,7 +33,12 @@ export type Message = {
 export type PermissionOption = {
   id: string;
   label: string;
-  keystroke: string;
+  /**
+   * Absent on omp, whose options are chosen by arrow keys rather than by one
+   * key (#33). Nothing here reads it — an answer names the `id` and the server
+   * works out what to press — so it rides along purely as disclosure.
+   */
+  keystroke?: string;
 };
 
 export type PendingPermission = {
@@ -199,7 +204,6 @@ export type SessionState = {
   resolvedActions: ResolvedAction[];
   agentState: "idle" | "running" | "requires_action" | null;
   receivedAuthoritativeState: boolean;
-  permissionMode?: string;
   // Present only on sessions backed by a live terminal session (herdr).
   // `ready` flips true on `terminal_created`; sends are gated until then.
   terminal?: { ready: boolean };
@@ -311,17 +315,6 @@ interface AppState {
   // Prompt suggestion (per-session)
   setPromptSuggestion: (sessionId: string, suggestion: string | null) => void;
 
-  // Model/Effort selection (server-side)
-  selectedModel: string;
-  setSelectedModel: (model: string) => void;
-  selectedEffort: string | null;
-  setSelectedEffort: (effort: string | null) => void;
-
-  // Permission mode (server-side setting)
-  permissionMode: string;
-  setPermissionMode: (mode: string) => void;
-  setSessionPermissionMode: (sessionId: string, mode: string | undefined) => void;
-
   // Global error (e.g., invalid cwd)
   globalError: string | null;
   setGlobalError: (error: string | null) => void;
@@ -403,7 +396,6 @@ export const useAppStore = create<AppState>((set) => ({
         resolvedActions: [],
         agentState: null,
         receivedAuthoritativeState: false,
-        permissionMode: undefined,
         terminal,
       });
       return {
@@ -455,8 +447,7 @@ export const useAppStore = create<AppState>((set) => ({
           resolvedActions: [],
           agentState: null,
           receivedAuthoritativeState: false,
-          permissionMode: undefined,
-        }),
+          }),
         cwd: existing?.cwd || cwd,
         terminal: { ready: true },
         descriptor: flags,
@@ -606,21 +597,6 @@ export const useAppStore = create<AppState>((set) => ({
       sessions: updateSession(state.sessions, sessionId, (s) => ({
         ...s,
         promptSuggestion: suggestion,
-      })),
-    })),
-
-  selectedModel: "",
-  setSelectedModel: (selectedModel) => set({ selectedModel }),
-  selectedEffort: null,
-  setSelectedEffort: (selectedEffort) => set({ selectedEffort }),
-
-  permissionMode: "default",
-  setPermissionMode: (permissionMode) => set({ permissionMode }),
-  setSessionPermissionMode: (sessionId, mode) =>
-    set((state) => ({
-      sessions: updateSession(state.sessions, sessionId, (s) => ({
-        ...s,
-        permissionMode: mode,
       })),
     })),
 

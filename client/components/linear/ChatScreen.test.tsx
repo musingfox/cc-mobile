@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { useAppStore } from "../../stores/app-store";
-import { useSettingsStore } from "../../stores/settings-store";
 import ChatScreen from "./ChatScreen";
 
 describe("ChatScreen", () => {
@@ -13,7 +12,6 @@ describe("ChatScreen", () => {
       capabilities: null,
       inputDraft: "",
     });
-    useSettingsStore.setState({ permissionMode: "default" });
   });
 
   afterEach(() => {
