@@ -79,7 +79,7 @@ All recorded in `docs/adr/`. Key decisions:
 
 ### WebSocket Protocol
 
-Client→Server: `terminal_create`, `terminal_send`, `terminal_teardown`, `list_terminal_sessions`, `permission`, `interrupt`, `stop_task`, `append_user_message`, `get_server_config`, `set_model`, `set_effort`, `set_env_vars`, `set_permission_mode`, `list_directories`, `reconnect`
+Client→Server: `terminal_create`, `terminal_send`, `terminal_teardown`, `list_terminal_sessions`, `permission`, `interrupt`, `stop_task`, `append_user_message`, `get_server_config`, `list_directories`, `reconnect`
 
 `permission` carries `optionId` — the id of one of the options the server parsed
 off the terminal's screen. The pre-#29 `allow` boolean is still accepted for one
@@ -91,10 +91,12 @@ start (`server/agents/kinds.ts`; absent → `claude`, which is what every bundle
 cached before #31 sends). Unlike `sessions[].agent` — herdr's inbound label, a
 free string — this one is a closed enum: it becomes the `kind` herdr execs, so an
 unlisted value is refused with `invalid_message` before a workspace exists. Each
-kind carries its own argv (`registry.ts`'s `argvFor`): claude's
-`--permission-mode`/`--session-id` are claude's own flags and are not passed to
-anything else. `server_config.availableAgents` names the kinds whose binary is on
-`PATH`, and is sent only in the `get_server_config` reply.
+kind carries its own argv (`registry.ts`'s `argvFor`), and neither kind gets a
+gating flag: an agent's permission posture is its own setting, which cc-mobile
+stopped deciding (ADR-003 superseded). claude keeps `--session-id` — transcript
+naming, not a setting — and omp is handed its transcript path by herdr instead.
+`server_config.availableAgents` names the kinds whose binary is on `PATH`, and
+is sent only in the `get_server_config` reply.
 
 Server→Client: `terminal_created`, `terminal_teardown_result`, `terminal_sessions`, `stream_chunk`, `stream_end`, `session_state`, `permission_request`, `capabilities`, `server_config`, `directory_listing`, `event`, `replay_complete`, `error`
 
@@ -153,7 +155,9 @@ a default omp writes files without asking). cc-mobile launches omp with no
 approval flag by choice, so the prompts #33 handles are the ones on panes the
 user started themselves with `--approval-mode always-ask` / `write`.
 
-Refused by the Zod gate: `list_sessions`, `resume_session`, `set_session_title`,
+Refused by the Zod gate: `set_permission_mode`, `set_model`, `set_effort`,
+`set_env_vars` (the agent-settings controls, removed once it was settled that an
+agent's mode is its own), `list_sessions`, `resume_session`, `set_session_title`,
 `session_list`, `session_history`, `session_created` (all #26), plus #25's
 `new_session`, `send`, `command`, `pty_send`, `get_session_info`,
 `session_info`, `result` and the `tmux_*` names `terminal_*` replaced.
@@ -162,7 +166,7 @@ Schemas defined in `server/protocol.ts`. Full spec in `cc-mobile.md`.
 
 ## Security Constraints
 
-- Permission mode defaults to `"default"` — configurable via `--permission-mode` CLI flag (ADR-003)
+- cc-mobile sets no agent settings: no `--permission-mode` on launch, no CLI flag, and `set_permission_mode` / `set_model` / `set_effort` / `set_env_vars` are refused by the Zod gate. Each agent runs at its own configured posture (ADR-003 superseded; ADR-015 §2026-08-06). `sessions[].gated` still discloses an ungated pane by reading its argv.
 - `CC_MOBILE_ALLOWED_ROOTS` env var restricts allowed working directories
 - No auth layer on Tailscale (network membership = auth)
 - If exposing via Cloudflare Tunnel, auth must be added

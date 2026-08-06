@@ -93,17 +93,18 @@ Open `http://localhost:5173` on your browser, or use your machine's IP / Tailsca
 ### Server CLI Flags
 
 ```bash
-bun run dev:server -- --port 4000 --default-cwd ~/workspace --permission-mode acceptEdits
+bun run dev:server -- --port 4000 --default-cwd ~/workspace
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--port` | `3001` | Server port |
 | `--default-cwd` | none | Default working directory for new sessions |
-| `--permission-mode` | `default` | SDK permission mode: `default`, `acceptEdits`, `auto`, `plan`, `dontAsk`, `bypassPermissions` |
 | `--hostname` | `0.0.0.0` | Server bind address |
 
-**Security note**: `--permission-mode` can only be set via CLI flag (server-side opt-in). The client UI can query the current mode but cannot change it.
+**Security note**: cc-mobile sets no agent settings at all — it passes no permission or approval flag when launching, and the messages that used to adjust mode / model / effort / env vars are refused by the Zod gate. Each agent runs at whatever its own configuration says, exactly as it would if you had started it in your own terminal (ADR-003 superseded; see ADR-015 §2026-08-06).
+
+The session list still *discloses* a pane running without a gate: a card marked `no permission gate` means that agent's own argv says it will not stop to ask. Disclosure, not control — cc-mobile reads that flag, it does not set it.
 
 ### Environment Variables
 
@@ -240,7 +241,7 @@ cc-mobile/
 |-----|----------|
 | [001](docs/adr/001-zod-runtime-validation.md) | Zod for runtime WebSocket message validation |
 | [002](docs/adr/002-permission-bridge-promise-pattern.md) | Promise + timeout pattern for permission relay |
-| [003](docs/adr/003-permission-mode-default.md) | Default to `"default"` permission mode, server-side opt-in |
+| [003](docs/adr/003-permission-mode-default.md) | Default to `"default"` permission mode, server-side opt-in (superseded — cc-mobile sets no agent settings) |
 | [004](docs/adr/004-centralized-socket-hook.md) | Centralized socket hook (superseded by ADR-008) |
 | [005](docs/adr/005-elysia-ws-plugin-pattern.md) | Elysia WS plugin pattern for testability |
 | [006](docs/adr/006-plugin-loading-from-user-settings.md) | Plugin loading from ~/.claude/ settings |

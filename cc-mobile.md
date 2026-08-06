@@ -78,7 +78,11 @@ All messages are Zod-validated (see [ADR-001](docs/adr/001-zod-runtime-validatio
 { type: "get_server_config" }
 ```
 
-Refused by the Zod gate with `{code:"invalid_message"}`: `list_sessions`,
+Refused by the Zod gate with `{code:"invalid_message"}`: `set_permission_mode`,
+`set_model`, `set_effort` and `set_env_vars` — the agent-settings controls,
+removed once it was settled that an agent's mode, model and effort are the
+agent's own settings and not cc-mobile's to decide (ADR-003 superseded) — plus
+`list_sessions`,
 `resume_session` and `set_session_title` (removed in #26 with the whole
 browse-past-conversations path), plus #25's `new_session`, `send`, `command`,
 `pty_send`, `get_session_info` and the `tmux_*` names that `terminal_*`
@@ -104,16 +108,19 @@ a page reload.
   states?: Record<string, "idle" | "running" | "requires_action"> }
 { type: "session_state", sessionId: string, state: "idle" | "running" | "requires_action" }
 { type: "error", code: string, message: string, sessionId?: string }
-{ type: "server_config", config: { permissionMode: string, availableAgents?: ("claude"|"omp")[] } }
+{ type: "server_config", config: { allowedRoots?: string[] | null, homeDirectory?: string,
+                                  availableAgents?: ("claude"|"omp")[] } }
 ```
 
+`server_config` now carries only what the server knows and the client cannot:
+which paths are allowed, where `$HOME` is, and which agents this machine can
+launch. The `permissionMode` / `model` / `effort` fields went with the messages
+that set them.
+
 `availableAgents` (#31) names the kinds this machine can launch — a
-`LAUNCHABLE_AGENT_KINDS` entry whose binary is on `PATH`. It rides only on the
-reply to `get_server_config`; the `set_model` / `set_effort` /
-`set_permission_mode` echoes carry a partial config and the client merges field
-by field, so an absent list means "unchanged", never "none". A kind missing from
-it is missing from the phone's new-session choice, which is the whole point:
-naming an unavailable kind would start a pane that dies immediately.
+`LAUNCHABLE_AGENT_KINDS` entry whose binary is on `PATH`. A kind missing from it
+is missing from the phone's new-session choice, which is the whole point: naming
+an unavailable kind would start a pane that dies immediately.
 
 Note the asymmetry with `sessions[].agent`, which stays a free string: that one
 is **inbound** — herdr's own label, whose vocabulary grows between versions, so
@@ -219,11 +226,11 @@ cc-mobile/
 ### 1. Session Manager — session map + settings state
 
 The in-process `query()` turn driver was removed in #25 (ADR-015). Turns are
-driven by the herdr backend; `SessionManager` now only holds the settings the
-settings screen reads back through `get_server_config`. Its session map has had
-no writer since #26 deleted the resume handler, so every session-scoped message
-(`set_permission_mode` with a `sessionId`, `append_user_message`) answers
-`session_not_found`, and `interrupt` is a silent no-op.
+driven by the herdr backend; `SessionManager` now holds only the session map —
+the settings state went with the messages that wrote it. That map has had no
+writer since #26 deleted the resume handler, so every session-scoped message
+(`append_user_message`) answers `session_not_found`, and `interrupt` is a silent
+no-op.
 
 ```typescript
 class SessionManager {
@@ -322,8 +329,10 @@ Add to home screen → launches as standalone app (no browser chrome).
 Mobile "new session" launches a real agent process inside a herdr workspace (`terminal_create`/`terminal_send`/`terminal_teardown` messages) — `claude` by default, or any kind in `availableAgents` since #31. The same live session can be joined from the desktop with `herdr agent attach ccm-<first-8-of-uuid>`.
 
 Each kind brings its own argv (`server/herdr/registry.ts`'s `argvFor`): claude
-gets `--permission-mode` and `--session-id`, omp gets none — those are claude's
-own CLI flags and omp would die on them. omp's permission handling is #33.
+keeps `--session-id` (transcript naming), omp gets nothing — that is claude's
+own CLI flag and omp would die on it. **Neither kind gets a gating flag**:
+cc-mobile does not decide an agent's permission posture, so each runs at its own
+configured setting exactly as it would if you had started it yourself.
 
 **Limitation — trusted directories only**: the herdr path currently only works for working directories already trusted in `~/.claude.json`. For an untrusted directory, `claude` shows its folder-trust dialog on startup; the first prompt is swallowed by that dialog, and the readiness gate cannot detect this state. Until this is handled, only create sessions in previously trusted directories. Tracked in #24.
 
@@ -357,7 +366,7 @@ own CLI flags and omp would die on them. omp's permission handling is #33.
 - Hook status display
 - Dark/light/Claude theme toggle
 - Settings page (default CWD, theme, pin management, localStorage persistence)
-- Server-side CLI flags: `--default-cwd`, `--permission-mode`, `--port`, `--hostname`
+- Server-side CLI flags: `--default-cwd`, `--port`, `--hostname`
 - `CC_MOBILE_ALLOWED_ROOTS` env var for project path whitelist
 - E2E test suite (Playwright with mock server) — removed in #25; the live herdr suites (`bun run test:herdr`) replaced it
 
@@ -403,8 +412,8 @@ cloudflared tunnel --url http://localhost:3001
 ## Security Considerations
 
 1. **No auth on Tailscale** — acceptable because Tailscale is a private mesh network. Only your devices can connect.
-2. **Permission mode defaults to `"default"`** — every tool use requires explicit approval on the phone. This is intentional for remote usage. (see [ADR-003](docs/adr/003-permission-mode-default.md))
-3. **Configurable permissionMode** — planned for Phase 4 via UI toggle or CLI flag. Must require server-side opt-in, never allow setting from WebSocket client alone.
+2. **cc-mobile sets no agent settings** — it passes no permission or approval flag when launching, so each agent gates exactly as its own configuration says. For claude with no flag that is still "ask on every tool use". ([ADR-003](docs/adr/003-permission-mode-default.md) superseded; ADR-015 §2026-08-06)
+3. **The session list discloses an ungated pane** — a `no permission gate` badge means that agent's argv says it will not stop to ask. Reading that flag is not setting it, and the badge never blocks driving the pane (Decision H4).
 4. **Session persistence** — SDK sessions are resumed via `resume: sessionId` option in each `query()` call.
 5. **WebSocket reconnect** — client auto-reconnects with exponential backoff (1s → 30s max).
 

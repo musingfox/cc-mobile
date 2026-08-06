@@ -221,3 +221,42 @@ deny-list 改成「有解析器的種類才進流程」＝ claude + omp，未回
 ### 範圍邊界：手機開的 omp 不帶 approval 旗標（使用者裁決）
 
 cc-mobile 從手機啟動 omp 時**不帶任何 approval 旗標**，沿用 omp 自己的預設（不閘門）。使用者裁決，2026-08-06。連帶結果：#33 處理的是**使用者自己在終端機用 `--approval-mode always-ask` / `write` 開的 omp**；手機開的 omp 不受保護，也不會產生權限提示。要改變這點只需在 `argvFor` 加一個 omp 旗標，是一行的事——但那是安全姿態的選擇，不是實作細節。
+
+---
+
+## 2026-08-06 增修：cc-mobile 不再替 agent 決定設定（取代 ADR-003）
+
+### 決定
+
+移除 cc-mobile 對 agent 設定的所有調整能力：
+
+- `agent.start` 的 argv 不再帶 `--permission-mode`（`--session-id` 留著——那是 transcript 命名，不是設定）
+- `--permission-mode` CLI 旗標移除，`ServerConfig.permissionMode` 與 `PermissionMode` 型別一併消失
+- `set_permission_mode` / `set_model` / `set_effort` / `set_env_vars` 四則訊息從 `ClientMessage` union 移除，由 Zod 閘門拒絕（回 `invalid_message`）
+- `server_config` 只剩 `allowedRoots` / `homeDirectory` / `availableAgents`——伺服器知道而 client 不知道的東西
+- `SessionManager` 的 permissionMode / model / effort / envVars 狀態全部刪除
+- 設定畫面移除 PERMISSION MODE 區塊、Model 選單（改為顯示 agent 回報的值，靜態）、Environment 編輯器；`ModelSheet` / `EnvVarSheet` / `EnvVarEditor` 三個元件刪除
+
+### 理由
+
+**這是 omp 裁決的對稱結果。** #33 決定手機開的 omp 不帶 approval 旗標，理由是「agent 的閘門姿態是 agent 自己的設定」。同樣的理由對 claude 一字不改地成立；不對稱本身就是提示。
+
+**它一直在傷害北極星性質。** cc-mobile 在啟動時決定一個 session 的安全姿態，而那個 session 之後會被使用者從自己的終端機共用。argv 上的 `--permission-mode` 正是「手機開的 session」與「終端機開的 session」剩下的少數差異之一——#29 已經把 `--settings`、hooks、settings 檔全部拿掉，這是同一條路上的最後一段。
+
+**四則設定訊息本來就是謊。** 它們自 #25 起就收不到 herdr（`ws.ts` 的 TODO 自己寫著「保留只是為了不讓設定 UI 報錯」）。留著一個送出去沒人收的 model 選單，比移除它更違背「直接吃 agent 本來的設定」。
+
+### 保留了什麼（設定 vs 揭露的界線）
+
+界線是：**移除會「設定」的，保留會「回報」的。**
+
+- `sessions[].gated` 保留。它讀 pane 自己的 argv（claude 看 `--permission-mode`、omp 看 `--approval-mode`）來判斷該 session 會不會停下來問。讀別人的旗標不是設定它。
+- `capabilities.model` 保留（agent 自己說它在跑什麼），設定畫面改成靜態顯示。
+- `permission_request` / `permission` 保留——回答一則提示不是設定一個 mode。
+
+### 連帶影響
+
+`gated` 對 cc-mobile 自建的 claude pane 從此回報 `true`（argv 上沒有 `bypassPermissions` 可讀）。這跟使用者自己在終端機開的 claude 得到的精確度完全一樣——argv 讀不出 settings 檔裡的設定，這個限制本來就存在，只是現在對兩種來源一致了。
+
+### 相容性
+
+無相容視窗，比照 #25 / #26：快取的 PWA bundle 送出退休訊息會收到一則 `invalid_message`，重新載入頁面即恢復。舊 bundle 在 reconnect 時會送 `set_model` / `set_effort`，所以這則錯誤在升級後的第一次連線可能出現一次。

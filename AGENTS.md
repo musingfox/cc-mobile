@@ -65,7 +65,7 @@ All recorded in `docs/adr/`. Key decisions:
 
 ### WebSocket Protocol
 
-Client→Server: `terminal_create`, `terminal_send`, `terminal_teardown`, `list_terminal_sessions`, `permission`, `interrupt`, `stop_task`, `append_user_message`, `get_server_config`, `set_model`, `set_effort`, `set_env_vars`, `set_permission_mode`, `list_directories`, `reconnect`
+Client→Server: `terminal_create`, `terminal_send`, `terminal_teardown`, `list_terminal_sessions`, `permission`, `interrupt`, `stop_task`, `append_user_message`, `get_server_config`, `list_directories`, `reconnect`
 
 Server→Client: `terminal_created`, `terminal_teardown_result`, `terminal_sessions`, `stream_chunk`, `stream_end`, `session_state`, `permission_request`, `capabilities`, `server_config`, `directory_listing`, `event`, `replay_complete`, `error`
 
@@ -111,7 +111,9 @@ screen without the marker raises no prompt. `gated` reads each kind's own flag
 (`--permission-mode` vs `--approval-mode`), whose defaults point opposite ways —
 an unflagged omp is ungated.
 
-Refused by the Zod gate: `list_sessions`, `resume_session`, `set_session_title`,
+Refused by the Zod gate: `set_permission_mode`, `set_model`, `set_effort`,
+`set_env_vars` (the agent-settings controls, removed once it was settled that an
+agent's mode is its own), `list_sessions`, `resume_session`, `set_session_title`,
 `session_list`, `session_history`, `session_created` (all #26), plus #25's
 `new_session`, `send`, `command`, `pty_send`, `get_session_info`,
 `session_info`, `result` and the `tmux_*` names `terminal_*` replaced.
@@ -120,7 +122,7 @@ Schemas defined in `server/protocol.ts`. Full spec in `cc-mobile.md`.
 
 ## Security Constraints
 
-- Permission mode defaults to `"default"` — configurable via `--permission-mode` CLI flag (ADR-003)
+- cc-mobile sets no agent settings — no launch flag, no CLI flag, and the four `set_*` messages are refused by the gate (ADR-003 superseded). `gated` discloses, it does not control.
 - `CC_MOBILE_ALLOWED_ROOTS` env var restricts allowed working directories
 - No auth layer on Tailscale (network membership = auth)
 - If exposing via Cloudflare Tunnel, auth must be added
