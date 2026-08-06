@@ -68,7 +68,7 @@ All messages are Zod-validated (see [ADR-001](docs/adr/001-zod-runtime-validatio
 ### Client → Server
 
 ```typescript
-{ type: "terminal_create", claudeUuid: string, cwd: string }
+{ type: "terminal_create", claudeUuid: string, cwd: string, agentKind?: "claude" | "omp" }
 { type: "terminal_send", claudeUuid: string, content: string }
 { type: "terminal_teardown", claudeUuid: string }
 { type: "list_terminal_sessions" }
@@ -104,8 +104,22 @@ a page reload.
   states?: Record<string, "idle" | "running" | "requires_action"> }
 { type: "session_state", sessionId: string, state: "idle" | "running" | "requires_action" }
 { type: "error", code: string, message: string, sessionId?: string }
-{ type: "server_config", config: { permissionMode: string } }
+{ type: "server_config", config: { permissionMode: string, availableAgents?: ("claude"|"omp")[] } }
 ```
+
+`availableAgents` (#31) names the kinds this machine can launch — a
+`LAUNCHABLE_AGENT_KINDS` entry whose binary is on `PATH`. It rides only on the
+reply to `get_server_config`; the `set_model` / `set_effort` /
+`set_permission_mode` echoes carry a partial config and the client merges field
+by field, so an absent list means "unchanged", never "none". A kind missing from
+it is missing from the phone's new-session choice, which is the whole point:
+naming an unavailable kind would start a pane that dies immediately.
+
+Note the asymmetry with `sessions[].agent`, which stays a free string: that one
+is **inbound** — herdr's own label, whose vocabulary grows between versions, so
+an unknown value must survive. `agentKind` is **outbound** into something herdr
+execs, so it is a closed enum and an unlisted kind is refused with
+`invalid_message` before any workspace is created.
 
 `terminal_sessions` doubles as the status bootstrap: `states` carries what herdr
 says each live session is doing, read from one `session.snapshot` call. It is
@@ -290,7 +304,11 @@ Add to home screen → launches as standalone app (no browser chrome).
 
 ### 8. Herdr Terminal Layer ([ADR-015](docs/adr/015-herdr-terminal-layer.md))
 
-Mobile "new session" launches a real `claude` process inside a herdr workspace (`terminal_create`/`terminal_send`/`terminal_teardown` messages). The same live session can be joined from the desktop with `herdr agent attach ccm-<first-8-of-uuid>`.
+Mobile "new session" launches a real agent process inside a herdr workspace (`terminal_create`/`terminal_send`/`terminal_teardown` messages) — `claude` by default, or any kind in `availableAgents` since #31. The same live session can be joined from the desktop with `herdr agent attach ccm-<first-8-of-uuid>`.
+
+Each kind brings its own argv (`server/herdr/registry.ts`'s `argvFor`): claude
+gets `--permission-mode` and `--session-id`, omp gets none — those are claude's
+own CLI flags and omp would die on them. omp's permission handling is #33.
 
 **Limitation — trusted directories only**: the herdr path currently only works for working directories already trusted in `~/.claude.json`. For an untrusted directory, `claude` shows its folder-trust dialog on startup; the first prompt is swallowed by that dialog, and the readiness gate cannot detect this state. Until this is handled, only create sessions in previously trusted directories. Tracked in #24.
 

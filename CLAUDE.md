@@ -86,6 +86,16 @@ off the terminal's screen. The pre-#29 `allow` boolean is still accepted for one
 migration window (`false` → Esc, `true` → the terminal's first option) so a
 cached PWA bundle can still answer.
 
+Since #31 `terminal_create` carries an optional `agentKind` naming which agent to
+start (`server/agents/kinds.ts`; absent → `claude`, which is what every bundle
+cached before #31 sends). Unlike `sessions[].agent` — herdr's inbound label, a
+free string — this one is a closed enum: it becomes the `kind` herdr execs, so an
+unlisted value is refused with `invalid_message` before a workspace exists. Each
+kind carries its own argv (`registry.ts`'s `argvFor`): claude's
+`--permission-mode`/`--session-id` are claude's own flags and are not passed to
+anything else. `server_config.availableAgents` names the kinds whose binary is on
+`PATH`, and is sent only in the `get_server_config` reply.
+
 Server→Client: `terminal_created`, `terminal_teardown_result`, `terminal_sessions`, `stream_chunk`, `stream_end`, `session_state`, `permission_request`, `capabilities`, `server_config`, `directory_listing`, `event`, `replay_complete`, `error`
 
 Browsing past conversations is gone since #26: there is no session history,

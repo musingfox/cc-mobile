@@ -15,7 +15,7 @@
     "lint": "bunx biome check .",
     "lint:fix": "bunx biome check --write .",
     "test": "bun test",
-    "test:herdr": "for f in live foreign transcript swap restart permission; do bun --config=/dev/null test --timeout=400000 ./server/integration/herdr-$f.e2e.test.ts || exit 1; done",
+    "test:herdr": "for f in live foreign transcript swap restart permission agent-kind; do bun --config=/dev/null test --timeout=400000 ./server/integration/herdr-$f.e2e.test.ts || exit 1; done",
     "postinstall": "git config core.hooksPath .githooks 2>/dev/null; true"
   },
   "dependencies": {

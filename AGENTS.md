@@ -69,6 +69,12 @@ Client→Server: `terminal_create`, `terminal_send`, `terminal_teardown`, `list_
 
 Server→Client: `terminal_created`, `terminal_teardown_result`, `terminal_sessions`, `stream_chunk`, `stream_end`, `session_state`, `permission_request`, `capabilities`, `server_config`, `directory_listing`, `event`, `replay_complete`, `error`
 
+`terminal_create` takes an optional `agentKind` (#31) — a closed enum
+(`server/agents/kinds.ts`), unlike the free-string `sessions[].agent`, because
+this one is what herdr execs. Absent → claude. Per-kind argv lives in
+`registry.ts`'s `argvFor`; `server_config.availableAgents` lists the kinds whose
+binary is on `PATH`.
+
 Browsing past conversations is gone since #26: there is no session history,
 no listing and no resume — herdr's live sessions are the only sessions there
 are. `terminal_sessions` is therefore both the liveness list and the status
