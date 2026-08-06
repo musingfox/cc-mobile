@@ -1,5 +1,6 @@
 /**
- * GlobalClaudeSessionListing — every claude on the machine, foreign or not.
+ * GlobalClaudeSessionListing — every agent pane on the machine, foreign or not,
+ * and since #30 whatever kind of agent is running in it.
  *
  * Wire shapes are the ones the 2026-08-02 probe recorded: `agent.list` entries
  * carrying `agent_session {kind:"id", value}`, workspace labels (`ccm-<uuid>`
@@ -86,20 +87,35 @@ function fakeClient(options: FakeOptions = {}) {
 }
 
 describe("GlobalClaudeSessionListing", () => {
-  test("lists every claude and nothing else, flagging one with no transcript key", async () => {
+  test("lists every pane herdr reports, whatever is running in it", async () => {
+    // The pre-#30 listing filtered to `agent === "claude"`, which made a pane
+    // running anything else invisible to the phone — including one whose kind
+    // herdr had simply not detected yet.
     const { client } = fakeClient({
       agents: [
         agentEntry(),
-        agentEntry({ pane_id: "w4A:p1", workspace_id: "w4A", agent_session: undefined }),
         agentEntry({ pane_id: "w5B:p1", workspace_id: "w5B", agent: "pi" }),
+        agentEntry({ pane_id: "w6C:p1", workspace_id: "w6C", agent: "omp" }),
       ],
-      workspaces: [workspace("w3V", "dev"), workspace("w4A", "scratch"), workspace("w5B", "pi")],
+      workspaces: [workspace("w3V", "dev"), workspace("w5B", "pi"), workspace("w6C", "omp")],
     });
 
     const sessions = await listClaudeSessions({ client, warn: () => {} });
 
-    expect(sessions).toHaveLength(2);
-    expect(sessions[0]?.sessionId).toBe("w3V:p1");
+    expect(sessions.map((session) => session.sessionId)).toEqual(["w3V:p1", "w5B:p1", "w6C:p1"]);
+  });
+
+  test("flags a claude with no transcript key as unreadable but still drivable", async () => {
+    const { client } = fakeClient({
+      agents: [
+        agentEntry(),
+        agentEntry({ pane_id: "w4A:p1", workspace_id: "w4A", agent_session: undefined }),
+      ],
+      workspaces: [workspace("w3V", "dev"), workspace("w4A", "scratch")],
+    });
+
+    const sessions = await listClaudeSessions({ client, warn: () => {} });
+
     expect(sessions[0]?.agentSessionValue).toBe(VALUE);
     expect(sessions[0]?.readable).toBe(true);
     expect(sessions[1]).toMatchObject({
@@ -108,6 +124,42 @@ describe("GlobalClaudeSessionListing", () => {
       readable: false,
       drivable: true,
     });
+  });
+
+  test("lists a pane whose kind herdr has not detected, unread but drivable", async () => {
+    const { client } = fakeClient({
+      agents: [agentEntry({ pane_id: "w9:p1", workspace_id: "w9", agent: undefined })],
+      workspaces: [workspace("w9", "dev")],
+    });
+
+    const sessions = await listClaudeSessions({ client, warn: () => {} });
+
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]).toMatchObject({
+      sessionId: "w9:p1",
+      agentSessionValue: VALUE,
+      readable: false,
+      drivable: true,
+    });
+    expect(Object.keys(sessions[0] ?? {})).not.toContain("agent");
+  });
+
+  test("an unknown kind never costs a pane its drivability", async () => {
+    const { client } = fakeClient({
+      agents: [agentEntry({ pane_id: "w7:p1", workspace_id: "w7", agent: "codex" })],
+      workspaces: [workspace("w7", "dev")],
+    });
+
+    const sessions = await listClaudeSessions({ client, warn: () => {} });
+
+    // H4's ruling generalised: a flag discloses, it never locks.
+    expect(sessions[0]?.drivable).toBe(true);
+  });
+
+  test("an empty agent.list is an empty listing, not an error", async () => {
+    const { client } = fakeClient({ agents: [] });
+
+    expect(await listClaudeSessions({ client, warn: () => {} })).toEqual([]);
   });
 
   test("omits a pane whose claude has exited and keeps the rest", async () => {

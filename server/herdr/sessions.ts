@@ -1,6 +1,12 @@
 /**
- * sessions.ts — GlobalClaudeSessionListing: every claude running on the
+ * sessions.ts — GlobalClaudeSessionListing: every agent pane running on the
  * machine, as the phone sees it.
+ *
+ * Since #30 that is literally every entry `agent.list` returns, claude or not:
+ * the kind rides along as disclosure (`agent`, `readable`) instead of deciding
+ * who gets listed. A pane whose kind herdr has not detected yet is listed too —
+ * dropping it would hide a session that is about to become identifiable, and a
+ * missing kind is an incomplete report, not a claim that nothing is running.
  *
  * This replaces the startup remount scan (Decision M12). The scan existed to
  * rebuild an in-memory uuid→pane map from workspace labels; there is no such
@@ -20,6 +26,7 @@
  * it.
  */
 
+import { hasTranscriptReader } from "../agents/transcript-readers";
 import { type AgentState, STATE_BY_AGENT_STATUS } from "./agent-state";
 import { WORKSPACE_LABEL_PATTERN } from "./registry";
 import type { AgentInfo, PaneProcess, SessionSnapshot } from "./schema";
@@ -52,7 +59,11 @@ export interface SessionDescriptor {
   origin: "self" | "foreign";
   /** Whether a prompt may be injected. Never gated on the permission mode (H4). */
   drivable: boolean;
-  /** Whether replies can be read back — false when there is no transcript key. */
+  /**
+   * Whether replies can be read back: there is a transcript key AND this kind
+   * has a registered reader. Disclosure only, exactly like `gated` — nothing
+   * refuses to drive, read or ask permission because it is false.
+   */
   readable: boolean;
   /** Advisory: false means claude runs with no permission gate in that pane. */
   gated: boolean;
@@ -104,7 +115,8 @@ function reportedKind(value: string | null | undefined): string | undefined {
 }
 
 /**
- * Every claude the daemon knows about, newest listing wins.
+ * Every agent pane the daemon knows about, newest listing wins. No kind is
+ * filtered out: `agent.list` decides what exists, and this decides nothing.
  *
  * Never rejects. One pane that cannot be inspected (its claude exited between
  * the list and the get — herdr answers `agent_not_found`) is omitted; a daemon
@@ -146,10 +158,8 @@ export async function listClaudeSessions(
     if (typeof cwd === "string") cwdByPane.set(pane.pane_id, cwd);
   }
 
-  const claudes = agents.filter((agent) => agent.agent === "claude");
-
   const descriptors = await Promise.all(
-    claudes.map(async (agent): Promise<SessionDescriptor | null> => {
+    agents.map(async (agent): Promise<SessionDescriptor | null> => {
       const label = labelByWorkspace.get(agent.workspace_id) ?? "";
       if (suppressLabel(label)) return null;
 
@@ -176,8 +186,13 @@ export async function listClaudeSessions(
         agentSessionValue,
         cwd: live.cwd ?? live.foreground_cwd ?? cwdByPane.get(agent.pane_id) ?? "",
         origin: WORKSPACE_LABEL_PATTERN.test(label) ? "self" : "foreign",
+        // Never gated on the kind: a pane running something cc-mobile cannot
+        // read back still takes a prompt, and the H4 ruling is that a flag
+        // discloses rather than locks.
         drivable: true,
-        readable: agentSessionValue !== null,
+        // The lookup is the whole rule — an undetected kind falls out of it by
+        // missing, with no branch of its own.
+        readable: hasTranscriptReader(kind) && agentSessionValue !== null,
         gated: await readGatedFlag(client, agent.pane_id, warn),
         ...(state ? { state } : {}),
       };
