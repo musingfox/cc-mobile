@@ -10,9 +10,9 @@
  * surprise on the user's first tap.
  */
 
+import { resolveAgentTranscriptPath } from "../agents/transcript-readers";
 import type { ClientSink, TerminalBackend, TerminalSessionInfo } from "../terminal-backend";
 import { createTranscriptDelivery } from "../transcript/delivery";
-import { resolveTranscriptPath } from "../transcript/path";
 import { type AgentState, statesFromSnapshot } from "./agent-state";
 import { createHerdrClient, type HerdrClient, SUPPORTED_PROTOCOL } from "./client";
 import { createHerdrPaneEvents } from "./pane-events";
@@ -114,7 +114,13 @@ export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalB
         (session) => session.sessionId === sessionId,
       );
       if (!match) return null;
-      return resolveTranscriptPath({ sessionValue: match.agentSessionValue, cwd: match.cwd });
+      // Routed by kind: the listing now carries panes running something other
+      // than claude, and only a kind with a registered reader is looked for.
+      return resolveAgentTranscriptPath({
+        agent: match.agent,
+        sessionValue: match.agentSessionValue,
+        cwd: match.cwd,
+      });
     },
     // Late-bound: a reconnect rebinds the session to a fresh sink.
     getSink: (sessionId) => routing.getClient(sessionId),

@@ -37,7 +37,15 @@ export interface SessionDescriptor {
    * pane id would be an invariant nobody promised.
    */
   workspaceId: string;
-  /** claude session uuid: the transcript key, `null` on a pane herdr has none for. */
+  /**
+   * The agent kind herdr detected in that pane, verbatim ("claude", "omp", …).
+   * Absent when herdr has not said — an undetected kind, never a default to
+   * claude. No enum: the daemon's vocabulary is its own and version-dependent,
+   * and a label this build has not heard of must pass through, not fail
+   * (same rule as ReportedAgentStatusSchema in schema.ts).
+   */
+  agent?: string;
+  /** The agent's transcript key: `null` on a pane herdr has none for. */
   agentSessionValue: string | null;
   cwd: string;
   /** "self" iff the workspace carries cc-mobile's `ccm-<uuid>` label. */
@@ -84,6 +92,15 @@ export function permissionModeFromArgv(process: PaneProcess): string | undefined
 
 function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * The kind herdr reported, or `undefined` when it reported none. An empty
+ * string is the daemon saying "not detected", so it is not a kind either —
+ * carrying `agent: ""` on the wire would be a claim nobody made.
+ */
+function reportedKind(value: string | null | undefined): string | undefined {
+  return value ? value : undefined;
 }
 
 /**
@@ -148,10 +165,14 @@ export async function listClaudeSessions(
 
       const agentSessionValue = live.agent_session?.value ?? agent.agent_session?.value ?? null;
       const state = STATE_BY_AGENT_STATUS[live.agent_status];
+      // Live value first, exactly as the session key is taken: `agent.get` is
+      // the fresher of the two reads, and detection can complete between them.
+      const kind = reportedKind(live.agent) ?? reportedKind(agent.agent);
 
       return {
         sessionId: agent.pane_id,
         workspaceId: agent.workspace_id,
+        ...(kind ? { agent: kind } : {}),
         agentSessionValue,
         cwd: live.cwd ?? live.foreground_cwd ?? cwdByPane.get(agent.pane_id) ?? "",
         origin: WORKSPACE_LABEL_PATTERN.test(label) ? "self" : "foreign",
