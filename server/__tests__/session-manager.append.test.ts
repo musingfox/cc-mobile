@@ -24,7 +24,7 @@ function readBuffer(mgr: SessionManager, sessionId: string): ContentBlock[] {
 
 describe("SessionManager.appendUserMessage", () => {
   test("appends accumulate in order across calls", async () => {
-    const mgr = new SessionManager({ permissionMode: "default" });
+    const mgr = new SessionManager();
     await mgr.createSession("ws-1", "/cwd");
 
     mgr.appendUserMessage("ws-1", "first note");
@@ -37,12 +37,12 @@ describe("SessionManager.appendUserMessage", () => {
   });
 
   test("appendUserMessage on missing session throws not-found", () => {
-    const mgr = new SessionManager({ permissionMode: "default" });
+    const mgr = new SessionManager();
     expect(() => mgr.appendUserMessage("nope", "hi")).toThrow("Session nope not found");
   });
 
   test("51st append exceeds count cap, throws atomically", async () => {
-    const mgr = new SessionManager({ permissionMode: "default" });
+    const mgr = new SessionManager();
     await mgr.createSession("ws-2", "/cwd");
 
     for (let i = 0; i < 50; i++) {
@@ -55,7 +55,7 @@ describe("SessionManager.appendUserMessage", () => {
   });
 
   test("byte cap rejects payload that would exceed 1MB", async () => {
-    const mgr = new SessionManager({ permissionMode: "default" });
+    const mgr = new SessionManager();
     await mgr.createSession("ws-3", "/cwd");
 
     // Push a ~700KB text block, then try to push another ~400KB block.
@@ -85,7 +85,7 @@ describe("SessionManager.appendUserMessage", () => {
   });
 
   test("ContentBlock[] append keeps text and image blocks in order", async () => {
-    const mgr = new SessionManager({ permissionMode: "default" });
+    const mgr = new SessionManager();
     await mgr.createSession("ws-5", "/cwd");
 
     mgr.appendUserMessage("ws-5", [

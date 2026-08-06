@@ -55,8 +55,6 @@ export interface HerdrSessionEntry {
 
 export interface HerdrRegistryOptions {
   client: HerdrRegistryClient;
-  /** claude --permission-mode value (default "default" — no more unconditional bypass). */
-  permissionMode?: string;
   /** Readiness gate tuning + test seams. */
   readinessBudgetMs?: number;
   readinessPollMs?: number;
@@ -111,24 +109,29 @@ export function claudeUuidFromWorkspaceLabel(label: string): string | undefined 
 
 export function createHerdrRegistry(options: HerdrRegistryOptions) {
   const { client } = options;
-  const permissionMode = options.permissionMode ?? "default";
 
   const sessions = new Map<string, HerdrSessionEntry>();
 
   /**
-   * The flags each kind is launched with. `--permission-mode` and
-   * `--session-id` are claude's own CLI flags — omp does not take them, and
-   * passing them through would make every omp launch die on an unknown
-   * argument. Live probe 2026-08-06: `agent.start {kind:"omp", args:[]}` acks
-   * with `argv:["omp"]` and the pane reaches `interactive_ready` at ~3.0s, so
-   * the readiness gate below needs nothing kind-specific.
+   * The flags each kind is launched with — which is now as close to none as the
+   * kind allows.
    *
-   * ponytail: omp gets no permission flag at all rather than a guessed
-   * equivalent. Its permission handling is #33's whole subject.
+   * No gating flag for anybody. cc-mobile used to pass claude
+   * `--permission-mode`, which meant it decided the safety posture of a session
+   * the user would then share with their own terminal. It no longer does: each
+   * agent runs at whatever its own settings say, the same way it would if the
+   * user had started it themselves. That also makes the two kinds symmetric —
+   * omp never took a flag here, and the asymmetry was the tell.
+   *
+   * `--session-id` stays, and is claude-only for a reason unrelated to
+   * settings: it names the transcript immediately (nothing may treat it as
+   * permanent — a `/clear` rotates it), and omp is handed its transcript path
+   * by herdr instead. Live probe 2026-08-06: `agent.start {kind:"omp",
+   * args:[]}` acks with `argv:["omp"]`.
    */
   function argvFor(kind: LaunchableAgentKind, claudeUuid: string): string[] {
     if (kind !== "claude") return [];
-    return ["--permission-mode", permissionMode, "--session-id", claudeUuid];
+    return ["--session-id", claudeUuid];
   }
 
   async function createSession(input: CreateSessionInput): Promise<HerdrCreateSessionResult> {

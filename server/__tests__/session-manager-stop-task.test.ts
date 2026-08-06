@@ -10,7 +10,7 @@ import { SessionManager } from "../session-manager";
  * a regression — the case is pinned here so a reviewer can tell the difference.
  */
 function makeMgr() {
-  return new SessionManager({ permissionMode: "default" });
+  return new SessionManager();
 }
 
 describe("SessionManager.stopTask", () => {

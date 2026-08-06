@@ -91,11 +91,11 @@ describe("HerdrCreateSession", () => {
       name: "ccm-3f2a9b01",
       kind: "claude",
       pane_id: "p1",
-      // A plain claude: no --settings, therefore no cc-mobile hooks. Replies
-      // come from the transcript and permissions from the pane's own screen,
-      // which is what makes this session indistinguishable from one the user
-      // started in their own terminal (Decision M6).
-      args: ["--permission-mode", "default", "--session-id", UUID],
+      // A plain claude: no --settings, therefore no cc-mobile hooks, and since
+      // the settings controls were removed, no --permission-mode either. It
+      // runs at whatever claude's own settings say, exactly as it would if the
+      // user had started it in their own terminal (Decision M6).
+      args: ["--session-id", UUID],
     });
     expect(registry.hasSession(UUID)).toEqual({ present: true, paneRef: "p1" });
   });
@@ -106,8 +106,9 @@ describe("HerdrCreateSession", () => {
 
     await registry.createSession({ claudeUuid: UUID, cwd: "/tmp", agentKind: "omp" });
 
-    // --permission-mode / --session-id are claude's flags; omp would die on
-    // them. Live probe 2026-08-06: args:[] acks with argv:["omp"].
+    // `--session-id` is claude's flag and omp would die on it; herdr hands omp
+    // its transcript path instead. Live probe 2026-08-06: args:[] acks with
+    // argv:["omp"].
     expect(fake.calls[1]?.params).toEqual({
       name: "ccm-3f2a9b01",
       kind: "omp",
@@ -116,7 +117,7 @@ describe("HerdrCreateSession", () => {
     });
   });
 
-  test("an absent agentKind still launches claude with its full argv", async () => {
+  test("an absent agentKind still launches claude", async () => {
     const fake = makeFakeClient();
     const registry = makeRegistry(fake);
 
@@ -124,12 +125,23 @@ describe("HerdrCreateSession", () => {
     await registry.createSession({ claudeUuid: UUID, cwd: "/tmp" });
 
     expect((fake.calls[1]?.params as { kind: string }).kind).toBe("claude");
-    expect((fake.calls[1]?.params as { args: string[] }).args).toEqual([
-      "--permission-mode",
-      "default",
-      "--session-id",
-      UUID,
-    ]);
+    expect((fake.calls[1]?.params as { args: string[] }).args).toEqual(["--session-id", UUID]);
+  });
+
+  test("no launch carries a gating flag, whatever the kind", async () => {
+    // The posture of a session the user will share with their own terminal is
+    // the agent's own setting to hold, not cc-mobile's to impose.
+    for (const agentKind of ["claude", "omp"] as const) {
+      const fake = makeFakeClient();
+      const registry = makeRegistry(fake);
+
+      await registry.createSession({ claudeUuid: UUID, cwd: "/tmp", agentKind });
+
+      const args = (fake.calls[1]?.params as { args: string[] }).args;
+      for (const flag of ["--permission-mode", "--approval-mode", "--auto-approve"]) {
+        expect(args).not.toContain(flag);
+      }
+    }
   });
 
   test("writes no settings file anywhere", async () => {
@@ -139,23 +151,6 @@ describe("HerdrCreateSession", () => {
     await registry.createSession({ claudeUuid: UUID, cwd: "/tmp" });
 
     expect(existsSync(formerSettingsPath(UUID))).toBe(false);
-  });
-
-  test("options.permissionMode overrides the argv value", async () => {
-    const fake = makeFakeClient();
-    const registry = createHerdrRegistry({
-      client: fake.client,
-      permissionMode: "plan",
-      sleep: async () => {},
-      now: () => 0,
-    });
-
-    await registry.createSession({ claudeUuid: UUID, cwd: "/tmp" });
-
-    const startParams = fake.calls[1]?.params as { args: string[] };
-    const pmIdx = startParams.args.indexOf("--permission-mode");
-    expect(pmIdx).toBeGreaterThanOrEqual(0);
-    expect(startParams.args[pmIdx + 1]).toBe("plan");
   });
 
   test("rejects a duplicate claudeUuid before issuing any RPC", async () => {

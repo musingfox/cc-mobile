@@ -3,23 +3,20 @@
  *
  * Since #25 this owns no conversation driver. The SDK `query()` path it used to
  * run is gone; turns are driven by the terminal backend (herdr) instead, and
- * what remains here is the session map plus the settings the UI reads back
- * through `get_server_config`.
+ * what remains here is the session map.
  *
- * TODO(#25-followup): `selectedModel`, `selectedEffort`, `envVars` and the
- * per-session permission-mode override are written but never read — herdr
- * receives none of them. Reconnecting them means passing argv/env through
- * `herdr/registry.ts`; making the UI honest about them is a separate ticket.
+ * The settings state that used to live here — permission mode, model, effort,
+ * env vars — is gone with the messages that set it. herdr received none of it,
+ * and an agent's gating and model are the agent's own settings rather than
+ * cc-mobile's to decide.
  */
 
-import type { PermissionMode } from "./config";
 import type { ContentBlock } from "./protocol";
 import { cleanupUploads } from "./upload-manager";
 
 interface SessionConfig {
   cwd: string;
   sdkSessionId: string | null;
-  permissionMode?: PermissionMode;
   pendingAppendBlocks: ContentBlock[];
 }
 
@@ -47,63 +44,9 @@ function blocksByteSize(blocks: ContentBlock[]): number {
 
 export class SessionManager {
   private sessions = new Map<string, SessionConfig>();
-  private permissionMode: PermissionMode;
-  private envVars: Record<string, string> = {};
-  /** Empty string means "follow the CLI default model" (no override). */
-  private selectedModel = "";
-  private selectedEffort: "low" | "medium" | "high" | "max" | null = null;
-
-  constructor(config: { permissionMode: PermissionMode }) {
-    this.permissionMode = config.permissionMode;
-  }
-
-  setPermissionMode(mode: PermissionMode): void {
-    this.permissionMode = mode;
-  }
-
-  getPermissionMode(): PermissionMode {
-    return this.permissionMode;
-  }
 
   hasSession(sessionId: string): boolean {
     return this.sessions.has(sessionId);
-  }
-
-  setSessionPermissionMode(sessionId: string, mode: PermissionMode): void {
-    const config = this.sessions.get(sessionId);
-    if (!config) {
-      throw new Error(`Session ${sessionId} not found`);
-    }
-
-    config.permissionMode = mode;
-  }
-
-  getSessionPermissionMode(sessionId: string): PermissionMode | undefined {
-    return this.sessions.get(sessionId)?.permissionMode;
-  }
-
-  setEnvVars(envVars: Record<string, string>): void {
-    this.envVars = envVars;
-  }
-
-  getEnvVars(): Record<string, string> {
-    return this.envVars;
-  }
-
-  getSelectedModel(): string {
-    return this.selectedModel;
-  }
-
-  setModel(model: string): void {
-    this.selectedModel = model;
-  }
-
-  getSelectedEffort(): "low" | "medium" | "high" | "max" | null {
-    return this.selectedEffort;
-  }
-
-  setEffort(effort: "low" | "medium" | "high" | "max" | null): void {
-    this.selectedEffort = effort;
   }
 
   async createSession(sessionId: string, cwd: string, sdkSessionId?: string): Promise<void> {
@@ -114,7 +57,6 @@ export class SessionManager {
     this.sessions.set(sessionId, {
       cwd,
       sdkSessionId: sdkSessionId ?? null,
-      permissionMode: undefined,
       pendingAppendBlocks: [],
     });
   }

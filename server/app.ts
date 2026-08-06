@@ -60,8 +60,7 @@ export interface AppTestDeps {
 
 /** Builds the whole server. The returned app has not been listened on. */
 export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
-  const sessionManager =
-    deps.sessionManager ?? new SessionManager({ permissionMode: serverConfig.permissionMode });
+  const sessionManager = deps.sessionManager ?? new SessionManager();
 
   // Persistent across reconnects; the WS plugin appends to it and replays from it.
   const eventBuffer = new EventBuffer(500);
@@ -74,8 +73,7 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
   // herdr is the only default backend (ADR-015 / plan D1). Its transport
   // connects lazily, so constructing the app here contacts no daemon —
   // index.ts gates on daemon reachability before it listens.
-  const backend: AppBackend =
-    deps.backend ?? createHerdrBackend({ permissionMode: serverConfig.permissionMode });
+  const backend: AppBackend = deps.backend ?? createHerdrBackend();
 
   if (deps.backendRef) deps.backendRef.current = backend;
 

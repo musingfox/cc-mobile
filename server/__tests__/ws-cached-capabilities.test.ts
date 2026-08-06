@@ -62,7 +62,7 @@ describe("CachedCapabilitiesStillEmittedOnConnect", () => {
     );
 
     harness = await startWsHarness(backendStub, testServerConfig, {
-      sessionManager: new SessionManager({ permissionMode: "default" }),
+      sessionManager: new SessionManager(),
     });
 
     const frame = await harness.waitFor((m) => m.type === "capabilities");
@@ -74,7 +74,7 @@ describe("CachedCapabilitiesStillEmittedOnConnect", () => {
     expect(existsSync(CACHE_FILE)).toBe(false);
 
     harness = await startWsHarness(backendStub, testServerConfig, {
-      sessionManager: new SessionManager({ permissionMode: "default" }),
+      sessionManager: new SessionManager(),
     });
     await settle();
 
@@ -90,7 +90,7 @@ describe("CachedCapabilitiesStillEmittedOnConnect", () => {
     writeFileSync(CACHE_FILE, "not json at all", "utf-8");
 
     harness = await startWsHarness(backendStub, testServerConfig, {
-      sessionManager: new SessionManager({ permissionMode: "default" }),
+      sessionManager: new SessionManager(),
     });
     await settle();
 

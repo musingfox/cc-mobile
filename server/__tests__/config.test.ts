@@ -21,7 +21,6 @@ describe("parseServerConfig", () => {
       port: 3001,
       hostname: "0.0.0.0",
       defaultCwd: null,
-      permissionMode: "default",
       allowedRoots: null,
       basePath: "",
     });
@@ -45,19 +44,10 @@ describe("parseServerConfig", () => {
       port: 4000,
       hostname: "0.0.0.0",
       defaultCwd: "/workspace",
-      permissionMode: "acceptEdits",
       allowedRoots: null,
       basePath: "",
     });
     cleanup();
-  });
-
-  test("invalid permission-mode", () => {
-    expect(() => {
-      parseServerConfig(["node", "index.ts", "--permission-mode", "invalid"]);
-    }).toThrow(
-      "Invalid permission-mode: invalid. Allowed: default, acceptEdits, auto, bypassPermissions, dontAsk, plan",
-    );
   });
 
   test("invalid port", () => {

@@ -70,7 +70,6 @@ describe("BufferedCreateAck", () => {
       port: 0,
       hostname: "127.0.0.1",
       defaultCwd: null,
-      permissionMode: "default",
       allowedRoots: ["/nowhere-allowed"],
       basePath: "",
     });

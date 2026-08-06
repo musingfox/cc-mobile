@@ -160,7 +160,6 @@ describe("Directory Listing Integration Tests", () => {
       const validConfig = {
         type: "server_config",
         config: {
-          permissionMode: "default",
           allowedRoots: ["/workspace"],
           homeDirectory: "/home/user",
         },
@@ -176,7 +175,6 @@ describe("Directory Listing Integration Tests", () => {
       const validConfig = {
         type: "server_config",
         config: {
-          permissionMode: "default",
           allowedRoots: null,
           homeDirectory: "/home/user",
         },
@@ -192,7 +190,6 @@ describe("Directory Listing Integration Tests", () => {
       const validConfig = {
         type: "server_config",
         config: {
-          permissionMode: "default",
         },
       };
 

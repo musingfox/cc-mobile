@@ -42,7 +42,6 @@ it.skipIf(!existsSync(socketPath))(
       port,
       hostname: "127.0.0.1",
       defaultCwd: null,
-      permissionMode: "default",
       allowedRoots: null,
       basePath: "",
     };
@@ -91,7 +90,12 @@ it.skipIf(!existsSync(socketPath))(
       expect(claudeProc).toBeDefined();
       const argv = claudeProc?.argv ?? [];
       expect(argv).not.toContain("--settings");
-      expect(argv[argv.indexOf("--permission-mode") + 1]).toBe("default");
+      // Read off the real process: cc-mobile imposes no gating posture on a
+      // session the user will share with their own terminal. claude runs at
+      // whatever its own settings say (ADR-003 superseded).
+      expect(argv).not.toContain("--permission-mode");
+      // What does remain is transcript naming, and it is what makes the
+      // readback below findable.
       expect(argv[argv.indexOf("--session-id") + 1]).toBe(claudeUuid);
 
       // One turn, answered from the transcript.

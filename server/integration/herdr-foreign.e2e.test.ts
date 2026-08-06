@@ -44,7 +44,6 @@ it.skipIf(!existsSync(socketPath))(
       port,
       hostname: "127.0.0.1",
       defaultCwd: null,
-      permissionMode: "default",
       allowedRoots: null,
       basePath: "",
     };

@@ -90,17 +90,17 @@ describe("herdr backend composition", () => {
     expect(backend.listLive()).toEqual([UUID]);
   });
 
-  test("permissionMode passes through to the launched claude argv", async () => {
+  test("launches with no gating flag, whatever the caller wants", async () => {
     const fake = makeFakeClient();
-    const backend = createHerdrBackend({ client: fake.client, permissionMode: "acceptEdits" });
+    const backend = createHerdrBackend({ client: fake.client });
 
-    const info = await backend.createSession({ claudeUuid: UUID, cwd: "/tmp" });
+    await backend.createSession({ claudeUuid: UUID, cwd: "/tmp" });
 
     const start = fake.calls.find((call) => call.method === "agent.start");
     const args = (start?.params as { args: string[] }).args;
-    const pmIdx = args.indexOf("--permission-mode");
-    expect(pmIdx).toBeGreaterThanOrEqual(0);
-    expect(args[pmIdx + 1]).toBe("acceptEdits");
+    // There is no longer any way to ask for one: the option is gone from the
+    // backend's surface, and the agent runs at its own settings.
+    expect(args).not.toContain("--permission-mode");
   });
 
   test("teardown closes the workspace and deregisters the session", async () => {

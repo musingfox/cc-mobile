@@ -17,7 +17,6 @@ export const testServerConfig: ServerConfig = {
   port: 0,
   hostname: "127.0.0.1",
   defaultCwd: null,
-  permissionMode: "default",
   allowedRoots: null,
   basePath: "",
 };

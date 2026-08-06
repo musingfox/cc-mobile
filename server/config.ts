@@ -1,19 +1,10 @@
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 
-export type PermissionMode =
-  | "default"
-  | "acceptEdits"
-  | "auto"
-  | "bypassPermissions"
-  | "dontAsk"
-  | "plan";
-
 export interface ServerConfig {
   port: number;
   hostname: string;
   defaultCwd: string | null;
-  permissionMode: PermissionMode;
   allowedRoots: string[] | null;
   basePath: string;
 }
@@ -47,7 +38,6 @@ export function parseServerConfig(argv: string[]): ServerConfig {
     port: 3001,
     hostname: "0.0.0.0",
     defaultCwd: null,
-    permissionMode: "default",
     allowedRoots: parseAllowedRoots(),
     basePath: parseBasePath(process.env.BASE_PATH),
   };
@@ -73,23 +63,6 @@ export function parseServerConfig(argv: string[]): ServerConfig {
         config.defaultCwd = argv[i + 1];
         i++;
         break;
-      case "--permission-mode": {
-        const mode = argv[i + 1];
-        const validModes = [
-          "default",
-          "acceptEdits",
-          "auto",
-          "bypassPermissions",
-          "dontAsk",
-          "plan",
-        ];
-        if (!validModes.includes(mode)) {
-          throw new Error(`Invalid permission-mode: ${mode}. Allowed: ${validModes.join(", ")}`);
-        }
-        config.permissionMode = mode as PermissionMode;
-        i++;
-        break;
-      }
     }
   }
 

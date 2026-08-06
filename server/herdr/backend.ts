@@ -23,8 +23,6 @@ import { listClaudeSessions, type SessionDescriptor, type SessionListingClient }
 import { resolveSocketPath } from "./transport";
 
 export interface HerdrBackendOptions {
-  /** claude --permission-mode for launched sessions (default "default"). */
-  permissionMode?: string;
   /**
    * Injectable client. Defaults to a real one whose transport connects lazily,
    * so constructing a backend never contacts the daemon.
@@ -118,12 +116,11 @@ export function permissionAppliesTo(status: string, kind: string | undefined): b
   return PARSEABLE_PROMPT_KINDS.has(kind);
 }
 
-export function createHerdrBackend(options: HerdrBackendOptions): HerdrTerminalBackend {
+export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerminalBackend {
   const client = options.client ?? createHerdrClient();
 
   const registry = createHerdrRegistry({
     client,
-    permissionMode: options.permissionMode,
     readinessBudgetMs: options.readinessBudgetMs,
     readinessPollMs: options.readinessPollMs,
   });

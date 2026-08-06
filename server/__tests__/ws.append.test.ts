@@ -128,7 +128,7 @@ describe("append_user_message over a fresh connection", () => {
         cleanupByOwner: () => {},
       },
       testServerConfig,
-      { sessionManager: new SessionManager({ permissionMode: "default" }) },
+      { sessionManager: new SessionManager() },
     );
 
     harness.send({ type: "append_user_message", sessionId: "u1", content: "hi" });
