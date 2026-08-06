@@ -162,6 +162,55 @@ describe("GlobalClaudeSessionListing", () => {
     expect(await listClaudeSessions({ client, warn: () => {} })).toEqual([]);
   });
 
+  test("names the kind herdr detected, verbatim", async () => {
+    const { client } = fakeClient({
+      agents: [agentEntry(), agentEntry({ pane_id: "w6C:p1", workspace_id: "w6C", agent: "omp" })],
+      workspaces: [workspace("w3V", "dev"), workspace("w6C", "omp")],
+    });
+
+    const sessions = await listClaudeSessions({ client, warn: () => {} });
+
+    expect(sessions[0]?.agent).toBe("claude");
+    // Verbatim: herdr's label vocabulary is its own and version-dependent, so
+    // nothing here normalises, maps or validates it against a list.
+    expect(sessions[1]?.agent).toBe("omp");
+  });
+
+  test("prefers the kind the live re-read reports over the listing's", async () => {
+    const { client } = fakeClient({
+      agents: [agentEntry()],
+      agentGet: async (target) => agentEntry({ pane_id: target, agent: "omp" }),
+    });
+
+    const sessions = await listClaudeSessions({ client, warn: () => {} });
+
+    // Same rule as the session value: agent.get is the fresher read, and
+    // detection can complete between the two calls.
+    expect(sessions[0]?.agent).toBe("omp");
+  });
+
+  test("says nothing at all when herdr reported no kind", async () => {
+    const { client } = fakeClient({
+      agents: [agentEntry({ agent: undefined })],
+    });
+
+    const sessions = await listClaudeSessions({ client, warn: () => {} });
+
+    expect(sessions).toHaveLength(1);
+    expect(Object.keys(sessions[0] ?? {})).not.toContain("agent");
+  });
+
+  test("an empty kind is not detected, and is never guessed as claude", async () => {
+    const { client } = fakeClient({
+      agents: [agentEntry({ agent: "" })],
+    });
+
+    const sessions = await listClaudeSessions({ client, warn: () => {} });
+
+    expect(sessions).toHaveLength(1);
+    expect(Object.keys(sessions[0] ?? {})).not.toContain("agent");
+  });
+
   test("omits a pane whose claude has exited and keeps the rest", async () => {
     const { client } = fakeClient({
       agents: [agentEntry(), agentEntry({ pane_id: "w4A:p1", workspace_id: "w4A" })],
