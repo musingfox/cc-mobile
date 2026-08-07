@@ -6,8 +6,12 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createApp } from "../app";
 import { parseServerConfig } from "../config";
+import { createSubscriptionStore } from "../push/subscription-store";
 import {
   createHerdrBackend,
   type HerdrBackendOptions,
@@ -124,9 +128,11 @@ describe("herdr backend composition", () => {
     await backend.teardownAll();
 
     expect(backend.listLive()).toEqual([]);
-    // Two workspaces closed; the one shared event stream stays open for the
-    // sessions that are still running.
     expect(fake.calls.filter((call) => call.method === "workspace.close")).toHaveLength(2);
+    // And the one shared event stream — with the status poll behind it — is
+    // closed too. It belongs to the backend, so no per-session teardown reaches
+    // it, and a backend left running one polls the daemon forever.
+    expect(fake.stopCalls()).toBe(1);
   });
 
   test("listSessionDescriptors reports every claude the daemon has, self or foreign", async () => {
@@ -396,12 +402,26 @@ describe("HerdrStartupGate", () => {
   test("createApp and the default backend construct without contacting a daemon", () => {
     const serverConfig = parseServerConfig(["bun", "server/index.ts"]);
 
-    expect(() => createApp(serverConfig)).not.toThrow();
+    // Push paths into a tmpdir: the defaults live in the developer's own
+    // `~/.claude-mobile/`, and no test may construct anything there.
+    const pushTmp = mkdtempSync(join(tmpdir(), "backend-app-push-"));
+    try {
+      expect(() =>
+        createApp(serverConfig, {
+          pushStore: createSubscriptionStore({ path: join(pushTmp, "subs.json") }),
+          pushAttemptLogPath: join(pushTmp, "attempts.jsonl"),
+        }),
+      ).not.toThrow();
+    } finally {
+      rmSync(pushTmp, { recursive: true, force: true });
+    }
 
     const backend = createHerdrBackend({});
     expect(backend.hasSession("x")).toEqual({ present: false });
     expect(backend.listLive()).toEqual([]);
   });
+
+  // wiring T3 covered: push absent ok (see push/wiring.test)
 });
 
 // ── TeardownOwnershipGuard ───────────────────────────────────────────────────

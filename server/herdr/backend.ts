@@ -39,6 +39,24 @@ export interface HerdrBackendOptions {
   suppressSessionLabel?: (label: string) => boolean;
   readinessBudgetMs?: number;
   readinessPollMs?: number;
+  /** The status poll's tick, so a test can watch a whole back-off tier go by. */
+  statusPollIntervalMs?: number;
+  /**
+   * The background-push collaborator. Entirely optional: absent, the backend
+   * behaves exactly as it did before push existed.
+   *
+   * All three halves live in one object on purpose — supplying the triggers
+   * and forgetting `subscriberCount` is what left the 3-second poll tier
+   * dormant in the assembled server while every unit test passed.
+   */
+  push?: {
+    /** A turn just settled on this pane. Announced with no sink lookup. */
+    onTurnSettled?(paneId: string): Promise<void> | void;
+    /** A permission prompt was just parsed; `origin` is the one recorded at emit time. */
+    onPermissionPrompt?(paneId: string, origin: "self" | "foreign"): Promise<void> | void;
+    /** How many phones are registered for push right now. */
+    subscriberCount?(): number;
+  };
 }
 
 /**
@@ -74,6 +92,12 @@ export interface HerdrTerminalBackend extends TerminalBackend {
   pausePermissions(): void;
   /** Reconnect: re-read and re-emit every prompt still on screen. */
   resumePermissions(): Promise<void>;
+  /**
+   * How many phones are registered for background push, as this backend sees
+   * it. On the port so the composition root can prove the route and the poll
+   * read one store rather than two.
+   */
+  pushSubscriberCount(): number;
 }
 
 /**
@@ -184,6 +208,10 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
       );
       return match?.origin ?? "foreign";
     },
+    // Announced for every emitted request, sink or no sink — a prompt that
+    // appears while the phone is asleep is exactly the case push exists for.
+    onPermissionPrompt: (sessionId, origin) =>
+      options.push?.onPermissionPrompt?.(sessionId, origin),
   });
 
   // Bound once: the poll below runs for the life of the process, and a client
@@ -195,6 +223,18 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
     // What the poll backs off on. A sink outlives its connection (it buffers for
     // the reconnect), so the sink map cannot answer this — ownership can.
     hasClients: () => routing.hasClients(),
+    // What lifts the poll out of its 30-tick dormancy when nobody is attached
+    // but a phone is registered: without it the push tier never engages.
+    hasPushSubscribers: () => (options.push?.subscriberCount?.() ?? 0) > 0,
+    ...(options.statusPollIntervalMs !== undefined
+      ? { pollIntervalMs: options.statusPollIntervalMs }
+      : {}),
+    // Fired on both settle paths (arrival and `state_change_seq`-advanced) and
+    // routed through pane-events' own `run()`, so a rejection reaches onError
+    // instead of becoming an unhandled rejection.
+    ...(options.push?.onTurnSettled
+      ? { onTurnSettled: (sessionId: string) => options.push?.onTurnSettled?.(sessionId) }
+      : {}),
     // The status source. Without it a turn that settles without changing the
     // pane's title is never read back at all — see pane-events.ts's header.
     ...(typeof sessionSnapshot === "function"
@@ -315,6 +355,7 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
     resolvePermission: (requestId, answer) => permission.resolve(requestId, answer),
     pausePermissions: () => permission.pause(),
     resumePermissions: () => permission.resume(),
+    pushSubscriberCount: () => options.push?.subscriberCount?.() ?? 0,
     teardown,
     async teardownAll() {
       // Routed through the composed teardown so subscriptions and waiters are
@@ -322,6 +363,11 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
       for (const claudeUuid of registry.listSessions()) {
         await teardown(claudeUuid);
       }
+      // The global stream and its status poll belong to the backend, not to any
+      // one session, so per-session teardown never reaches them: a backend that
+      // has been torn down would otherwise keep calling `session.snapshot`
+      // forever. This is terminal — `start()` stays stopped after it.
+      paneEvents.stop();
     },
     send: (params) => routing.send(params),
     registerClient: (claudeUuid: string, sink: ClientSink, owner?: unknown) =>
