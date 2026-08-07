@@ -121,3 +121,37 @@ self.addEventListener("fetch", (event) => {
     }),
   );
 });
+
+// Push event: ALWAYS show notification (no early return, no conditional around show; Apple revokes permission permanently on silent push)
+self.addEventListener("push", (event) => {
+  const promise = (async () => {
+    let title = "CCMobile";
+    let body = "Something needs you";
+    let tag = "cc-mobile-push";
+    try {
+      let payload = null;
+      if (event.data) {
+        try {
+          payload = await event.data.json();
+        } catch (err) {
+          // The only place a parse failure is ever visible: the notification
+          // still goes up, so without this line an unreadable payload looks
+          // exactly like a working one.
+          console.warn("[sw] push payload could not be parsed:", err);
+        }
+      }
+      // Both kinds carry their own copy and their own tag, so a permission
+      // banner never coalesces over a turn banner (and vice versa).
+      const kind = payload && typeof payload === "object" ? payload.kind : null;
+      if (kind === "turn" || kind === "permission") {
+        title = payload.title || title;
+        body = payload.body || body;
+        tag = payload.tag || tag;
+      }
+    } catch {
+      // malformed/undecryptable still shows fallback; parsing contained in try/catch
+    }
+    await self.registration.showNotification(title, { body, tag, renotify: true });
+  })();
+  event.waitUntil(promise);
+});
