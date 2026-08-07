@@ -159,6 +159,8 @@
   cursor: default;
 }
 
+/* Enabling… state for push subscribe uses the existing disabled style (T2) */
+
 .lin-toggle.is-on {
   background: #ececec;
 }

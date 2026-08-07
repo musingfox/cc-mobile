@@ -3,6 +3,12 @@ import { Icon } from "../../design/icons";
 import { tokens as T } from "../../design/tokens";
 import { hapticService } from "../../services/haptic";
 import { notificationService } from "../../services/notification";
+import {
+  getCachedPublicKey,
+  uploadSubscription,
+  urlBase64ToUint8Array,
+} from "../../services/push-service";
+import { swRegistrationManager } from "../../services/sw-registration";
 import { toastService } from "../../services/toast-service";
 import { useAppStore } from "../../stores/app-store";
 import { useSettingsStore } from "../../stores/settings-store";
@@ -56,24 +62,82 @@ export default function SettingsScreen({ onNavigate }: Props) {
   const [notifPermission, setNotifPermission] = useState<NotificationPermission | null>(
     notifSupported ? Notification.permission : null,
   );
+  const [isEnablingPush, setIsEnablingPush] = useState(false);
   const hapticSupported = hapticService.isSupported();
 
-  const notifDesc = !notifSupported
-    ? "Add to Home Screen to enable (iOS)"
-    : notifPermission === "denied"
-      ? "Blocked — allow notifications in system settings"
-      : "Permission requests & completion";
+  const notifDesc = isEnablingPush
+    ? "Enabling…"
+    : !notifSupported
+      ? "Add to Home Screen to enable (iOS)"
+      : notifPermission === "denied"
+        ? "Blocked — allow notifications in system settings"
+        : "Permission requests & completion";
 
   const handleNotificationsChange = async (next: boolean) => {
-    if (next && notifSupported && Notification.permission !== "granted") {
-      const result = await notificationService.requestPermission();
-      setNotifPermission(result);
-      if (result !== "granted") {
-        toastService.error("Notification permission was not granted");
-        return;
-      }
+    if (!next) {
+      setNotificationsEnabled(false);
+      return;
     }
-    setNotificationsEnabled(next);
+
+    // Enabling path
+    const registration = swRegistrationManager.getRegistration();
+    if (!registration) {
+      toastService.error("Service worker not ready — reload and try again");
+      return;
+    }
+
+    const hasPushManager =
+      typeof window !== "undefined" && "PushManager" in window && registration.pushManager != null;
+
+    if (!hasPushManager) {
+      // T6 fallback: no PushManager, use legacy Notification.request only
+      if (notifSupported && Notification.permission !== "granted") {
+        const result = await notificationService.requestPermission();
+        setNotifPermission(result);
+        if (result !== "granted") {
+          toastService.error("Notification permission was not granted");
+          return;
+        }
+      }
+      setNotificationsEnabled(true);
+      return;
+    }
+
+    const publicKey = getCachedPublicKey();
+    if (publicKey === null) {
+      toastService.error("Push is not configured on the server");
+      return;
+    }
+
+    // IMPORTANT: pushManager.subscribe() call must be the first statement
+    // that can suspend after entering handler (no prior await on this path).
+    // Transient activation for iOS must be live at subscribe() time.
+    setIsEnablingPush(true);
+    registration.pushManager
+      .subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      })
+      .then(async (subscription) => {
+        try {
+          await uploadSubscription(subscription.toJSON() as any);
+          setNotificationsEnabled(true);
+          // no success toast (T8)
+        } catch {
+          toastService.error("Could not register this device for push");
+          // enabled remains false
+        }
+      })
+      .catch((err: any) => {
+        if (err && err.name === "NotAllowedError") {
+          toastService.error("Notification permission was not granted");
+        } else {
+          toastService.error("Could not enable notifications");
+        }
+      })
+      .finally(() => {
+        setIsEnablingPush(false);
+      });
   };
 
   return (
@@ -129,7 +193,7 @@ export default function SettingsScreen({ onNavigate }: Props) {
               <Toggle
                 on={notificationsEnabled}
                 onChange={handleNotificationsChange}
-                disabled={!notifSupported}
+                disabled={!notifSupported || isEnablingPush}
               />
             </div>
             <div className="lin-settings-row is-static">
