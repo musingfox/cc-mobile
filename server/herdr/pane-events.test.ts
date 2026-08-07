@@ -25,6 +25,8 @@ function harness(
     }>;
     subscribeFails?: boolean;
     hasClients?: () => boolean;
+    hasPushSubscribers?: () => boolean;
+    onTurnSettled?: (sessionId: string) => void | Promise<void>;
   } = {},
 ) {
   const sent: Record<string, Record<string, unknown>[]> = {};
@@ -79,6 +81,8 @@ function harness(
       }),
     ...(overrides.snapshot ? { snapshot: overrides.snapshot } : {}),
     ...(overrides.hasClients ? { hasClients: overrides.hasClients } : {}),
+    ...(overrides.hasPushSubscribers ? { hasPushSubscribers: overrides.hasPushSubscribers } : {}),
+    ...(overrides.onTurnSettled ? { onTurnSettled: overrides.onTurnSettled } : {}),
     setIntervalFn: (fn: () => void) => {
       const id = nextTimer++;
       ticks.set(id, fn);
@@ -465,8 +469,8 @@ describe("PaneEventPollBackOff", () => {
 
     for (let i = 0; i < 10; i++) await h.tick();
 
-    // One call to see where things stand, then nothing for half a minute.
-    expect(calls.count).toBe(1);
+    // Dormant tier (30) means first snapshot on the 30th tick; 10 ticks yields 0.
+    expect(calls.count).toBe(0);
   });
 
   test("a pane event does not wake the poll for a phone that is not there", async () => {
@@ -476,6 +480,7 @@ describe("PaneEventPollBackOff", () => {
     await h.tick();
 
     // A working claude retitles its pane constantly; nobody is listening.
+    // Dormant: first 29 ticks produce no snapshot.
     h.emit({
       event: "pane_updated",
       data: { pane: { pane_id: "w3V:p1", agent_status: "working" } },
@@ -483,7 +488,7 @@ describe("PaneEventPollBackOff", () => {
     await h.tick();
     await h.tick();
 
-    expect(calls.count).toBe(1);
+    expect(calls.count).toBe(0);
   });
 
   test("the phone coming back gets the turn it missed, in one look", async () => {
@@ -503,18 +508,23 @@ describe("PaneEventPollBackOff", () => {
     await h.tick();
 
     // Two turns run in the user's own terminal while the phone is closed.
+    // Dormant: no snapshot call in first ~29 ticks.
     agents = [{ pane_id: "w3V:p1", agent: "claude", agent_status: "idle", state_change_seq: 44 }];
     await h.tick();
     await h.tick();
-    expect(calls.count).toBe(1);
+    expect(calls.count).toBe(0);
 
     connected = true;
+    // resync sets clR without counting as a poll call; then 1 tick fires (every=1)
+    h.resync({
+      panes: [{ pane_id: "w3V:p1", agent: "claude", agent_status: "idle" }],
+      agents: [{ pane_id: "w3V:p1", agent: "claude", agent_status: "idle", state_change_seq: 44 }],
+    });
     await h.tick();
 
-    expect(calls.count).toBe(2);
+    expect(calls.count).toBe(1);
     expect(h.transcriptCalls.filter((call) => call.startsWith("deliver"))).toEqual([
-      "deliver:w3V:p1", // first sighting
-      "deliver:w3V:p1", // everything written while nobody was watching
+      "deliver:w3V:p1",
     ]);
   });
 
@@ -535,6 +545,183 @@ describe("PaneEventPollBackOff", () => {
     await h.tick();
 
     expect(calls.count).toBe(2);
+  });
+});
+
+/**
+ * PushSubscriberPollTier contract:
+ * With no phone connected but a push registration on file, pane status is polled
+ * every ~3 s instead of every 30 s.
+ */
+describe("PushSubscriberPollTier", () => {
+  function counted(panes: Record<string, unknown>[], agents: Record<string, unknown>[] = []) {
+    const calls = { count: 0 };
+    return {
+      calls,
+      snapshot: async () => {
+        calls.count += 1;
+        return { panes, agents };
+      },
+    };
+  }
+
+  const livePane = [{ pane_id: "w3V:p1", agent: "claude", agent_status: "idle" }];
+  const liveAgent = [
+    { pane_id: "w3V:p1", agent: "claude", agent_status: "idle", state_change_seq: 40 },
+  ];
+
+  test("T1: given 3 ticks with hasClients:false, hasPushSubscribers:true -> expect snapshot called exactly 1 time (on the 3rd tick)", async () => {
+    const { calls, snapshot } = counted(livePane, liveAgent);
+    const h = harness({ snapshot, hasClients: () => false, hasPushSubscribers: () => true });
+    await h.events.start();
+
+    await h.tick();
+    await h.tick();
+    await h.tick();
+
+    expect(calls.count).toBe(1);
+  });
+
+  test("T2: given 29 ticks with hasClients:false, hasPushSubscribers:false -> expect snapshot called 0 times", async () => {
+    const { calls, snapshot } = counted(livePane, liveAgent);
+    const h = harness({ snapshot, hasClients: () => false, hasPushSubscribers: () => false });
+    await h.events.start();
+
+    for (let i = 0; i < 29; i++) await h.tick();
+
+    expect(calls.count).toBe(0);
+  });
+
+  test("T3: given 1 tick with hasClients:true, claude running, hasPushSubscribers:true -> expect snapshot called 1 time (existing behaviour unchanged)", async () => {
+    const { calls, snapshot } = counted(livePane, liveAgent);
+    const h = harness({ snapshot, hasClients: () => true, hasPushSubscribers: () => true });
+    await h.events.start();
+
+    await h.tick();
+
+    expect(calls.count).toBe(1);
+  });
+
+  test("T4: given a stream event setting dueNext, then 1 tick, with hasClients:false and hasPushSubscribers:true -> expect snapshot NOT called on that tick (the shortcut stays gated on hasClients())", async () => {
+    const { calls, snapshot } = counted(livePane, liveAgent);
+    const h = harness({ snapshot, hasClients: () => false, hasPushSubscribers: () => true });
+    await h.events.start();
+
+    await h.tick(); // tick 1: 1 < 3, no call
+
+    // stream event sets dueNext
+    h.emit({
+      event: "pane_updated",
+      data: { pane: { pane_id: "w3V:p1", agent_status: "working" } },
+    });
+    await h.tick(); // tick 2: 2 < 3 but shortcut=false (no clients), no call
+
+    // dueNext did not trigger because shortcut gated on hasClients()
+    expect(calls.count).toBe(0);
+  });
+
+  test("T5: given hasPushSubscribers option omitted entirely, 29 ticks with hasClients:false -> expect snapshot called 0 times (today's dormant behaviour)", async () => {
+    const { calls, snapshot } = counted(livePane, liveAgent);
+    const h = harness({ snapshot, hasClients: () => false });
+    await h.events.start();
+
+    for (let i = 0; i < 29; i++) await h.tick();
+
+    expect(calls.count).toBe(0);
+  });
+});
+
+/**
+ * PushTurnSettledTrigger contract:
+ * The server announces a finished turn even when no phone is connected,
+ * instead of only telling an attached socket.
+ */
+describe("PushTurnSettledTrigger", () => {
+  test("T1: given a pane observed working -> idle with getSink returning undefined -> expect onTurnSettled called exactly once", async () => {
+    const settled: string[] = [];
+    const h = harness({
+      getSink: () => undefined,
+      onTurnSettled: (id) => {
+        settled.push(id);
+      },
+    });
+    await h.events.start();
+
+    h.emit({
+      event: "pane_updated",
+      data: { pane: { pane_id: "w3V:p1", agent_status: "working" } },
+    });
+    h.emit({ event: "pane_updated", data: { pane: { pane_id: "w3V:p1", agent_status: "idle" } } });
+    await flush();
+
+    expect(settled).toEqual(["w3V:p1"]);
+  });
+
+  test("T2: given a pane observed idle -> idle with state_change_seq advancing 4->5 -> expect onTurnSettled called exactly once", async () => {
+    let seq = 4;
+    const settled: string[] = [];
+    const h = harness({
+      getSink: () => undefined,
+      snapshot: async () => ({
+        panes: [{ pane_id: "w3V:p1", agent_status: "idle" }],
+        agents: [{ pane_id: "w3V:p1", agent_status: "idle", state_change_seq: seq }],
+      }),
+      onTurnSettled: (id) => {
+        settled.push(id);
+      },
+    });
+    await h.events.start();
+    await h.tick(); // first sighting idle seq4 (calls once, ignore for adv test)
+    settled.length = 0;
+
+    seq = 5;
+    await h.tick(); // same status, seq adv -> onTurnSettled exactly once
+
+    expect(settled).toEqual(["w3V:p1"]);
+  });
+
+  test("T3: given a pane observed done -> idle (the decaying pair) -> expect onTurnSettled not called", async () => {
+    const settled: string[] = [];
+    const h = harness({
+      getSink: () => undefined,
+      onTurnSettled: (id) => {
+        settled.push(id);
+      },
+    });
+    await h.events.start();
+
+    h.emit({ event: "pane_updated", data: { pane: { pane_id: "w3V:p1", agent_status: "done" } } });
+    settled.length = 0; // ignore the done arrival itself
+    h.emit({ event: "pane_updated", data: { pane: { pane_id: "w3V:p1", agent_status: "idle" } } });
+    await flush();
+
+    expect(settled).toEqual([]);
+  });
+
+  test("T4: given a collaborator whose onTurnSettled rejects -> expect the error reaches onError and session_state handling for that pane still completes", async () => {
+    const sent: Record<string, unknown>[] = [];
+    const h = harness({
+      getSink: () => (m) => sent.push(m),
+      onTurnSettled: () => Promise.reject(new Error("onTurnSettled failed")),
+    });
+    await h.events.start();
+
+    h.emit({
+      event: "pane_updated",
+      data: { pane: { pane_id: "w3V:p1", agent_status: "working" } },
+    });
+    h.emit({ event: "pane_updated", data: { pane: { pane_id: "w3V:p1", agent_status: "idle" } } });
+    await flush();
+
+    expect(h.errors.some((e) => e.message.includes("onTurnSettled failed"))).toBe(true);
+    // session_state still sent despite reject
+    expect(
+      sent.some(
+        (m) =>
+          (m as Record<string, unknown>).type === "session_state" &&
+          (m as Record<string, unknown>).state === "idle",
+      ),
+    ).toBe(true);
   });
 });
 

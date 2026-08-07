@@ -80,12 +80,16 @@ export const DEFAULT_STATUS_POLL_MS = 1_000;
  *   discovery    a phone is connected but no claude has been seen yet: nothing
  *                to read back, only a new pane to notice. The stream notices it
  *                sooner anyway (any event forces the next tick to call).
- *   dormant      nobody is listening. Anything read here would be dropped on the
- *                floor for want of a sink, so this is close to off — kept alive
- *                only so a daemon restart is eventually noticed.
+ *   push         no phone connected, but a push subscription is registered: poll
+ *                every ~3 s so a finished turn can trigger a push notification.
+ *   dormant      nobody is listening and no push subs. Anything read here would
+ *                be dropped, so this is close to off — kept alive only so a
+ *                daemon restart is eventually noticed.
  */
 const DISCOVERY_POLL_TICKS = 5;
 const DORMANT_POLL_TICKS = 30;
+/** Intermediate tier: push subscribers exist but no live client. ~3 s. */
+const PUSH_SUBSCRIBER_POLL_TICKS = 3;
 
 export interface HerdrPaneEventsOptions {
   subscribe: (options: SubscribeEventsOptions) => Promise<SubscriptionHandle>;
@@ -97,6 +101,12 @@ export interface HerdrPaneEventsOptions {
    */
   hasClients?: () => boolean;
   /**
+   * Whether any push subscribers are registered (for the push poll tier).
+   * When no clients but push subs exist, poll at an intermediate rate (~3s)
+   * instead of dormant (30s). Omitted or false keeps dormant behaviour.
+   */
+  hasPushSubscribers?: () => boolean;
+  /**
    * The level-triggered status source (see the module header). Optional: a
    * client slice without it degrades to the stream's incidental status reports,
    * which is what this module did before the poll existed.
@@ -107,6 +117,8 @@ export interface HerdrPaneEventsOptions {
   clearIntervalFn?: (handle: TimerHandle) => void;
   transcript?: PaneEventTranscript;
   permission?: PaneEventPermission;
+  /** Separate settle announcement for push path (fires even with no sink). */
+  onTurnSettled?: (sessionId: string) => Promise<void> | void;
   onError?: (error: Error) => void;
 }
 
@@ -160,6 +172,8 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
   const { subscribe, getSink, snapshot, transcript, permission } = options;
   const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_STATUS_POLL_MS;
   const hasClients = options.hasClients ?? (() => true);
+  const hasPushSubscribers = options.hasPushSubscribers ?? (() => false);
+  const onTurnSettled = options.onTurnSettled;
   const setIntervalFn =
     options.setIntervalFn ??
     ((fn: () => void, ms: number) => {
@@ -256,6 +270,7 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
       // still means a whole turn ran in the gap, so it is read out.
       if (seqAdvanced && SETTLED_STATUSES.has(status)) {
         run(transcript?.deliverTurn(sessionId));
+        run(onTurnSettled?.(sessionId));
       }
       return;
     }
@@ -288,6 +303,7 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
     const settledPairRanATurn = wasSettled && seqAdvanced && !decayingAfterDelivery;
     if (SETTLED_STATUSES.has(status) && (!wasSettled || settledPairRanATurn)) {
       run(transcript?.deliverTurn(sessionId));
+      run(onTurnSettled?.(sessionId));
     }
   }
 
@@ -338,7 +354,13 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
    * at all (see `observe`).
    */
   function dueThisTick(): boolean {
-    const every = !hasClients() ? DORMANT_POLL_TICKS : claudeRunning ? 1 : DISCOVERY_POLL_TICKS;
+    const every = !hasClients()
+      ? hasPushSubscribers()
+        ? PUSH_SUBSCRIBER_POLL_TICKS
+        : DORMANT_POLL_TICKS
+      : claudeRunning
+        ? 1
+        : DISCOVERY_POLL_TICKS;
     ticksWaited += 1;
     // A stream event only shortcuts a wait somebody is waiting on: with no
     // phone connected, a working claude retitles its pane every second and
@@ -391,9 +413,10 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
       // the stream never was, so a dead stream still leaves the phone with its
       // replies and its activity dots.
       if (snapshot && poll === undefined && !stopped) {
-        // The first tick always calls, whatever the tier: nothing is known yet,
-        // so a back-off decision would be based on nothing.
-        ticksWaited = DORMANT_POLL_TICKS;
+        // Prime so that when clients present at arm we get the free first poll
+        // (old DORMANT trick); when !clients (push or dormant) we start from 0
+        // so the tier rhythm (3 or 30) governs including first poll time.
+        ticksWaited = hasClients() ? DORMANT_POLL_TICKS : 0;
         poll = setIntervalFn(() => {
           if (dueThisTick()) void pollOnce();
         }, pollIntervalMs);
