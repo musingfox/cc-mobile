@@ -50,8 +50,20 @@ Vite dev server proxies `/ws` and `/api` to Elysia backend on port 3001.
 
 - **Dev**: two processes — Vite (:5173) proxies `/ws` and `/api` to Elysia (:3001)
 - **Prod**: single Elysia process serves static files + WebSocket + API on :7701
-- Prod port is configured in `ecosystem.config.cjs` via `--port 7701`
-- Access via Tailscale IP: `http://100.88.181.24:7701/`
+- Prod port and bind are configured in `ecosystem.config.cjs` via `--port 7701 --hostname 127.0.0.1`
+- Access over TLS: `https://nick-mac-mini.tail361ef.ts.net/`, via `tailscale serve --bg 7701`
+
+The prod server binds loopback only and is reached through `tailscale serve`,
+which terminates TLS for the tailnet (publicly-trusted cert, tailnet-only
+reachability — not `tailscale funnel`). This is not decoration: on the plain-http
+LAN address the page was **not a secure context**, so `navigator.serviceWorker`
+and `crypto.subtle` did not exist and `crypto.randomUUID` threw — the phone's PWA
+had no service worker and no push, and the new-session button died in its own
+handler. Both entrances existing at once would leave that door open, so the LAN
+one is closed rather than merely deprecated.
+
+Note the origin change resets everything keyed to it: `localStorage` (projects,
+drafts, session persistence) is per-origin, so the https origin starts empty.
 
 ## Architecture
 

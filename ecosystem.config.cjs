@@ -22,7 +22,12 @@ module.exports = {
       name: "cc-mobile-prod",
       script: "server/index.ts",
       interpreter: "bun",
-      args: "--port 7701",
+      // Loopback only: the phone reaches this through `tailscale serve`, which
+      // terminates TLS for the tailnet and proxies to localhost. Binding the
+      // LAN interface as well would leave a plain-http door open on the same
+      // machine — and that door is not a secure context, so a browser there
+      // gets no service worker, no push, and no crypto.randomUUID.
+      args: "--port 7701 --hostname 127.0.0.1",
       cwd: __dirname,
       env: {
         NODE_ENV: "production",
