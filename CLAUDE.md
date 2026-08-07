@@ -176,6 +176,13 @@ agent's mode is its own), `list_sessions`, `resume_session`, `set_session_title`
 
 Schemas defined in `server/protocol.ts`. Full spec in `cc-mobile.md`.
 
+## Background Push (web push for iOS PWA)
+- Only panes with origin "self" (cc-mobile launched) trigger `dispatch` to phones.
+- Every send attempt is logged to ~/.claude-mobile/push-attempts.jsonl with {ts,kind,host,status,reason} (PushAttemptLog).
+- Constant generic payload only; no session/cwd/tool in the push body (traverses APNs).
+- VAPID from CC_MOBILE_VAPID_* envs; positive TTL (0→1); 410/404 prunes subscription.
+- Subscribe at /api/push/subscribe (dedup by endpoint, allowlist apple, max 10); public key at /api/push/public-key (503 if unset).
+
 ## Security Constraints
 
 - cc-mobile sets no agent settings: no `--permission-mode` on launch, no CLI flag, and `set_permission_mode` / `set_model` / `set_effort` / `set_env_vars` are refused by the Zod gate. Each agent runs at its own configured posture (ADR-003 superseded; ADR-015 §2026-08-06). `sessions[].gated` still discloses an ungated pane by reading its argv.
