@@ -13,8 +13,12 @@
  */
 
 import { afterAll, describe, expect, it } from "bun:test";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { type AppBackend, createApp } from "./app";
 import type { ServerConfig } from "./config";
+import { createSubscriptionStore } from "./push/subscription-store";
 
 // ── stubs ────────────────────────────────────────────────────────────────────
 
@@ -52,9 +56,16 @@ function makeSpyBackend() {
   };
 }
 
+// Push paths point into a tmpdir even though this file never sends: with them
+// omitted `createApp` builds a store and an attempt log at the developer's own
+// `~/.claude-mobile/`, which is the file the physical-device test is read from.
+const pushTmp = mkdtempSync(join(tmpdir(), "app-lifecycle-push-"));
+
 function buildApp(extraDeps: Record<string, unknown>) {
   return createApp(serverConfig, {
     sessionManager: sessionManagerStub,
+    pushStore: createSubscriptionStore({ path: join(pushTmp, "subs.json") }),
+    pushAttemptLogPath: join(pushTmp, "attempts.jsonl"),
     ...extraDeps,
   });
 }
@@ -64,6 +75,7 @@ const beforeSigterm = [...process.listeners("SIGTERM")];
 const beforeSigint = [...process.listeners("SIGINT")];
 
 afterAll(() => {
+  if (existsSync(pushTmp)) rmSync(pushTmp, { recursive: true, force: true });
   for (const l of process.listeners("SIGTERM")) {
     if (!beforeSigterm.includes(l)) process.removeListener("SIGTERM", l as any);
   }

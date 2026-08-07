@@ -15,11 +15,13 @@
  * window in which a hook POST can be lost.
  */
 
-import { describe, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
+import { afterAll, describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AppBackend, createApp } from "../app";
 import type { ServerConfig } from "../config";
+import { createSubscriptionStore } from "../push/subscription-store";
 
 const repoRoot = join(import.meta.dir, "..", "..");
 
@@ -43,6 +45,19 @@ const backend = {
   cleanupByOwner: () => {},
 } as AppBackend;
 
+// Nothing here pushes, but a `createApp` with no push deps builds its store and
+// its attempt log at the developer's own `~/.claude-mobile/`. A test suite has
+// no business touching that directory at all.
+const pushTmp = mkdtempSync(join(tmpdir(), "hook-endpoints-push-"));
+const pushDeps = {
+  pushStore: createSubscriptionStore({ path: join(pushTmp, "subs.json") }),
+  pushAttemptLogPath: join(pushTmp, "attempts.jsonl"),
+};
+
+afterAll(() => {
+  if (existsSync(pushTmp)) rmSync(pushTmp, { recursive: true, force: true });
+});
+
 function post(path: string, body: unknown): Request {
   return new Request(`http://127.0.0.1:3001${path}`, {
     method: "POST",
@@ -53,7 +68,7 @@ function post(path: string, body: unknown): Request {
 
 describe("HookEndpointsRemoved", () => {
   test("a well-formed PreToolUse hook POST is not answered", async () => {
-    const app = createApp(serverConfig, { backend });
+    const app = createApp(serverConfig, { backend, ...pushDeps });
 
     const response = await app.handle(
       post("/api/pty-permission", {
@@ -68,7 +83,7 @@ describe("HookEndpointsRemoved", () => {
   });
 
   test("a well-formed Stop hook POST is not answered", async () => {
-    const app = createApp(serverConfig, { backend });
+    const app = createApp(serverConfig, { backend, ...pushDeps });
 
     const response = await app.handle(
       post("/api/pty-response", { session_id: "u1", text: "hello" }),

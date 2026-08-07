@@ -23,6 +23,12 @@ import type { ServerConfig } from "./config";
 import { EventBuffer } from "./event-buffer";
 import { createHerdrBackend } from "./herdr/backend";
 import { stripBasePath } from "./path-utils";
+import { createAttemptLog } from "./push/attempt-log";
+import { createPushNotifier } from "./push/notifier";
+import { createPushPlugin } from "./push/plugin";
+import { createPushSender, type PushTransport } from "./push/sender";
+import { createSubscriptionStore } from "./push/subscription-store";
+import { loadVapidKeys } from "./push/vapid";
 import { SessionManager } from "./session-manager";
 import { createUploadPlugin } from "./upload";
 import { createUploadImagePlugin } from "./upload-image";
@@ -41,6 +47,13 @@ export interface AppBackend extends WsBackend {
   hasSession(claudeUuid: string): { present: boolean; paneRef?: string };
   getClient(claudeUuid: string): ((msg: Record<string, unknown>) => void) | undefined;
   teardownAll(): Promise<void>;
+  /**
+   * How many phones are registered for background push, read through the
+   * backend rather than off the store directly — that is what proves the
+   * subscribe route and the poll tier share one store. Optional: a test may
+   * inject a backend that has no push wiring at all.
+   */
+  pushSubscriberCount?(): number;
 }
 
 /**
@@ -56,6 +69,21 @@ export interface AppTestDeps {
   backend?: AppBackend;
   backendRef?: { current: AppBackend | null };
   sessionManager?: SessionManager;
+  pushStore?: ReturnType<typeof createSubscriptionStore>;
+  /**
+   * The herdr client the default backend talks to. A probe can drive the whole
+   * assembled chain — pane event → poll → notifier → sender — off a fake
+   * daemon without stubbing anything above it.
+   */
+  herdrClient?: NonNullable<Parameters<typeof createHerdrBackend>[0]>["client"];
+  /**
+   * The transport boundary, and the only thing a test may stand in for on the
+   * push path: everything between `createApp` and here must be the real
+   * article, or this whole seam goes untested again.
+   */
+  pushSend?: PushTransport;
+  /** Keeps a probe's attempt lines out of the developer's own `~/.claude-mobile`. */
+  pushAttemptLogPath?: string;
 }
 
 /** Builds the whole server. The returned app has not been listened on. */
@@ -70,11 +98,46 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
   // client that does not exist yet.
   const clientSink: ClientSink = { current: null };
 
+  // One store, read by three parties: the subscribe route stores into it, the
+  // sender sends to it, and the poll tier asks it whether anybody is listening.
+  // Two instances here is the failure this whole feature is built to avoid.
+  const pushStore = deps.pushStore ?? createSubscriptionStore();
+  const sender = createPushSender({
+    store: pushStore,
+    attemptLog: createAttemptLog(deps.pushAttemptLogPath ? { path: deps.pushAttemptLogPath } : {}),
+    ...(deps.pushSend ? { send: deps.pushSend } : {}),
+  });
+
+  // The notifier needs the backend to answer "whose pane is this?" and the
+  // backend needs the notifier; one typed cell breaks the cycle. It used to be
+  // `let backend: any`, which is precisely what hid two missing wirings.
+  const backendCell: { current: AppBackend | null } = { current: null };
+  const notifier = createPushNotifier({
+    getSubscriptions: () => pushStore.list(),
+    dispatch: (kind, subs, vapid) => sender.dispatch(kind, subs, vapid),
+    // Read per dispatch, not captured: the keys are environment-only.
+    getVapid: () => loadVapidKeys(),
+    getOrigin: async (paneId: string) => {
+      const descriptors = (await backendCell.current?.listSessionDescriptors?.()) ?? [];
+      return descriptors.find((entry) => entry.sessionId === paneId)?.origin ?? "foreign";
+    },
+  });
+
   // herdr is the only default backend (ADR-015 / plan D1). Its transport
   // connects lazily, so constructing the app here contacts no daemon —
   // index.ts gates on daemon reachability before it listens.
-  const backend: AppBackend = deps.backend ?? createHerdrBackend();
+  const backend: AppBackend =
+    deps.backend ??
+    createHerdrBackend({
+      ...(deps.herdrClient ? { client: deps.herdrClient } : {}),
+      push: {
+        onTurnSettled: (paneId) => notifier.onTurnSettled(paneId),
+        onPermissionPrompt: (paneId, origin) => notifier.onPermissionPrompt(paneId, origin),
+        subscriberCount: () => pushStore.count(),
+      },
+    });
 
+  backendCell.current = backend;
   if (deps.backendRef) deps.backendRef.current = backend;
 
   // No shutdown signal handler: pane survival across a stop is the persistence
@@ -92,6 +155,7 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
     .use(createWsPlugin(sessionManager, serverConfig, { backend, eventBuffer, clientSink }))
     .use(createUploadPlugin(serverConfig))
     .use(createUploadImagePlugin(serverConfig))
+    .use(createPushPlugin({ store: pushStore, config: serverConfig }))
     .get("*", async ({ request }) => {
       // Skip if dist/ doesn't exist (dev mode)
       if (!existsSync(DIST_DIR)) {
