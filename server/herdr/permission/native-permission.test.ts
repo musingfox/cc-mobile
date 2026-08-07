@@ -31,6 +31,8 @@ function harness(
     paneRead: NativePermissionClient["paneRead"];
     agentGet: NativePermissionClient["agentGet"];
     sink: boolean;
+    onPermissionPrompt: (sessionId: string, origin: "self" | "foreign") => Promise<void> | void;
+    warn: (message: string) => void;
   }> = {},
 ): Harness {
   const sent: Record<string, unknown>[] = [];
@@ -53,7 +55,8 @@ function harness(
     getSink: overrides.sink === false ? () => undefined : () => (msg) => sent.push(msg),
     originOf: () => overrides.origin ?? "foreign",
     newRequestId: () => `r${++counter}`,
-    warn: () => {},
+    warn: overrides.warn ?? (() => {}),
+    onPermissionPrompt: overrides.onPermissionPrompt,
   });
 
   return { permission, sent, keys, screen, status, client };
@@ -351,5 +354,73 @@ describe("PermissionAnswerKeySend — omp", () => {
 
     expect(h.keys).toEqual([]);
     expect(h.sent.some((msg) => msg.code === "permission_option_unknown")).toBe(true);
+  });
+});
+
+describe("PushPermissionTrigger", () => {
+  test('T1: given a blocked pane emitted with getSink returning undefined and origin "self" -> expect onPermissionPrompt called once with (PANE,"self")', async () => {
+    const prompted: Array<[string, "self" | "foreign"]> = [];
+    const h = harness({
+      sink: false,
+      origin: "self",
+      onPermissionPrompt: (sid, o) => {
+        prompted.push([sid, o]);
+      },
+    });
+
+    await h.permission.onStatus(PANE, "blocked");
+
+    expect(prompted).toHaveLength(1);
+    expect(prompted[0]).toEqual([PANE, "self"]);
+  });
+
+  test("T2: given a blocked pane whose screen cannot be parsed (Cancel-only fallback) -> expect onPermissionPrompt still called once", async () => {
+    const prompted: Array<[string, "self" | "foreign"]> = [];
+    const h = harness({
+      origin: "self",
+      onPermissionPrompt: (rid, o) => {
+        prompted.push([rid, o]);
+      },
+    });
+    h.screen.text = UNPARSEABLE;
+
+    await h.permission.onStatus(PANE, "blocked");
+
+    expect(prompted).toHaveLength(1);
+  });
+
+  test("T3: given a collaborator that throws synchronously -> expect the pending request is still registered and the unattended-deny timer is still armed", async () => {
+    const h = harness({
+      origin: "self",
+      onPermissionPrompt: () => {
+        throw new Error("collaborator boom");
+      },
+    });
+
+    await h.permission.onStatus(PANE, "blocked");
+
+    expect(h.permission.pendingCount()).toBe(1);
+    const entry = h.permission.pendingFor(PANE);
+    expect(entry).toBeDefined();
+    expect(entry?.timerId).not.toBeUndefined();
+  });
+
+  test("T4: given a collaborator that rejects -> expect the prompt still stands and the failure is warned, not thrown at the process", async () => {
+    // The push notifier is async, so "swallowed and warned" has to hold for a
+    // rejected promise too — otherwise it escapes as an unhandled rejection
+    // and the operator gets a crash log instead of one warning line.
+    const warnings: string[] = [];
+    const h = harness({
+      origin: "self",
+      warn: (message) => warnings.push(message),
+      onPermissionPrompt: () => Promise.reject(new Error("notifier boom")),
+    });
+
+    await h.permission.onStatus(PANE, "blocked");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    expect(h.permission.pendingCount()).toBe(1);
+    expect(h.permission.pendingFor(PANE)?.timerId).not.toBeUndefined();
+    expect(warnings.some((message) => message.includes("notifier boom"))).toBe(true);
   });
 });
