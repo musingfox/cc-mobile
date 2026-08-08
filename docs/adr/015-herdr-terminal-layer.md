@@ -268,3 +268,11 @@ cc-mobile 從手機啟動 omp 時**不帶任何 approval 旗標**，沿用 omp �
 那個自動拒絕只對 cc-mobile 自建的 pane 生效（Decision H2）。而自建的 claude 現在照使用者自己的設定跑——如果那份設定不會問（例如 `defaultMode: "auto"` 加一串 allow 規則，開發機上很常見），自建 pane 就不會出現待答提示，計時器也就沒有東西可以拒絕。
 
 邏輯本身沒動，也仍由 `server/unattended-permission.test.ts` 覆蓋。但 live e2e 的覆蓋面確實換了位置：`herdr-permission.e2e.test.ts` 現在自己起一個帶 `--permission-mode default` 的 claude（origin=foreign），因為那是唯一保證有提示可答的狀態。它測的因此是「使用者自己開的、會問的 session」——這也正是 #33 之後權限流真正服務的對象。
+
+## 2026-08-08 增修：讀回游標的檔尾附著只管 live 一路（ADR-016）
+
+§2026-08-02 決策第 2 點「附著時游標取檔尾，因此不會把既有對話當成新訊息重播」**維持不變**，但它從此只描述 live 送達那一路。
+
+[ADR-016](016-session-view-as-transcript-projection.md) 決定手機的 session 畫面是這個 session 的 transcript 的投影：既有對話由 client 主動往回拉，走一組自己的請求／回應對、貼在畫面上方，不冒充剛剛說的話。原本那句話的意圖因此完整保留——重播的顧慮是「被當成新訊息」，不是「看得到舊訊息」。
+
+Decision M1（不重塑內容）不受影響：歷史信封裡的 record body 與 live 路徑共用同一個 `transcriptRecordToChunk`。`readable` 的「只揭露、不封鎖」也沿用：不可讀的 session 沒有歷史 affordance，但 `drivable` 仍為 true、composer 仍可用。
