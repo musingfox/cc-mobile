@@ -7,6 +7,8 @@ export interface ServerConfig {
   defaultCwd: string | null;
   allowedRoots: string[] | null;
   basePath: string;
+  /** Which panes may buzz a phone. See `parsePushScope`. */
+  pushScope: "phone-last" | "all";
 }
 
 /**
@@ -40,6 +42,7 @@ export function parseServerConfig(argv: string[]): ServerConfig {
     defaultCwd: null,
     allowedRoots: parseAllowedRoots(),
     basePath: parseBasePath(process.env.BASE_PATH),
+    pushScope: parsePushScope(),
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -74,6 +77,22 @@ function expandPath(p: string): string {
     return resolve(homedir(), p.slice(2));
   }
   return resolve(p);
+}
+
+/**
+ * Which panes may buzz a phone. `phone-last` (the default) restricts push to a
+ * pane whose most recent input came from the phone; `all` sends for every pane
+ * on the machine.
+ *
+ * An unrecognised value throws rather than falling back. Silently defaulting a
+ * typo would leave the operator believing they had turned something on, and a
+ * push that never arrives is already the hardest failure here to see.
+ */
+function parsePushScope(): "phone-last" | "all" {
+  const value = process.env.CC_MOBILE_PUSH_SCOPE?.trim();
+  if (!value) return "phone-last";
+  if (value === "phone-last" || value === "all") return value;
+  throw new Error(`CC_MOBILE_PUSH_SCOPE must be "phone-last" or "all", got "${value}"`);
 }
 
 function parseAllowedRoots(): string[] | null {

@@ -71,6 +71,7 @@ describe("BufferedCreateAck", () => {
       hostname: "127.0.0.1",
       defaultCwd: null,
       allowedRoots: ["/nowhere-allowed"],
+      pushScope: "phone-last" as const,
       basePath: "",
     });
 

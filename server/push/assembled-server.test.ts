@@ -148,8 +148,14 @@ describe("the assembled server can actually transmit a push", () => {
     // 2. The route and the backend read one store (this is what "wiring" means).
     expect(backendRef.current?.pushSubscriberCount?.()).toBe(1);
 
-    // 3. The pane runs a turn and settles. This opens the event stream too.
+    // 3. The phone sends a prompt into the pane, through the real backend. This
+    //    is what puts the pane in scope under `phone-last`: the rule is "notify
+    //    me about the work I asked for from here", and driving it any other way
+    //    would test a pane nobody asked anything of.
     await backendRef.current?.listSessionDescriptors?.();
+    await backendRef.current?.send({ claudeUuid: PANE, content: "do the thing" });
+
+    // 4. The pane runs that turn and settles.
     emitter.emit?.({
       event: "pane_updated",
       data: { pane: { pane_id: PANE, agent_status: "working" } },
@@ -220,7 +226,12 @@ describe("the assembled server can actually transmit a push", () => {
     ).toBe(201);
     await backendRef.current?.listSessionDescriptors?.();
 
-    // claude asks for permission on a pane cc-mobile launched. The screen the
+    // The prompt the phone sent is what this permission question belongs to:
+    // under `phone-last` a prompt is announced to whoever asked for the turn
+    // that raised it.
+    await backendRef.current?.send({ claudeUuid: PANE, content: "do the thing" });
+
+    // claude asks for permission. The screen the
     // fake daemon returns parses to nothing, which is the unparseable fallback
     // — it still raises a request, and a request is what push announces.
     emitter.emit?.({

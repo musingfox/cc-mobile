@@ -50,10 +50,14 @@ export interface HerdrBackendOptions {
    * dormant in the assembled server while every unit test passed.
    */
   push?: {
+    /** cc-mobile just injected a prompt into this pane. */
+    onPromptSent?(paneId: string): void;
+    /** This pane began working — whoever asked for it. */
+    onTurnStart?(paneId: string): void;
     /** A turn just settled on this pane. Announced with no sink lookup. */
     onTurnSettled?(paneId: string): Promise<void> | void;
-    /** A permission prompt was just parsed; `origin` is the one recorded at emit time. */
-    onPermissionPrompt?(paneId: string, origin: "self" | "foreign"): Promise<void> | void;
+    /** A permission prompt was just parsed on this pane. */
+    onPermissionPrompt?(paneId: string): Promise<void> | void;
     /** How many phones are registered for push right now. */
     subscriberCount?(): number;
   };
@@ -210,8 +214,7 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
     },
     // Announced for every emitted request, sink or no sink — a prompt that
     // appears while the phone is asleep is exactly the case push exists for.
-    onPermissionPrompt: (sessionId, origin) =>
-      options.push?.onPermissionPrompt?.(sessionId, origin),
+    onPermissionPrompt: (sessionId) => options.push?.onPermissionPrompt?.(sessionId),
   });
 
   // Bound once: the poll below runs for the life of the process, and a client
@@ -234,6 +237,12 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
     // instead of becoming an unhandled rejection.
     ...(options.push?.onTurnSettled
       ? { onTurnSettled: (sessionId: string) => options.push?.onTurnSettled?.(sessionId) }
+      : {}),
+    // Separate from the settle wiring: the scope tracker needs turn *starts*
+    // even on a machine where nothing has subscribed, because the verdict it
+    // builds is read later, by a settle that happens after someone subscribes.
+    ...(options.push?.onTurnStart
+      ? { onTurnStart: (sessionId: string) => options.push?.onTurnStart?.(sessionId) }
       : {}),
     // The status source. Without it a turn that settles without changing the
     // pane's title is never read back at all — see pane-events.ts's header.
@@ -369,7 +378,13 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
       // forever. This is terminal — `start()` stays stopped after it.
       paneEvents.stop();
     },
-    send: (params) => routing.send(params),
+    send: async (params) => {
+      // Marked before the send, not after: the pane can begin working the
+      // instant the Enter lands, and a turn that starts before the mark would
+      // read as typed at the terminal.
+      options.push?.onPromptSent?.(params.claudeUuid);
+      return routing.send(params);
+    },
     registerClient: (claudeUuid: string, sink: ClientSink, owner?: unknown) =>
       routing.registerClient(claudeUuid, sink, owner),
     getClient: (claudeUuid) => routing.getClient(claudeUuid),

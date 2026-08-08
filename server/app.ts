@@ -25,6 +25,7 @@ import { createHerdrBackend } from "./herdr/backend";
 import { stripBasePath } from "./path-utils";
 import { createAttemptLog } from "./push/attempt-log";
 import { createPushNotifier } from "./push/notifier";
+import { createPhoneDrivenTracker, type PhoneDrivenTracker } from "./push/phone-driven";
 import { createPushPlugin } from "./push/plugin";
 import { createPushSender, type PushTransport } from "./push/sender";
 import { createSubscriptionStore } from "./push/subscription-store";
@@ -84,6 +85,11 @@ export interface AppTestDeps {
   pushSend?: PushTransport;
   /** Keeps a probe's attempt lines out of the developer's own `~/.claude-mobile`. */
   pushAttemptLogPath?: string;
+  /**
+   * The push scope tracker. Injectable so an assembled-server test can drive
+   * "the phone sent this" without going through a real pane.
+   */
+  phoneDriven?: PhoneDrivenTracker;
 }
 
 /** Builds the whole server. The returned app has not been listened on. */
@@ -108,19 +114,16 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
     ...(deps.pushSend ? { send: deps.pushSend } : {}),
   });
 
-  // The notifier needs the backend to answer "whose pane is this?" and the
-  // backend needs the notifier; one typed cell breaks the cycle. It used to be
-  // `let backend: any`, which is precisely what hid two missing wirings.
-  const backendCell: { current: AppBackend | null } = { current: null };
+  // Who spoke into which pane last. The scope rule reads it; the backend feeds
+  // it from the send path and the pane's own turn transitions.
+  const phoneDriven = deps.phoneDriven ?? createPhoneDrivenTracker();
   const notifier = createPushNotifier({
     getSubscriptions: () => pushStore.list(),
     dispatch: (kind, subs, vapid) => sender.dispatch(kind, subs, vapid),
     // Read per dispatch, not captured: the keys are environment-only.
     getVapid: () => loadVapidKeys(),
-    getOrigin: async (paneId: string) => {
-      const descriptors = (await backendCell.current?.listSessionDescriptors?.()) ?? [];
-      return descriptors.find((entry) => entry.sessionId === paneId)?.origin ?? "foreign";
-    },
+    scope: serverConfig.pushScope,
+    phoneDriven,
   });
 
   // herdr is the only default backend (ADR-015 / plan D1). Its transport
@@ -131,13 +134,19 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
     createHerdrBackend({
       ...(deps.herdrClient ? { client: deps.herdrClient } : {}),
       push: {
-        onTurnSettled: (paneId) => notifier.onTurnSettled(paneId),
-        onPermissionPrompt: (paneId, origin) => notifier.onPermissionPrompt(paneId, origin),
+        onPromptSent: (paneId) => phoneDriven.markSent(paneId),
+        onTurnStart: (paneId) => phoneDriven.onTurnStart(paneId),
+        onTurnSettled: async (paneId) => {
+          // Read the verdict before spending the token: `onTurnSettled` on the
+          // tracker clears it, and the notifier is what reads it.
+          await notifier.onTurnSettled(paneId);
+          phoneDriven.onTurnSettled(paneId);
+        },
+        onPermissionPrompt: (paneId) => notifier.onPermissionPrompt(paneId),
         subscriberCount: () => pushStore.count(),
       },
     });
 
-  backendCell.current = backend;
   if (deps.backendRef) deps.backendRef.current = backend;
 
   // No shutdown signal handler: pane survival across a stop is the persistence

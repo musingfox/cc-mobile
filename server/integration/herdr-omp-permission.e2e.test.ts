@@ -59,6 +59,7 @@ it.skipIf(!existsSync(socketPath))(
       hostname: "127.0.0.1",
       defaultCwd: null,
       allowedRoots: null,
+      pushScope: "phone-last" as const,
       basePath: "",
     };
     // Same deviation as the foreign suite: this asserts on a pane it labelled

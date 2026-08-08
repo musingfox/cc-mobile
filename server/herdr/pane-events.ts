@@ -117,6 +117,12 @@ export interface HerdrPaneEventsOptions {
   clearIntervalFn?: (handle: TimerHandle) => void;
   transcript?: PaneEventTranscript;
   permission?: PaneEventPermission;
+  /**
+   * This pane left a settled status — a turn began, whoever started it. The
+   * push scope rule reads it to tell a turn the phone asked for apart from one
+   * typed at the terminal, so it must fire for both.
+   */
+  onTurnStart?: (sessionId: string) => void;
   /** Separate settle announcement for push path (fires even with no sink). */
   onTurnSettled?: (sessionId: string) => Promise<void> | void;
   onError?: (error: Error) => void;
@@ -173,6 +179,7 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
   const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_STATUS_POLL_MS;
   const hasClients = options.hasClients ?? (() => true);
   const hasPushSubscribers = options.hasPushSubscribers ?? (() => false);
+  const onTurnStart = options.onTurnStart;
   const onTurnSettled = options.onTurnSettled;
   const setIntervalFn =
     options.setIntervalFn ??
@@ -275,6 +282,11 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
       return;
     }
     state.status = status;
+
+    // Leaving a settled status is a turn beginning. Reported before anything
+    // else acts on the change, so the scope verdict is already right by the
+    // time a prompt or a settle on this same pane is announced.
+    if (wasSettled && !SETTLED_STATUSES.has(status)) onTurnStart?.(sessionId);
 
     // An unrecognised status is no claim at all — a daemon that invents one must
     // not be able to make the UI assert something wrong.

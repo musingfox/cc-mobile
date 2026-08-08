@@ -45,6 +45,7 @@ it.skipIf(!existsSync(socketPath))(
       hostname: "127.0.0.1",
       defaultCwd: null,
       allowedRoots: null,
+      pushScope: "phone-last" as const,
       basePath: "",
     };
 

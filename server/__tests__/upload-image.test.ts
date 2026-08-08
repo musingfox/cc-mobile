@@ -11,6 +11,7 @@ const serverConfig = {
   hostname: "0.0.0.0",
   defaultCwd: null,
   allowedRoots: null,
+  pushScope: "phone-last" as const,
 };
 
 // 1x1 transparent PNG

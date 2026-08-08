@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { parseServerConfig } from "../config";
 
 describe("parseServerConfig", () => {
@@ -23,6 +23,7 @@ describe("parseServerConfig", () => {
       defaultCwd: null,
       allowedRoots: null,
       basePath: "",
+      pushScope: "phone-last",
     });
     cleanup();
   });
@@ -46,6 +47,7 @@ describe("parseServerConfig", () => {
       defaultCwd: "/workspace",
       allowedRoots: null,
       basePath: "",
+      pushScope: "phone-last",
     });
     cleanup();
   });
@@ -54,5 +56,32 @@ describe("parseServerConfig", () => {
     expect(() => {
       parseServerConfig(["node", "index.ts", "--port", "abc"]);
     }).toThrow("Port must be a valid number");
+  });
+
+  describe("CC_MOBILE_PUSH_SCOPE", () => {
+    const original = process.env.CC_MOBILE_PUSH_SCOPE;
+
+    afterEach(() => {
+      if (original === undefined) delete process.env.CC_MOBILE_PUSH_SCOPE;
+      else process.env.CC_MOBILE_PUSH_SCOPE = original;
+    });
+
+    test("unset means phone-last", () => {
+      delete process.env.CC_MOBILE_PUSH_SCOPE;
+      expect(parseServerConfig(["node", "index.ts"]).pushScope).toBe("phone-last");
+    });
+
+    test("all is accepted", () => {
+      process.env.CC_MOBILE_PUSH_SCOPE = "all";
+      expect(parseServerConfig(["node", "index.ts"]).pushScope).toBe("all");
+    });
+
+    test("a typo throws instead of silently defaulting", () => {
+      // Falling back would leave the operator believing they had switched
+      // something on, and a push that never arrives is already the hardest
+      // failure here to see.
+      process.env.CC_MOBILE_PUSH_SCOPE = "always";
+      expect(() => parseServerConfig(["node", "index.ts"])).toThrow("CC_MOBILE_PUSH_SCOPE");
+    });
   });
 });

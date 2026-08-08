@@ -26,6 +26,7 @@ const serverConfig = {
   hostname: "0.0.0.0",
   defaultCwd: null,
   allowedRoots: null,
+  pushScope: "phone-last" as const,
 };
 
 const uploadsRoot = join(homedir(), ".cache", "cc-mobile", "uploads");

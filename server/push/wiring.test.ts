@@ -83,10 +83,10 @@ describe("PushNotifierWiring", () => {
     expect(app).toBeTruthy();
   });
 
-  test("T5: a parsed permission prompt reaches the push collaborator with its origin", async () => {
+  test("T5: a parsed permission prompt reaches the push collaborator", async () => {
     // `onPermissionPrompt` was declared in three files and passed by nobody:
     // a prompt raised while the phone slept pushed nothing at all.
-    const prompts: Array<[string, string]> = [];
+    const prompts: string[] = [];
     let emit: ((e: { event: string; data: unknown }) => void) | undefined;
     const backend = createHerdrBackend({
       client: {
@@ -103,8 +103,8 @@ describe("PushNotifierWiring", () => {
         },
       } as any,
       push: {
-        onPermissionPrompt: (paneId, origin) => {
-          prompts.push([paneId, origin]);
+        onPermissionPrompt: (paneId) => {
+          prompts.push(paneId);
         },
       },
     });
@@ -116,9 +116,9 @@ describe("PushNotifierWiring", () => {
     for (let i = 0; i < 20 && prompts.length === 0; i++) {
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
-    // Origin is "foreign" here — an empty listing knows no pane — which is
-    // exactly the value the scope gate needs to see.
-    expect(prompts).toEqual([["%1", "foreign"]]);
+    // The pane id alone: the scope gate reads who spoke into it last, which is
+    // a question the prompt's own emit knows nothing about.
+    expect(prompts).toEqual(["%1"]);
     // Closes the status poll this backend armed; a test process is shared.
     await backend.teardownAll();
   });
