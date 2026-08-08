@@ -45,15 +45,27 @@ describe("PushPublicKeyEndpoint + subscribe", () => {
     process.env = orig;
   });
 
-  test("T3: BASE_PATH=/cc serves /cc/api/... 200 , bare 404", async () => {
-    const store = createSubscriptionStore({ path: storePath });
-    const cfg = parseServerConfig([]);
-    (cfg as any).basePath = "/cc";
-    const plugin = createPushPlugin({ store, config: cfg });
-    const r1 = await plugin.handle(new Request("http://localhost/cc/api/push/public-key"));
-    expect(r1.status).toBe(503); // no key but route hit
-    const r2 = await plugin.handle(new Request("http://localhost/api/push/public-key"));
-    expect(r2.status).toBe(404);
+  test("T3: BASE_PATH=/cc serves /cc/api/..., bare 404", async () => {
+    // The subject here is routing, so the keys are cleared rather than
+    // inherited: read off the ambient environment this asserted 503 on a
+    // machine with no VAPID configured and 200 on one that had some, which
+    // makes a passing run say nothing about the base path.
+    const orig = process.env;
+    process.env = { ...orig } as any;
+    delete process.env.CC_MOBILE_VAPID_PUBLIC_KEY;
+    delete process.env.CC_MOBILE_VAPID_PRIVATE_KEY;
+    try {
+      const store = createSubscriptionStore({ path: storePath });
+      const cfg = parseServerConfig([]);
+      (cfg as any).basePath = "/cc";
+      const plugin = createPushPlugin({ store, config: cfg });
+      const r1 = await plugin.handle(new Request("http://localhost/cc/api/push/public-key"));
+      expect(r1.status).toBe(503); // route hit, and deterministically unconfigured
+      const r2 = await plugin.handle(new Request("http://localhost/api/push/public-key"));
+      expect(r2.status).toBe(404);
+    } finally {
+      process.env = orig;
+    }
   });
 
   // subscribe basic from other
