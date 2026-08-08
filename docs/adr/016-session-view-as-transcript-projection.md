@@ -33,6 +33,8 @@ Accepted（2026-08-08）
 
    同時**刪除 client 端的 `stream_event` 路徑與 `currentStreamMessageId` 串流泡泡機制**：server 早已不發 `stream_event`，留著等於在 record 身分旁邊並存第二套 client 生成的 id 制度，而那正是本決策要收掉的東西。
 
+   實作分歧（#34 落地時記錄）：「後者覆蓋前者」在 `upsertMessage` 裡是**以舊訊息為底的合併**，不是整筆置換——只存在於舊那份的欄位會存活。對促成這條規則的 `slug` 重寫情境無害（record 只會長欄位不會掉欄位），但字面上比本決策寬。
+
 2. **渲染 user record**。終端機那邊打的字從此出現在手機上。這是產品定義的改變，也是歷史能安全重複抓取的前提。
 
 3. **畫面順序是 transcript 的檔案順序，不是到達順序**。sink 在使用者打開該 session 之前就已綁定（`server/ws.ts:353`），live chunk 可能早於首頁歷史抵達，也可能在抓取途中插進來。去重解決重複，不解決次序。record 自帶 `timestamp` 與 parent 鏈，次序可推導。
@@ -83,4 +85,4 @@ Decision M1（不重塑內容）不受影響：歷史信封裡的 record body �
 
 手機不再是「你在手機上打的東西的紀錄」，而是這個 session 的鏡子。這讓終端機打的字第一次出現在手機上，也讓歷史可以被安全地重複抓取——後者是前者的直接結果，不是另外加上去的機制。
 
-決策過程與各方向的權衡見 `.spiral/L1-plan.md`。
+決策過程與各方向的權衡見 [`spiral-016/`](spiral-016/)：[方法層定案](spiral-016/L1-plan.md)、[當初的四條路](spiral-016/L1-a1-directions.md)。
