@@ -49,6 +49,8 @@ export interface WsBackend extends TerminalControlBackend {
       sessionId: string;
       /** The kind herdr detected; absent when it has not detected one. */
       agent?: string;
+      /** The pane's own title; absent when herdr reported none. */
+      title?: string;
       agentSessionValue: string | null;
       cwd: string;
       origin: "self" | "foreign";
@@ -375,6 +377,10 @@ export function createWsPlugin(
                 // read as "detected nothing", which is a claim herdr did not
                 // make.
                 ...(session.agent ? { agent: session.agent } : {}),
+                // Same rule as `agent`: omitted rather than sent undefined, so
+                // "herdr has no title for this pane" stays distinguishable
+                // from "this pane is called nothing".
+                ...(session.title ? { title: session.title } : {}),
                 agentSessionValue: session.agentSessionValue,
                 cwd: session.cwd,
                 origin: session.origin,

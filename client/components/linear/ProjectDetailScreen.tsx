@@ -64,7 +64,13 @@ export default function ProjectDetailScreen({ cwd, onNavigate, onBack }: Props) 
       const foreign = s.descriptor?.origin === "foreign";
       items.push({
         key: `mem-${id}`,
-        title: s.messages.length > 0 ? `${s.messages.length} msgs` : "new session",
+        // The pane names itself; how much of it this phone has read is not a
+        // name. Deriving the title from `messages.length` labelled every pane
+        // the phone had not spoken to "new session" — including ones that had
+        // been running for hours — and made N such rows indistinguishable.
+        // With no title from herdr the pane id is what is actually known, and
+        // it is the same id herdr shows, so it cross-references.
+        title: s.descriptor?.title ?? id,
         age: id === activeSessionId ? "current" : "open",
         live: s.agentState === "running",
         foreign,

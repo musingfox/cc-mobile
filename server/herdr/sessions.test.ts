@@ -483,4 +483,43 @@ describe("GlobalClaudeSessionListing", () => {
     expect(sessions).toEqual([]);
     expect(warnings.join(" ")).toContain("agent.list failed");
   });
+
+  test("carries the pane's stripped title", async () => {
+    const { client } = fakeClient({
+      agents: [
+        agentEntry({
+          terminal_title: "✳ 檢查 container memory 容量持續增長問題",
+          terminal_title_stripped: "檢查 container memory 容量持續增長問題",
+        }),
+      ],
+    });
+
+    const [session] = await listClaudeSessions({ client, warn: () => {} });
+
+    // The stripped form, never the decorated one: the glyph says "working",
+    // which is `state`'s job, and a glyph frozen in a snapshot claims a motion
+    // that has stopped.
+    expect(session?.title).toBe("檢查 container memory 容量持續增長問題");
+  });
+
+  test("omits the title when herdr reported none, rather than inventing one", async () => {
+    const { client } = fakeClient({ agents: [agentEntry()] });
+
+    const [session] = await listClaudeSessions({ client, warn: () => {} });
+
+    expect(session).not.toBeUndefined();
+    expect(session && "title" in session).toBe(false);
+  });
+
+  test("a whitespace-only title counts as no title", async () => {
+    // It would otherwise render as a blank row, which the user cannot tell
+    // apart from a broken one.
+    const { client } = fakeClient({
+      agents: [agentEntry({ terminal_title_stripped: "   " })],
+    });
+
+    const [session] = await listClaudeSessions({ client, warn: () => {} });
+
+    expect(session && "title" in session).toBe(false);
+  });
 });

@@ -323,6 +323,22 @@ const TerminalSessionDescriptor = z.object({
    * corrected the next time the client asks for the list (i.e. on reconnect).
    */
   agent: z.string().optional(),
+  /**
+   * The pane's own title, as herdr reports it (`terminal_title_stripped`) —
+   * what claude called the work it is doing. Absent when herdr has no title
+   * for that pane; a client must then say so rather than invent one.
+   *
+   * The *stripped* form on purpose: `terminal_title` carries a spinner glyph,
+   * and activity is already `state`'s job. A glyph captured in a snapshot
+   * freezes, so it would sit there claiming motion that stopped.
+   *
+   * Snapshot-time value, exactly like `agent`: nothing pushes a title on its
+   * own, and it is corrected the next time the client asks for the listing. A
+   * working claude retitles its pane every second (see commit 9269787), so
+   * pushing this would put back the per-second chatter that commit removed.
+   * Liveness is `session_state`'s job; this field is identity.
+   */
+  title: z.string().optional(),
   agentSessionValue: z.string().nullable(),
   cwd: z.string(),
   origin: z.enum(["self", "foreign"]),

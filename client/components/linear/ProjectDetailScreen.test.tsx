@@ -400,3 +400,77 @@ describe("ProjectDetailScreen close control", () => {
     expect(container.querySelectorAll(".lin-session-row").length).toBe(1);
   });
 });
+
+describe("ProjectDetailScreen session row title", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    useAppStore.setState({
+      sessions: new Map(),
+      activeSessionId: null,
+      connectionState: "connected",
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    localStorage.clear();
+  });
+
+  function titles(container: HTMLElement): (string | null)[] {
+    return Array.from(container.querySelectorAll(".lin-session-title")).map((n) => n.textContent);
+  }
+
+  test("the pane's own title is what the row is called", () => {
+    useAppStore.getState().upsertListedSession({
+      sessionId: "w1F:p1",
+      cwd: "/a",
+      title: "Teammate idle notification received",
+      origin: "foreign",
+      drivable: true,
+      readable: true,
+      gated: true,
+    });
+
+    expect(titles(renderScreen("/a").container)).toEqual(["Teammate idle notification received"]);
+  });
+
+  test("a pane herdr gave no title for is not called 'new session'", () => {
+    // The defect this replaces: the title came from `messages.length`, so a
+    // pane the phone had never spoken to read "new session" — including one
+    // that had been running for hours. Falling back to another invented name
+    // would be the same bug wearing a different word, so the assertion is that
+    // the row shows the pane id and claims nothing about newness.
+    useAppStore.getState().upsertListedSession({
+      sessionId: "w1F:p1",
+      cwd: "/a",
+      origin: "foreign",
+      drivable: true,
+      readable: true,
+      gated: true,
+    });
+
+    const shown = titles(renderScreen("/a").container);
+    expect(shown).toEqual(["w1F:p1"]);
+    expect(shown[0]).not.toContain("new session");
+  });
+
+  test("two untitled panes stay distinguishable", () => {
+    // With the title derived from a message count both of these read exactly
+    // the same, which is how a session already running gets mistaken for a
+    // blank one.
+    for (const id of ["w1F:p1", "w4R:p1"]) {
+      useAppStore.getState().upsertListedSession({
+        sessionId: id,
+        cwd: "/a",
+        origin: "foreign",
+        drivable: true,
+        readable: true,
+        gated: true,
+      });
+    }
+
+    const shown = titles(renderScreen("/a").container);
+    expect(shown.length).toBe(2);
+    expect(new Set(shown).size).toBe(2);
+  });
+});

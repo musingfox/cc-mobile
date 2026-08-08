@@ -64,6 +64,12 @@ export interface SessionDescriptor {
   agentSessionKind?: string;
   cwd: string;
   /** "self" iff the workspace carries cc-mobile's `ccm-<uuid>` label. */
+  /**
+   * The pane's own title as herdr reports it (`terminal_title_stripped`).
+   * Absent when herdr has none — never substituted, so a client can say
+   * "untitled" instead of inventing a name for a pane.
+   */
+  title?: string;
   origin: "self" | "foreign";
   /** Whether a prompt may be injected. Never gated on the permission mode (H4). */
   drivable: boolean;
@@ -143,6 +149,17 @@ function describe(error: unknown): string {
  */
 function reportedKind(value: string | null | undefined): string | undefined {
   return value ? value : undefined;
+}
+
+/**
+ * The pane title herdr reported, or `undefined` when it reported none. Same
+ * rule as the kind, plus a trim: a pane whose title is whitespace has no title
+ * to show, and passing one on would render as a blank row the user cannot
+ * tell apart from a bug.
+ */
+function reportedTitle(value: string | null | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
 }
 
 /**
@@ -236,11 +253,18 @@ export async function listClaudeSessions(
       // Live value first, exactly as the session key is taken: `agent.get` is
       // the fresher of the two reads, and detection can complete between them.
       const kind = reportedKind(live.agent) ?? reportedKind(agent.agent);
+      // The stripped form: the decorated one carries a spinner glyph, which
+      // duplicates `state` and would freeze mid-spin once snapshotted.
+      const title =
+        reportedTitle(live.terminal_title_stripped) ?? reportedTitle(agent.terminal_title_stripped);
 
       return {
         sessionId: agent.pane_id,
         workspaceId: agent.workspace_id,
         ...(kind ? { agent: kind } : {}),
+        // Live read first, for the same reason the kind is: `agent.get` is the
+        // fresher of the two, and a pane retitles itself constantly.
+        ...(title ? { title } : {}),
         agentSessionValue,
         ...(agentSessionKind ? { agentSessionKind } : {}),
         cwd: live.cwd ?? live.foreground_cwd ?? cwdByPane.get(agent.pane_id) ?? "",

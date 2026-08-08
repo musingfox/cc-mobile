@@ -76,6 +76,12 @@ export type SessionDescriptorFlags = {
    * name on a card.
    */
   agent?: string;
+  /**
+   * The pane's own title, as herdr reports it. Absent when herdr has none —
+   * a row must then show what it actually knows (the pane id) rather than
+   * name the session itself.
+   */
+  title?: string;
 };
 
 export type ModelInfo = {
@@ -447,7 +453,7 @@ export const useAppStore = create<AppState>((set) => ({
           resolvedActions: [],
           agentState: null,
           receivedAuthoritativeState: false,
-          }),
+        }),
         cwd: existing?.cwd || cwd,
         terminal: { ready: true },
         descriptor: flags,
