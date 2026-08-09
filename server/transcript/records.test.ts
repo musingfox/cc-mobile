@@ -40,6 +40,7 @@ describe("TranscriptRecordToChunk", () => {
           },
         ],
       },
+      recordId: "73e1a695-4c0f-4d21-b58a-9e0f1a2b3c4d",
     });
   });
 
@@ -203,6 +204,7 @@ describe("TranscriptRecordToChunk — omp", () => {
           { type: "text", text: "Done.", textSignature: "sig" },
         ],
       },
+      recordId: "c03690ca",
     });
   });
 
@@ -259,5 +261,58 @@ describe("TranscriptRecordToChunk — omp", () => {
     expect(transcriptRecordToChunk({ type: "message" })).toBeNull();
     expect(transcriptRecordToChunk({ type: "message", message: null })).toBeNull();
     expect(transcriptRecordToChunk({ type: "message", message: { content: [] } })).toBeNull();
+  });
+});
+
+describe("TranscriptChunkRecordId", () => {
+  it("T1: given {uuid:\"u1\", type:\"assistant\", message:{role:\"assistant\", content:[{type:\"text\", text:\"hi\"}]}} -> expect {type:\"assistant\", message:{…}, recordId:\"u1\"}", () => {
+    const record = {
+      uuid: "u1",
+      type: "assistant",
+      message: { role: "assistant", content: [{ type: "text", text: "hi" }] },
+    };
+    expect(transcriptRecordToChunk(record)).toEqual({
+      type: "assistant",
+      message: { role: "assistant", content: [{ type: "text", text: "hi" }] },
+      recordId: "u1",
+    });
+  });
+
+  it("T2: given {id:\"o1\", type:\"message\", message:{role:\"user\", content:\"hi\"}} -> expect {type:\"user\", message:{…}, recordId:\"o1\"}", () => {
+    const record = {
+      id: "o1",
+      type: "message",
+      message: { role: "user", content: "hi" },
+    };
+    expect(transcriptRecordToChunk(record)).toEqual({
+      type: "user",
+      message: { role: "user", content: "hi" },
+      recordId: "o1",
+    });
+  });
+
+  it("T3: given {uuid:\"u2\", type:\"user\", isMeta:true, message:{…}} -> expect null", () => {
+    const record = {
+      uuid: "u2",
+      type: "user",
+      isMeta: true,
+      message: { role: "user", content: "injected" },
+    };
+    expect(transcriptRecordToChunk(record)).toBeNull();
+  });
+
+  it("T4: given {type:\"assistant\", message:{…}} with no uuid and no id -> expect a chunk where \"recordId\" in chunk === false (absent, not undefined)", () => {
+    const record = {
+      type: "assistant",
+      message: { role: "assistant", content: [{ type: "text", text: "no id" }] },
+    };
+    const chunk = transcriptRecordToChunk(record);
+    expect(chunk).not.toBeNull();
+    expect("recordId" in (chunk as any)).toBe(false);
+  });
+
+  it("T5: given a record that is not an object (42) -> expect null, no throw", () => {
+    expect(() => transcriptRecordToChunk(42 as any)).not.toThrow();
+    expect(transcriptRecordToChunk(42 as any)).toBeNull();
   });
 });

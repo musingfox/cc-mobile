@@ -13,6 +13,7 @@ import {
   handleTerminalTeardown,
   type TerminalControlBackend,
 } from "./terminal-control";
+import type { PageCursor, TranscriptPage } from "./transcript/page";
 
 // ---------------------------------------------------------------------------
 // Capabilities emit helper — extracted seam (logic-free; byte-equivalent)
@@ -77,6 +78,17 @@ export interface WsBackend extends TerminalControlBackend {
     requestId: string,
     answer: { optionId?: string; allow?: boolean },
   ): Promise<boolean>;
+  /**
+   * One page of a session's own transcript backlog, older than `before`.
+   * Resolves `null` when there is no transcript to read at all, which the
+   * transport turns into `transcript_unavailable` rather than an empty page.
+   * Optional: only a backend that can locate a pane's transcript has one, and
+   * its absence answers "unavailable" for every session.
+   */
+  readTranscriptPage?(
+    sessionId: string,
+    before: PageCursor | null,
+  ): Promise<TranscriptPage | null>;
   /** Connection lifecycle for pending native prompts (see resolvePermission). */
   pausePermissions?(): void;
   resumePermissions?(): Promise<void> | void;
@@ -458,6 +470,28 @@ export function createWsPlugin(
             // rather than replayed from a stored payload.
             await backend.resumePermissions?.();
             await backend.send({ claudeUuid, content });
+            break;
+          }
+
+          case "transcript_page_request": {
+            const { sessionId } = message;
+            const page = await backend.readTranscriptPage?.(sessionId, message.before ?? null);
+            // No transcript is not an empty page: the session may be foreign,
+            // gone, or running a kind with no reader, and the client must be
+            // able to tell that from "you have reached the beginning".
+            if (!page) {
+              ws.send({ type: "error", code: "transcript_unavailable", sessionId });
+              break;
+            }
+            // Bare send, never `sendBuffered`: this answers one connection's
+            // question, so it must not enter the session's replay buffer.
+            ws.send({
+              type: "transcript_page",
+              sessionId,
+              epoch: page.epoch,
+              records: page.records,
+              nextBefore: page.nextBefore,
+            });
             break;
           }
         }

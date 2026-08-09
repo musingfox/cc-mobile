@@ -32,6 +32,8 @@ export interface TranscriptCursor {
 
 export interface TranscriptReadResult {
   records: unknown[];
+  /** Absolute byte offsets (start of line) for each record in `records`, parallel array. */
+  offsets: number[];
   cursor: TranscriptCursor;
 }
 
@@ -133,7 +135,7 @@ export async function readTranscriptSince(
   const size = await fs.size(path);
   // Missing file: the session may not have written anything yet. Keep the
   // cursor so a file that appears later is read from where we expect.
-  if (size === null) return { records: [], cursor };
+  if (size === null) return { records: [], offsets: [], cursor };
 
   let start = cursor.byteOffset;
   if (start > size) {
@@ -147,6 +149,7 @@ export async function readTranscriptSince(
   if (start === size) {
     return {
       records: [],
+      offsets: [],
       cursor: restarted ? { byteOffset: start, lastUuid: null } : cursor,
     };
   }
@@ -155,20 +158,29 @@ export async function readTranscriptSince(
   const { lines, consumedBytes } = completeLines(chunk);
 
   const records: unknown[] = [];
+  const offsets: number[] = [];
   let lastUuid = restarted ? null : cursor.lastUuid;
+  let lineStart = start;
   for (const line of lines) {
-    if (line.trim().length === 0) continue;
+    const lineBytes = byteLength(line) + 1;
+    if (line.trim().length === 0) {
+      lineStart += lineBytes;
+      continue;
+    }
     let record: unknown;
     try {
       record = JSON.parse(line);
     } catch {
+      lineStart += lineBytes;
       continue;
     }
     records.push(record);
+    offsets.push(lineStart);
     lastUuid = uuidOf(record);
+    lineStart += lineBytes;
   }
 
-  return { records, cursor: { byteOffset: start + consumedBytes, lastUuid } };
+  return { records, offsets, cursor: { byteOffset: start + consumedBytes, lastUuid } };
 }
 
 /**

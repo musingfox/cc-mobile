@@ -198,3 +198,91 @@ describe("TranscriptCursorInitAtEOF", () => {
     expect(cursor).toEqual({ byteOffset: 0, lastUuid: null });
   });
 });
+
+describe("TranscriptReadRecordOffsets", () => {
+  it("T1: given 3-line file with line byte-lengths 10/20/30 (incl. newline), cursor {byteOffset:0, lastUuid:null} -> expect records with offsets [0, 10, 30]", async () => {
+    const makeLine = (target: number, id: string) => {
+      let s = JSON.stringify({ u: id });
+      const nl = 1;
+      while (Buffer.byteLength(s, "utf8") + nl < target) s += " ";
+      return s;
+    };
+    const path = await writeTranscript("off.jsonl", [makeLine(10, "0"), makeLine(20, "1"), makeLine(30, "2")]);
+
+    const { records, offsets } = await readTranscriptSince({ path, cursor: START });
+
+    expect(records).toHaveLength(3);
+    expect(offsets).toEqual([0, 10, 30]);
+  });
+
+  it("T2: given same file, cursor {byteOffset:10, lastUuid:<uuid of line 1>} -> expect records with offsets [10, 30] — absolute, not slice-relative", async () => {
+    const makeLine = (target: number, id: string) => {
+      let s = JSON.stringify({ u: id });
+      const nl = 1;
+      while (Buffer.byteLength(s, "utf8") + nl < target) s += " ";
+      return s;
+    };
+    const path = await writeTranscript("off.jsonl", [makeLine(10, "0"), makeLine(20, "1"), makeLine(30, "2")]);
+    const first = await readTranscriptSince({ path, cursor: START });
+    const cur = { byteOffset: 10, lastUuid: uuidOf(first.records[0]) };
+
+    const { records, offsets } = await readTranscriptSince({ path, cursor: cur });
+
+    expect(records).toHaveLength(2);
+    expect(offsets).toEqual([10, 30]);
+  });
+
+  it("T3: given cursor whose lastUuid check fails, forcing the start=0 restart path -> expect offsets start at 0 and cover every line", async () => {
+    const makeLine = (target: number, id: string) => {
+      let s = JSON.stringify({ u: id });
+      const nl = 1;
+      while (Buffer.byteLength(s, "utf8") + nl < target) s += " ";
+      return s;
+    };
+    const path = await writeTranscript("off.jsonl", [makeLine(10, "0"), makeLine(20, "1")]);
+    const badCur = { byteOffset: 10, lastUuid: "wrong-uuid" };
+
+    const { records, offsets } = await readTranscriptSince({ path, cursor: badCur });
+
+    expect(records).toHaveLength(2);
+    expect(offsets[0]).toBe(0);
+    expect(offsets).toEqual([0, 10]);
+  });
+
+  it("T4: given first line contains CJK text (byte length > char length) -> expect second record's offset === Buffer.byteLength(line1,'utf8') + 1", async () => {
+    const wide = JSON.stringify({ t: "測試" });
+    const l1 = '{"u":"x"}';
+    const path = await writeTranscript("cjk.jsonl", [wide, l1]);
+    const { offsets } = await readTranscriptSince({ path, cursor: START });
+
+    const expectedSecond = Buffer.byteLength(wide, "utf8") + 1;
+    expect(offsets[1]).toBe(expectedSecond);
+  });
+
+  it("T5: given a file whose middle line is malformed JSON -> expect that line is skipped and the third record's offset is still its true byte position", async () => {
+    const makeLine = (target: number, id: string) => {
+      let s = JSON.stringify({ u: id });
+      const nl = 1;
+      while (Buffer.byteLength(s, "utf8") + nl < target) s += " ";
+      return s;
+    };
+    const l0 = makeLine(10, "0");
+    const bad = "{bad";
+    const l2 = makeLine(30, "2");
+    const path = await writeTranscript("mal.jsonl", [l0, bad, l2]);
+
+    const { records, offsets } = await readTranscriptSince({ path, cursor: START });
+
+    expect(records).toHaveLength(2);
+    const off2 = 10 + Buffer.byteLength(bad, "utf8") + 1;
+    expect(offsets[1]).toBe(off2);
+  });
+
+  it("T6: given a file that does not exist -> expect {records: [], cursor unchanged}", async () => {
+    const cur = { byteOffset: 123, lastUuid: "u9" };
+    const res = await readTranscriptSince({ path: join(dir, "nope.jsonl"), cursor: cur });
+
+    expect(res.records).toEqual([]);
+    expect(res.cursor).toEqual(cur);
+  });
+});

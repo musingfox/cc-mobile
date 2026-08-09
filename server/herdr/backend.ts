@@ -13,6 +13,7 @@
 import { resolveAgentTranscriptPath } from "../agents/transcript-readers";
 import type { ClientSink, TerminalBackend, TerminalSessionInfo } from "../terminal-backend";
 import { createTranscriptDelivery } from "../transcript/delivery";
+import { type PageCursor, readTranscriptPage, type TranscriptPage } from "../transcript/page";
 import { type AgentState, statesFromSnapshot } from "./agent-state";
 import { createHerdrClient, type HerdrClient, SUPPORTED_PROTOCOL } from "./client";
 import { createHerdrPaneEvents } from "./pane-events";
@@ -83,6 +84,22 @@ export interface HerdrTerminalBackend extends TerminalBackend {
    * reply.
    */
   listStates(): Promise<Record<string, AgentState>>;
+  /**
+   * One page of a session's own transcript, older than `before`. Resolves
+   * `null` — not an empty page — when the session is not listed, has no
+   * transcript key, or runs a kind with no registered reader: "there is no file
+   * to read" is a different answer from "the file holds nothing older", and
+   * only the second one is a page.
+   *
+   * Reads exactly the path the resolver returns, the same one the live tail
+   * uses, so a page and a live chunk for one session always carry one epoch. It
+   * never scans a directory, so an omp session cannot page in a nested
+   * sub-agent transcript.
+   */
+  readTranscriptPage(
+    sessionId: string,
+    before: PageCursor | null,
+  ): Promise<TranscriptPage | null>;
   /**
    * Presses the chosen option's key in the pane, after re-proving on live RPCs
    * that the same prompt is still on screen. Resolves `false` — silently, with
@@ -173,21 +190,29 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
     });
   }
 
+  /**
+   * The pane's transcript file, or null when there is none to read. Named
+   * rather than inlined because the live tail and the history pager must agree
+   * on it: one resolution means one epoch, so a page and a live chunk for the
+   * same session are never labelled as two different files.
+   */
+  async function resolveTranscriptPath(sessionId: string): Promise<string | null> {
+    const match = (await listSessionDescriptors()).find(
+      (session) => session.sessionId === sessionId,
+    );
+    if (!match) return null;
+    // Routed by kind: the listing now carries panes running something other
+    // than claude, and only a kind with a registered reader is looked for.
+    return resolveAgentTranscriptPath({
+      agent: match.agent,
+      sessionValue: match.agentSessionValue,
+      sessionKind: match.agentSessionKind,
+      cwd: match.cwd,
+    });
+  }
+
   const delivery = createTranscriptDelivery({
-    resolvePath: async (sessionId) => {
-      const match = (await listSessionDescriptors()).find(
-        (session) => session.sessionId === sessionId,
-      );
-      if (!match) return null;
-      // Routed by kind: the listing now carries panes running something other
-      // than claude, and only a kind with a registered reader is looked for.
-      return resolveAgentTranscriptPath({
-        agent: match.agent,
-        sessionValue: match.agentSessionValue,
-        sessionKind: match.agentSessionKind,
-        cwd: match.cwd,
-      });
-    },
+    resolvePath: resolveTranscriptPath,
     // Late-bound: a reconnect rebinds the session to a fresh sink.
     getSink: (sessionId) => routing.getClient(sessionId),
   });
@@ -355,6 +380,11 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
         console.warn(`[herdr] agent state snapshot failed: ${detail}`);
         return {};
       }
+    },
+    async readTranscriptPage(sessionId, before) {
+      const path = await resolveTranscriptPath(sessionId);
+      if (!path) return null;
+      return readTranscriptPage({ path, before });
     },
     /**
      * Answers a native (screen-derived) permission prompt. Reports whether this

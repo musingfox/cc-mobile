@@ -81,6 +81,25 @@
   text-align: center;
 }
 
+/* History affordance ---------------------------------------- */
+
+/* Sits at the top of the scroller, so reaching it is the same gesture as
+   scrolling up. Deliberately quiet: it is a boundary marker first and a button
+   second, and it disappears once the conversation's beginning is on screen. */
+.lin-chat-load-more {
+  align-self: center;
+  flex-shrink: 0;
+  margin: 8px 0 4px;
+  padding: 6px 14px;
+  background: transparent;
+  color: #6a6a6a;
+  border: 1px solid #2a2a2e;
+  border-radius: 999px;
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  cursor: pointer;
+}
+
 .lin-chat-empty-btn {
   background: #ececec;
   color: #0e0e10;

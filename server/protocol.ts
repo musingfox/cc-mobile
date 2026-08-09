@@ -129,6 +129,32 @@ const ListTerminalSessionsMessage = z.object({
   type: z.literal("list_terminal_sessions"),
 });
 
+/**
+ * Where a history page stops, and which transcript file that position is
+ * measured in. The client sends back the cursor the server last gave it; the
+ * server re-proves both halves against the file before honouring it, because
+ * the path is resolved live and a terminal `/clear` rotates it underneath.
+ */
+const TranscriptPageCursorSchema = z.object({
+  /** 16 hex chars naming the file the cursor was read from (`epochOf`). */
+  epoch: z.string().min(1),
+  /** Absolute byte offset of the record the page stops before. */
+  seq: z.number(),
+  /** That record's own id, so a shifted offset is detectable. */
+  recordId: z.string().min(1),
+});
+
+/**
+ * One page of a session's own backlog, older than `before` (absent → the newest
+ * page). No page size on the wire: the server owns that number, so a client
+ * cannot ask it to build an arbitrarily large frame.
+ */
+const TranscriptPageRequestMessage = z.object({
+  type: z.literal("transcript_page_request"),
+  sessionId: z.string().min(1),
+  before: TranscriptPageCursorSchema.optional(),
+});
+
 export const ClientMessage = z.discriminatedUnion("type", [
   PermissionMessage,
   InterruptMessage,
@@ -141,6 +167,7 @@ export const ClientMessage = z.discriminatedUnion("type", [
   TerminalCreateMessage,
   TerminalTeardownMessage,
   ListTerminalSessionsMessage,
+  TranscriptPageRequestMessage,
 ]);
 
 export type ClientMessage = z.infer<typeof ClientMessage>;
@@ -149,6 +176,14 @@ export type ClientMessage = z.infer<typeof ClientMessage>;
 const StreamChunkMessage = z.object({
   type: z.literal("stream_chunk"),
   sessionId: z.string(),
+  /**
+   * `{type, message}` straight out of `transcriptRecordToChunk`, plus the three
+   * keys that say which record this is and where it sits: `recordId` (the
+   * record's own `uuid`/`id`, absent when it carries neither), `seq` (its
+   * absolute byte offset — the only total order the transcript supports) and
+   * `epoch` (16 hex chars naming the file, from `epochOf`). All three are
+   * stamped by the server; the record body itself is never reshaped.
+   */
   chunk: z.record(z.unknown()),
 });
 
@@ -376,6 +411,24 @@ const TerminalSessionsMessage = z.object({
   states: z.record(z.enum(["idle", "running", "requires_action"])).optional(),
 });
 
+/**
+ * The reply to `transcript_page_request`, sent with a bare `ws.send`: it answers
+ * one connection's question, so it is never wrapped in an `event` envelope and
+ * never replayed on reconnect.
+ *
+ * `epoch` is not nullable and never a placeholder — it names the file the page
+ * was actually read from, which may not be the one the request's cursor named.
+ * A session with no resolvable transcript gets `transcript_unavailable` instead.
+ * Each element of `records` has the same shape as `stream_chunk.chunk`.
+ */
+const TranscriptPageMessage = z.object({
+  type: z.literal("transcript_page"),
+  sessionId: z.string(),
+  epoch: z.string().min(1),
+  records: z.array(z.record(z.unknown())),
+  nextBefore: TranscriptPageCursorSchema.nullable(),
+});
+
 export const ServerMessage = z.discriminatedUnion("type", [
   StreamChunkMessage,
   StreamEndMessage,
@@ -388,6 +441,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
   ReplayCompleteMessage,
   SessionStateMessage,
   TerminalSessionsMessage,
+  TranscriptPageMessage,
 ]);
 
 export type ServerMessage = z.infer<typeof ServerMessage>;
