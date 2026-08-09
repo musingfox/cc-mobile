@@ -81,10 +81,13 @@ describe("OptimisticEchoSupersede", () => {
 
   test("T3: 301s later -> 2", () => {
     const o = Date.now; let t=0; (Date as any).now=()=>t;
-    wsService.terminalSend("s1", "hello");
-    t += 301000;
-    getInternal().handleMessage({ type: "stream_chunk", sessionId: "s1", chunk: { type: "user", message: { role: "user", content: "hello" }, recordId: "late", seq: 2 } });
-    (Date as any).now = o;
+    try {
+      wsService.terminalSend("s1", "hello");
+      t += 301000;
+      getInternal().handleMessage({ type: "stream_chunk", sessionId: "s1", chunk: { type: "user", message: { role: "user", content: "hello" }, recordId: "late", seq: 2 } });
+    } finally {
+      (Date as any).now = o;
+    }
     expect(useAppStore.getState().sessions.get("s1")!.messages.length).toBe(2);
   });
 
