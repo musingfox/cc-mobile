@@ -151,6 +151,7 @@ const StreamChunkMessage = z.object({
   sessionId: z.string(),
   // chunk carries {type, message, ...} from transcriptRecordToChunk (or live path);
   // recordId (uuid or id) is attached when present — see TranscriptChunkRecordId
+  // .epoch (16-hex from epochOf) identifies the transcript file for this chunk
   chunk: z.record(z.unknown()),
 });
 
