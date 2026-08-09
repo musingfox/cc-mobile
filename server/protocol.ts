@@ -149,6 +149,8 @@ export type ClientMessage = z.infer<typeof ClientMessage>;
 const StreamChunkMessage = z.object({
   type: z.literal("stream_chunk"),
   sessionId: z.string(),
+  // chunk carries {type, message, ...} from transcriptRecordToChunk (or live path);
+  // recordId (uuid or id) is attached when present — see TranscriptChunkRecordId
   chunk: z.record(z.unknown()),
 });
 

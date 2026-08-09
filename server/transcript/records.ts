@@ -88,10 +88,19 @@ export function transcriptRecordToChunk(record: unknown): TranscriptChunk | null
   }
 
   const { type, message } = record as { type?: unknown; message?: unknown };
-  if (type === OMP_RECORD_TYPE) return ompRecordToChunk(message);
+  if (type === OMP_RECORD_TYPE) {
+    const chunk = ompRecordToChunk(message);
+    if (!chunk) return null;
+    const rid = (fields.id ?? fields.uuid) as string | undefined;
+    if (rid) (chunk as any).recordId = rid;
+    return chunk;
+  }
   if (typeof type !== "string" || !RENDERABLE_TYPES.has(type)) return null;
   // A conversational record with no message body carries nothing to show.
   if (typeof message !== "object" || message === null) return null;
 
-  return { type, message };
+  const chunk: TranscriptChunk = { type, message };
+  const rid = (fields.uuid ?? fields.id) as string | undefined;
+  if (rid) (chunk as any).recordId = rid;
+  return chunk;
 }
