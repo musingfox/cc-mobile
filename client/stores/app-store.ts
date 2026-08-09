@@ -27,6 +27,9 @@ export type Message = {
   agentDescription?: string;
   kind?: "compact_boundary" | "permission_denied";
   compactMetadata?: CompactMetadata;
+  /** From transcript record for history / dedup */
+  recordId?: string;
+  seq?: number;
 };
 
 /** One choice the terminal is offering, in its own wording (server-supplied). */

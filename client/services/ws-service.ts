@@ -285,16 +285,28 @@ export function deriveContextUsage(
 }
 
 export function extractTextFromChunk(chunk: Record<string, unknown>): string | null {
-  if (chunk.type === "assistant") {
-    const message = chunk.message as
-      | { content?: Array<{ type: string; text?: string }> }
-      | undefined;
-    if (!message?.content) return null;
-    const text = message.content
-      .filter((b) => b.type === "text")
-      .map((b) => b.text ?? "")
-      .join("");
-    return text || null;
+  const message = chunk.message as
+    | { role?: string; content?: Array<{ type: string; text?: string }> | string }
+    | undefined;
+
+  const isUser = chunk.type === "user" || message?.role === "user";
+
+  if (chunk.type === "assistant" || isUser) {
+    if (!message) return null;
+    if (typeof message.content === "string") {
+      const s = message.content;
+      if (s.includes("<command-name>") || s.includes("<local-command-stdout>")) return null;
+      return s || null;
+    }
+    if (!message.content || !Array.isArray(message.content)) return null;
+    // drop if only tool_result or wrappers
+    const texts = message.content
+      .filter((b: any) => b && b.type === "text" && typeof b.text === "string")
+      .map((b: any) => b.text);
+    if (texts.length === 0) return null;
+    const joined = texts.join("");
+    if (joined.includes("<command-name>") || joined.includes("<local-command-stdout>")) return null;
+    return joined || null;
   }
 
   if (chunk.type === "stream_event") {
@@ -919,6 +931,18 @@ class WsService {
             role: "assistant",
             content: text,
             timestamp: Date.now(),
+          });
+        } else if (chunk.type === "user") {
+          const rid = (chunk as any).recordId as string | undefined;
+          const sq = (chunk as any).seq as number | undefined;
+          const newId = `user-${Date.now()}-${Math.random()}`;
+          store.addMessage(sessionId, {
+            id: newId,
+            role: "user",
+            content: text,
+            timestamp: Date.now(),
+            ...(rid ? { recordId: rid } : {}),
+            ...(typeof sq === "number" ? { seq: sq } : {}),
           });
         }
         break;

@@ -128,4 +128,9 @@ describe("extractTextFromChunk", () => {
     };
     expect(extractTextFromChunk(chunk)).toBe("complete message");
   });
+
+  test("user record text extraction (UserRecordBubble)", () => {
+    const chunk = { type: "user", message: { role: "user", content: "from terminal" }, recordId: "u9", seq: 9 };
+    expect(extractTextFromChunk(chunk as any)).toBe("from terminal");
+  });
 });

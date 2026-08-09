@@ -153,6 +153,7 @@ const StreamChunkMessage = z.object({
   // recordId (uuid or id) is attached when present — see TranscriptChunkRecordId
   // .epoch (16-hex from epochOf) identifies the transcript file for this chunk
   // (server-side: TranscriptReadResult now supplies absolute offsets per record for seq)
+  // user chunks (from terminal) also arrive with recordId/seq for UserRecordBubble
   chunk: z.record(z.unknown()),
 });
 
