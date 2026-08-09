@@ -604,4 +604,26 @@ describe("TranscriptChunkPositionStamp", () => {
     await delivery.deliverTurn("s1");
     expect(spy.messages.find((m) => m.type === "stream_end")).toBeUndefined();
   });
+
+  // TranscriptEpochAbsenceIgnored T8 — the server's whole obligation under that
+  // contract. The "don't wipe" rule lives on the client, and it can only be
+  // enforced there if the server never mints an identity for a file it could
+  // not resolve: an epoch derived from a null path would be a distinct value
+  // like any other, and would read on the phone as "the terminal moved to a
+  // different conversation" when in fact an agent simply exited.
+  it("T8: given a delivery whose resolvePath answers null -> expect no sink write at all, and no chunk carrying an epoch key", async () => {
+    const file = offsetAwareFake([{ rec: assistantText("hi", "u1"), off: 0 }]);
+    const spy = sinkSpy();
+    const delivery = createTranscriptDelivery({
+      resolvePath: async () => null,
+      getSink: () => spy.sink,
+      read: file.read,
+      initCursor: async () => ({ byteOffset: 0, lastUuid: null }),
+    });
+
+    await delivery.deliverTurn("gone-1");
+
+    expect(spy.messages).toEqual([]);
+    expect(spy.messages.some((m) => "epoch" in ((m.chunk as object) ?? {}))).toBe(false);
+  });
 });
