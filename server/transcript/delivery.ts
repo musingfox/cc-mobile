@@ -34,6 +34,7 @@ import {
   type TranscriptReadResult,
 } from "./reader";
 import { type TranscriptChunk, transcriptRecordToChunk } from "./records";
+import { epochOf } from "./epoch";
 
 export type ClientSink = (msg: Record<string, unknown>) => void;
 
@@ -149,9 +150,14 @@ export function createTranscriptDelivery(options: TranscriptDeliveryOptions) {
         // queued (see the module header).
         state.cursor = result.cursor;
         const chunks: TranscriptChunk[] = [];
-        for (const record of result.records) {
+        for (let i = 0; i < result.records.length; i++) {
+          const record = result.records[i];
           const chunk = toChunk(record);
-          if (chunk) chunks.push(chunk);
+          if (chunk) {
+            (chunk as any).seq = result.offsets?.[i] ?? 0;
+            if (state.path) (chunk as any).epoch = epochOf(state.path);
+            chunks.push(chunk);
+          }
         }
         return chunks;
       } finally {

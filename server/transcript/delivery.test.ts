@@ -511,3 +511,97 @@ describe("TranscriptWorkingTail", () => {
     expect(spy.messages.map((m) => m.type)).toEqual(["stream_chunk", "stream_end"]);
   });
 });
+
+describe("TranscriptChunkPositionStamp", () => {
+  function offsetAwareFake(initial: Array<{ rec: unknown; off: number }> = []) {
+    let items = [...initial];
+    return {
+      append(...more: Array<{ rec: unknown; off: number }>) {
+        items = [...items, ...more];
+      },
+      read: async ({ cursor }: { path: string; cursor: TranscriptCursor }) => {
+        const fresh = items.filter((it) => it.off >= cursor.byteOffset);
+        const last = fresh.length ? fresh[fresh.length - 1] : null;
+        return {
+          records: fresh.map((it) => it.rec),
+          offsets: fresh.map((it) => it.off),
+          cursor: { byteOffset: last ? last.off + 10 : cursor.byteOffset, lastUuid: last ? "uX" : cursor.lastUuid },
+        };
+      },
+    };
+  }
+
+  it("T1: given a fake transcript with two renderable records at offsets 0 and 120, delivered on settle -> expect two stream_chunk sink writes with chunk.seq 0 and 120, both carrying the same non-empty chunk.epoch", async () => {
+    const file = offsetAwareFake([
+      { rec: assistantText("hi", "u1"), off: 0 },
+      { rec: assistantText("there", "u2"), off: 120 },
+    ]);
+    const spy = sinkSpy();
+    const delivery = createTranscriptDelivery({
+      resolvePath: async () => PATH,
+      getSink: () => spy.sink,
+      read: file.read,
+      initCursor: async () => ({ byteOffset: 0, lastUuid: null }),
+    });
+    await delivery.deliverTurn("w3V:p1");
+
+    const chunks = spy.messages.filter((m) => m.type === "stream_chunk").map((m) => m.chunk as any);
+    expect(chunks).toHaveLength(2);
+    expect(chunks[0].seq).toBe(0);
+    expect(chunks[1].seq).toBe(120);
+    expect(chunks[0].epoch).toBe(chunks[1].epoch);
+    expect(chunks[0].epoch).toMatch(/^[0-9a-f]{16}$/);
+    expect(chunks[0].epoch?.length).toBe(16);
+  });
+
+  it("T2: given the same session after resetCursor with resolvePath now returning a different path -> expect subsequent chunks carry a different chunk.epoch", async () => {
+    let p = "/a.jsonl";
+    const fileA = offsetAwareFake([{ rec: assistantText("old", "u1"), off: 0 }]);
+    const fileB = offsetAwareFake([{ rec: assistantText("new", "n1"), off: 0 }]);
+    const spy = sinkSpy();
+    const delivery = createTranscriptDelivery({
+      resolvePath: async () => p,
+      getSink: () => spy.sink,
+      read: async (inp) => (p === "/a.jsonl" ? fileA.read(inp) : fileB.read(inp)),
+      initCursor: async () => ({ byteOffset: 0, lastUuid: null }),
+    });
+    await delivery.deliverTurn("s1");
+    const e1 = (spy.messages[0].chunk as any).epoch;
+
+    p = "/b.jsonl";
+    await delivery.resetCursor("s1");
+    spy.messages.length = 0;
+    await delivery.deliverTurn("s1");
+    const e2 = (spy.messages[0].chunk as any).epoch;
+    expect(e2).not.toBe(e1);
+  });
+
+  it("T3: given a record with isSidechain:true -> expect no sink write; the cursor still advances", async () => {
+    const file = offsetAwareFake([
+      { rec: { type: "assistant", isSidechain: true, message: { role: "assistant", content: [] }, uuid: "side" }, off: 0 },
+    ]);
+    const spy = sinkSpy();
+    const delivery = createTranscriptDelivery({
+      resolvePath: async () => PATH,
+      getSink: () => spy.sink,
+      read: file.read,
+      initCursor: async () => ({ byteOffset: 0, lastUuid: null }),
+    });
+    await delivery.deliverTurn("s1");
+    expect(spy.messages.length).toBe(0); // no write
+    expect(delivery.cursorFor("s1")?.byteOffset).toBeGreaterThan(0);
+  });
+
+  it("T4: given a settle that yields no renderable record and no open turn -> expect no stream_end emitted (existing behaviour preserved)", async () => {
+    const file = offsetAwareFake([]); // nothing renderable
+    const spy = sinkSpy();
+    const delivery = createTranscriptDelivery({
+      resolvePath: async () => PATH,
+      getSink: () => spy.sink,
+      read: file.read,
+      initCursor: async () => ({ byteOffset: 0, lastUuid: null }),
+    });
+    await delivery.deliverTurn("s1");
+    expect(spy.messages.find((m) => m.type === "stream_end")).toBeUndefined();
+  });
+});
