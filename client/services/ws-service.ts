@@ -383,7 +383,7 @@ class WsService {
   // reply that means the turn never happened: the bubble has to come back off
   // the screen and the text has to go back in the composer, or the user loses
   // what they typed to a send that was never made.
-  private lastOptimisticSend = new Map<string, { messageId: string; prompt: string }>();
+  private lastOptimisticSend = new Map<string, Array<{ messageId: string; prompt: string; sentAt: number }>>();
 
   private sendMessage(msg: Record<string, unknown>) {
     if (!this.ws) return;
@@ -935,15 +935,34 @@ class WsService {
         } else if (chunk.type === "user") {
           const rid = (chunk as any).recordId as string | undefined;
           const sq = (chunk as any).seq as number | undefined;
-          const newId = `user-${Date.now()}-${Math.random()}`;
-          store.addMessage(sessionId, {
-            id: newId,
-            role: "user",
-            content: text,
-            timestamp: Date.now(),
-            ...(rid ? { recordId: rid } : {}),
-            ...(typeof sq === "number" ? { seq: sq } : {}),
-          });
+          // Optimistic echo supersede: if matches last send within time bound, remove echo, use this record bubble
+          const arr = this.lastOptimisticSend.get(sessionId) || [];
+          const now = Date.now();
+          const idx = arr.findIndex(a => a.prompt.trim() === text.trim() && now - a.sentAt < 300000);
+          if (idx >= 0) {
+            const [attempted] = arr.splice(idx, 1);
+            if (arr.length === 0) this.lastOptimisticSend.delete(sessionId); else this.lastOptimisticSend.set(sessionId, arr);
+            store.removeMessage(sessionId, attempted.messageId);
+            const newId = `user-${Date.now()}-${Math.random()}`;
+            store.addMessage(sessionId, {
+              id: newId,
+              role: "user",
+              content: text,
+              timestamp: Date.now(),
+              ...(rid ? { recordId: rid } : {}),
+              ...(typeof sq === "number" ? { seq: sq } : {}),
+            });
+          } else {
+            const newId = `user-${Date.now()}-${Math.random()}`;
+            store.addMessage(sessionId, {
+              id: newId,
+              role: "user",
+              content: text,
+              timestamp: Date.now(),
+              ...(rid ? { recordId: rid } : {}),
+              ...(typeof sq === "number" ? { seq: sq } : {}),
+            });
+          }
         }
         break;
       }
@@ -1100,13 +1119,11 @@ class WsService {
         // back where the user can edit and retry it — the composer was cleared
         // the moment the send left, long before this refusal arrived.
         if (sessionId && msg.code === "session_busy") {
-          const attempted = this.lastOptimisticSend.get(sessionId);
-          if (attempted) {
-            this.lastOptimisticSend.delete(sessionId);
+          const arr = this.lastOptimisticSend.get(sessionId) || [];
+          if (arr.length) {
+            const attempted = arr.pop()!;
+            if (arr.length === 0) this.lastOptimisticSend.delete(sessionId); else this.lastOptimisticSend.set(sessionId, arr);
             store.removeMessage(sessionId, attempted.messageId);
-            // Only into the composer it was typed in, and only while that
-            // composer is empty: whatever the user has typed since is newer
-            // than what was refused and must not be overwritten.
             if (store.activeSessionId === sessionId && store.inputDraft.trim() === "") {
               store.setInputDraft(attempted.prompt);
             }
@@ -1202,7 +1219,9 @@ class WsService {
       content: prompt,
       timestamp: Date.now(),
     });
-    this.lastOptimisticSend.set(sessionId, { messageId, prompt });
+    const arr = this.lastOptimisticSend.get(sessionId) || [];
+    arr.push({ messageId, prompt, sentAt: Date.now() });
+    this.lastOptimisticSend.set(sessionId, arr);
 
     this.sendMessage({ type: "terminal_send", claudeUuid: sessionId, content: prompt });
 
