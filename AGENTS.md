@@ -77,15 +77,25 @@ All recorded in `docs/adr/`. Key decisions:
 
 ### WebSocket Protocol
 
-Client→Server: `terminal_create`, `terminal_send`, `terminal_teardown`, `list_terminal_sessions`, `permission`, `interrupt`, `stop_task`, `append_user_message`, `get_server_config`, `list_directories`, `reconnect`
+Client→Server: `terminal_create`, `terminal_send`, `terminal_teardown`, `list_terminal_sessions`, `permission`, `interrupt`, `stop_task`, `append_user_message`, `get_server_config`, `list_directories`, `reconnect`, `transcript_page_request`
 
-Server→Client: `terminal_created`, `terminal_teardown_result`, `terminal_sessions`, `stream_chunk`, `stream_end`, `session_state`, `permission_request`, `capabilities`, `server_config`, `directory_listing`, `event`, `replay_complete`, `error`
+Server→Client: `terminal_created`, `terminal_teardown_result`, `terminal_sessions`, `stream_chunk`, `stream_end`, `session_state`, `permission_request`, `capabilities`, `server_config`, `directory_listing`, `event`, `replay_complete`, `error`, `transcript_page`
 
 `terminal_create` takes an optional `agentKind` (#31) — a closed enum
 (`server/agents/kinds.ts`), unlike the free-string `sessions[].agent`, because
 this one is what herdr execs. Absent → claude. Per-kind argv lives in
 `registry.ts`'s `argvFor`; `server_config.availableAgents` lists the kinds whose
 binary is on `PATH`.
+
+`transcript_page_request` / `transcript_page` are the history pull: one page (50
+records, a number the wire never carries) of a **live** session's own transcript,
+answered with a bare `ws.send` so it never enters the replay buffer. `before` is
+a receipt — `{epoch, seq, recordId}` — re-proved against the file the path
+resolves to now; a stale or shifted cursor degrades to the newest page instead of
+erroring, and the reply's `epoch` says which file that was. No transcript at all
+answers `{code:"transcript_unavailable"}`, never a page with an empty `epoch`.
+`stream_chunk.chunk` carries the same `epoch` plus `recordId` and `seq` (the
+record's absolute byte offset, the only total order the data supports).
 
 Browsing past conversations is gone since #26: there is no session history,
 no listing and no resume — herdr's live sessions are the only sessions there

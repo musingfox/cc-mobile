@@ -935,35 +935,26 @@ class WsService {
         } else if (chunk.type === "user") {
           const rid = (chunk as any).recordId as string | undefined;
           const sq = (chunk as any).seq as number | undefined;
-          // Optimistic echo supersede: if matches last send within time bound, remove echo, use this record bubble
+          // supersede
           const arr = this.lastOptimisticSend.get(sessionId) || [];
           const now = Date.now();
           const idx = arr.findIndex(a => a.prompt.trim() === text.trim() && now - a.sentAt < 300000);
           if (idx >= 0) {
-            const [attempted] = arr.splice(idx, 1);
+            const [att] = arr.splice(idx, 1);
             if (arr.length === 0) this.lastOptimisticSend.delete(sessionId); else this.lastOptimisticSend.set(sessionId, arr);
-            store.removeMessage(sessionId, attempted.messageId);
-            const newId = `user-${Date.now()}-${Math.random()}`;
-            store.addMessage(sessionId, {
-              id: newId,
-              role: "user",
-              content: text,
-              timestamp: Date.now(),
-              ...(rid ? { recordId: rid } : {}),
-              ...(typeof sq === "number" ? { seq: sq } : {}),
-            });
-          } else {
-            const newId = `user-${Date.now()}-${Math.random()}`;
-            store.addMessage(sessionId, {
-              id: newId,
-              role: "user",
-              content: text,
-              timestamp: Date.now(),
-              ...(rid ? { recordId: rid } : {}),
-              ...(typeof sq === "number" ? { seq: sq } : {}),
-            });
+            store.removeMessage(sessionId, att.messageId);
           }
+          const newId = `user-${Date.now()}-${Math.random()}`;
+          store.addMessage(sessionId, {
+            id: newId,
+            role: "user",
+            content: text,
+            timestamp: Date.now(),
+            ...(rid ? { recordId: rid } : {}),
+            ...(typeof sq === "number" ? { seq: sq } : {}),
+          });
         }
+
         break;
       }
 

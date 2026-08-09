@@ -76,6 +76,8 @@ All messages are Zod-validated (see [ADR-001](docs/adr/001-zod-runtime-validatio
 { type: "interrupt", sessionId: string }
 { type: "stop_task", sessionId: string, taskId: string }
 { type: "get_server_config" }
+{ type: "transcript_page_request", sessionId: string,
+  before?: { epoch: string, seq: number, recordId: string } }
 ```
 
 Refused by the Zod gate with `{code:"invalid_message"}`: `set_permission_mode`,
@@ -110,7 +112,37 @@ a page reload.
 { type: "error", code: string, message: string, sessionId?: string }
 { type: "server_config", config: { allowedRoots?: string[] | null, homeDirectory?: string,
                                   availableAgents?: ("claude"|"omp")[] } }
+{ type: "transcript_page", sessionId: string, epoch: string,
+  records: Record<string, unknown>[],
+  nextBefore: { epoch: string, seq: number, recordId: string } | null }
 ```
+
+`transcript_page_request` / `transcript_page` are the history pull: the phone
+asks a live session for one page of its own backlog and gets it outside the live
+stream. The reply goes out with a bare `ws.send`, so it is never wrapped in an
+`event` envelope and never replayed on reconnect — it answers one connection's
+question, not the session's.
+
+There is no page size on the wire; the server owns that number (50 records).
+The page unit is "records the mapper keeps", not "records the phone renders", so
+a page of tool plumbing can legitimately produce no visible bubbles — deciding
+what is visible stays the client's job (ADR-015 M1), and the bodies in `records`
+come out of the same `transcriptRecordToChunk` the live path uses.
+
+`before` is the cursor the server last handed back, and it is a receipt, not just
+a position: it names the file (`epoch`) and the record it stops before (`seq` +
+`recordId`). The server re-proves both against the file the path resolves to
+*now*, because a terminal `/clear` rotates that file underneath the phone. A
+cursor from a retired epoch, one whose byte offset now holds a different record,
+or one past EOF is not an error — it degrades to the newest page of the current
+file, and the reply's own `epoch` says so. `nextBefore: null` means the
+conversation starts at this page.
+
+`epoch` is never empty and never a placeholder: a session that is not listed, has
+no transcript key, or runs a kind with no registered reader gets
+`{code:"transcript_unavailable"}` instead of a page. Every `stream_chunk.chunk`
+carries the same `epoch`, plus `recordId` and `seq`, so the phone can tell a live
+chunk and a page entry apart from a *different* conversation.
 
 `server_config` now carries only what the server knows and the client cannot:
 which paths are allowed, where `$HOME` is, and which agents this machine can
@@ -167,7 +199,7 @@ exists.
 The key kind is server-side only — `ws.ts` projects the wire fields by name, so
 `agentSessionKind` never reaches the phone.
 
-Note: `stream_chunk.chunk` contains raw claude message objects (e.g., `{ type: "assistant", message: { content: [...] } }`). The frontend's `extractTextFromChunk()` parses these into displayable text. omp's records are mapped into that same envelope by `server/transcript/records.ts` — one mapper reads both vocabularies, since they do not overlap (omp puts every conversational record under `type:"message"` with the role inside; claude uses the role as the type) and which file is read is already decided per kind by the reader registry.
+Note: `stream_chunk.chunk` contains raw claude message objects (e.g., `{ type: "assistant", message: { content: [...] } }`) plus the three keys the server stamps on: `recordId` (the record's own `uuid`/`id`, absent when it has neither), `seq` (its absolute byte offset in the transcript — the only total order the data supports, since timestamps tie and invert) and `epoch` (16 hex chars naming the file). The frontend's `extractTextFromChunk()` parses these into displayable text. omp's records are mapped into that same envelope by `server/transcript/records.ts` — one mapper reads both vocabularies, since they do not overlap (omp puts every conversational record under `type:"message"` with the role inside; claude uses the role as the type) and which file is read is already decided per kind by the reader registry.
 
 ## Project Structure
 

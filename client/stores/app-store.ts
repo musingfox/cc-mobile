@@ -819,8 +819,13 @@ export const useAppStore = create<AppState>((set) => ({
     const recId = (chunk as any).recordId as string | undefined;
     const sq = (chunk as any).seq as number | undefined;
     const chEpoch = (chunk as any).epoch as string | undefined | null;
-    const text = (chunk as any).message?.content?.[0]?.text || (typeof (chunk as any).message?.content === "string" ? (chunk as any).message.content : "");
+    let text = (chunk as any).message?.content?.[0]?.text || (typeof (chunk as any).message?.content === "string" ? (chunk as any).message.content : "");
+    if (!text && (chunk as any).type === "user") {
+      const c = (chunk as any).message?.content;
+      if (Array.isArray(c)) text = c.filter((b:any)=>b && b.type==="text").map((b:any)=>b.text||"").join("");
+    }
     const role = (chunk as any).type === "user" ? "user" : "assistant";
+    if ((chunk as any).type === "user" && !text) return state; // refuse non visible per extract rules
 
     // epoch rules (Retired + Reset + Absence) advisory
     const curEpoch = (s as any).epoch as string | undefined;

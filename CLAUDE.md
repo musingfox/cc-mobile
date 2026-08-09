@@ -91,7 +91,7 @@ All recorded in `docs/adr/`. Key decisions:
 
 ### WebSocket Protocol
 
-Client→Server: `terminal_create`, `terminal_send`, `terminal_teardown`, `list_terminal_sessions`, `permission`, `interrupt`, `stop_task`, `append_user_message`, `get_server_config`, `list_directories`, `reconnect`
+Client→Server: `terminal_create`, `terminal_send`, `terminal_teardown`, `list_terminal_sessions`, `permission`, `interrupt`, `stop_task`, `append_user_message`, `get_server_config`, `list_directories`, `reconnect`, `transcript_page_request`
 
 `permission` carries `optionId` — the id of one of the options the server parsed
 off the terminal's screen. The pre-#29 `allow` boolean is still accepted for one
@@ -110,11 +110,39 @@ naming, not a setting — and omp is handed its transcript path by herdr instead
 `server_config.availableAgents` names the kinds whose binary is on `PATH`, and
 is sent only in the `get_server_config` reply.
 
-Server→Client: `terminal_created`, `terminal_teardown_result`, `terminal_sessions`, `stream_chunk`, `stream_end`, `session_state`, `permission_request`, `capabilities`, `server_config`, `directory_listing`, `event`, `replay_complete`, `error`
+Server→Client: `terminal_created`, `terminal_teardown_result`, `terminal_sessions`, `stream_chunk`, `stream_end`, `session_state`, `permission_request`, `capabilities`, `server_config`, `directory_listing`, `event`, `replay_complete`, `error`, `transcript_page`
 
 Browsing past conversations is gone since #26: there is no session history,
 no listing and no resume — herdr's live sessions are the only sessions there
-are.
+are. `transcript_page_request` / `transcript_page` are not that coming back:
+they read one **live** session's own transcript, and there is still no way to
+reach a session that is not running.
+
+The pair is the history pull — the phone asks a live session for one page of its
+own backlog, outside the live stream. The reply goes out with a bare `ws.send`,
+so it never enters the session's replay buffer: it answers one connection's
+question, not the session's. There is no page size on the wire; the server owns
+that number (50 records), and the page unit is "records the mapper keeps", not
+"records the phone renders", so a page of pure tool plumbing can legitimately
+show nothing (ADR-015 M1 keeps that decision on the client).
+
+`before` is the cursor the server last handed back, and it is a receipt: it names
+the file (`epoch`) and the record it stops before (`seq` + `recordId`). Both
+halves are re-proved against the file the path resolves to *now*, because a
+terminal `/clear` rotates it underneath the phone. A cursor from a retired epoch,
+one whose offset now holds a different record, or one past EOF degrades to the
+newest page of the current file rather than erroring — the reply's own `epoch`
+says which file it actually read. `nextBefore: null` means the conversation
+starts at this page. A session that is not listed, has no transcript key, or runs
+a kind with no registered reader gets `{code:"transcript_unavailable"}` — never a
+page with an empty or placeholder `epoch`.
+
+Every `stream_chunk.chunk` now also carries `recordId` (the record's own
+`uuid`/`id`, absent when it has neither), `seq` (its absolute byte offset — the
+only total order the transcript supports, since timestamps both tie and invert)
+and `epoch`. The phone keys messages by `recordId`, orders them by `seq`, and
+treats a move between two different non-null `epoch`s — and only that — as the
+terminal having reset the conversation.
 
 Since #29 the session key on the wire is herdr's `pane_id`, not a claude uuid: it
 exists for every pane and survives a `/clear`. `terminal_sessions` carries
