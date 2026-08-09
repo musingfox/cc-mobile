@@ -28,6 +28,18 @@ interface SerializableSessionState {
   // Must survive a reload: send routing keys on this marker, so dropping it
   // would silently send a live terminal session's prompt down the PTY path.
   terminal?: { ready: boolean };
+  /**
+   * Which transcript file the restored messages were built from. Without it,
+   * every reload would look exactly like a rotation — "unknown epoch" is
+   * indistinguishable from "a different file" — and the first history page
+   * after a reload would silently destroy the restored conversation instead of
+   * merging into it.
+   *
+   * The paging cursor is deliberately NOT persisted: an absent cursor self-heals
+   * on the next activation fetch, whereas a stale one would have to be validated
+   * against a file that may have rotated while the app was closed.
+   */
+  epoch?: string;
 }
 
 export function saveSessionState(sessionId: string, state: SessionState): void {
@@ -51,6 +63,7 @@ export function saveSessionState(sessionId: string, state: SessionState): void {
       agentState: state.agentState,
       receivedAuthoritativeState: state.receivedAuthoritativeState,
       terminal: state.terminal,
+      epoch: state.epoch,
     };
 
     const key = `${SESSION_KEY_PREFIX}${sessionId}`;

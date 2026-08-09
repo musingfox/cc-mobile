@@ -348,6 +348,49 @@ describe("session-persistence", () => {
     expect(loadSessionState("u2")?.terminal).toBeUndefined();
   });
 
+  // LocalOnlyDiscardOnFirstPage T5 — the reload half.
+  //
+  // Without the epoch, every reload would look exactly like a rotation, and the
+  // first history page after it would destroy the restored conversation instead
+  // of merging into it. The paging cursor is deliberately not carried: it would
+  // have to be re-validated against a file that may have rotated while the app
+  // was closed, and an absent cursor self-heals on the next activation fetch.
+  test("a reloaded session carries its transcript epoch, and not its paging cursor", () => {
+    const state = {
+      id: "u3",
+      cwd: "/test",
+      sdkSessionId: null,
+      messages: [
+        { id: "m1", role: "assistant" as const, content: "hi", timestamp: 1, recordId: "r1", seq: 10 },
+      ],
+      pendingPermission: null,
+      isStreaming: false,
+      currentStreamMessageId: null,
+      activeToolStatus: null,
+      activeTools: new Map(),
+      activeAgents: new Map(),
+      activeHook: null,
+      usage: null,
+      contextUsage: null,
+      promptSuggestion: null,
+      resolvedActions: [],
+      agentState: null,
+      receivedAuthoritativeState: false,
+      epoch: "aaaa",
+      pagingCursor: { epoch: "aaaa", seq: 400, recordId: "u9" },
+    } as unknown as SessionState;
+
+    saveSessionState("u3", state);
+
+    const restored = loadSessionState("u3");
+    expect(restored?.epoch).toBe("aaaa");
+    expect(restored?.pagingCursor).toBeUndefined();
+
+    const stored = JSON.parse(localStorage.getItem("ccm:session:u3") ?? "{}");
+    expect(stored.epoch).toBe("aaaa");
+    expect("pagingCursor" in stored).toBe(false);
+  });
+
   // SessionRemovalDropsReplayCursor — the storage half of the choke point.
   test("clearing a session also forgets its replay cursor", () => {
     localStorage.setItem("ccm:lastEventIds", JSON.stringify({ u1: 5, u2: 9 }));

@@ -15,6 +15,13 @@ export type CompactMetadata = {
   postTokens?: number;
 };
 
+/** The earlier of two file positions, where either may be absent. */
+function earliestSeq(a: number | undefined, b: number | undefined): number | undefined {
+  if (a === undefined) return b;
+  if (b === undefined) return a;
+  return Math.min(a, b);
+}
+
 export type Message = {
   id: string;
   role: "user" | "assistant" | "tool";
@@ -223,7 +230,34 @@ export type SessionState = {
   /** Retired epochs (replays ignored). */
   retiredEpochs?: Set<string>;
   /** Paging cursor for history load more (client held). */
-  pagingCursor?: { epoch: string; seq: number; recordId: string } | null;
+  pagingCursor?: TranscriptCursor | null;
+};
+
+/** Where a history page stops, and which transcript file that position is in. */
+export type TranscriptCursor = { epoch: string; seq: number; recordId: string };
+
+/** One delivery of transcript-derived content, from any of the three sources. */
+export type TranscriptApply = {
+  /**
+   * The file this content came from, as the deliverer reported it. `null`,
+   * `undefined` and `""` all mean "no claim" and are treated identically —
+   * a delivery that cannot say which file it read never erases anything.
+   */
+  epoch?: string | null;
+  /** Already rendered to bubbles by the caller; the store never parses records. */
+  messages: Message[];
+  /**
+   * The next backward cursor, when this delivery was a page. `undefined` leaves
+   * the stored cursor alone (a live chunk says nothing about paging); `null`
+   * means the page reached the beginning of the conversation.
+   */
+  nextBefore?: TranscriptCursor | null;
+  /**
+   * Discard local-only messages (no `recordId`) older than this client-clock
+   * timestamp. Set to the moment the page request went out, so a bubble the
+   * user is sending right now survives while the pre-transcript log gives way.
+   */
+  discardLocalBefore?: number;
 };
 
 type ConnectionState = "connecting" | "connected" | "disconnected";
@@ -350,8 +384,13 @@ interface AppState {
   persistAllSessions: () => void;
   restoreAllSessions: () => void;
 
-  /** Internal for transcript projection: upsert by recordId, order by seq, epoch reset rules. */
-  applyTranscriptChunk: (sessionId: string, chunk: Record<string, unknown>) => void;
+  /**
+   * The one door transcript-derived content comes through, whether it arrived
+   * live, in a history page, or in a reconnect replay. Keys by `recordId`,
+   * orders by `seq`, and owns the epoch rules — see the implementation for the
+   * branch order, which is the contract.
+   */
+  applyTranscriptMessages: (sessionId: string, apply: TranscriptApply) => void;
 
   // Directory browsing
   directoryListing: DirectoryListing | null;
@@ -813,73 +852,103 @@ export const useAppStore = create<AppState>((set) => ({
   activeScreen: "chat",
   setActiveScreen: (activeScreen) => set({ activeScreen }),
 
-  applyTranscriptChunk: (sessionId, chunk) => set((state) => {
-    const s = state.sessions.get(sessionId);
-    if (!s) return state;
-    const recId = (chunk as any).recordId as string | undefined;
-    const sq = (chunk as any).seq as number | undefined;
-    const chEpoch = (chunk as any).epoch as string | undefined | null;
-    let text = (chunk as any).message?.content?.[0]?.text || (typeof (chunk as any).message?.content === "string" ? (chunk as any).message.content : "");
-    if (!text && (chunk as any).type === "user") {
-      const c = (chunk as any).message?.content;
-      if (Array.isArray(c)) text = c.filter((b:any)=>b && b.type==="text").map((b:any)=>b.text||"").join("");
-    }
-    const role = (chunk as any).type === "user" ? "user" : "assistant";
-    if ((chunk as any).type === "user" && !text) return state; // refuse non visible per extract rules
+  /**
+   * Transcript-derived content, from whichever of the three deliverers brought
+   * it: the live tail, a history page, or a reconnect replay. The branch order
+   * below is the contract, and it is deliberate.
+   */
+  applyTranscriptMessages: (sessionId, apply) =>
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
 
-    // epoch rules (Retired + Reset + Absence) advisory
-    const curEpoch = (s as any).epoch as string | undefined;
-    let retired: Set<string> = (s as any).retiredEpochs || new Set<string>();
-    let nextEpoch = curEpoch;
-    let wipe = false;
-    if (chEpoch && chEpoch !== "") {
-      if (retired.has(chEpoch)) {
-        // ignore replay
-      } else if (curEpoch && chEpoch !== curEpoch) {
-        wipe = true;
-        nextEpoch = chEpoch;
-        retired = new Set(retired);
-        retired.add(curEpoch);
-      } else if (!curEpoch) {
-        nextEpoch = chEpoch;
+      // "This content has no file identity" has three spellings on the wire —
+      // absent, null, and "" — and they mean one thing. None of them erases
+      // anything: an agent that exits makes herdr report an explicitly null
+      // session, and that is not the user clearing their conversation.
+      const incoming = typeof apply.epoch === "string" && apply.epoch !== "" ? apply.epoch : null;
+      const current = session.epoch;
+      const retired = session.retiredEpochs ?? new Set<string>();
+
+      // A replay of a conversation this session has already left must not drag
+      // it back. The server's event buffer holds up to 500 pre-rotation chunks
+      // per session and nothing prunes them, so a reconnect will re-deliver
+      // them; they are dropped here, not merged and not treated as a rotation.
+      if (incoming !== null && retired.has(incoming)) return state;
+
+      // The one transition that wipes: from one real file to a *different* real
+      // file. Adopting a first epoch is not a reset, and neither is losing one.
+      const isReset = incoming !== null && current !== undefined && incoming !== current;
+
+      const nextRetired = isReset ? new Set(retired).add(current as string) : retired;
+
+      // Local-only messages (no `recordId`) are the pre-transcript log. They
+      // give way to the file in one batch, but only those older than the moment
+      // the request went out — a bubble the user is sending right now is not
+      // part of the history this page is replacing.
+      const kept = isReset
+        ? []
+        : session.messages.filter(
+            (message) =>
+              message.recordId !== undefined ||
+              apply.discardLocalBefore === undefined ||
+              message.timestamp >= apply.discardLocalBefore,
+          );
+
+      const messages = [...kept];
+      const indexOfRecord = new Map<string, number>();
+      messages.forEach((message, index) => {
+        if (message.recordId !== undefined) indexOfRecord.set(message.recordId, index);
+      });
+
+      for (const arrival of apply.messages) {
+        const recordId = arrival.recordId;
+        const at = recordId === undefined ? undefined : indexOfRecord.get(recordId);
+        if (at === undefined) {
+          if (recordId !== undefined) indexOfRecord.set(recordId, messages.length);
+          messages.push(arrival);
+          continue;
+        }
+        // The same record delivered twice. Body follows the newer arrival —
+        // claude does re-write a record, only ever adding fields. Position
+        // follows the earlier one: a record re-appended thousands of lines
+        // later is still the record it was, and its first position is the true
+        // one. The stored id survives so React keeps the same DOM node.
+        const existing = messages[at];
+        messages[at] = {
+          ...existing,
+          ...arrival,
+          id: existing.id,
+          ...(earliestSeq(existing.seq, arrival.seq) === undefined
+            ? {}
+            : { seq: earliestSeq(existing.seq, arrival.seq) }),
+        };
       }
-    }
 
-    const nextMsgs = wipe ? [] : [...s.messages];
-    const chE = chEpoch && chEpoch !== "" ? chEpoch : null;
-    const isRetired = chE && retired.has(chE);
-    if (recId && !isRetired) {
-      const idx = nextMsgs.findIndex(m => m.recordId === recId);
-      const base = idx >= 0 ? nextMsgs[idx] : null;
-      const merged = base ? { ...base, content: text || base.content, seq: typeof sq === "number" ? sq : base.seq } : {
-        id: recId,
-        role: role as any,
-        content: text,
-        timestamp: Date.now(),
-        recordId: recId,
-        ...(typeof sq === "number" ? { seq: sq } : {}),
-      };
-      if (idx >= 0) nextMsgs[idx] = merged;
-      else nextMsgs.push(merged);
-    } else if (!recId) {
-      // no id: append (rare)
-      nextMsgs.push({ id: `no-id-${Date.now()}`, role: role as any, content: text, timestamp: Date.now(), ...(typeof sq === "number" ? { seq: sq } : {}) });
-    }
+      // File order, never arrival order. A message with no `seq` has no
+      // position in any file, so it sorts below everything the transcript
+      // placed; the sort is stable, so equal keys keep the order they had.
+      messages.sort(
+        (a, b) => (a.seq ?? Number.MAX_SAFE_INTEGER) - (b.seq ?? Number.MAX_SAFE_INTEGER),
+      );
 
-    // order by seq asc, locals last
-    nextMsgs.sort((a, b) => {
-      const sa = (a.seq ?? Number.MAX_SAFE_INTEGER);
-      const sb = (b.seq ?? Number.MAX_SAFE_INTEGER);
-      return sa - sb;
-    });
+      // A reset invalidates the cursor (it points into the file we just left),
+      // but this very delivery may be the page that supplies the new one.
+      const pagingCursor =
+        apply.nextBefore !== undefined
+          ? apply.nextBefore
+          : isReset
+            ? null
+            : session.pagingCursor;
 
-    const next = new Map(state.sessions);
-    next.set(sessionId, {
-      ...s,
-      messages: nextMsgs,
-      epoch: nextEpoch,
-      retiredEpochs: retired,
-    } as any);
-    return { sessions: next };
-  }),
+      const next = new Map(state.sessions);
+      next.set(sessionId, {
+        ...session,
+        messages,
+        ...(incoming !== null ? { epoch: incoming } : {}),
+        retiredEpochs: nextRetired,
+        pagingCursor,
+      });
+      return { sessions: next };
+    }),
 }));

@@ -4,6 +4,8 @@ import {
   type ActiveAgent,
   type ActiveTool,
   type Capabilities,
+  type Message,
+  type TranscriptCursor,
   useAppStore,
 } from "../stores/app-store";
 import { useSettingsStore } from "../stores/settings-store";
@@ -284,6 +286,32 @@ export function deriveContextUsage(
   return { totalTokens, maxTokens: effectiveMax, percentage };
 }
 
+/**
+ * How long after a send an inbound `user` record may still be that send's echo.
+ * Measured on this device's clock, never against the record's own timestamp:
+ * the phone and the dev machine are two clocks, and a skew of minutes would
+ * silently stop the pairing without anything looking wrong.
+ */
+const ECHO_PAIRING_WINDOW_MS = 300_000;
+
+/**
+ * The record's identity and position, as the server stamped them. Both are
+ * omitted rather than set to `undefined` when the chunk carries neither: a
+ * message with no `recordId` is by definition local-only, and that has to stay
+ * distinguishable from one whose id happened to be undefined.
+ */
+function transcriptPositionOf(chunk: Record<string, unknown>): { recordId?: string; seq?: number } {
+  return {
+    ...(typeof chunk.recordId === "string" ? { recordId: chunk.recordId } : {}),
+    ...(typeof chunk.seq === "number" ? { seq: chunk.seq } : {}),
+  };
+}
+
+/** The file this chunk came from, or null when it makes no claim. */
+function epochOfChunk(chunk: Record<string, unknown>): string | null {
+  return typeof chunk.epoch === "string" && chunk.epoch !== "" ? chunk.epoch : null;
+}
+
 export function extractTextFromChunk(chunk: Record<string, unknown>): string | null {
   const message = chunk.message as
     | { role?: string; content?: Array<{ type: string; text?: string }> | string }
@@ -384,6 +412,14 @@ class WsService {
   // the screen and the text has to go back in the composer, or the user loses
   // what they typed to a send that was never made.
   private lastOptimisticSend = new Map<string, Array<{ messageId: string; prompt: string; sentAt: number }>>();
+  /**
+   * History page requests waiting for their reply, per session, with the
+   * client-clock moment each went out. Presence is the in-flight guard — a
+   * double-tap or a second scroll-to-top sends one request, not two — and the
+   * timestamp is what tells a restored local-only message (older than the
+   * request) from an echo the user is sending right now (newer).
+   */
+  private transcriptPageRequests = new Map<string, { sentAt: number }>();
 
   private sendMessage(msg: Record<string, unknown>) {
     if (!this.ws) return;
@@ -924,34 +960,53 @@ class WsService {
               break;
             }
           }
-          // Not a duplicate: create new message
-          const newId = `msg-${Date.now()}-${Math.random()}`;
-          store.addMessage(sessionId, {
-            id: newId,
-            role: "assistant",
-            content: text,
-            timestamp: Date.now(),
+          // Not a duplicate: through the transcript door, so a chunk the event
+          // buffer replays after a reconnect merges onto the message it already
+          // produced instead of drawing a second bubble.
+          store.applyTranscriptMessages(sessionId, {
+            epoch: epochOfChunk(chunk),
+            messages: [
+              {
+                id: `msg-${Date.now()}-${Math.random()}`,
+                role: "assistant",
+                content: text,
+                timestamp: Date.now(),
+                ...transcriptPositionOf(chunk),
+              },
+            ],
           });
         } else if (chunk.type === "user") {
-          const rid = (chunk as any).recordId as string | undefined;
-          const sq = (chunk as any).seq as number | undefined;
-          // supersede
-          const arr = this.lastOptimisticSend.get(sessionId) || [];
+          // What the user typed at the terminal. The bubble the phone drew the
+          // instant *it* sent is the same message read back, so it is superseded
+          // rather than left sitting next to a copy of itself: first pending
+          // send for this session whose text matches after trimming, inside the
+          // window, measured on this device's clock (the dev machine's is a
+          // different one, and a skew would silently break the pairing).
+          const pending = this.lastOptimisticSend.get(sessionId) ?? [];
           const now = Date.now();
-          const idx = arr.findIndex(a => a.prompt.trim() === text.trim() && now - a.sentAt < 300000);
-          if (idx >= 0) {
-            const [att] = arr.splice(idx, 1);
-            if (arr.length === 0) this.lastOptimisticSend.delete(sessionId); else this.lastOptimisticSend.set(sessionId, arr);
-            store.removeMessage(sessionId, att.messageId);
+          const paired = pending.findIndex(
+            (send) => send.prompt.trim() === text.trim() && now - send.sentAt < ECHO_PAIRING_WINDOW_MS,
+          );
+          let messageId = `user-${Date.now()}-${Math.random()}`;
+          if (paired >= 0) {
+            const [echo] = pending.splice(paired, 1);
+            if (pending.length === 0) this.lastOptimisticSend.delete(sessionId);
+            else this.lastOptimisticSend.set(sessionId, pending);
+            // Re-key the same slot: the echo becomes the record it always was.
+            store.removeMessage(sessionId, echo.messageId);
+            messageId = echo.messageId;
           }
-          const newId = `user-${Date.now()}-${Math.random()}`;
-          store.addMessage(sessionId, {
-            id: newId,
-            role: "user",
-            content: text,
-            timestamp: Date.now(),
-            ...(rid ? { recordId: rid } : {}),
-            ...(typeof sq === "number" ? { seq: sq } : {}),
+          store.applyTranscriptMessages(sessionId, {
+            epoch: epochOfChunk(chunk),
+            messages: [
+              {
+                id: messageId,
+                role: "user",
+                content: text,
+                timestamp: Date.now(),
+                ...transcriptPositionOf(chunk),
+              },
+            ],
           });
         }
 
@@ -1056,6 +1111,41 @@ class WsService {
         }
         break;
 
+      case "transcript_page": {
+        if (!sessionId) break;
+        const request = this.transcriptPageRequests.get(sessionId);
+        this.transcriptPageRequests.delete(sessionId);
+
+        // Records go through the same visible-text rule as live chunks, so a
+        // page of tool plumbing legitimately yields no bubbles. Nothing here
+        // touches activeTools, isStreaming or the pending permission: loading
+        // older conversation must not disturb the turn running right now.
+        const records = (msg.records as Record<string, unknown>[]) ?? [];
+        const messages: Message[] = [];
+        for (const record of records) {
+          const text = extractTextFromChunk(record);
+          if (!text) continue;
+          messages.push({
+            id: `page-${(record.recordId as string) ?? messages.length}-${Math.random()}`,
+            role: record.type === "user" ? "user" : "assistant",
+            content: text,
+            timestamp: Date.now(),
+            ...transcriptPositionOf(record),
+          });
+        }
+
+        store.applyTranscriptMessages(sessionId, {
+          epoch: msg.epoch as string,
+          messages,
+          nextBefore: (msg.nextBefore as TranscriptCursor | null) ?? null,
+          // The pre-transcript local log gives way to the file, but only what
+          // was already on screen when the request went out — a bubble sent
+          // since then has not had its chance to appear in the transcript yet.
+          ...(request ? { discardLocalBefore: request.sentAt } : {}),
+        });
+        break;
+      }
+
       case "capabilities":
         // Zod's union+transform pipeline confuses TS inference; cast to the store shape.
         store.setCapabilities({
@@ -1073,6 +1163,17 @@ class WsService {
         hapticService.error();
         // Clear directory loading state on any error
         store.setIsLoadingDirectories(false);
+
+        // "This session has no transcript to read" is a fact about the session,
+        // not something that went wrong: no toast, no error bubble, and above
+        // all nothing discarded — this is also how the phone hears that an
+        // agent has exited, and its conversation must stay on screen. All that
+        // changes is that the request is no longer in flight, so the user can
+        // try again.
+        if (sessionId && msg.code === "transcript_unavailable") {
+          this.transcriptPageRequests.delete(sessionId);
+          break;
+        }
 
         // Terminal create failures arrive without a sessionId, so drop the
         // optimistic sessions still waiting for `terminal_created` — otherwise the
@@ -1196,6 +1297,33 @@ class WsService {
   }
 
   /**
+   * Asks a session for one page of its own transcript: the newest page when
+   * `before` is absent, the page immediately older than that cursor otherwise.
+   *
+   * At most one request per session is outstanding — a double-tap on the
+   * session card, or two scroll-to-top events before the reply lands, send one
+   * request. Returns whether this call actually sent one, which is what the
+   * caller renders its loading row from.
+   */
+  requestTranscriptPage(sessionId: string, before?: TranscriptCursor | null): boolean {
+    if (!this.ws) return false;
+    if (this.transcriptPageRequests.has(sessionId)) return false;
+
+    this.transcriptPageRequests.set(sessionId, { sentAt: Date.now() });
+    this.sendMessage({
+      type: "transcript_page_request",
+      sessionId,
+      ...(before ? { before } : {}),
+    });
+    return true;
+  }
+
+  /** Whether this session is waiting on a history page right now. */
+  isTranscriptPageInFlight(sessionId: string): boolean {
+    return this.transcriptPageRequests.has(sessionId);
+  }
+
+  /**
    * Sends one turn to a live terminal session. The session id doubles as the
    * claudeUuid, and the reply arrives through the usual stream_chunk/stream_end
    * handlers.
@@ -1203,7 +1331,10 @@ class WsService {
   terminalSend(sessionId: string, prompt: string) {
     if (!this.ws) return;
 
-    const messageId = `user-${Date.now()}`;
+    // Random suffix, not just the clock: two sends inside one millisecond used
+    // to mint the same id, so removing one echo removed both and the supersede
+    // could not tell the two bubbles apart.
+    const messageId = `user-${Date.now()}-${Math.random()}`;
     useAppStore.getState().addMessage(sessionId, {
       id: messageId,
       role: "user",
