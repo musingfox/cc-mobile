@@ -285,9 +285,9 @@ describe("LoadMoreOlderPage", () => {
 
     const scroller = stubScroller(container, 1000, 0);
     fireEvent.scroll(scroller);
-    // The affordance is gone, so the scroll finds nothing to click; the service
-    // guard is what stops the scroll handler itself.
-    expect(queryByText("Load earlier messages")).toBeNull();
+    // The point of the contract: reaching the top again while the first request
+    // is still out issues nothing.
+    expect(requests).toHaveLength(0);
   });
 
   test("T6: an error reply brings the affordance back in its idle state, messages untouched", () => {
