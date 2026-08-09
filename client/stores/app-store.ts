@@ -218,6 +218,12 @@ export type SessionState = {
   terminal?: { ready: boolean };
   /** Server-supplied capability flags; absent until the session has been listed. */
   descriptor?: SessionDescriptorFlags;
+  /** Current transcript file identity (from epochOf). */
+  epoch?: string;
+  /** Retired epochs (replays ignored). */
+  retiredEpochs?: Set<string>;
+  /** Paging cursor for history load more (client held). */
+  pagingCursor?: { epoch: string; seq: number; recordId: string } | null;
 };
 
 type ConnectionState = "connecting" | "connected" | "disconnected";
@@ -343,6 +349,9 @@ interface AppState {
   persistSessionState: (sessionId: string) => void;
   persistAllSessions: () => void;
   restoreAllSessions: () => void;
+
+  /** Internal for transcript projection: upsert by recordId, order by seq, epoch reset rules. */
+  applyTranscriptChunk: (sessionId: string, chunk: Record<string, unknown>) => void;
 
   // Directory browsing
   directoryListing: DirectoryListing | null;
@@ -803,4 +812,69 @@ export const useAppStore = create<AppState>((set) => ({
 
   activeScreen: "chat",
   setActiveScreen: (activeScreen) => set({ activeScreen }),
+
+  applyTranscriptChunk: (sessionId, chunk) => set((state) => {
+    const s = state.sessions.get(sessionId);
+    if (!s) return state;
+    const recId = (chunk as any).recordId as string | undefined;
+    const sq = (chunk as any).seq as number | undefined;
+    const chEpoch = (chunk as any).epoch as string | undefined | null;
+    const text = (chunk as any).message?.content?.[0]?.text || (typeof (chunk as any).message?.content === "string" ? (chunk as any).message.content : "");
+    const role = (chunk as any).type === "user" ? "user" : "assistant";
+
+    // epoch rules (Retired + Reset + Absence) advisory
+    const curEpoch = (s as any).epoch as string | undefined;
+    let retired: Set<string> = (s as any).retiredEpochs || new Set<string>();
+    let nextEpoch = curEpoch;
+    let wipe = false;
+    if (chEpoch && chEpoch !== "") {
+      if (retired.has(chEpoch)) {
+        // ignore replay
+      } else if (curEpoch && chEpoch !== curEpoch) {
+        wipe = true;
+        nextEpoch = chEpoch;
+        retired = new Set(retired);
+        retired.add(curEpoch);
+      } else if (!curEpoch) {
+        nextEpoch = chEpoch;
+      }
+    }
+
+    const nextMsgs = wipe ? [] : [...s.messages];
+    const chE = chEpoch && chEpoch !== "" ? chEpoch : null;
+    const isRetired = chE && retired.has(chE);
+    if (recId && !isRetired) {
+      const idx = nextMsgs.findIndex(m => m.recordId === recId);
+      const base = idx >= 0 ? nextMsgs[idx] : null;
+      const merged = base ? { ...base, content: text || base.content, seq: typeof sq === "number" ? sq : base.seq } : {
+        id: recId,
+        role: role as any,
+        content: text,
+        timestamp: Date.now(),
+        recordId: recId,
+        ...(typeof sq === "number" ? { seq: sq } : {}),
+      };
+      if (idx >= 0) nextMsgs[idx] = merged;
+      else nextMsgs.push(merged);
+    } else if (!recId) {
+      // no id: append (rare)
+      nextMsgs.push({ id: `no-id-${Date.now()}`, role: role as any, content: text, timestamp: Date.now(), ...(typeof sq === "number" ? { seq: sq } : {}) });
+    }
+
+    // order by seq asc, locals last
+    nextMsgs.sort((a, b) => {
+      const sa = (a.seq ?? Number.MAX_SAFE_INTEGER);
+      const sb = (b.seq ?? Number.MAX_SAFE_INTEGER);
+      return sa - sb;
+    });
+
+    const next = new Map(state.sessions);
+    next.set(sessionId, {
+      ...s,
+      messages: nextMsgs,
+      epoch: nextEpoch,
+      retiredEpochs: retired,
+    } as any);
+    return { sessions: next };
+  }),
 }));
