@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { transcriptRecordToChunk } from "./records";
+import { epochOf } from "./epoch";
 import { readTranscriptPage } from "./page";
 
 let dir: string;
@@ -33,10 +33,9 @@ describe("TranscriptBackwardPage", () => {
   it("T2: given same file, before naming record #5, limit:3 -> expect records #2,#3,#4; nextBefore names record #1", async () => {
     const recs = Array.from({length:7}, (_,i) => makeRec("u"+(i+1), "t"+(i+1)));
     const path = await writeLines("p.jsonl", recs);
-    const full = await readTranscriptPage({ path, before: null, limit: 99 });
-    const rec5 = full.records.find((r:any) => r.recordId === "u5");
-    const before5 = { epoch: "x", seq: rec5.seq as number, recordId: "u5" };
-    const res = await readTranscriptPage({ path, before: before5, limit: 3 });
+    const page1 = await readTranscriptPage({ path, before: null, limit: 3 });
+    expect(page1.nextBefore?.recordId).toBe("u5");
+    const res = await readTranscriptPage({ path, before: page1.nextBefore, limit: 3 });
     expect(res.records.map((r:any)=>r.recordId)).toEqual(["u2","u3","u4"]);
     expect(res.nextBefore?.recordId).toBe("u2");
   });
@@ -44,10 +43,10 @@ describe("TranscriptBackwardPage", () => {
   it("T3: given same file, before naming record #2, limit:3 -> expect record #1 only; nextBefore null", async () => {
     const recs = Array.from({length:7}, (_,i) => makeRec("u"+(i+1), "t"+(i+1)));
     const path = await writeLines("p.jsonl", recs);
-    const full = await readTranscriptPage({ path, before: null, limit: 99 });
-    const rec2 = full.records.find((r:any) => r.recordId === "u2");
-    const before2 = { epoch: "x", seq: rec2.seq as number, recordId: "u2" };
-    const res = await readTranscriptPage({ path, before: before2, limit: 3 });
+    const page1 = await readTranscriptPage({ path, before: null, limit: 3 });
+    const page2 = await readTranscriptPage({ path, before: page1.nextBefore, limit: 3 });
+    expect(page2.nextBefore?.recordId).toBe("u2");
+    const res = await readTranscriptPage({ path, before: page2.nextBefore, limit: 3 });
     expect(res.records.map((r:any)=>r.recordId)).toEqual(["u1"]);
     expect(res.nextBefore).toBeNull();
   });
@@ -98,5 +97,69 @@ describe("TranscriptBackwardPage", () => {
     const path = await writeLines("p.jsonl", recs);
     const res = await readTranscriptPage({ path, before: null, limit: 10 });
     expect(res.records.map((r:any)=>r.recordId)).toEqual(["u1","u2"]);
+  });
+});
+
+describe("TranscriptPageCursorGuard", () => {
+  async function sevenRecordFile(): Promise<string> {
+    return writeLines("p.jsonl", Array.from({ length: 7 }, (_, i) => makeRec("u" + (i + 1), "t" + (i + 1))));
+  }
+
+  it("T1: given before naming record #5 in the current epoch -> expect the page ending just before it, labelled with the current epoch", async () => {
+    const path = await sevenRecordFile();
+    const current = epochOf(path);
+    const full = await readTranscriptPage({ path, before: null, limit: 99 });
+    const rec5 = full.records.find((r: any) => r.recordId === "u5") as any;
+    const res = await readTranscriptPage({
+      path,
+      before: { epoch: current, seq: rec5.seq as number, recordId: "u5" },
+      limit: 3,
+    });
+    expect(res.records.map((r: any) => r.recordId)).toEqual(["u2", "u3", "u4"]);
+    expect(res.epoch).toBe(current);
+  });
+
+  it("T2: given a cursor from another epoch -> expect the newest page of the current file, epoch === current epoch", async () => {
+    const path = await sevenRecordFile();
+    const current = epochOf(path);
+    const res = await readTranscriptPage({
+      path,
+      before: { epoch: "deadbeefdeadbeef", seq: 4000, recordId: "u9" },
+      limit: 3,
+    });
+    expect(res.records.map((r: any) => r.recordId)).toEqual(["u5", "u6", "u7"]);
+    expect(res.epoch).toBe(current);
+    expect(current).not.toBe("deadbeefdeadbeef");
+  });
+
+  it("T3: given a cursor whose seq now holds a different recordId -> expect the newest page (in-place rewrite guard)", async () => {
+    const path = await sevenRecordFile();
+    const current = epochOf(path);
+    const full = await readTranscriptPage({ path, before: null, limit: 99 });
+    const rec3 = full.records.find((r: any) => r.recordId === "u3") as any;
+    // The offset is real and still occupied — by u3, not by the u9 the client remembers.
+    const res = await readTranscriptPage({
+      path,
+      before: { epoch: current, seq: rec3.seq as number, recordId: "u9" },
+      limit: 3,
+    });
+    expect(res.records.map((r: any) => r.recordId)).toEqual(["u5", "u6", "u7"]);
+    expect(res.epoch).toBe(current);
+  });
+
+  it("T4: given a cursor whose seq is past EOF -> expect the newest page, no throw", async () => {
+    const path = await sevenRecordFile();
+    const res = await readTranscriptPage({
+      path,
+      before: { epoch: epochOf(path), seq: 999999, recordId: "u9" },
+      limit: 3,
+    });
+    expect(res.records.map((r: any) => r.recordId)).toEqual(["u5", "u6", "u7"]);
+  });
+
+  it("stamps every record with the current epoch so a page and a live chunk agree", async () => {
+    const path = await sevenRecordFile();
+    const res = await readTranscriptPage({ path, before: null, limit: 3 });
+    for (const record of res.records) expect(record.epoch).toBe(epochOf(path));
   });
 });
