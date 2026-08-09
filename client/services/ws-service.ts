@@ -412,14 +412,6 @@ class WsService {
   // the screen and the text has to go back in the composer, or the user loses
   // what they typed to a send that was never made.
   private lastOptimisticSend = new Map<string, Array<{ messageId: string; prompt: string; sentAt: number }>>();
-  /**
-   * History page requests waiting for their reply, per session, with the
-   * client-clock moment each went out. Presence is the in-flight guard — a
-   * double-tap or a second scroll-to-top sends one request, not two — and the
-   * timestamp is what tells a restored local-only message (older than the
-   * request) from an echo the user is sending right now (newer).
-   */
-  private transcriptPageRequests = new Map<string, { sentAt: number }>();
 
   private sendMessage(msg: Record<string, unknown>) {
     if (!this.ws) return;
@@ -1113,8 +1105,8 @@ class WsService {
 
       case "transcript_page": {
         if (!sessionId) break;
-        const request = this.transcriptPageRequests.get(sessionId);
-        this.transcriptPageRequests.delete(sessionId);
+        const request = store.sessions.get(sessionId)?.transcriptPageRequest;
+        store.setTranscriptPageRequest(sessionId, null);
 
         // Records go through the same visible-text rule as live chunks, so a
         // page of tool plumbing legitimately yields no bubbles. Nothing here
@@ -1171,7 +1163,7 @@ class WsService {
         // changes is that the request is no longer in flight, so the user can
         // try again.
         if (sessionId && msg.code === "transcript_unavailable") {
-          this.transcriptPageRequests.delete(sessionId);
+          store.setTranscriptPageRequest(sessionId, null);
           break;
         }
 
@@ -1307,9 +1299,13 @@ class WsService {
    */
   requestTranscriptPage(sessionId: string, before?: TranscriptCursor | null): boolean {
     if (!this.ws) return false;
-    if (this.transcriptPageRequests.has(sessionId)) return false;
+    const store = useAppStore.getState();
+    // No session means nothing can hold the guard, and an unguarded request
+    // would repeat on every scroll event.
+    if (!store.sessions.has(sessionId)) return false;
+    if (store.sessions.get(sessionId)?.transcriptPageRequest) return false;
 
-    this.transcriptPageRequests.set(sessionId, { sentAt: Date.now() });
+    store.setTranscriptPageRequest(sessionId, { sentAt: Date.now() });
     this.sendMessage({
       type: "transcript_page_request",
       sessionId,
@@ -1320,7 +1316,7 @@ class WsService {
 
   /** Whether this session is waiting on a history page right now. */
   isTranscriptPageInFlight(sessionId: string): boolean {
-    return this.transcriptPageRequests.has(sessionId);
+    return Boolean(useAppStore.getState().sessions.get(sessionId)?.transcriptPageRequest);
   }
 
   /**

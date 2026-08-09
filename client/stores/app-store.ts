@@ -231,6 +231,13 @@ export type SessionState = {
   retiredEpochs?: Set<string>;
   /** Paging cursor for history load more (client held). */
   pagingCursor?: TranscriptCursor | null;
+  /**
+   * The history page request currently in flight, with the client-clock moment
+   * it went out. Presence is the in-flight guard — a double-tap or a second
+   * scroll-to-top issues one request — and the timestamp separates the
+   * pre-transcript log (older) from a message being sent right now (newer).
+   */
+  transcriptPageRequest?: { sentAt: number } | null;
 };
 
 /** Where a history page stops, and which transcript file that position is in. */
@@ -391,6 +398,8 @@ interface AppState {
    * branch order, which is the contract.
    */
   applyTranscriptMessages: (sessionId: string, apply: TranscriptApply) => void;
+  /** Marks a history page request in flight, or clears it when one resolves. */
+  setTranscriptPageRequest: (sessionId: string, request: { sentAt: number } | null) => void;
 
   // Directory browsing
   directoryListing: DirectoryListing | null;
@@ -851,6 +860,14 @@ export const useAppStore = create<AppState>((set) => ({
 
   activeScreen: "chat",
   setActiveScreen: (activeScreen) => set({ activeScreen }),
+
+  setTranscriptPageRequest: (sessionId, request) =>
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (session) => ({
+        ...session,
+        transcriptPageRequest: request,
+      })),
+    })),
 
   /**
    * Transcript-derived content, from whichever of the three deliverers brought

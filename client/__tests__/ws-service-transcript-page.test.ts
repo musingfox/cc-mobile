@@ -17,7 +17,6 @@ function internals() {
   return wsService as unknown as {
     ws: unknown;
     handleMessage: (message: Record<string, unknown>) => void;
-    transcriptPageRequests: Map<string, { sentAt: number }>;
   };
 }
 
@@ -53,14 +52,14 @@ beforeEach(() => {
   previousWs = internals().ws;
   sent = [];
   internals().ws = { send: (raw: string) => sent.push(JSON.parse(raw)) };
-  internals().transcriptPageRequests.clear();
+
   useAppStore.setState({ sessions: new Map(), activeSessionId: null });
   useAppStore.getState().addSession("s1", "/cwd");
 });
 
 afterEach(() => {
   internals().ws = previousWs;
-  internals().transcriptPageRequests.clear();
+
 });
 
 describe("HistoryPageApplyIsolated", () => {

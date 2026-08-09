@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "../../design/icons";
 import { tokens as T } from "../../design/tokens";
 import { wsService } from "../../services/ws-service";
@@ -41,13 +41,73 @@ export default function ChatScreen({ onNavigate }: Props) {
 
   const messages = session?.messages ?? [];
   const lastContent = messages[messages.length - 1]?.content ?? "";
+
+  // History is offered only where replies can be read back at all, and
+  // `readable` is a snapshot value that can arrive late — an omp pane becomes
+  // readable once it has written its first turn, and a kind detected later
+  // becomes readable then. Nothing pushes the change, so the affordance follows
+  // whatever the most recent listing said.
+  const historyReadable = session?.descriptor?.readable === true;
+  const pagingCursor = session?.pagingCursor ?? null;
+  const historyLoading = Boolean(session?.transcriptPageRequest);
+
+  // Every activation fetches the newest page, not just the first one: after the
+  // terminal resets its conversation, re-opening the session is the only
+  // gesture that re-syncs it. A same-epoch page is a visual no-op, so the
+  // refetch costs a round trip and duplicates nothing. The in-flight guard
+  // inside the service turns a double-tap into one request.
   useEffect(() => {
+    if (!activeSessionId || !historyReadable) return;
+    wsService.requestTranscriptPage(activeSessionId);
+  }, [activeSessionId, historyReadable]);
+
+  // Scroll metrics as they were before the commit that is about to happen.
+  // Updated after every commit and on every user scroll, so a prepend can
+  // restore the reader's position from the growth in scrollHeight.
+  const beforeCommit = useRef({ scrollTop: 0, scrollHeight: 0 });
+  const previousFirstId = useRef<string | undefined>(undefined);
+
+  useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    requestAnimationFrame(() => {
-      el.scrollTop = el.scrollHeight;
-    });
-  }, [messages.length, lastContent]);
+
+    const firstId = messages[0]?.id;
+    const previousFirst = previousFirstId.current;
+    // A prepend, as opposed to a reset: the message that used to be at the top
+    // is still in the list, just no longer first. An epoch reset replaces the
+    // whole list, so its old first message is gone and the view belongs at the
+    // bottom like any other bottom-anchored change.
+    const isPrepend =
+      previousFirst !== undefined &&
+      firstId !== previousFirst &&
+      messages.some((m) => m.id === previousFirst);
+    previousFirstId.current = firstId;
+
+    if (isPrepend) {
+      el.scrollTop = beforeCommit.current.scrollTop + (el.scrollHeight - beforeCommit.current.scrollHeight);
+      beforeCommit.current = { scrollTop: el.scrollTop, scrollHeight: el.scrollHeight };
+      return;
+    }
+
+    el.scrollTop = el.scrollHeight;
+    beforeCommit.current = { scrollTop: el.scrollTop, scrollHeight: el.scrollHeight };
+  }, [messages, lastContent]);
+
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    beforeCommit.current = { scrollTop: el.scrollTop, scrollHeight: el.scrollHeight };
+    if (el.scrollTop > 0) return;
+    loadOlder();
+  };
+
+  const loadOlder = () => {
+    // The service holds the authoritative in-flight guard; this one keeps a
+    // stream of scroll events from even reaching it, and is what the loading
+    // row corresponds to on screen.
+    if (!activeSessionId || !historyReadable || !pagingCursor || historyLoading) return;
+    wsService.requestTranscriptPage(activeSessionId, pagingCursor);
+  };
 
   const handlePickerSelect = (literal: string) => {
     if (!activeSessionId) return;
@@ -149,10 +209,31 @@ export default function ChatScreen({ onNavigate }: Props) {
         <span className="lin-chat-model">{model}</span>
       </header>
 
-      <div className="lin-chat-scroll lin-scroll" ref={scrollRef}>
+      <div className="lin-chat-scroll lin-scroll" ref={scrollRef} onScroll={handleScroll}>
         {terminalStarting && <div className="lin-chat-empty-inline">Starting session…</div>}
 
-        {messages.length === 0 && !isStreaming && !terminalStarting && (
+        {/* Two loading rows, one string each: the first page of a session that
+            has nothing on screen yet is "the conversation", anything after that
+            is "earlier messages". Both suppress the scroll-triggered request
+            until they resolve. */}
+        {historyLoading && messages.length === 0 && (
+          <div className="lin-chat-empty-inline">Loading conversation…</div>
+        )}
+
+        {historyLoading && messages.length > 0 && (
+          <div className="lin-chat-empty-inline">Loading earlier messages…</div>
+        )}
+
+        {/* A cursor means the server said something older exists. It survives a
+            page that rendered nothing (a run of tool plumbing), so the next
+            gesture reaches further back instead of reading as "the beginning". */}
+        {!historyLoading && historyReadable && pagingCursor && (
+          <button type="button" className="lin-chat-load-more" onClick={loadOlder}>
+            Load earlier messages
+          </button>
+        )}
+
+        {messages.length === 0 && !isStreaming && !terminalStarting && !historyLoading && (
           <div className="lin-chat-empty-inline">Type a message to start.</div>
         )}
 

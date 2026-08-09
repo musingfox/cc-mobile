@@ -133,4 +133,50 @@ describe("extractTextFromChunk", () => {
     const chunk = { type: "user", message: { role: "user", content: "from terminal" }, recordId: "u9", seq: 9 };
     expect(extractTextFromChunk(chunk as any)).toBe("from terminal");
   });
+
+  // UserRecordBubble's binding criterion: no transcript-derived user bubble may
+  // render the wrapper markup claude writes around slash commands and their
+  // output. The corpus holds 166 <command-name> and 75 <local-command-stdout>
+  // user records, and the cases below are shapes, not just the four the
+  // contract test-cases by name.
+  describe("no user bubble ever renders wrapper markup", () => {
+    const wrapped = [
+      "<command-name>/clear</command-name>",
+      "<command-name>/compact</command-name>",
+      "<local-command-stdout>ok</local-command-stdout>",
+      "<local-command-stdout></local-command-stdout>",
+      "<command-message>compact</command-message>\n<command-name>/compact</command-name>",
+      "<command-name>/model</command-name>\n<command-args>opus</command-args>",
+    ];
+
+    for (const content of wrapped) {
+      test(`string content: ${content.slice(0, 32)}`, () => {
+        expect(extractTextFromChunk({ type: "user", message: { role: "user", content } })).toBeNull();
+      });
+
+      test(`block content: ${content.slice(0, 32)}`, () => {
+        expect(
+          extractTextFromChunk({
+            type: "user",
+            message: { role: "user", content: [{ type: "text", text: content }] },
+          }),
+        ).toBeNull();
+      });
+    }
+
+    test("a tool_result-only record renders nothing", () => {
+      expect(
+        extractTextFromChunk({
+          type: "user",
+          message: { role: "user", content: [{ type: "tool_result", content: "42 lines" }] },
+        }),
+      ).toBeNull();
+    });
+
+    test("ordinary text that merely mentions a slash command still renders", () => {
+      expect(
+        extractTextFromChunk({ type: "user", message: { role: "user", content: "run /clear for me" } }),
+      ).toBe("run /clear for me");
+    });
+  });
 });
