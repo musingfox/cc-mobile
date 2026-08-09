@@ -32,10 +32,11 @@ function fakeFile(initial: unknown[] = []) {
     get size() {
       return records.length;
     },
-    read: async ({ cursor }: { path: string; cursor: TranscriptCursor }) => {
+      read: async ({ cursor }: { path: string; cursor: TranscriptCursor }) => {
       const fresh = records.slice(cursor.byteOffset);
       return {
         records: fresh,
+        offsets: [],
         cursor: { byteOffset: records.length, lastUuid: `u${records.length}` },
       };
     },
