@@ -3,7 +3,8 @@ import { debugLog } from "../components/DebugOverlay";
 import {
   type ActiveAgent,
   type ActiveTool,
-  type Capabilities,
+  type AgentInfo,
+  type CommandInfo,
   type Message,
   type TranscriptCursor,
   useAppStore,
@@ -240,6 +241,9 @@ export function handleCompactBoundaryChunk(
 // 200k matches Claude Sonnet 4.x; conservative for newer models.
 export const MAX_TOKENS_FALLBACK = 200_000;
 
+/** Server probe budget is 30s; 45s is that ceiling plus margin for a dropped reply. */
+export const CAPABILITIES_REQUEST_TIMEOUT_MS = 45_000;
+
 // Context window for the 1M-context beta models (marked with a "[1m]" suffix in
 // the model string, e.g. "claude-opus-4-8[1m]").
 export const ONE_MILLION_CONTEXT = 1_000_000;
@@ -387,6 +391,7 @@ export function getTerminalReasonMessage(reason: TerminalReason | undefined): st
 
 class WsService {
   private ws: WebSocket | null = null;
+  private capabilitiesTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
   private reconnectTimeout: number | null = null;
   private reconnectDelay = 1000;
   private lastToolBatchTime = 0;
@@ -1138,18 +1143,24 @@ class WsService {
         break;
       }
 
-      case "capabilities":
-        // Zod's union+transform pipeline confuses TS inference; cast to the store shape.
-        store.setCapabilities({
-          commands: (msg.commands as Capabilities["commands"]) ?? [],
-          agents: (msg.agents as Capabilities["agents"]) ?? [],
-          model: (msg.model as string) ?? "unknown",
-          ...(msg.models ? { models: msg.models as Capabilities["models"] } : {}),
-          ...(msg.accountInfo
-            ? { accountInfo: msg.accountInfo as Capabilities["accountInfo"] }
-            : {}),
-        });
+      case "capabilities_list": {
+        this.clearCapabilitiesTimeout(sessionId);
+        if (!sessionId) break;
+        const commands = ((msg.commands as CommandInfo[]) ?? []).map((command) => ({
+          name: command.name,
+          ...(command.description ? { description: command.description } : {}),
+          ...(command.category ? { category: command.category } : {}),
+          ...(command.argumentHint ? { argumentHint: command.argumentHint } : {}),
+        }));
+        const agents = ((msg.agents as AgentInfo[]) ?? []).map((agent) => ({
+          name: agent.name,
+          ...(agent.description ? { description: agent.description } : {}),
+          ...(agent.allowedTools ? { allowedTools: agent.allowedTools } : {}),
+          ...(agent.icon ? { icon: agent.icon } : {}),
+        }));
+        store.setSessionCapabilities(sessionId, { status: "ready", commands, agents });
         break;
+      }
 
       case "error": {
         hapticService.error();
@@ -1164,6 +1175,18 @@ class WsService {
         // try again.
         if (sessionId && msg.code === "transcript_unavailable") {
           store.setTranscriptPageRequest(sessionId, null);
+          break;
+        }
+
+        if (
+          sessionId &&
+          (msg.code === "capabilities_unsupported" || msg.code === "capabilities_unavailable")
+        ) {
+          this.clearCapabilitiesTimeout(sessionId);
+          store.setSessionCapabilities(sessionId, {
+            status: "unavailable",
+            reason: msg.code === "capabilities_unsupported" ? "unsupported" : "failed",
+          });
           break;
         }
 
@@ -1297,6 +1320,55 @@ class WsService {
    * request. Returns whether this call actually sent one, which is what the
    * caller renders its loading row from.
    */
+  private clearCapabilitiesTimeout(sessionId: string | undefined) {
+    if (!sessionId) return;
+    const handle = this.capabilitiesTimeouts.get(sessionId);
+    if (handle === undefined) return;
+    clearTimeout(handle);
+    this.capabilitiesTimeouts.delete(sessionId);
+  }
+
+  private armCapabilitiesTimeout(sessionId: string) {
+    this.clearCapabilitiesTimeout(sessionId);
+    const handle = setTimeout(() => {
+      this.capabilitiesTimeouts.delete(sessionId);
+      const session = useAppStore.getState().sessions.get(sessionId);
+      if (!session || session.capabilities?.status !== "loading") return;
+      useAppStore.getState().setSessionCapabilities(sessionId, {
+        status: "unavailable",
+        reason: "failed",
+      });
+    }, CAPABILITIES_REQUEST_TIMEOUT_MS);
+    this.capabilitiesTimeouts.set(sessionId, handle);
+  }
+
+  /**
+   * Ask one live session for its command / agent list. At most one request is
+   * outstanding per session unless `refresh` is set. A missing socket writes
+   * a terminating `unavailable`/`failed` so the picker never spins on a
+   * request that was not sent.
+   */
+  requestCapabilities(sessionId: string, options?: { refresh?: boolean }): boolean {
+    const store = useAppStore.getState();
+    if (!store.sessions.has(sessionId)) return false;
+    const current = store.sessions.get(sessionId)?.capabilities;
+    if (!options?.refresh) {
+      if (current?.status === "loading" || current?.status === "ready") return false;
+    }
+    if (!this.ws) {
+      store.setSessionCapabilities(sessionId, { status: "unavailable", reason: "failed" });
+      return false;
+    }
+    store.setSessionCapabilities(sessionId, { status: "loading", sentAt: Date.now() });
+    this.armCapabilitiesTimeout(sessionId);
+    this.sendMessage({
+      type: "capabilities_request",
+      sessionId,
+      ...(options?.refresh ? { refresh: true } : {}),
+    });
+    return true;
+  }
+
   requestTranscriptPage(sessionId: string, before?: TranscriptCursor | null): boolean {
     if (!this.ws) return false;
     const store = useAppStore.getState();
