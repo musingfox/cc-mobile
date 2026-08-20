@@ -40,9 +40,7 @@ describe("Probe invocation spec", () => {
   });
 
   test("T4: accepts an environment without herdr variables", () => {
-    expect(() =>
-      buildProbeSpec({ cwd: "/tmp/x", env: { PATH: "/usr/bin" } }),
-    ).not.toThrow();
+    expect(() => buildProbeSpec({ cwd: "/tmp/x", env: { PATH: "/usr/bin" } })).not.toThrow();
     expect(buildProbeSpec({ cwd: "/tmp/x", env: { PATH: "/usr/bin" } }).env).toEqual({
       PATH: "/usr/bin",
     });

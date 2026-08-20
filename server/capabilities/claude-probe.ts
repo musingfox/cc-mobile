@@ -43,7 +43,10 @@ function asPlugins(value: unknown): ProbePlugin[] {
       typeof (item as { name?: unknown }).name === "string" &&
       typeof (item as { path?: unknown }).path === "string"
     ) {
-      plugins.push({ name: (item as { name: string }).name, path: (item as { path: string }).path });
+      plugins.push({
+        name: (item as { name: string }).name,
+        path: (item as { path: string }).path,
+      });
     }
   }
   return plugins;

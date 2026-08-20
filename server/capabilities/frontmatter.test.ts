@@ -69,8 +69,8 @@ describe("FrontmatterDescriptionRead", () => {
   });
 
   test("reads an argument hint without a description", () => {
-    expect(
-      readFrontmatter({ file, read: read("---\nargument-hint: <n>\n---\n") }),
-    ).toEqual({ argumentHint: "<n>" });
+    expect(readFrontmatter({ file, read: read("---\nargument-hint: <n>\n---\n") })).toEqual({
+      argumentHint: "<n>",
+    });
   });
 });

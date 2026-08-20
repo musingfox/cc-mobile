@@ -6,14 +6,10 @@ describe("CapabilityEnrichJoin", () => {
     const result = enrich(["obw:pm", "help"], {
       plugins: [{ name: "obw", path: "/p/obw" }],
       home: "/h",
-      reader: (file) =>
-        file === "/p/obw/skills/pm/SKILL.md" ? { description: "PM" } : null,
+      reader: (file) => (file === "/p/obw/skills/pm/SKILL.md" ? { description: "PM" } : null),
     });
 
-    expect(result).toEqual([
-      { name: "obw:pm", description: "PM" },
-      { name: "help" },
-    ]);
+    expect(result).toEqual([{ name: "obw:pm", description: "PM" }, { name: "help" }]);
   });
 
   test("T2: a throwing reader degrades one entry and never the list", () => {
@@ -27,10 +23,7 @@ describe("CapabilityEnrichJoin", () => {
       },
     });
 
-    expect(result).toEqual([
-      { name: "obw:pm", description: "PM" },
-      { name: "help" },
-    ]);
+    expect(result).toEqual([{ name: "obw:pm", description: "PM" }, { name: "help" }]);
     expect(result).toHaveLength(2);
   });
 
@@ -40,8 +33,8 @@ describe("CapabilityEnrichJoin", () => {
     });
 
     expect(result).toEqual([{ name: "a" }, { name: "b" }]);
-    expect("description" in result[0]!).toBe(false);
-    expect("description" in result[1]!).toBe(false);
+    expect(result[0] && "description" in result[0]).toBe(false);
+    expect(result[1] && "description" in result[1]).toBe(false);
   });
 
   test("T4: unknown plugin prefix never calls the reader", () => {

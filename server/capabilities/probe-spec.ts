@@ -1,8 +1,4 @@
-export const HERDR_PROBE_ENV_VARS = [
-  "HERDR_ENV",
-  "HERDR_PANE_ID",
-  "HERDR_SOCKET_PATH",
-] as const;
+export const HERDR_PROBE_ENV_VARS = ["HERDR_ENV", "HERDR_PANE_ID", "HERDR_SOCKET_PATH"] as const;
 
 const CLAUDE_PROBE_ARGV = [
   "claude",

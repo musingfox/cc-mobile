@@ -17,11 +17,7 @@ export type FrontmatterReader = (
   file: string,
 ) => { description?: string; argumentHint?: string } | null;
 
-export function candidates(
-  name: string,
-  plugins: Map<string, string>,
-  home: string,
-): string[] {
+export function candidates(name: string, plugins: Map<string, string>, home: string): string[] {
   const colon = name.indexOf(":");
   if (colon !== -1) {
     const root = plugins.get(name.slice(0, colon));
@@ -59,9 +55,7 @@ export function enrich(
       try {
         const fields = reader(file);
         if (fields) return { name, ...fields };
-      } catch {
-        continue;
-      }
+      } catch {}
     }
     return { name };
   });

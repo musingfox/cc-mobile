@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { probeClaudeCapabilities, type ProbeSpawn } from "./claude-probe";
+import { type ProbeSpawn, probeClaudeCapabilities } from "./claude-probe";
 
 function stdoutSpawn(stdout: string): ProbeSpawn & { calls: unknown[] } {
   const calls: unknown[] = [];
@@ -100,9 +100,7 @@ describe("Claude capability probe", () => {
   });
 
   test("T8: spawn is invoked once with the probe-spec cwd and scrubbed env", async () => {
-    const spawn = stdoutSpawn(
-      '{"subtype":"init","slash_commands":[],"agents":[],"plugins":[]}\n',
-    );
+    const spawn = stdoutSpawn('{"subtype":"init","slash_commands":[],"agents":[],"plugins":[]}\n');
 
     await probeClaudeCapabilities({ cwd: "/repo", spawn });
 

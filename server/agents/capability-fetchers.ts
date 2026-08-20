@@ -11,8 +11,8 @@
  * no config file. ACP / omp is not registered.
  */
 
-import { probeClaudeCapabilities, type ProbeResult } from "../capabilities/claude-probe";
-import { enrich, type EnrichedCapability, type PluginInfo } from "../capabilities/enrich";
+import { type ProbeResult, probeClaudeCapabilities } from "../capabilities/claude-probe";
+import { type EnrichedCapability, enrich, type PluginInfo } from "../capabilities/enrich";
 
 export type CommandInfo = EnrichedCapability;
 export type AgentInfo = EnrichedCapability;
@@ -58,9 +58,7 @@ async function listClaude(input: {
  * kind → fetcher. Keyed `string | undefined` so an undetected kind misses by
  * lookup rather than by a special case at every call site.
  */
-const FETCHERS = new Map<string | undefined, CapabilityFetcher>([
-  ["claude", { list: listClaude }],
-]);
+const FETCHERS = new Map<string | undefined, CapabilityFetcher>([["claude", { list: listClaude }]]);
 
 /** The fetcher for a kind, or `undefined` when that kind cannot list commands. */
 export function capabilityFetcherFor(agent: string | undefined): CapabilityFetcher | undefined {
