@@ -90,3 +90,84 @@ describe("CapabilitiesReplyDelivered", () => {
     expect(lists).toHaveLength(2);
   });
 });
+
+describe("CapabilitiesUnavailableSignalled", () => {
+  async function request(backend: Parameters<typeof startWsHarness>[0]) {
+    harness = await startWsHarness(backend);
+    harness.send({ type: "capabilities_request", sessionId: "w1:p1" });
+    return harness.waitFor((m) => true);
+  }
+
+  test("T1: unsupported is a named error for that session", async () => {
+    const frame = await request({
+      readCapabilities: async () => ({ ok: false, reason: "unsupported" }),
+    });
+    expect(frame).toEqual({
+      type: "error",
+      code: "capabilities_unsupported",
+      sessionId: "w1:p1",
+    });
+  });
+
+  test("T2: failed is capabilities_unavailable for that session", async () => {
+    const frame = await request({
+      readCapabilities: async () => ({ ok: false, reason: "failed" }),
+    });
+    expect(frame).toEqual({
+      type: "error",
+      code: "capabilities_unavailable",
+      sessionId: "w1:p1",
+    });
+  });
+
+  test("T3: a backend with no readCapabilities is unsupported", async () => {
+    const frame = await request({});
+    expect(frame).toEqual({
+      type: "error",
+      code: "capabilities_unsupported",
+      sessionId: "w1:p1",
+    });
+  });
+
+  test("T4: a rejecting backend is unavailable, never session_error", async () => {
+    const frame = await request({
+      readCapabilities: async () => {
+        throw new Error("boom");
+      },
+    });
+    expect(frame).toEqual({
+      type: "error",
+      code: "capabilities_unavailable",
+      sessionId: "w1:p1",
+    });
+    expect(harness!.received.filter((m) => m.code === "session_error")).toEqual([]);
+  });
+
+  test("T5: a refusal never enters the session replay buffer", async () => {
+    await request({
+      readCapabilities: async () => ({ ok: false, reason: "unsupported" }),
+    });
+    expect(harness!.eventBuffer.replay("w1:p1", -1)).toEqual([]);
+  });
+
+  test("T6: each refusal is exactly one session-addressed frame", async () => {
+    const cases: Parameters<typeof startWsHarness>[0][] = [
+      { readCapabilities: async () => ({ ok: false, reason: "unsupported" }) },
+      { readCapabilities: async () => ({ ok: false, reason: "failed" }) },
+      {},
+      {
+        readCapabilities: async () => {
+          throw new Error("boom");
+        },
+      },
+    ];
+    for (const backend of cases) {
+      await harness?.close();
+      harness = null;
+      const frame = await request(backend);
+      expect(harness!.received).toHaveLength(1);
+      expect(frame.sessionId).toBe("w1:p1");
+    }
+  });
+});
+
