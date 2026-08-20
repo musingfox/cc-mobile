@@ -520,3 +520,128 @@ describe("TeardownOwnershipGuard", () => {
     expect(calls.some((call) => call.method === "workspace.close")).toBe(false);
   });
 });
+
+describe("CapabilitiesBackendPort", () => {
+  type Listing = { sessionId: string; agent?: string; cwd: string };
+
+  function portBackend(input: {
+    listing: Listing[] | (() => Promise<Listing[]>);
+    fetch?: () => Promise<{ ok: true; commands: { name: string }[]; agents: { name: string }[] } | { ok: false }>;
+  }) {
+    let fetchCalls = 0;
+    const listingFn =
+      typeof input.listing === "function" ? input.listing : async () => input.listing as Listing[];
+    const backend = createHerdrBackend({
+      capabilitiesListing: listingFn,
+      capabilityFetcherFor: (agent) => {
+        if (agent !== "claude") return undefined;
+        return {
+          list: async () => {
+            fetchCalls += 1;
+            if (!input.fetch) {
+              return { ok: true as const, commands: [{ name: "help" }], agents: [{ name: "Explore" }] };
+            }
+            return input.fetch();
+          },
+        };
+      },
+    });
+    return {
+      backend,
+      fetchCalls: () => fetchCalls,
+    };
+  }
+
+  test("T1: a listed claude session returns the enriched list", async () => {
+    const { backend } = portBackend({
+      listing: [{ sessionId: "w1:p1", agent: "claude", cwd: "/repo" }],
+      fetch: async () => ({
+        ok: true,
+        commands: [{ name: "help" }],
+        agents: [{ name: "Explore" }],
+      }),
+    });
+    await expect(backend.readCapabilities("w1:p1")).resolves.toEqual({
+      ok: true,
+      commands: [{ name: "help" }],
+      agents: [{ name: "Explore" }],
+    });
+  });
+
+  test("T2: a session the listing does not carry is unsupported", async () => {
+    const { backend, fetchCalls } = portBackend({
+      listing: [{ sessionId: "w1:p1", agent: "claude", cwd: "/repo" }],
+    });
+    await expect(backend.readCapabilities("w9:p9")).resolves.toEqual({
+      ok: false,
+      reason: "unsupported",
+    });
+    expect(fetchCalls()).toBe(0);
+  });
+
+  test("T3: an unknown kind is unsupported and never probes", async () => {
+    const { backend, fetchCalls } = portBackend({
+      listing: [{ sessionId: "w1:p1", agent: "gemini", cwd: "/repo" }],
+    });
+    await expect(backend.readCapabilities("w1:p1")).resolves.toEqual({
+      ok: false,
+      reason: "unsupported",
+    });
+    expect(fetchCalls()).toBe(0);
+  });
+
+  test("T4: a listing with no agent is unsupported and never probes", async () => {
+    const { backend, fetchCalls } = portBackend({
+      listing: [{ sessionId: "w1:p1", cwd: "/repo" }],
+    });
+    await expect(backend.readCapabilities("w1:p1")).resolves.toEqual({
+      ok: false,
+      reason: "unsupported",
+    });
+    expect(fetchCalls()).toBe(0);
+  });
+
+  test("T5: a failed fetch is a failed read, not unsupported", async () => {
+    const { backend } = portBackend({
+      listing: [{ sessionId: "w1:p1", agent: "claude", cwd: "/repo" }],
+      fetch: async () => ({ ok: false }),
+    });
+    await expect(backend.readCapabilities("w1:p1")).resolves.toEqual({
+      ok: false,
+      reason: "failed",
+    });
+  });
+
+  test("T6: a listing that rejects resolves failed, never rejects", async () => {
+    const { backend } = portBackend({
+      listing: async () => {
+        throw new Error("daemon down");
+      },
+    });
+    await expect(backend.readCapabilities("w1:p1")).resolves.toEqual({
+      ok: false,
+      reason: "failed",
+    });
+  });
+
+  test("T7: two sessions of the same kind and cwd share one fetch", async () => {
+    const { backend, fetchCalls } = portBackend({
+      listing: [
+        { sessionId: "w1:p1", agent: "claude", cwd: "/repo" },
+        { sessionId: "w1:p2", agent: "claude", cwd: "/repo" },
+      ],
+    });
+    await backend.readCapabilities("w1:p1");
+    await backend.readCapabilities("w1:p2");
+    expect(fetchCalls()).toBe(1);
+  });
+
+  test("T8: refresh:true re-fetches after a cached success", async () => {
+    const { backend, fetchCalls } = portBackend({
+      listing: [{ sessionId: "w1:p1", agent: "claude", cwd: "/repo" }],
+    });
+    await backend.readCapabilities("w1:p1");
+    await backend.readCapabilities("w1:p1", { refresh: true });
+    expect(fetchCalls()).toBe(2);
+  });
+});

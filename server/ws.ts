@@ -89,6 +89,18 @@ export interface WsBackend extends TerminalControlBackend {
     sessionId: string,
     before: PageCursor | null,
   ): Promise<TranscriptPage | null>;
+  /**
+   * The command / agent list for one live session. Optional: a backend without
+   * a fetcher answers unsupported for every session, mirroring a missing
+   * `readTranscriptPage` answering unavailable.
+   */
+  readCapabilities?(
+    sessionId: string,
+    options?: { refresh?: boolean },
+  ): Promise<
+    | { ok: true; commands: unknown[]; agents: unknown[] }
+    | { ok: false; reason: "unsupported" | "failed" }
+  >;
   /** Connection lifecycle for pending native prompts (see resolvePermission). */
   pausePermissions?(): void;
   resumePermissions?(): Promise<void> | void;

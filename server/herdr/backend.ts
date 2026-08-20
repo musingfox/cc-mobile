@@ -10,6 +10,12 @@
  * surprise on the user's first tap.
  */
 
+import {
+  capabilityFetcherFor as defaultCapabilityFetcherFor,
+  type CapabilityFetcher,
+  type CapabilityListResult,
+} from "../agents/capability-fetchers";
+import { createCapabilityCache } from "../capabilities/cache";
 import { resolveAgentTranscriptPath } from "../agents/transcript-readers";
 import type { ClientSink, TerminalBackend, TerminalSessionInfo } from "../terminal-backend";
 import { createTranscriptDelivery } from "../transcript/delivery";
@@ -22,6 +28,12 @@ import { createHerdrRegistry } from "./registry";
 import { createHerdrSendRouting } from "./send-routing";
 import { listClaudeSessions, type SessionDescriptor, type SessionListingClient } from "./sessions";
 import { resolveSocketPath } from "./transport";
+
+export type CapabilitiesReadResult =
+  | Extract<CapabilityListResult, { ok: true }>
+  | { ok: false; reason: "unsupported" | "failed" };
+
+type CapabilityListing = Pick<SessionDescriptor, "sessionId" | "cwd"> & { agent?: string };
 
 export interface HerdrBackendOptions {
   /**
@@ -62,6 +74,12 @@ export interface HerdrBackendOptions {
     /** How many phones are registered for push right now. */
     subscriberCount?(): number;
   };
+  /**
+   * Test seams for the capabilities port. Production uses the live listing and
+   * the kind registry; tests inject a listing and a fetcher without a daemon.
+   */
+  capabilitiesListing?: () => Promise<CapabilityListing[]>;
+  capabilityFetcherFor?: (agent: string | undefined) => CapabilityFetcher | undefined;
 }
 
 /**
@@ -119,6 +137,14 @@ export interface HerdrTerminalBackend extends TerminalBackend {
    * read one store rather than two.
    */
   pushSubscriberCount(): number;
+  /**
+   * The command / agent list for one live session, or which dead end it hit.
+   * Never rejects: a listing that throws or a probe that fails is `{ok:false}`.
+   */
+  readCapabilities(
+    sessionId: string,
+    options?: { refresh?: boolean },
+  ): Promise<CapabilitiesReadResult>;
 }
 
 /**
@@ -163,6 +189,8 @@ export function permissionAppliesTo(status: string, kind: string | undefined): b
 
 export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerminalBackend {
   const client = options.client ?? createHerdrClient();
+  const capabilityCache = createCapabilityCache<CapabilityListResult>();
+  const fetcherFor = options.capabilityFetcherFor ?? defaultCapabilityFetcherFor;
 
   const registry = createHerdrRegistry({
     client,
@@ -385,6 +413,27 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
       const path = await resolveTranscriptPath(sessionId);
       if (!path) return null;
       return readTranscriptPage({ path, before });
+    },
+    async readCapabilities(sessionId, readOptions): Promise<CapabilitiesReadResult> {
+      try {
+        const listing = options.capabilitiesListing
+          ? await options.capabilitiesListing()
+          : await listSessionDescriptors();
+        const match = listing.find((session) => session.sessionId === sessionId);
+        if (!match) return { ok: false, reason: "unsupported" };
+        const fetcher = fetcherFor(match.agent);
+        if (!fetcher) return { ok: false, reason: "unsupported" };
+        const result = await capabilityCache.get(
+          match.agent ?? "",
+          match.cwd,
+          () => fetcher.list({ cwd: match.cwd }),
+          readOptions,
+        );
+        if (!result.ok) return { ok: false, reason: "failed" };
+        return result;
+      } catch {
+        return { ok: false, reason: "failed" };
+      }
     },
     /**
      * Answers a native (screen-derived) permission prompt. Reports whether this
