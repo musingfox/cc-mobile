@@ -125,3 +125,83 @@ describe("RateLimitChipRemoved stream handler", () => {
     expect(useAppStore.getState().sessions.get("s1")?.messages).toEqual(before);
   });
 });
+
+
+describe("ContextWindowFallbackWithoutCapabilities", () => {
+  let prevWs: WebSocket | null;
+
+  beforeEach(() => {
+    prevWs = getInternal().ws;
+    getInternal().ws = new FakeWebSocket() as unknown as WebSocket;
+    useAppStore.setState({ sessions: new Map(), activeSessionId: null });
+    useAppStore.getState().addSession("s1", "/tmp");
+  });
+
+  afterEach(() => {
+    getInternal().ws = prevWs;
+    useAppStore.setState({ sessions: new Map(), activeSessionId: null });
+  });
+
+  test("T1: input_tokens 100000 is 50% of 200k", () => {
+    getInternal().handleMessage({
+      type: "stream_chunk",
+      sessionId: "s1",
+      chunk: {
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        usage: { input_tokens: 100000 },
+      },
+    });
+    expect(useAppStore.getState().sessions.get("s1")?.contextUsage).toEqual({
+      totalTokens: 100000,
+      maxTokens: 200000,
+      percentage: 0.5,
+    });
+  });
+
+  test("T2: mixed usage components still sum to 100k / 200k", () => {
+    getInternal().handleMessage({
+      type: "stream_chunk",
+      sessionId: "s1",
+      chunk: {
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        usage: { input_tokens: 50000, output_tokens: 10000, cache_read_input_tokens: 40000 },
+      },
+    });
+    expect(useAppStore.getState().sessions.get("s1")?.contextUsage).toEqual({
+      totalTokens: 100000,
+      maxTokens: 200000,
+      percentage: 0.5,
+    });
+  });
+
+  test("T3: a result without usage leaves the previous reading", () => {
+    getInternal().handleMessage({
+      type: "stream_chunk",
+      sessionId: "s1",
+      chunk: {
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        usage: { input_tokens: 100000 },
+      },
+    });
+    getInternal().handleMessage({
+      type: "stream_chunk",
+      sessionId: "s1",
+      chunk: {
+        type: "result",
+        subtype: "success",
+        is_error: false,
+      },
+    });
+    expect(useAppStore.getState().sessions.get("s1")?.contextUsage).toEqual({
+      totalTokens: 100000,
+      maxTokens: 200000,
+      percentage: 0.5,
+    });
+  });
+});
