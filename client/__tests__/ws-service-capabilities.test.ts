@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { ClientMessage, ServerMessage } from "../../server/protocol";
 import { toastService } from "../services/toast-service";
-import { wsService } from "../services/ws-service";
+import { CAPABILITIES_REQUEST_TIMEOUT_MS, wsService } from "../services/ws-service";
 import { useAppStore } from "../stores/app-store";
 
 class FakeWebSocket {
@@ -289,5 +289,105 @@ describe("CapabilityUnavailableApplied", () => {
       }),
     ).not.toThrow();
     expect(useAppStore.getState().sessions.size).toBe(before);
+  });
+});
+
+
+describe("CapabilityRequestTimeout", () => {
+  let fake: FakeWebSocket;
+  let prevWs: WebSocket | null;
+  const pending: Array<{ id: number; fn: () => void; at: number }> = [];
+  let nextId = 1;
+  let clock = 0;
+  let origSet: typeof setTimeout;
+  let origClear: typeof clearTimeout;
+
+  function flush(ms: number) {
+    clock += ms;
+    const due = pending.filter((t) => t.at <= clock);
+    for (const t of due) {
+      const i = pending.indexOf(t);
+      if (i >= 0) pending.splice(i, 1);
+      t.fn();
+    }
+  }
+
+  beforeEach(() => {
+    fake = new FakeWebSocket();
+    prevWs = getInternal().ws;
+    getInternal().ws = fake as unknown as WebSocket;
+    useAppStore.setState({ sessions: new Map(), activeSessionId: null });
+    useAppStore.getState().addSession("w1:p1", "/tmp/a");
+    pending.length = 0;
+    nextId = 1;
+    clock = 0;
+    origSet = globalThis.setTimeout;
+    origClear = globalThis.clearTimeout;
+    globalThis.setTimeout = ((fn: () => void, ms?: number) => {
+      const id = nextId++;
+      pending.push({ id, fn, at: clock + (ms ?? 0) });
+      return id as unknown as ReturnType<typeof setTimeout>;
+    }) as typeof setTimeout;
+    globalThis.clearTimeout = ((id: ReturnType<typeof setTimeout>) => {
+      const i = pending.findIndex((t) => t.id === (id as unknown as number));
+      if (i >= 0) pending.splice(i, 1);
+    }) as typeof clearTimeout;
+  });
+
+  afterEach(() => {
+    globalThis.setTimeout = origSet;
+    globalThis.clearTimeout = origClear;
+    getInternal().ws = prevWs;
+    useAppStore.setState({ sessions: new Map(), activeSessionId: null });
+  });
+
+  test("T1: 45s without a reply is failed", () => {
+    getInternal().requestCapabilities("w1:p1");
+    flush(CAPABILITIES_REQUEST_TIMEOUT_MS);
+    expect(useAppStore.getState().sessions.get("w1:p1")?.capabilities).toEqual({
+      status: "unavailable",
+      reason: "failed",
+    });
+  });
+
+  test("T2: a list at +1s cancels the deadline", () => {
+    getInternal().requestCapabilities("w1:p1");
+    flush(1000);
+    getInternal().handleMessage({
+      type: "capabilities_list",
+      sessionId: "w1:p1",
+      commands: [{ name: "help" }],
+      agents: [],
+    });
+    flush(60_000);
+    expect(useAppStore.getState().sessions.get("w1:p1")?.capabilities?.status).toBe("ready");
+  });
+
+  test("T3: unsupported at +1s is not overwritten by the deadline", () => {
+    getInternal().requestCapabilities("w1:p1");
+    flush(1000);
+    getInternal().handleMessage({
+      type: "error",
+      code: "capabilities_unsupported",
+      sessionId: "w1:p1",
+    });
+    flush(60_000);
+    expect(useAppStore.getState().sessions.get("w1:p1")?.capabilities).toEqual({
+      status: "unavailable",
+      reason: "unsupported",
+    });
+  });
+
+  test("T4: 44s is still loading", () => {
+    getInternal().requestCapabilities("w1:p1");
+    flush(44_000);
+    expect(useAppStore.getState().sessions.get("w1:p1")?.capabilities?.status).toBe("loading");
+  });
+
+  test("T5: a removed session is not resurrected", () => {
+    getInternal().requestCapabilities("w1:p1");
+    useAppStore.getState().removeSession("w1:p1");
+    expect(() => flush(CAPABILITIES_REQUEST_TIMEOUT_MS)).not.toThrow();
+    expect(useAppStore.getState().sessions.has("w1:p1")).toBe(false);
   });
 });
