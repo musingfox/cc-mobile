@@ -77,9 +77,9 @@ All recorded in `docs/adr/`. Key decisions:
 
 ### WebSocket Protocol
 
-Client→Server: `terminal_create`, `terminal_send`, `terminal_teardown`, `list_terminal_sessions`, `permission`, `interrupt`, `stop_task`, `append_user_message`, `get_server_config`, `list_directories`, `reconnect`, `transcript_page_request`
+Client→Server: `terminal_create`, `terminal_send`, `terminal_teardown`, `list_terminal_sessions`, `permission`, `interrupt`, `stop_task`, `append_user_message`, `get_server_config`, `list_directories`, `reconnect`, `transcript_page_request`, `capabilities_request`
 
-Server→Client: `terminal_created`, `terminal_teardown_result`, `terminal_sessions`, `stream_chunk`, `stream_end`, `session_state`, `permission_request`, `capabilities`, `server_config`, `directory_listing`, `event`, `replay_complete`, `error`, `transcript_page`
+Server→Client: `terminal_created`, `terminal_teardown_result`, `terminal_sessions`, `stream_chunk`, `stream_end`, `session_state`, `permission_request`, `capabilities_list`, `server_config`, `directory_listing`, `event`, `replay_complete`, `error`, `transcript_page`
 
 `terminal_create` takes an optional `agentKind` (#31) — a closed enum
 (`server/agents/kinds.ts`), unlike the free-string `sessions[].agent`, because

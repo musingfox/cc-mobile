@@ -91,7 +91,7 @@ All recorded in `docs/adr/`. Key decisions:
 
 ### WebSocket Protocol
 
-Client→Server: `terminal_create`, `terminal_send`, `terminal_teardown`, `list_terminal_sessions`, `permission`, `interrupt`, `stop_task`, `append_user_message`, `get_server_config`, `list_directories`, `reconnect`, `transcript_page_request`
+Client→Server: `terminal_create`, `terminal_send`, `terminal_teardown`, `list_terminal_sessions`, `permission`, `interrupt`, `stop_task`, `append_user_message`, `get_server_config`, `list_directories`, `reconnect`, `transcript_page_request`, `capabilities_request`
 
 `permission` carries `optionId` — the id of one of the options the server parsed
 off the terminal's screen. The pre-#29 `allow` boolean is still accepted for one
@@ -110,7 +110,7 @@ naming, not a setting — and omp is handed its transcript path by herdr instead
 `server_config.availableAgents` names the kinds whose binary is on `PATH`, and
 is sent only in the `get_server_config` reply.
 
-Server→Client: `terminal_created`, `terminal_teardown_result`, `terminal_sessions`, `stream_chunk`, `stream_end`, `session_state`, `permission_request`, `capabilities`, `server_config`, `directory_listing`, `event`, `replay_complete`, `error`, `transcript_page`
+Server→Client: `terminal_created`, `terminal_teardown_result`, `terminal_sessions`, `stream_chunk`, `stream_end`, `session_state`, `permission_request`, `capabilities_list`, `server_config`, `directory_listing`, `event`, `replay_complete`, `error`, `transcript_page`
 
 Browsing past conversations is gone since #26: there is no session history,
 no listing and no resume — herdr's live sessions are the only sessions there

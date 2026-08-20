@@ -459,6 +459,43 @@ export function createWsPlugin(
             break;
           }
 
+          case "capabilities_request": {
+            const { sessionId, refresh } = message;
+            // Catch here so a rejecting backend cannot fall into the generic
+            // `session_error` wrapper — this answer is typed and session-named.
+            let result: Awaited<ReturnType<NonNullable<WsBackend["readCapabilities"]>>>;
+            try {
+              result = backend.readCapabilities
+                ? await backend.readCapabilities(
+                    sessionId,
+                    refresh ? { refresh: true } : undefined,
+                  )
+                : { ok: false, reason: "unsupported" };
+            } catch {
+              result = { ok: false, reason: "failed" };
+            }
+            if (!result.ok) {
+              ws.send({
+                type: "error",
+                code:
+                  result.reason === "unsupported"
+                    ? "capabilities_unsupported"
+                    : "capabilities_unavailable",
+                sessionId,
+              });
+              break;
+            }
+            // Bare send, never `sendBuffered`: this answers one connection's
+            // question, so it must not enter the session's replay buffer.
+            ws.send({
+              type: "capabilities_list",
+              sessionId,
+              commands: result.commands,
+              agents: result.agents,
+            });
+            break;
+          }
+
           case "transcript_page_request": {
             const { sessionId } = message;
             const page = await backend.readTranscriptPage?.(sessionId, message.before ?? null);
