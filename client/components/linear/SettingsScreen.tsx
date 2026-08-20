@@ -10,7 +10,6 @@ import {
 } from "../../services/push-service";
 import { swRegistrationManager } from "../../services/sw-registration";
 import { toastService } from "../../services/toast-service";
-import { useAppStore } from "../../stores/app-store";
 import { useSettingsStore } from "../../stores/settings-store";
 import type { LinearScreen } from "./AppShell";
 import "./settings.css";
@@ -45,16 +44,12 @@ function Toggle({ on, onChange, disabled }: ToggleProps) {
 }
 
 export default function SettingsScreen({ onNavigate }: Props) {
-  const capabilities = useAppStore((s) => s.capabilities);
-
   const notificationsEnabled = useSettingsStore((s) => s.notificationsEnabled);
   const setNotificationsEnabled = useSettingsStore((s) => s.setNotificationsEnabled);
   const hapticsEnabled = useSettingsStore((s) => s.hapticsEnabled);
   const setHapticsEnabled = useSettingsStore((s) => s.setHapticsEnabled);
 
   const defaultCwd = useSettingsStore((s) => s.defaultCwd);
-
-  const account = capabilities?.accountInfo;
 
   // Notification API only exists in iOS standalone PWAs (Add to Home Screen);
   // a plain Safari tab has no `Notification` at all.
@@ -168,16 +163,6 @@ export default function SettingsScreen({ onNavigate }: Props) {
               </div>
               <div className="lin-settings-row-value">Linear</div>
             </div>
-            {/* Reported by the agent, not chosen here: cc-mobile stopped
-                deciding an agent's settings, so this reads back rather than
-                sets. */}
-            <div className="lin-settings-row is-static">
-              <div className="lin-settings-row-main">
-                <div className="lin-settings-row-title">Model</div>
-                <div className="lin-settings-row-desc">Whatever the agent is running</div>
-              </div>
-              <div className="lin-settings-row-value is-mono">{capabilities?.model || "—"}</div>
-            </div>
           </div>
         </section>
 
@@ -224,14 +209,6 @@ export default function SettingsScreen({ onNavigate }: Props) {
               </div>
               <div className="lin-settings-row-value is-mono">{defaultCwd || "—"}</div>
             </div>
-            {account?.email && (
-              <div className="lin-settings-row is-static">
-                <div className="lin-settings-row-main">
-                  <div className="lin-settings-row-title">Account</div>
-                </div>
-                <div className="lin-settings-row-value">{account.email}</div>
-              </div>
-            )}
           </div>
         </section>
       </div>

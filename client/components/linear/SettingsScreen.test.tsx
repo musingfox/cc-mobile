@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { cleanup, render } from "@testing-library/react";
-import { useAppStore } from "../../stores/app-store";
 import { useSettingsStore } from "../../stores/settings-store";
 import SettingsScreen from "./SettingsScreen";
 
@@ -14,7 +13,6 @@ import SettingsScreen from "./SettingsScreen";
  */
 describe("SettingsScreen", () => {
   beforeEach(() => {
-    useAppStore.setState({ capabilities: null });
     useSettingsStore.setState({
       defaultCwd: "/tmp/project",
       notificationsEnabled: true,
@@ -36,26 +34,24 @@ describe("SettingsScreen", () => {
     expect(queryByText("Auto")).toBeNull();
   });
 
-  test("shows the model the agent reports, as a static row", () => {
-    useAppStore.setState({
-      capabilities: { commands: [], agents: [], model: "claude-sonnet-4" },
-    });
-
-    const { getByText } = render(<SettingsScreen onNavigate={() => {}} />);
-
-    const row = getByText("Model").closest(".lin-settings-row");
-    expect(row).not.toBeNull();
-    // Static: no sheet to open, nothing to pick, nothing sent.
-    expect(row?.classList.contains("is-static")).toBe(true);
-    expect(row?.tagName).not.toBe("BUTTON");
-    expect(getByText("claude-sonnet-4")).not.toBeNull();
+  test("T1: retired model copy is gone", () => {
+    const { queryByText } = render(<SettingsScreen onNavigate={() => {}} />);
+    expect(queryByText("Whatever the agent is running")).toBeNull();
   });
 
-  test("an agent that reports no model reads as unknown rather than as a default", () => {
-    const { getByText } = render(<SettingsScreen onNavigate={() => {}} />);
+  test("T2: no Account row", () => {
+    const { queryByText } = render(<SettingsScreen onNavigate={() => {}} />);
+    expect(queryByText("Account")).toBeNull();
+  });
 
-    expect(getByText("Model")).not.toBeNull();
-    expect(getByText("—")).not.toBeNull();
+  test("T3: Default folder remains", () => {
+    const { getByText } = render(<SettingsScreen onNavigate={() => {}} />);
+    expect(getByText("Default folder")).not.toBeNull();
+  });
+
+  test("T4: Haptics remains", () => {
+    const { getByText } = render(<SettingsScreen onNavigate={() => {}} />);
+    expect(getByText("Haptics")).not.toBeNull();
   });
 
   test("offers no environment editor — nothing received what it wrote", () => {
