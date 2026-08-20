@@ -22,6 +22,23 @@ interface Props {
   onNavigate: (screen: LinearScreen) => void;
 }
 
+type ScrollSnapshot = {
+  scrollTop: number;
+  scrollHeight: number;
+  clientHeight: number;
+};
+
+// Misjudging "not at bottom" stops auto-scroll and breaks the primary use
+// case; misjudging "at bottom" merely scrolls once more than needed, so the
+// threshold errs generous. iOS reports sub-pixel scrollTop and rubber-bands
+// past the end, and overscroll-behavior is unset, so exact equality would
+// fail on a phone that is visually pinned.
+const BOTTOM_TOLERANCE_PX = 64;
+
+function wasNearBottom(s: ScrollSnapshot): boolean {
+  return s.scrollHeight - s.scrollTop - s.clientHeight <= BOTTOM_TOLERANCE_PX;
+}
+
 function basename(path: string): string {
   const parts = path.split("/").filter(Boolean);
   return parts[parts.length - 1] || path;
@@ -63,8 +80,9 @@ export default function ChatScreen({ onNavigate }: Props) {
 
   // Scroll metrics as they were before the commit that is about to happen.
   // Updated after every commit and on every user scroll, so a prepend can
-  // restore the reader's position from the growth in scrollHeight.
-  const beforeCommit = useRef({ scrollTop: 0, scrollHeight: 0 });
+  // restore the reader's position from the growth in scrollHeight, and so the
+  // live-arrival gate can ask whether the reader was already at the bottom.
+  const beforeCommit = useRef<ScrollSnapshot>({ scrollTop: 0, scrollHeight: 0, clientHeight: 0 });
   const previousFirstId = useRef<string | undefined>(undefined);
 
   useLayoutEffect(() => {
@@ -85,18 +103,43 @@ export default function ChatScreen({ onNavigate }: Props) {
 
     if (isPrepend) {
       el.scrollTop = beforeCommit.current.scrollTop + (el.scrollHeight - beforeCommit.current.scrollHeight);
-      beforeCommit.current = { scrollTop: el.scrollTop, scrollHeight: el.scrollHeight };
+      beforeCommit.current = { scrollTop: el.scrollTop, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight };
+      return;
+    }
+
+    // First mount: previousFirst is unset, so this is not a same-conversation
+    // tail — opening a session lands on the newest message.
+    const isFirstMount = previousFirst === undefined;
+    // Epoch reset: the first id changed and the old first is gone (otherwise
+    // isPrepend would have returned). The remembered offset points into a
+    // conversation that no longer exists, so the gate does not apply.
+    const isEpochReset =
+      previousFirst !== undefined && firstId !== previousFirst;
+    const isSameConversationTail = firstId === previousFirst;
+    const last = messages[messages.length - 1];
+    // Own send: a local echo from the composer (role user, no recordId).
+    // A transcript-borne user record still has a recordId and stays gated.
+    const isOwnSend = last?.role === "user" && last.recordId === undefined;
+
+    if (isEpochReset || isFirstMount || isOwnSend || !isSameConversationTail) {
+      el.scrollTop = el.scrollHeight;
+      beforeCommit.current = { scrollTop: el.scrollTop, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight };
+      return;
+    }
+
+    if (!wasNearBottom(beforeCommit.current)) {
+      beforeCommit.current = { scrollTop: el.scrollTop, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight };
       return;
     }
 
     el.scrollTop = el.scrollHeight;
-    beforeCommit.current = { scrollTop: el.scrollTop, scrollHeight: el.scrollHeight };
+    beforeCommit.current = { scrollTop: el.scrollTop, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight };
   }, [messages, lastContent]);
 
   const handleScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
-    beforeCommit.current = { scrollTop: el.scrollTop, scrollHeight: el.scrollHeight };
+    beforeCommit.current = { scrollTop: el.scrollTop, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight };
     if (el.scrollTop > 0) return;
     loadOlder();
   };

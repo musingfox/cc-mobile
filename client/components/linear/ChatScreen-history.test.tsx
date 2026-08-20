@@ -360,32 +360,35 @@ describe("ScrollAnchorOnPrepend", () => {
   test("T2: an append at the bottom still scrolls to the bottom", () => {
     openSession({ readable: true, messages: [record("a", 10)] });
     const { container } = render(<ChatScreen onNavigate={() => {}} />);
-    const scroller = stubScroller(container, 1000, 0);
+    const scroller = stubScroller(container, 1000, 400, 600);
+    fireEvent.scroll(scroller);
 
     act(() => {
+      Object.defineProperty(scroller, "scrollHeight", { value: 1200, configurable: true });
       useAppStore.getState().applyTranscriptMessages("s1", {
         epoch: "aaaa",
         messages: [record("b", 20)],
       });
     });
 
-    expect(scroller.scrollTop).toBe(scroller.scrollHeight);
+    expect(scroller.scrollTop).toBe(1200);
   });
 
-  test("T3: a tail message growing in place still scrolls to the bottom", () => {
+  test("T3: a tail message growing in place does not drag a parked reader down", () => {
     openSession({ readable: true, messages: [record("a", 10)] });
     const { container } = render(<ChatScreen onNavigate={() => {}} />);
-    const scroller = stubScroller(container, 1000, 0);
-    scroller.scrollTop = 0;
+    const scroller = stubScroller(container, 1000, 0, 600);
+    fireEvent.scroll(scroller);
 
     act(() => {
+      Object.defineProperty(scroller, "scrollHeight", { value: 1400, configurable: true });
       useAppStore.getState().applyTranscriptMessages("s1", {
         epoch: "aaaa",
         messages: [{ ...record("a", 10), content: "a much longer streamed body" }],
       });
     });
 
-    expect(scroller.scrollTop).toBe(scroller.scrollHeight);
+    expect(scroller.scrollTop).toBe(0);
   });
 
   test("T4: an epoch reset is not a prepend — the view goes to the bottom", () => {
@@ -408,5 +411,158 @@ describe("ScrollAnchorOnPrepend", () => {
     });
 
     expect(scroller.scrollTop).toBe(400);
+  });
+
+  test("T5: a stay-put append still leaves a later prepend anchored", () => {
+    openSession({ readable: true, messages: [record("tail", 1000)] });
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    const scroller = stubScroller(container, 1000, 0, 600);
+    fireEvent.scroll(scroller);
+
+    act(() => {
+      Object.defineProperty(scroller, "scrollHeight", { value: 1100, configurable: true });
+      useAppStore.getState().applyTranscriptMessages("s1", {
+        epoch: "aaaa",
+        messages: [record("live", 1100)],
+      });
+    });
+    expect(scroller.scrollTop).toBe(0);
+
+    Object.defineProperty(scroller, "scrollHeight", { value: 1700, configurable: true });
+    act(() => {
+      useAppStore.getState().applyTranscriptMessages("s1", {
+        epoch: "aaaa",
+        messages: Array.from({ length: 10 }, (_, i) => record(`old${i}`, i)),
+      });
+    });
+
+    expect(scroller.scrollTop).toBe(600);
+  });
+});
+
+describe("StayPutOnLiveArrival", () => {
+  test("T1: a reply while scrolled up leaves the page where the reader left it", () => {
+    openSession({ readable: true, messages: [record("a", 10)] });
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    const scroller = stubScroller(container, 1000, 0, 600);
+    fireEvent.scroll(scroller);
+
+    act(() => {
+      Object.defineProperty(scroller, "scrollHeight", { value: 1200, configurable: true });
+      useAppStore.getState().applyTranscriptMessages("s1", {
+        epoch: "aaaa",
+        messages: [record("b", 20)],
+      });
+    });
+
+    expect(scroller.scrollTop).toBe(0);
+  });
+
+  test("T2: one pixel outside the near-bottom band stays put", () => {
+    openSession({ readable: true, messages: [record("a", 10)] });
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    const scroller = stubScroller(container, 1000, 335, 600);
+    fireEvent.scroll(scroller);
+
+    act(() => {
+      Object.defineProperty(scroller, "scrollHeight", { value: 1200, configurable: true });
+      useAppStore.getState().applyTranscriptMessages("s1", {
+        epoch: "aaaa",
+        messages: [record("b", 20)],
+      });
+    });
+
+    expect(scroller.scrollTop).toBe(335);
+  });
+
+  test("T3: a transcript-borne user record while parked stays put", () => {
+    openSession({ readable: true, messages: [record("a", 10)] });
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    const scroller = stubScroller(container, 1000, 0, 600);
+    fireEvent.scroll(scroller);
+
+    act(() => {
+      Object.defineProperty(scroller, "scrollHeight", { value: 1200, configurable: true });
+      useAppStore.getState().applyTranscriptMessages("s1", {
+        epoch: "aaaa",
+        messages: [{ id: "id-u1", role: "user", content: "from terminal", timestamp: 0, recordId: "u1", seq: 30 }],
+      });
+    });
+
+    expect(scroller.scrollTop).toBe(0);
+  });
+
+  test("T4: a reader 64px from the end still follows an append", () => {
+    openSession({ readable: true, messages: [record("a", 10)] });
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    const scroller = stubScroller(container, 1000, 336, 600);
+    fireEvent.scroll(scroller);
+
+    act(() => {
+      Object.defineProperty(scroller, "scrollHeight", { value: 1200, configurable: true });
+      useAppStore.getState().applyTranscriptMessages("s1", {
+        epoch: "aaaa",
+        messages: [record("b", 20)],
+      });
+    });
+
+    expect(scroller.scrollTop).toBe(1200);
+  });
+
+  test("T5: rubber-band overscroll past the end still follows an append", () => {
+    openSession({ readable: true, messages: [record("a", 10)] });
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    const scroller = stubScroller(container, 1000, 408, 600);
+    fireEvent.scroll(scroller);
+
+    act(() => {
+      Object.defineProperty(scroller, "scrollHeight", { value: 1200, configurable: true });
+      useAppStore.getState().applyTranscriptMessages("s1", {
+        epoch: "aaaa",
+        messages: [record("b", 20)],
+      });
+    });
+
+    expect(scroller.scrollTop).toBe(1200);
+  });
+
+  test("T6: streaming growth from the bottom still tracks the answer", () => {
+    openSession({ readable: true, messages: [record("a", 10)] });
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    const scroller = stubScroller(container, 1000, 400, 600);
+    fireEvent.scroll(scroller);
+
+    act(() => {
+      useAppStore.setState((state) => {
+        const sessions = new Map(state.sessions);
+        const session = sessions.get("s1");
+        if (!session) return state;
+        sessions.set("s1", { ...session, currentStreamMessageId: "id-a" });
+        return { sessions };
+      });
+      Object.defineProperty(scroller, "scrollHeight", { value: 1400, configurable: true });
+      useAppStore.getState().appendToLastAssistantMessage("s1", " …more tokens");
+    });
+
+    expect(scroller.scrollTop).toBe(1400);
+  });
+
+  test("T7: sending from the composer jumps to the bottom even when parked", () => {
+    openSession({ readable: true, messages: [record("a", 10)] });
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    const scroller = stubScroller(container, 1000, 0, 600);
+    fireEvent.scroll(scroller);
+
+    act(() => {
+      Object.defineProperty(scroller, "scrollHeight", { value: 1100, configurable: true });
+      useAppStore.getState().addMessage("s1", {
+        id: "user-1",
+        role: "user",
+        content: "hi",
+        timestamp: Date.now(),
+      });
+    });
+
+    expect(scroller.scrollTop).toBe(1100);
   });
 });
