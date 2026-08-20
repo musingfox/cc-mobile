@@ -72,3 +72,50 @@ describe("CapabilityCacheHitByKindAndCwd", () => {
     expect(await second).toEqual(success);
   });
 });
+
+describe("CapabilityProbeFailureRetried", () => {
+  test("retries after a failed result", async () => {
+    const cache = createCapabilityCache<Result>();
+    let calls = 0;
+    const load = async (): Promise<Result> => {
+      calls++;
+      return calls === 1 ? { ok: false } : success;
+    };
+
+    expect(await cache.get("claude", "/a", load)).toEqual({ ok: false });
+    expect(await cache.get("claude", "/a", load)).toEqual(success);
+    expect(calls).toBe(2);
+  });
+
+  test("caches a successful empty list", async () => {
+    const cache = createCapabilityCache<Result>();
+    let calls = 0;
+    const empty: Result = { ok: true, commands: [], agents: [] };
+    const load = async (): Promise<Result> => {
+      calls++;
+      return calls === 1 ? empty : success;
+    };
+
+    expect(await cache.get("claude", "/a", load)).toEqual(empty);
+    expect(await cache.get("claude", "/a", load)).toEqual(empty);
+    expect(calls).toBe(1);
+  });
+
+  test("retries after a rejected load", async () => {
+    const cache = createCapabilityCache<Result>();
+    let calls = 0;
+    const load = async (): Promise<Result> => {
+      calls++;
+      if (calls === 1) throw new Error("boom");
+      return { ok: true, commands: [], agents: [] };
+    };
+
+    await expect(cache.get("claude", "/a", load)).rejects.toThrow("boom");
+    expect(await cache.get("claude", "/a", load)).toEqual({
+      ok: true,
+      commands: [],
+      agents: [],
+    });
+    expect(calls).toBe(2);
+  });
+});
