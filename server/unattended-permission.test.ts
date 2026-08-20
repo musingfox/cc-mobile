@@ -216,6 +216,18 @@ describe("UnattendedDenyForSelfLaunched — omp", () => {
 
     expect(h.keys).toEqual([{ pane: PANE, keys: ["esc"] }]);
   });
+
+  it("does not cancel a different prompt at fire time", async () => {
+    const h = harness();
+    h.screen.text = ompScreen(0, "echo hello");
+    await h.permission.onStatus(PANE, "blocked");
+    h.screen.text = ompScreen(0, "echo goodbye");
+
+    await h.clock.advance(UNATTENDED_DENY_MS);
+
+    expect(h.keys).toEqual([]);
+    expect(h.permission.pendingCount()).toBe(0);
+  });
 });
 
 describe("UnattendedDenyForSelfLaunched — across a disconnect", () => {
