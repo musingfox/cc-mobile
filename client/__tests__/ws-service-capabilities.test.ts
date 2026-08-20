@@ -218,3 +218,76 @@ describe("CapabilityRequestIssuedOnPickerOpen", () => {
     expect(ClientMessage.safeParse(sentFrames()[0]).success).toBe(true);
   });
 });
+
+
+describe("CapabilityUnavailableApplied", () => {
+  let fake: FakeWebSocket;
+  let prevWs: WebSocket | null;
+  let errorSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    fake = new FakeWebSocket();
+    prevWs = getInternal().ws;
+    getInternal().ws = fake as unknown as WebSocket;
+    useAppStore.setState({ sessions: new Map(), activeSessionId: null });
+    useAppStore.getState().addSession("w1:p1", "/tmp/a");
+    errorSpy = spyOn(toastService, "error").mockImplementation(() => "" as never);
+  });
+
+  afterEach(() => {
+    errorSpy.mockRestore();
+    getInternal().ws = prevWs;
+    useAppStore.setState({ sessions: new Map(), activeSessionId: null });
+  });
+
+  test("T1: unsupported ends the wait without a toast", () => {
+    useAppStore.getState().setSessionCapabilities("w1:p1", { status: "loading", sentAt: 1 });
+    getInternal().handleMessage({
+      type: "error",
+      code: "capabilities_unsupported",
+      sessionId: "w1:p1",
+    });
+    expect(useAppStore.getState().sessions.get("w1:p1")?.capabilities).toEqual({
+      status: "unavailable",
+      reason: "unsupported",
+    });
+    expect(errorSpy.mock.calls.length).toBe(0);
+  });
+
+  test("T2: unavailable maps to failed without a toast", () => {
+    getInternal().handleMessage({
+      type: "error",
+      code: "capabilities_unavailable",
+      sessionId: "w1:p1",
+    });
+    expect(useAppStore.getState().sessions.get("w1:p1")?.capabilities).toEqual({
+      status: "unavailable",
+      reason: "failed",
+    });
+    expect(errorSpy.mock.calls.length).toBe(0);
+  });
+
+  test("T3: an unrelated terminal_error leaves a ready list alone", () => {
+    const ready = { status: "ready" as const, commands: [{ name: "h" }], agents: [] };
+    useAppStore.getState().setSessionCapabilities("w1:p1", ready);
+    getInternal().handleMessage({
+      type: "error",
+      code: "terminal_error",
+      message: "x",
+      sessionId: "w1:p1",
+    });
+    expect(useAppStore.getState().sessions.get("w1:p1")?.capabilities).toEqual(ready);
+  });
+
+  test("T4: ghost session does not throw or appear", () => {
+    const before = useAppStore.getState().sessions.size;
+    expect(() =>
+      getInternal().handleMessage({
+        type: "error",
+        code: "capabilities_unsupported",
+        sessionId: "ghost",
+      }),
+    ).not.toThrow();
+    expect(useAppStore.getState().sessions.size).toBe(before);
+  });
+});
