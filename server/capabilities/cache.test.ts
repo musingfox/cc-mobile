@@ -119,3 +119,45 @@ describe("CapabilityProbeFailureRetried", () => {
     expect(calls).toBe(2);
   });
 });
+
+describe("CapabilityRefreshBypassesCache", () => {
+  test("refresh replaces the cached success", async () => {
+    const cache = createCapabilityCache<Result>();
+    let calls = 0;
+    const refreshed: Result = {
+      ok: true,
+      commands: [{ name: "h" }, { name: "n" }],
+      agents: [],
+    };
+    const load = async (): Promise<Result> => {
+      calls++;
+      return calls === 1 ? success : refreshed;
+    };
+
+    await cache.get("claude", "/a", load);
+    const second = await cache.get("claude", "/a", load, { refresh: true });
+    const third = await cache.get("claude", "/a", load);
+
+    expect(calls).toBe(2);
+    expect(second.ok && second.commands).toHaveLength(2);
+    expect(third.ok && third.commands).toHaveLength(2);
+  });
+
+  test("a failed refresh preserves the cached success", async () => {
+    const cache = createCapabilityCache<Result>();
+    let calls = 0;
+    const load = async (): Promise<Result> => {
+      calls++;
+      return success;
+    };
+
+    await cache.get("claude", "/a", load);
+    expect(
+      await cache.get("claude", "/a", async () => ({ ok: false }), {
+        refresh: true,
+      }),
+    ).toEqual({ ok: false });
+    expect(await cache.get("claude", "/a", load)).toEqual(success);
+    expect(calls).toBe(1);
+  });
+});

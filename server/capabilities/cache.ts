@@ -2,18 +2,28 @@ export function createCapabilityCache<Result extends { ok: boolean }>() {
   const entries = new Map<string, Promise<Result>>();
 
   return {
-    get(kind: string, cwd: string, load: () => Promise<Result>): Promise<Result> {
+    get(
+      kind: string,
+      cwd: string,
+      load: () => Promise<Result>,
+      options?: { refresh?: boolean },
+    ): Promise<Result> {
       const key = `${kind}\0${cwd}`;
-      const cached = entries.get(key);
-      if (cached) return cached;
+      const previous = entries.get(key);
+      if (previous && !options?.refresh) return previous;
 
+      const restorePrevious = (pending: Promise<Result>) => {
+        if (entries.get(key) !== pending) return;
+        if (previous) entries.set(key, previous);
+        else entries.delete(key);
+      };
       const pending = load().then(
         (result) => {
-          if (!result.ok && entries.get(key) === pending) entries.delete(key);
+          if (!result.ok) restorePrevious(pending);
           return result;
         },
         (error) => {
-          if (entries.get(key) === pending) entries.delete(key);
+          restorePrevious(pending);
           throw error;
         },
       );
