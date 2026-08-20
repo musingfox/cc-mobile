@@ -317,3 +317,39 @@ describe("PickerSheetTerminates", () => {
     });
   });
 });
+
+
+describe("ChatHeaderModelLabelRemoved", () => {
+  beforeEach(() => {
+    useAppStore.setState({ sessions: new Map(), activeSessionId: null, inputDraft: "" });
+  });
+  afterEach(() => {
+    cleanup();
+  });
+
+  test("T1: no model element", () => {
+    const store = useAppStore.getState();
+    store.addSession("s1", "/tmp/cc-mobile");
+    store.setActiveSession("s1");
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    expect(container.querySelector(".lin-chat-model")).toBeNull();
+  });
+
+  test("T2: basename and context chip remain", () => {
+    const store = useAppStore.getState();
+    store.addSession("s1", "/tmp/cc-mobile");
+    store.setActiveSession("s1");
+    const { container, getByText } = render(<ChatScreen onNavigate={() => {}} />);
+    expect(getByText("cc-mobile")).not.toBeNull();
+    expect(container.querySelector(".lin-context-usage-chip")).not.toBeNull();
+  });
+
+  test("T3: header does not say claude when the descriptor has no agent", () => {
+    const store = useAppStore.getState();
+    store.addSession("s1", "/tmp/project");
+    store.setActiveSession("s1");
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    const header = container.querySelector(".lin-chat-bar");
+    expect(header?.textContent?.toLowerCase().includes("claude")).toBe(false);
+  });
+});

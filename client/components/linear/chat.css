@@ -53,12 +53,6 @@
   min-width: 0;
 }
 
-.lin-chat-model {
-  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
-  color: #6a6a6a;
-  flex-shrink: 0;
-}
 
 /* Empty state ---------------------------------------------- */
 

@@ -197,7 +197,6 @@ export default function ChatScreen({ onNavigate }: Props) {
   const usage = session.usage;
   const contextUsage = session.contextUsage;
   const terminalStarting = session.terminal !== undefined && !session.terminal.ready;
-  const model = "claude";
   const projectName = basename(session.cwd);
   const displayPath = session.cwd.replace(/^\/Users\/[^/]+/, "~");
 
@@ -250,7 +249,6 @@ export default function ChatScreen({ onNavigate }: Props) {
           <span className="lin-chat-path">{displayPath}</span>
         </div>
         <ContextUsageChip contextUsage={contextUsage} />
-        <span className="lin-chat-model">{model}</span>
       </header>
 
       <div className="lin-chat-scroll lin-scroll" ref={scrollRef} onScroll={handleScroll}>
