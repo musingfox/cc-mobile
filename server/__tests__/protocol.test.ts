@@ -1,5 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { ClientMessage, ServerMessage } from "../protocol";
+import { startWsHarness, type WsHarness } from "./ws-harness";
 
 describe("ClientMessage schema", () => {
   // Both answer forms are optional at the schema — a discriminated union cannot
@@ -88,6 +89,60 @@ describe("ClientMessage schema", () => {
       content: "hi",
     });
     expect(result.success).toBe(false);
+  });
+
+  test("capabilities_request with a named session parses", () => {
+    const result = ClientMessage.safeParse({
+      type: "capabilities_request",
+      sessionId: "w1:p1",
+    });
+    expect(result.success).toBe(true);
+    if (result.success && result.data.type === "capabilities_request") {
+      expect(result.data.sessionId).toBe("w1:p1");
+      expect(result.data.refresh).toBeUndefined();
+    }
+  });
+
+  test("capabilities_request accepts refresh:true", () => {
+    const result = ClientMessage.safeParse({
+      type: "capabilities_request",
+      sessionId: "w1:p1",
+      refresh: true,
+    });
+    expect(result.success).toBe(true);
+    if (result.success && result.data.type === "capabilities_request") {
+      expect(result.data.refresh).toBe(true);
+    }
+  });
+
+  test("capabilities_request without sessionId is refused", () => {
+    expect(ClientMessage.safeParse({ type: "capabilities_request" }).success).toBe(false);
+  });
+
+  test("capabilities_request with empty sessionId is refused", () => {
+    expect(
+      ClientMessage.safeParse({ type: "capabilities_request", sessionId: "" }).success,
+    ).toBe(false);
+  });
+});
+
+describe("CapabilitiesRequestAccepted over the socket", () => {
+  let harness: WsHarness | null = null;
+
+  afterEach(async () => {
+    await harness?.close();
+    harness = null;
+  });
+
+  test("a request that names no session is refused before anything runs", async () => {
+    harness = await startWsHarness({});
+    harness.send({ type: "capabilities_request" });
+    const frame = await harness.waitFor((m) => m.type === "error");
+    expect(frame).toEqual({
+      type: "error",
+      code: "invalid_message",
+      message: "Invalid message format",
+    });
   });
 });
 

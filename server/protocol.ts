@@ -155,6 +155,17 @@ const TranscriptPageRequestMessage = z.object({
   before: TranscriptPageCursorSchema.optional(),
 });
 
+/**
+ * Ask one live session for its command / agent list. Same shape as
+ * `transcript_page_request`: a named session, plus an optional refresh that
+ * bypasses a cached success. No session is refused here, before anything runs.
+ */
+const CapabilitiesRequestMessage = z.object({
+  type: z.literal("capabilities_request"),
+  sessionId: z.string().min(1),
+  refresh: z.boolean().optional(),
+});
+
 export const ClientMessage = z.discriminatedUnion("type", [
   PermissionMessage,
   InterruptMessage,
@@ -168,6 +179,7 @@ export const ClientMessage = z.discriminatedUnion("type", [
   TerminalTeardownMessage,
   ListTerminalSessionsMessage,
   TranscriptPageRequestMessage,
+  CapabilitiesRequestMessage,
 ]);
 
 export type ClientMessage = z.infer<typeof ClientMessage>;
