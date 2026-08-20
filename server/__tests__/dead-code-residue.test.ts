@@ -96,6 +96,10 @@ describe("DeadModuleResidueScan — deleted modules", () => {
     `pty${"-"}permission-endpoint`,
     `claude${"-"}settings`,
     `build${"Claude"}Settings`,
+    // Disk capabilities cache (writerless since #25) and the open-path emitter.
+    `capabilities${"-"}cache`,
+    `load${"Cached"}Capabilities`,
+    `emit${"Capabilities"}OnOpen`,
   ];
 
   test.each(deletedModules)("no source file references %s", (pattern) => {
@@ -180,6 +184,8 @@ describe("DeadModuleResidueScan — deleted files stay deleted", () => {
     join("server", `tmux${"-"}control.ts`),
     join("server", `session${"-"}listing.ts`),
     join("server", `session${"-"}history.ts`),
+    join("server", `capabilities${"-"}cache.ts`),
+    join("server", `capabilities${"-"}cache.test.ts`),
   ])("%s does not exist", (relative) => {
     expect(existsSync(join(repoRoot, relative))).toBe(false);
   });

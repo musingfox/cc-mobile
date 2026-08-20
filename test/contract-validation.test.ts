@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadSettings, saveSettings } from "../client/services/settings";
 import { ServerMessage } from "../server/protocol";
-import type { Capabilities } from "../server/capabilities-cache";
 
 describe("Contract Validation - T1 Theme Tokens & Type", () => {
   test("Contract: ThemeTokens - all required CSS vars defined", () => {

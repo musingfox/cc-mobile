@@ -1,7 +1,6 @@
 import { homedir } from "node:os";
 import { Elysia, t } from "elysia";
 import { availableAgentKinds } from "./agents/kinds";
-import { type Capabilities, loadCachedCapabilities } from "./capabilities-cache";
 import type { ServerConfig } from "./config";
 import { listDirectories } from "./directory-listing";
 import type { EventBuffer } from "./event-buffer";
@@ -14,27 +13,6 @@ import {
   type TerminalControlBackend,
 } from "./terminal-control";
 import type { PageCursor, TranscriptPage } from "./transcript/page";
-
-// ---------------------------------------------------------------------------
-// Capabilities emit helper — extracted seam (logic-free; byte-equivalent)
-//
-// TODO(#26): the disk cache this reads has had no writer since the SDK query
-// path was removed, so the slash-command / agent lists are frozen at whatever
-// a pre-#25 run left behind (empty on a machine that never had one).
-// ---------------------------------------------------------------------------
-
-/** open/reconnect path: bare ws.send, no sessionId */
-export function emitCapabilitiesOnOpen(
-  ws: { send: (msg: Record<string, unknown>) => void },
-  cachedCapabilities: Capabilities | null,
-): void {
-  if (cachedCapabilities) {
-    ws.send({
-      type: "capabilities",
-      ...cachedCapabilities,
-    });
-  }
-}
 
 /** The terminal backend surface the WS transport drives. */
 export interface WsBackend extends TerminalControlBackend {
@@ -135,7 +113,6 @@ export function createWsPlugin(
   collaborators: WsCollaborators,
 ) {
   const { backend, eventBuffer, clientSink } = collaborators;
-  const cachedCapabilities: Capabilities | null = loadCachedCapabilities();
   const wsPath = buildUrl(serverConfig.basePath, "/ws");
 
   /**
@@ -172,9 +149,6 @@ export function createWsPlugin(
     open(ws) {
       console.log("[ws] client connected");
       clientSink.current = (msg) => ws.send(msg);
-
-      // Send cached capabilities on reconnect
-      emitCapabilitiesOnOpen(ws, cachedCapabilities);
     },
 
     async message(ws, data) {
