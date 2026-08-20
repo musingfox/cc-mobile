@@ -44,6 +44,8 @@ const BASH_PROMPT = readFileSync(
   "utf8",
 );
 const OTHER_PROMPT = BASH_PROMPT.replaceAll("canary2.txt", "elsewhere.txt");
+// Written as an escape, not the glyph: the Nerd Font chevron is invisible in most
+// editors and does not survive every way this file gets written back.
 const OMP_CURSOR = "\uF054";
 
 function ompScreen(selected: 0 | 1, command: string): string {
@@ -205,11 +207,20 @@ describe("UnattendedDenyForSelfLaunched", () => {
   });
 });
 
+// omp is deliberately NOT exempt from the unattended deny. ADR-015 `:211` records the
+// 2026-08-06 spike: `esc` on omp writes `role=toolResult isError=true "Tool call denied
+// by user: bash"` and the turn settles normally, so the ticket's "行為不明就先不送"
+// fallback was never taken. `:200-203` is the ADR for the positional parsing these
+// screens rely on. Both were re-litigated on 2026-08-20 and re-closed — these cases
+// exist so the next attempt to exempt omp fails here instead of shipping.
 describe("UnattendedDenyForSelfLaunched — omp", () => {
   it("still cancels when the selection moves before the timer fires", async () => {
     const h = harness();
     h.screen.text = ompScreen(0, "echo hello");
     await h.permission.onStatus(PANE, "blocked");
+    // Not decoration: a rotted fixture hashes to UNPARSED_FINGERPRINT, which still
+    // arms and still sends esc — this assertion is what stops that passing green.
+    expect(h.permission.pendingFor(PANE)?.dialect).toBe("omp");
     h.screen.text = ompScreen(1, "echo hello");
 
     await h.clock.advance(UNATTENDED_DENY_MS);
@@ -233,6 +244,9 @@ describe("UnattendedDenyForSelfLaunched — omp", () => {
     const h = harness();
     h.screen.text = ompScreen(0, "echo hello");
     await h.permission.onStatus(PANE, "blocked");
+    // Not decoration: a rotted fixture hashes to UNPARSED_FINGERPRINT, which still
+    // arms and still sends esc — this assertion is what stops that passing green.
+    expect(h.permission.pendingFor(PANE)?.dialect).toBe("omp");
     h.status.value = "idle";
 
     await h.clock.advance(UNATTENDED_DENY_MS);
