@@ -26,3 +26,13 @@ describe("DEAD_CODE", () => {
     expect(content).not.toContain(".tool-status-bar");
   });
 });
+
+describe("RateLimitChipRemoved", () => {
+  test("T4: RateLimitChip.tsx does not exist", () => {
+    expect(existsSync(join(import.meta.dir, "linear", "RateLimitChip.tsx"))).toBe(false);
+  });
+
+  test("T5: rate-limit-chip.css does not exist", () => {
+    expect(existsSync(join(import.meta.dir, "linear", "rate-limit-chip.css"))).toBe(false);
+  });
+});

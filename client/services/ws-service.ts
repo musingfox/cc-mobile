@@ -25,7 +25,6 @@ import {
   isNotification,
   isPermissionDenied,
   isPromptSuggestion,
-  isRateLimitEvent,
   isResultMessage,
   isSessionStateChanged,
   isTaskNotification,
@@ -687,12 +686,6 @@ class WsService {
           break;
         }
 
-        // Handle rate limit events
-        if (isRateLimitEvent(chunk)) {
-          store.setRateLimitInfo(chunk.rate_limit_info);
-          break;
-        }
-
         // Handle API retry notifications (with per-turn dedupe)
         if (handleApiRetryChunk(chunk, this.apiRetrySeenKeys)) {
           break;
@@ -726,13 +719,8 @@ class WsService {
             terminalReason,
           });
 
-          // Refresh context-occupancy chip from the same usage payload.
-          // Active model lookup keys on `capabilities.model`; fall back to
-          // MAX_TOKENS_FALLBACK when the model isn't catalogued.
-          const activeModelValue = store.capabilities?.model;
-          const activeModel = store.capabilities?.models?.find((m) => m.value === activeModelValue);
-          const maxTokens = resolveContextWindow(activeModelValue, activeModel?.contextLength);
-          const contextUsage = deriveContextUsage(chunk.usage, maxTokens);
+          // Catalogue is gone; occupancy is always against MAX_TOKENS_FALLBACK.
+          const contextUsage = deriveContextUsage(chunk.usage, undefined);
           if (contextUsage) {
             store.setContextUsage(sessionId, contextUsage);
           }

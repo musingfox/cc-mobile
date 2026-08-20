@@ -175,25 +175,6 @@ export function isHookResponse(chunk: Record<string, unknown>): chunk is HookRes
   );
 }
 
-// Rate limit event from SDK
-export type RateLimitEvent = {
-  type: "rate_limit_event";
-  rate_limit_info: {
-    status: "allowed" | "allowed_warning" | "rejected";
-    resetsAt?: number;
-    rateLimitType?: string;
-    utilization?: number;
-    overageStatus?: string;
-    overageResetsAt?: number;
-    isUsingOverage?: boolean;
-    surpassedThreshold?: number;
-  };
-};
-
-export function isRateLimitEvent(chunk: Record<string, unknown>): chunk is RateLimitEvent {
-  return chunk.type === "rate_limit_event" && typeof chunk.rate_limit_info === "object";
-}
-
 // Prompt suggestion from SDK (requires promptSuggestions: true in query options)
 export type PromptSuggestionEvent = {
   type: "prompt_suggestion";

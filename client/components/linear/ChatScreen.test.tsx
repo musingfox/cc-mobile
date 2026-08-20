@@ -353,3 +353,35 @@ describe("ChatHeaderModelLabelRemoved", () => {
     expect(header?.textContent?.toLowerCase().includes("claude")).toBe(false);
   });
 });
+
+
+describe("RateLimitChipRemoved", () => {
+  beforeEach(() => {
+    const current = useAppStore.getState() as Record<string, unknown>;
+    const next = { ...current };
+    delete next.rateLimitInfo;
+    delete next.setRateLimitInfo;
+    useAppStore.setState(next as typeof current, true);
+    useAppStore.setState({ sessions: new Map(), activeSessionId: null, inputDraft: "" });
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  test("T1: the chip is gone from ChatScreen", () => {
+    const store = useAppStore.getState();
+    store.addSession("s1", "/tmp/project");
+    store.setActiveSession("s1");
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    expect(container.querySelector('[data-testid="rate-limit-chip"]')).toBeNull();
+  });
+
+  test("T2: store has no rateLimitInfo", () => {
+    expect("rateLimitInfo" in useAppStore.getState()).toBe(false);
+  });
+
+  test("T3: store has no setRateLimitInfo", () => {
+    expect("setRateLimitInfo" in useAppStore.getState()).toBe(false);
+  });
+});

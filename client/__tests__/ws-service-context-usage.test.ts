@@ -1,10 +1,23 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   deriveContextUsage,
   MAX_TOKENS_FALLBACK,
   ONE_MILLION_CONTEXT,
   resolveContextWindow,
+  wsService,
 } from "../services/ws-service";
+import { useAppStore } from "../stores/app-store";
+
+class FakeWebSocket {
+  send = mock((_data: string) => {});
+}
+
+function getInternal() {
+  return wsService as unknown as {
+    ws: WebSocket | null;
+    handleMessage: (msg: Record<string, unknown>) => void;
+  };
+}
 
 describe("deriveContextUsage", () => {
   test("sums input + output + cache tokens against provided maxTokens", () => {
@@ -76,5 +89,39 @@ describe("resolveContextWindow", () => {
     const max = resolveContextWindow("claude-opus-4-8[1m]", 200_000);
     const usage = deriveContextUsage({ input_tokens: 55_000 }, max);
     expect(usage?.maxTokens).toBe(1_000_000);
+  });
+});
+
+
+describe("RateLimitChipRemoved stream handler", () => {
+  let prevWs: WebSocket | null;
+
+  beforeEach(() => {
+    prevWs = getInternal().ws;
+    getInternal().ws = new FakeWebSocket() as unknown as WebSocket;
+    useAppStore.setState({ sessions: new Map(), activeSessionId: null });
+    useAppStore.getState().addSession("s1", "/tmp");
+    useAppStore.getState().addMessage("s1", {
+      id: "m1",
+      role: "user",
+      content: "hi",
+      timestamp: 0,
+    });
+  });
+
+  afterEach(() => {
+    getInternal().ws = prevWs;
+  });
+
+  test("T6: a rate_limit_event chunk does not throw or change messages", () => {
+    const before = useAppStore.getState().sessions.get("s1")?.messages;
+    expect(() =>
+      getInternal().handleMessage({
+        type: "stream_chunk",
+        sessionId: "s1",
+        chunk: { type: "rate_limit_event", rate_limit_info: { status: "rejected" } },
+      }),
+    ).not.toThrow();
+    expect(useAppStore.getState().sessions.get("s1")?.messages).toEqual(before);
   });
 });

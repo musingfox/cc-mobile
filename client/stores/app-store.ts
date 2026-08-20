@@ -172,16 +172,6 @@ export type ContextUsage = {
   percentage: number;
 };
 
-export type RateLimitInfo = {
-  status: "allowed" | "allowed_warning" | "rejected";
-  resetsAt?: number;
-  rateLimitType?: string;
-  utilization?: number;
-  overageStatus?: string;
-  overageResetsAt?: number;
-  isUsingOverage?: boolean;
-};
-
 export type SessionState = {
   id: string;
   cwd: string;
@@ -349,10 +339,6 @@ interface AppState {
     sessionId: string,
     capabilities: SessionCapabilitiesState | null,
   ) => void;
-
-  // Rate limit info (global, not per-session)
-  rateLimitInfo: RateLimitInfo | null;
-  setRateLimitInfo: (info: RateLimitInfo) => void;
 
   // Prompt suggestion (per-session)
   setPromptSuggestion: (sessionId: string, suggestion: string | null) => void;
@@ -648,9 +634,6 @@ export const useAppStore = create<AppState>((set) => ({
         return { ...session, capabilities };
       }),
     })),
-
-  rateLimitInfo: null,
-  setRateLimitInfo: (rateLimitInfo) => set({ rateLimitInfo }),
 
   setPromptSuggestion: (sessionId, suggestion) =>
     set((state) => ({
