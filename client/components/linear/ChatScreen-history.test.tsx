@@ -21,10 +21,16 @@ let requests: Array<{ sessionId: string; before?: TranscriptCursor | null }> = [
 let originalRequest: typeof wsService.requestTranscriptPage;
 
 /** Gives the scroller a layout happy-dom will not invent on its own. */
-function stubScroller(container: HTMLElement, scrollHeight: number, scrollTop = 0) {
+function stubScroller(
+  container: HTMLElement,
+  scrollHeight: number,
+  scrollTop = 0,
+  clientHeight = 0,
+) {
   const el = container.querySelector(".lin-chat-scroll") as HTMLElement;
   if (!el) throw new Error("no scroller");
   Object.defineProperty(el, "scrollHeight", { value: scrollHeight, configurable: true });
+  Object.defineProperty(el, "clientHeight", { value: clientHeight, configurable: true });
   el.scrollTop = scrollTop;
   return el;
 }
@@ -307,6 +313,26 @@ describe("LoadMoreOlderPage", () => {
 
     expect(queryByText("Load earlier messages")).not.toBeNull();
     expect(getByText("a")).not.toBeNull();
+  });
+});
+
+describe("ScrollGeometryStub", () => {
+  test("T1: a test can state all three numbers the viewport rule reads", () => {
+    openSession({ readable: true, messages: [record("a", 10)] });
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    const el = stubScroller(container, 1000, 400, 600);
+    expect(el.scrollHeight).toBe(1000);
+    expect(el.scrollTop).toBe(400);
+    expect(el.clientHeight).toBe(600);
+  });
+
+  test("T2: existing two-argument call sites keep their current meaning", () => {
+    openSession({ readable: true, messages: [record("a", 10)] });
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    const el = stubScroller(container, 1000);
+    expect(el.scrollHeight).toBe(1000);
+    expect(el.scrollTop).toBe(0);
+    expect(el.clientHeight).toBe(0);
   });
 });
 
