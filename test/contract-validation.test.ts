@@ -54,7 +54,7 @@ describe("Contract Validation - T1 Theme Tokens & Type", () => {
 });
 
 describe("Contract Validation - T4 Capabilities Protocol Extension", () => {
-  test("Contract: CapabilitiesSchema - new format with objects parses", () => {
+  test("Contract: retired capabilities snapshot is refused", () => {
     const result = ServerMessage.safeParse({
       type: "capabilities",
       sessionId: "s1",
@@ -62,53 +62,44 @@ describe("Contract Validation - T4 Capabilities Protocol Extension", () => {
       commands: [{ name: "/help", description: "Help command" }],
       model: "test-model",
     });
+    expect(result.success).toBe(false);
+  });
+
+  test("Contract: capabilities_list with objects parses", () => {
+    const result = ServerMessage.safeParse({
+      type: "capabilities_list",
+      sessionId: "s1",
+      agents: [{ name: "coder", description: "Code agent" }],
+      commands: [{ name: "/help", description: "Help command" }],
+    });
 
     expect(result.success).toBe(true);
-    if (result.success) {
+    if (result.success && result.data.type === "capabilities_list") {
       expect(result.data.agents).toEqual([{ name: "coder", description: "Code agent" }]);
       expect(result.data.commands).toEqual([{ name: "/help", description: "Help command" }]);
     }
   });
 
-  test("Contract: CapabilitiesSchema - old format with strings transforms", () => {
+  test("Contract: capabilities_list malformed data is refused", () => {
     const result = ServerMessage.safeParse({
-      type: "capabilities",
-      sessionId: "s1",
-      agents: ["coder", "explorer"],
-      commands: ["/help", "/commit"],
-      model: "test-model",
-    });
-
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.agents).toEqual([{ name: "coder" }, { name: "explorer" }]);
-      expect(result.data.commands).toEqual([{ name: "/help" }, { name: "/commit" }]);
-    }
-  });
-
-  test("Contract: CapabilitiesSchema - malformed data throws", () => {
-    const result = ServerMessage.safeParse({
-      type: "capabilities",
+      type: "capabilities_list",
       sessionId: "s1",
       agents: [123, 456],
-      commands: ["/help"],
-      model: "test-model",
+      commands: [{ name: "/help" }],
     });
-
     expect(result.success).toBe(false);
   });
 
-  test("Contract: CapabilitiesSchema - partial object (name only) succeeds", () => {
+  test("Contract: capabilities_list name-only entries succeed", () => {
     const result = ServerMessage.safeParse({
-      type: "capabilities",
+      type: "capabilities_list",
       sessionId: "s1",
       agents: [{ name: "minimal" }],
       commands: [{ name: "/test" }],
-      model: "test-model",
     });
 
     expect(result.success).toBe(true);
-    if (result.success) {
+    if (result.success && result.data.type === "capabilities_list") {
       expect(result.data.agents[0].description).toBeUndefined();
       expect(result.data.commands[0].description).toBeUndefined();
     }

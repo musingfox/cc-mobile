@@ -246,24 +246,6 @@ const ErrorMessage = z.object({
   sessionId: z.string().optional(),
 });
 
-const ModelInfoSchema = z.object({
-  value: z.string(),
-  displayName: z.string(),
-  description: z.string(),
-  supportsEffort: z.boolean().optional(),
-  supportedEffortLevels: z.array(z.string()).optional(),
-  supportsFastMode: z.boolean().optional(),
-  supportsAdaptiveThinking: z.boolean().optional(),
-});
-
-const AccountInfoSchema = z.object({
-  email: z.string().optional(),
-  organization: z.string().optional(),
-  subscriptionType: z.string().optional(),
-  tokenSource: z.string().optional(),
-  apiKeySource: z.string().optional(),
-});
-
 const AgentInfoSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
@@ -275,22 +257,19 @@ const CommandInfoSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
   category: z.string().optional(),
+  argumentHint: z.string().optional(),
 });
 
-const CapabilitiesMessage = z.object({
-  type: z.literal("capabilities"),
-  sessionId: z.string(),
-  commands: z.union([z.array(z.string()), z.array(CommandInfoSchema)]).transform((val) => {
-    if (val.length === 0) return [];
-    return typeof val[0] === "string" ? val.map((name) => ({ name })) : val;
-  }),
-  agents: z.union([z.array(z.string()), z.array(AgentInfoSchema)]).transform((val) => {
-    if (val.length === 0) return [];
-    return typeof val[0] === "string" ? val.map((name) => ({ name })) : val;
-  }),
-  model: z.string(),
-  models: z.array(ModelInfoSchema).optional(),
-  accountInfo: AccountInfoSchema.optional(),
+/**
+ * Reply to `capabilities_request`, sent with a bare `ws.send`: it answers one
+ * connection's question about one named session, so it is session-addressed
+ * by construction and never a machine-wide snapshot.
+ */
+const CapabilitiesListMessage = z.object({
+  type: z.literal("capabilities_list"),
+  sessionId: z.string().min(1),
+  commands: z.array(CommandInfoSchema),
+  agents: z.array(AgentInfoSchema),
 });
 
 const ServerConfigMessage = z.object({
@@ -446,7 +425,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
   StreamEndMessage,
   PermissionRequestMessage,
   ErrorMessage,
-  CapabilitiesMessage,
+  CapabilitiesListMessage,
   ServerConfigMessage,
   DirectoryListingMessage,
   EventWrapperMessage,
@@ -459,5 +438,3 @@ export const ServerMessage = z.discriminatedUnion("type", [
 export type ServerMessage = z.infer<typeof ServerMessage>;
 export type AgentInfo = z.infer<typeof AgentInfoSchema>;
 export type CommandInfo = z.infer<typeof CommandInfoSchema>;
-export type ModelInfo = z.infer<typeof ModelInfoSchema>;
-export type AccountInfo = z.infer<typeof AccountInfoSchema>;

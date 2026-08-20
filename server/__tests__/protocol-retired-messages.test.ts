@@ -69,6 +69,51 @@ describe("RetiredMessageTypesRejected", () => {
   });
 });
 
+describe("LegacyCapabilitiesMessageRefused", () => {
+  test("the retired capabilities snapshot no longer parses", () => {
+    const result = ServerMessage.safeParse({
+      type: "capabilities",
+      sessionId: "s1",
+      commands: ["help"],
+      agents: ["Explore"],
+      model: "claude-sonnet-4-6",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("capabilities_list with named session and object lists parses", () => {
+    const result = ServerMessage.safeParse({
+      type: "capabilities_list",
+      sessionId: "s1",
+      commands: [{ name: "help" }],
+      agents: [{ name: "Explore" }],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  test("capabilities_list carries argumentHint on a command", () => {
+    const result = ServerMessage.safeParse({
+      type: "capabilities_list",
+      sessionId: "s1",
+      commands: [{ name: "help", description: "H", argumentHint: "<x>" }],
+      agents: [],
+    });
+    expect(result.success).toBe(true);
+    if (result.success && result.data.type === "capabilities_list") {
+      expect(result.data.commands[0].argumentHint).toBe("<x>");
+    }
+  });
+
+  test("capabilities_list without sessionId is refused", () => {
+    const result = ServerMessage.safeParse({
+      type: "capabilities_list",
+      commands: [],
+      agents: [],
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
 /**
  * The socket-level half. It lives here rather than in a ws-* test file because
  * this file is one of the residue scan's two by-name exclusions, and the case

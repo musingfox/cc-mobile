@@ -155,13 +155,12 @@ describe("ServerMessage schema", () => {
     });
     expect(result.success).toBe(true);
   });
-  test("capabilities valid", () => {
+  test("capabilities_list valid", () => {
     const result = ServerMessage.safeParse({
-      type: "capabilities",
+      type: "capabilities_list",
       sessionId: "s1",
-      commands: ["commit", "review-pr"],
-      agents: ["Explore"],
-      model: "claude-sonnet-4-6",
+      commands: [{ name: "commit" }],
+      agents: [{ name: "Explore" }],
     });
     expect(result.success).toBe(true);
   });

@@ -10,7 +10,10 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { AccountInfo, AgentInfo, CommandInfo, ModelInfo } from "./protocol";
+import type { AgentInfo, CommandInfo } from "./protocol";
+
+type ModelInfo = { value: string; displayName: string; description: string };
+type AccountInfo = { email?: string; organization?: string; subscriptionType?: string };
 
 export type Capabilities = {
   commands: CommandInfo[];
