@@ -44,6 +44,23 @@ const BASH_PROMPT = readFileSync(
   "utf8",
 );
 const OTHER_PROMPT = BASH_PROMPT.replaceAll("canary2.txt", "elsewhere.txt");
+const OMP_CURSOR = "\uF054";
+
+function ompScreen(selected: 0 | 1, command: string): string {
+  return [
+    "──────────────────────────────────────────────────────",
+    "",
+    " Allow tool: bash",
+    ` Command: ${command}`,
+    "",
+    selected === 0 ? ` ${OMP_CURSOR} Approve` : "   Approve",
+    selected === 1 ? ` ${OMP_CURSOR} Deny` : "   Deny",
+    "",
+    " up/down navigate  enter select  esc cancel",
+    "",
+    "──────────────────────────────────────────────────────",
+  ].join("\n");
+}
 
 // ── fake clock ───────────────────────────────────────────────────────────────
 
@@ -185,6 +202,19 @@ describe("UnattendedDenyForSelfLaunched", () => {
     await h.clock.advance(UNATTENDED_DENY_MS * 2);
 
     expect(h.keys).toEqual([{ pane: PANE, keys: ["3"] }]);
+  });
+});
+
+describe("UnattendedDenyForSelfLaunched — omp", () => {
+  it("still cancels when the selection moves before the timer fires", async () => {
+    const h = harness();
+    h.screen.text = ompScreen(0, "echo hello");
+    await h.permission.onStatus(PANE, "blocked");
+    h.screen.text = ompScreen(1, "echo hello");
+
+    await h.clock.advance(UNATTENDED_DENY_MS);
+
+    expect(h.keys).toEqual([{ pane: PANE, keys: ["esc"] }]);
   });
 });
 
