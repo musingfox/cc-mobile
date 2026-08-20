@@ -30,6 +30,7 @@ import { createPushPlugin } from "./push/plugin";
 import { createPushSender, type PushTransport } from "./push/sender";
 import { createSubscriptionStore } from "./push/subscription-store";
 import { loadVapidKeys } from "./push/vapid";
+import { evaluateRequestGate } from "./request-gate";
 import { SessionManager } from "./session-manager";
 import { createUploadPlugin } from "./upload";
 import { createUploadImagePlugin } from "./upload-image";
@@ -90,6 +91,14 @@ export interface AppTestDeps {
    * "the phone sent this" without going through a real pane.
    */
   phoneDriven?: PhoneDrivenTracker;
+  /**
+   * The environment the root request gate reads (`CC_MOBILE_TRUSTED_USER`,
+   * `CC_MOBILE_ALLOWED_ORIGINS`). Production passes nothing and the gate falls
+   * back to `process.env`; a test injects instead of mutating it, because
+   * `bun test` runs every file in one process and a leaked
+   * `CC_MOBILE_TRUSTED_USER` would 403 every later `createApp` test.
+   */
+  gateEnv?: Record<string, string | undefined>;
 }
 
 /** Builds the whole server. The returned app has not been listened on. */
@@ -155,12 +164,17 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
   // needs to: the session list is a live `agent.list` query (Decision M12).
   // `backend.teardownAll` stays on the port for explicit callers.
 
+  // The root gate is chained before every route, so it covers the `/ws`
+  // upgrade, `/api/*` and the static catch-all alike — an identity check that
+  // only guarded plain HTTP would guard nothing, since the WebSocket is the way
+  // in. It reads `process.env` unless a test injects `gateEnv`.
   return new Elysia({
     websocket: {
       idleTimeout: WS_IDLE_TIMEOUT_SECONDS,
       sendPings: true,
     },
   })
+    .onRequest(({ request }) => evaluateRequestGate(request, deps.gateEnv ?? process.env))
     .use(createWsPlugin(sessionManager, serverConfig, { backend, eventBuffer, clientSink }))
     .use(createUploadPlugin(serverConfig))
     .use(createUploadImagePlugin(serverConfig))

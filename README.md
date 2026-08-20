@@ -111,6 +111,8 @@ The session list still *discloses* a pane running without a gate: a card marked 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CC_MOBILE_ALLOWED_ROOTS` | none | Comma-separated list of allowed working directory roots. When set, sessions can only be created under these paths. Example: `CC_MOBILE_ALLOWED_ROOTS=~/workspace,~/projects` |
+| `CC_MOBILE_TRUSTED_USER` | none | Tailnet login allowed to reach this server, compared against the `Tailscale-User-Login` header. When set, every request that does not carry it — HTTP **and** WebSocket upgrade — gets `403 forbidden: identity`. Unset (or whitespace-only) the check does not run at all. **Only meaningful behind `tailscale serve`**, which injects the header and strips a client-supplied one; do not set it when reaching the server through the Vite dev proxy, which injects nothing and would lock you out. Example: `CC_MOBILE_TRUSTED_USER=you@github` |
+| `CC_MOBILE_ALLOWED_ORIGINS` | none | Comma-separated origins accepted on a WebSocket upgrade regardless of the same-origin rule. Only needed if the `Origin` a browser sends cannot match the `Host` the server sees (a proxy that rewrites `Host`). Example: `CC_MOBILE_ALLOWED_ORIGINS=https://dev-machine.tailnet.ts.net` |
 
 ## Network Access
 
@@ -122,7 +124,16 @@ Already have Tailscale on your dev machine and phone? Just access it:
 Phone -> Tailscale -> dev-machine:5173
 ```
 
-No auth layer needed — Tailscale network membership is the auth.
+Tailscale network membership is the auth by default. To narrow it to a single identity, set
+`CC_MOBILE_TRUSTED_USER` to your tailnet login and reach the server through `tailscale serve` —
+serve injects `Tailscale-User-Login` (on WebSocket upgrades too) and strips any copy a client
+made up, and anything else is refused with `403 forbidden: identity`. Leave it unset for the
+Vite dev proxy, which injects no such header.
+
+Separately and always on: a WebSocket upgrade whose `Origin` does not match the request's `Host`
+is refused with `403 forbidden: origin`, so no other site's page can open this server's socket.
+Native clients, which send no `Origin`, are unaffected; `CC_MOBILE_ALLOWED_ORIGINS` is the escape
+hatch if a proxy in front rewrites `Host`.
 
 ### Cloudflare Tunnel (alternative)
 

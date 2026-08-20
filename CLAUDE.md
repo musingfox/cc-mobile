@@ -215,5 +215,18 @@ Schemas defined in `server/protocol.ts`. Full spec in `cc-mobile.md`.
 
 - cc-mobile sets no agent settings: no `--permission-mode` on launch, no CLI flag, and `set_permission_mode` / `set_model` / `set_effort` / `set_env_vars` are refused by the Zod gate. Each agent runs at its own configured posture (ADR-003 superseded; ADR-015 §2026-08-06). `sessions[].gated` still discloses an ungated pane by reading its argv.
 - `CC_MOBILE_ALLOWED_ROOTS` env var restricts allowed working directories
-- No auth layer on Tailscale (network membership = auth)
+- Tailscale network membership is the auth by default. `CC_MOBILE_TRUSTED_USER` narrows it to
+  one identity: a single root gate (`server/request-gate.ts`) compares the `Tailscale-User-Login`
+  header `tailscale serve` injects against it and answers `403 forbidden: identity` on a mismatch
+  or an absent header — before routing, so it covers the WS upgrade as well as `/api/*` and the
+  static catch-all. **Unset (or whitespace-only) the rung does not exist**, and that is
+  deliberate: dev arrives through the Vite proxy, which injects no such header, so an always-on
+  check would lock the developer out. Only set it behind `tailscale serve`, which strips a
+  client-supplied copy; anywhere else the header is whatever the caller typed.
+- The same gate origin-checks **WebSocket upgrades only** (not `/api/*` — the dev `/api` proxy
+  rewrites `Host` while forwarding `Origin`): the `Origin` host must equal the `Host` header, an
+  absent `Origin` is allowed (native clients send none), the literal `null` is refused, and
+  `CC_MOBILE_ALLOWED_ORIGINS` (comma-separated) accepts listed origins regardless. Refusals are
+  `403 forbidden: origin`. Trusting `Host` is deliberate — see the module docstring before
+  "fixing" it.
 - If exposing via Cloudflare Tunnel, auth must be added

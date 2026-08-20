@@ -146,5 +146,12 @@ Schemas defined in `server/protocol.ts`. Full spec in `cc-mobile.md`.
 
 - cc-mobile sets no agent settings — no launch flag, no CLI flag, and the four `set_*` messages are refused by the gate (ADR-003 superseded). `gated` discloses, it does not control.
 - `CC_MOBILE_ALLOWED_ROOTS` env var restricts allowed working directories
-- No auth layer on Tailscale (network membership = auth)
+- Tailscale network membership is the auth by default; `CC_MOBILE_TRUSTED_USER` narrows it to one
+  identity. The root gate (`server/request-gate.ts`) compares `Tailscale-User-Login` against it
+  before routing — WS upgrade included — and answers `403 forbidden: identity`. Unset or
+  whitespace-only, the rung is dormant, which is what keeps the Vite-proxied dev flow working;
+  only set it behind `tailscale serve`, the only thing that makes that header trustworthy.
+- The same gate checks `Origin` on **WebSocket upgrades only**: it must match the `Host` header;
+  absent is allowed, the literal `null` is refused, `CC_MOBILE_ALLOWED_ORIGINS` overrides.
+  Refusals are `403 forbidden: origin`.
 - If exposing via Cloudflare Tunnel, auth must be added

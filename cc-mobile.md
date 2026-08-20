@@ -431,7 +431,15 @@ Already installed on dev machine. Phone has Tailscale app.
 Phone → Tailscale → dev-machine:3001
 ```
 
-No auth layer needed — Tailscale network membership is the auth.
+Tailscale network membership is the auth by default. `CC_MOBILE_TRUSTED_USER` narrows it to one
+tailnet login: the root request gate compares it against the `Tailscale-User-Login` header
+`tailscale serve` injects — on the WebSocket upgrade as well as on plain HTTP — and refuses
+anything else with `403 forbidden: identity`. Unset, the check does not run, which is what keeps
+the Vite dev proxy (no such header) working; only set it behind `tailscale serve`.
+
+WebSocket upgrades are additionally origin-checked, always: `Origin` must match `Host` (absent
+`Origin` allowed, literal `null` refused), overridable with `CC_MOBILE_ALLOWED_ORIGINS`. A
+refusal is `403 forbidden: origin`.
 
 ### Cloudflare Tunnel (alternative)
 
