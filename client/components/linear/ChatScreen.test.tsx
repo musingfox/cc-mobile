@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { wsService } from "../../services/ws-service";
 import { useAppStore } from "../../stores/app-store";
 import ChatScreen from "./ChatScreen";
 
@@ -180,5 +181,32 @@ describe("ChatScreen", () => {
 
     const { container } = render(<ChatScreen onNavigate={() => {}} />);
     expect(container.querySelector(".lin-thinking")).toBeNull();
+  });
+});
+
+
+describe("CapabilityRequestIssuedOnPickerOpen", () => {
+  let prevWs: WebSocket | null;
+
+  beforeEach(() => {
+    const internal = wsService as unknown as { ws: WebSocket | null };
+    prevWs = internal.ws;
+    internal.ws = { send: mock((_data: string) => {}) } as unknown as WebSocket;
+    useAppStore.setState({ sessions: new Map(), activeSessionId: null, inputDraft: "" });
+  });
+
+  afterEach(() => {
+    (wsService as unknown as { ws: WebSocket | null }).ws = prevWs;
+  });
+
+  test("T9: opening the slash sheet sends one capabilities_request", () => {
+    const store = useAppStore.getState();
+    store.addSession("w1:p1", "/tmp/project");
+    store.setActiveSession("w1:p1");
+    const { getByLabelText } = render(<ChatScreen onNavigate={() => {}} />);
+    fireEvent.click(getByLabelText("Insert slash command"));
+    const send = (wsService as unknown as { ws: { send: ReturnType<typeof mock> } }).ws.send;
+    const frames = send.mock.calls.map((call) => JSON.parse(call[0] as string));
+    expect(frames).toEqual([{ type: "capabilities_request", sessionId: "w1:p1" }]);
   });
 });

@@ -126,3 +126,95 @@ describe("CapabilityListApplied", () => {
     expect(ServerMessage.safeParse(frame).success).toBe(true);
   });
 });
+
+
+describe("CapabilityRequestIssuedOnPickerOpen", () => {
+  let fake: FakeWebSocket;
+  let prevWs: WebSocket | null;
+
+  beforeEach(() => {
+    fake = new FakeWebSocket();
+    prevWs = getInternal().ws;
+    getInternal().ws = fake as unknown as WebSocket;
+    useAppStore.setState({ sessions: new Map(), activeSessionId: null });
+    useAppStore.getState().addSession("w1:p1", "/tmp/a");
+  });
+
+  afterEach(() => {
+    getInternal().ws = prevWs;
+    useAppStore.setState({ sessions: new Map(), activeSessionId: null });
+  });
+
+  test("T1: first ask sends one frame and marks loading", () => {
+    const ok = getInternal().requestCapabilities("w1:p1");
+    expect(ok).toBe(true);
+    expect(sentFrames()).toEqual([{ type: "capabilities_request", sessionId: "w1:p1" }]);
+    const state = useAppStore.getState().sessions.get("w1:p1")?.capabilities;
+    expect(state?.status).toBe("loading");
+    if (state?.status === "loading") expect(typeof state.sentAt).toBe("number");
+  });
+
+  test("T2: a second call while loading is ignored", () => {
+    getInternal().requestCapabilities("w1:p1");
+    const ok = getInternal().requestCapabilities("w1:p1");
+    expect(ok).toBe(false);
+    expect(sentFrames()).toHaveLength(1);
+  });
+
+  test("T3: ready does not send again", () => {
+    useAppStore.getState().setSessionCapabilities("w1:p1", {
+      status: "ready",
+      commands: [],
+      agents: [],
+    });
+    const ok = getInternal().requestCapabilities("w1:p1");
+    expect(ok).toBe(false);
+    expect(sentFrames()).toHaveLength(0);
+  });
+
+  test("T4: unavailable may retry", () => {
+    useAppStore.getState().setSessionCapabilities("w1:p1", {
+      status: "unavailable",
+      reason: "unsupported",
+    });
+    const ok = getInternal().requestCapabilities("w1:p1");
+    expect(ok).toBe(true);
+    expect(sentFrames()).toHaveLength(1);
+  });
+
+  test("T5: refresh:true re-asks a ready session", () => {
+    useAppStore.getState().setSessionCapabilities("w1:p1", {
+      status: "ready",
+      commands: [],
+      agents: [],
+    });
+    const ok = getInternal().requestCapabilities("w1:p1", { refresh: true });
+    expect(ok).toBe(true);
+    expect(sentFrames()).toEqual([
+      { type: "capabilities_request", sessionId: "w1:p1", refresh: true },
+    ]);
+  });
+
+  test("T6: a missing socket writes failed, never undefined", () => {
+    getInternal().ws = null;
+    const ok = getInternal().requestCapabilities("w1:p1");
+    expect(ok).toBe(false);
+    expect(sentFrames()).toHaveLength(0);
+    expect(useAppStore.getState().sessions.get("w1:p1")?.capabilities).toEqual({
+      status: "unavailable",
+      reason: "failed",
+    });
+  });
+
+  test("T7: unknown session sends nothing and creates nothing", () => {
+    const ok = getInternal().requestCapabilities("nope");
+    expect(ok).toBe(false);
+    expect(sentFrames()).toHaveLength(0);
+    expect(useAppStore.getState().sessions.has("nope")).toBe(false);
+  });
+
+  test("T8: the T1 frame conforms to ClientMessage", () => {
+    getInternal().requestCapabilities("w1:p1");
+    expect(ClientMessage.safeParse(sentFrames()[0]).success).toBe(true);
+  });
+});
