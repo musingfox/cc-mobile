@@ -252,6 +252,18 @@ describe("UnattendedDenyForSelfLaunched — omp", () => {
     expect(h.permission.pendingCount()).toBe(1);
     expect(h.permission.pendingFor(PANE)?.timerId).toBeUndefined();
   });
+
+  it("arms unattended deny for an omp prompt on a self-launched pane", async () => {
+    const h = harness({ origin: "self" });
+    h.screen.text = ompScreen(0, "echo hello");
+
+    await h.permission.onStatus(PANE, "blocked");
+
+    const pending = h.permission.pendingFor(PANE);
+    expect(pending?.dialect).toBe("omp");
+    expect(pending?.timerId).not.toBeUndefined();
+    expect(h.permission.pendingCount()).toBe(1);
+  });
 });
 
 describe("UnattendedDenyForSelfLaunched — across a disconnect", () => {
