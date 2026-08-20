@@ -1,5 +1,8 @@
-import { beforeEach, describe, expect, test } from "bun:test";
-import { debugLog } from "../components/DebugOverlay";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { createElement } from "react";
+import { cleanup, render } from "@testing-library/react";
+import DebugOverlay, { buildDebugStoreSnapshot, debugLog } from "../components/DebugOverlay";
+import { useAppStore } from "../stores/app-store";
 
 describe("DebugOverlay debugLog", () => {
   beforeEach(() => {
@@ -75,5 +78,57 @@ describe("DebugOverlay debugLog", () => {
     expect(debugLog.entries[0].id).toBe(0);
     expect(debugLog.entries[1].id).toBe(1);
     expect(debugLog.entries[2].id).toBe(2);
+  });
+});
+
+describe("GlobalCapabilitiesSlotRemoved", () => {
+  beforeEach(() => {
+    const current = useAppStore.getState() as Record<string, unknown>;
+    const next = { ...current };
+    delete next.capabilities;
+    delete next.setCapabilities;
+    useAppStore.setState(next as typeof current, true);
+    useAppStore.setState({ sessions: new Map(), activeSessionId: null });
+  });
+
+  afterEach(() => {
+    cleanup();
+    useAppStore.setState({ sessions: new Map(), activeSessionId: null });
+  });
+
+  test("T1: the store has no machine-wide capabilities key", () => {
+    expect("capabilities" in useAppStore.getState()).toBe(false);
+  });
+
+  test("T2: the store has no setCapabilities writer", () => {
+    expect("setCapabilities" in useAppStore.getState()).toBe(false);
+  });
+
+  test("T3: debug snapshot carries the session status, not a top-level list", () => {
+    const store = useAppStore.getState();
+    store.addSession("s1", "/tmp/project");
+    store.setActiveSession("s1");
+    store.setSessionCapabilities("s1", { status: "ready", commands: [], agents: [] });
+    const snapshot = buildDebugStoreSnapshot(useAppStore.getState());
+    expect("capabilities" in snapshot).toBe(false);
+    expect(snapshot.activeSession?.capabilities).toBe("ready");
+  });
+
+  test("T4: a session that never asked reports none", () => {
+    const store = useAppStore.getState();
+    store.addSession("s1", "/tmp/project");
+    store.setActiveSession("s1");
+    const snapshot = buildDebugStoreSnapshot(useAppStore.getState());
+    expect(snapshot.activeSession?.capabilities).toBe("none");
+  });
+
+  test("T5: rendering the overlay does not throw", () => {
+    const store = useAppStore.getState();
+    store.addSession("s1", "/tmp/project");
+    store.setActiveSession("s1");
+    const url = new URL(window.location.href);
+    url.searchParams.set("debug", "1");
+    window.history.replaceState({}, "", url);
+    expect(() => render(createElement(DebugOverlay))).not.toThrow();
   });
 });

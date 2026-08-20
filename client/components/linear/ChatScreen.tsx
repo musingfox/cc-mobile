@@ -50,8 +50,6 @@ export default function ChatScreen({ onNavigate }: Props) {
   const session = useAppStore((s) =>
     activeSessionId ? s.sessions.get(activeSessionId) : undefined,
   );
-  const capabilities = useAppStore((s) => s.capabilities);
-
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<InputBarAHandle>(null);
   const [pickerKind, setPickerKind] = useState<"slash" | "agent" | null>(null);
@@ -199,7 +197,7 @@ export default function ChatScreen({ onNavigate }: Props) {
   const usage = session.usage;
   const contextUsage = session.contextUsage;
   const terminalStarting = session.terminal !== undefined && !session.terminal.ready;
-  const model = capabilities?.model ?? "claude";
+  const model = "claude";
   const projectName = basename(session.cwd);
   const displayPath = session.cwd.replace(/^\/Users\/[^/]+/, "~");
 
@@ -213,12 +211,15 @@ export default function ChatScreen({ onNavigate }: Props) {
     if (activeSessionId) wsService.answerPermissionOption(activeSessionId, optionId);
   };
 
+  const capState = session.capabilities;
   const pickerItems =
-    pickerKind === "slash"
-      ? (capabilities?.commands ?? [])
-      : pickerKind === "agent"
-        ? (capabilities?.agents ?? [])
-        : [];
+    capState?.status === "ready"
+      ? pickerKind === "slash"
+        ? capState.commands
+        : pickerKind === "agent"
+          ? capState.agents
+          : []
+      : [];
 
   const streamMessage = currentStreamMessageId
     ? messages.find((m) => m.id === currentStreamMessageId)
@@ -379,7 +380,7 @@ export default function ChatScreen({ onNavigate }: Props) {
           open={pickerKind !== null}
           onClose={() => setPickerKind(null)}
           onSelect={handlePickerSelect}
-          loading={capabilities === null}
+          loading={capState?.status === "loading"}
           items={pickerItems.map((item) => ({
             name: item.name,
             ...(item.description ? { description: item.description } : {}),

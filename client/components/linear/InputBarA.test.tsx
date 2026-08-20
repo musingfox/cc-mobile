@@ -13,7 +13,6 @@ describe("InputBarA", () => {
   function seed(draft: string, terminal?: { ready: boolean }) {
     useAppStore.setState({
       inputDraft: draft,
-      capabilities: null,
       // Only `.cwd` and `.terminal` are read by the component.
       sessions: new Map([["s1", { cwd: "/tmp/proj", terminal }]]) as never,
       activeSessionId: "s1",

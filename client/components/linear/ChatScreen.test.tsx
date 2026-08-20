@@ -9,7 +9,6 @@ describe("ChatScreen", () => {
     useAppStore.setState({
       sessions: new Map(),
       activeSessionId: null,
-      capabilities: null,
       inputDraft: "",
     });
   });
@@ -68,10 +67,10 @@ describe("ChatScreen", () => {
     const store = useAppStore.getState();
     store.addSession("s1", "/tmp/project");
     store.setActiveSession("s1");
-    store.setCapabilities({
+    store.setSessionCapabilities("s1", {
+      status: "ready",
       commands: [{ name: "clear", description: "Clear chat" }],
       agents: [],
-      model: "claude-sonnet-4",
     });
 
     const { getByLabelText, getByText } = render(<ChatScreen onNavigate={() => {}} />);
@@ -85,10 +84,10 @@ describe("ChatScreen", () => {
     const store = useAppStore.getState();
     store.addSession("s1", "/tmp/project");
     store.setActiveSession("s1");
-    store.setCapabilities({
+    store.setSessionCapabilities("s1", {
+      status: "ready",
       commands: [{ name: "clear", description: "Clear chat" }],
       agents: [],
-      model: "claude-sonnet-4",
     });
 
     const { getByLabelText, getByText, queryByText } = render(<ChatScreen onNavigate={() => {}} />);

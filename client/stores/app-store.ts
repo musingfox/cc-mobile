@@ -94,25 +94,6 @@ export type SessionDescriptorFlags = {
   title?: string;
 };
 
-export type ModelInfo = {
-  value: string;
-  displayName: string;
-  description: string;
-  supportsEffort?: boolean;
-  supportedEffortLevels?: string[];
-  supportsFastMode?: boolean;
-  supportsAdaptiveThinking?: boolean;
-  contextLength?: number;
-};
-
-export type AccountInfo = {
-  email?: string;
-  organization?: string;
-  subscriptionType?: string;
-  tokenSource?: string;
-  apiKeySource?: string;
-};
-
 export type AgentInfo = {
   name: string;
   description?: string;
@@ -124,15 +105,14 @@ export type CommandInfo = {
   name: string;
   description?: string;
   category?: string;
+  argumentHint?: string;
 };
 
-export type Capabilities = {
-  commands: CommandInfo[];
-  agents: AgentInfo[];
-  model: string;
-  models?: ModelInfo[];
-  accountInfo?: AccountInfo;
-};
+/** Per-session command/agent list. `undefined` on the session means never asked. */
+export type SessionCapabilitiesState =
+  | { status: "loading"; sentAt: number }
+  | { status: "ready"; commands: CommandInfo[]; agents: AgentInfo[] }
+  | { status: "unavailable"; reason: "unsupported" | "failed" };
 
 export type ActiveTool = {
   toolName: string;
@@ -238,6 +218,11 @@ export type SessionState = {
    * pre-transcript log (older) from a message being sent right now (newer).
    */
   transcriptPageRequest?: { sentAt: number } | null;
+  /**
+   * Command/agent inventory for this session. Absent until the picker asks;
+   * never a machine-wide list.
+   */
+  capabilities?: SessionCapabilitiesState;
 };
 
 /** Where a history page stops, and which transcript file that position is in. */
@@ -360,9 +345,10 @@ interface AppState {
   updateUsage: (sessionId: string, usage: UsageData) => void;
   setContextUsage: (sessionId: string, contextUsage: ContextUsage | null) => void;
 
-  // Capabilities (shared across sessions)
-  capabilities: Capabilities | null;
-  setCapabilities: (capabilities: Capabilities) => void;
+  setSessionCapabilities: (
+    sessionId: string,
+    capabilities: SessionCapabilitiesState | null,
+  ) => void;
 
   // Rate limit info (global, not per-session)
   rateLimitInfo: RateLimitInfo | null;
@@ -652,8 +638,16 @@ export const useAppStore = create<AppState>((set) => ({
       })),
     })),
 
-  capabilities: null,
-  setCapabilities: (capabilities) => set({ capabilities }),
+  setSessionCapabilities: (sessionId, capabilities) =>
+    set((state) => ({
+      sessions: updateSession(state.sessions, sessionId, (session) => {
+        if (capabilities === null) {
+          const { capabilities: _dropped, ...rest } = session;
+          return rest;
+        }
+        return { ...session, capabilities };
+      }),
+    })),
 
   rateLimitInfo: null,
   setRateLimitInfo: (rateLimitInfo) => set({ rateLimitInfo }),

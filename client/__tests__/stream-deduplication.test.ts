@@ -81,7 +81,6 @@ describe("stream deduplication", () => {
       sessions: new Map(),
       activeSessionId: null,
       connectionState: "connected",
-      capabilities: null,
       globalError: null,
       inputDraft: "",
     });

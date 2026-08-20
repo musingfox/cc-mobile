@@ -39,6 +39,36 @@ export const debugLog = {
   },
 };
 
+
+export function debugCapabilitiesStatus(
+  session: { capabilities?: { status: string } } | undefined,
+): "ready" | "loading" | "unavailable" | "none" {
+  const status = session?.capabilities?.status;
+  if (status === "ready" || status === "loading" || status === "unavailable") return status;
+  return "none";
+}
+
+export function buildDebugStoreSnapshot(state: ReturnType<typeof useAppStore.getState>) {
+  const active = state.activeSessionId ? state.sessions.get(state.activeSessionId) : undefined;
+  return {
+    connectionState: state.connectionState,
+    activeSessionId: state.activeSessionId,
+    sessionCount: state.sessions.size,
+    activeSession: state.activeSessionId
+      ? {
+          id: state.activeSessionId,
+          messageCount: active?.messages.length ?? 0,
+          isStreaming: active?.isStreaming ?? false,
+          pendingPermission: active?.pendingPermission ? "present" : "none",
+          activeToolsCount: active?.activeTools.size ?? 0,
+          activeAgentsCount: active?.activeAgents.size ?? 0,
+          usage: active?.usage ?? null,
+          capabilities: debugCapabilitiesStatus(active),
+        }
+      : null,
+  };
+}
+
 export default function DebugOverlay() {
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"ws" | "store">("ws");
@@ -54,25 +84,7 @@ export default function DebugOverlay() {
     if (!isDebugMode || activeTab !== "store") return;
     const interval = setInterval(() => {
       const state = useAppStore.getState();
-      const snapshot = {
-        connectionState: state.connectionState,
-        activeSessionId: state.activeSessionId,
-        sessionCount: state.sessions.size,
-        activeSession: state.activeSessionId
-          ? {
-              id: state.activeSessionId,
-              messageCount: state.sessions.get(state.activeSessionId)?.messages.length ?? 0,
-              isStreaming: state.sessions.get(state.activeSessionId)?.isStreaming ?? false,
-              pendingPermission: state.sessions.get(state.activeSessionId)?.pendingPermission
-                ? "present"
-                : "none",
-              activeToolsCount: state.sessions.get(state.activeSessionId)?.activeTools.size ?? 0,
-              activeAgentsCount: state.sessions.get(state.activeSessionId)?.activeAgents.size ?? 0,
-              usage: state.sessions.get(state.activeSessionId)?.usage ?? null,
-            }
-          : null,
-        capabilities: state.capabilities,
-      };
+      const snapshot = buildDebugStoreSnapshot(state);
       setStoreSnapshot(JSON.stringify(snapshot, null, 2));
     }, 500);
     return () => clearInterval(interval);

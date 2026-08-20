@@ -80,7 +80,7 @@ beforeEach(() => {
     requests.push({ sessionId, ...(before === undefined ? {} : { before }) });
     return true;
   }) as typeof wsService.requestTranscriptPage;
-  useAppStore.setState({ sessions: new Map(), activeSessionId: null, capabilities: null, inputDraft: "" });
+  useAppStore.setState({ sessions: new Map(), activeSessionId: null, inputDraft: "" });
 });
 
 afterEach(() => {
