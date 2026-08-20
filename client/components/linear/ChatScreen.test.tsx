@@ -197,6 +197,7 @@ describe("CapabilityRequestIssuedOnPickerOpen", () => {
 
   afterEach(() => {
     (wsService as unknown as { ws: WebSocket | null }).ws = prevWs;
+    cleanup();
   });
 
   test("T9: opening the slash sheet sends one capabilities_request", () => {
@@ -208,5 +209,111 @@ describe("CapabilityRequestIssuedOnPickerOpen", () => {
     const send = (wsService as unknown as { ws: { send: ReturnType<typeof mock> } }).ws.send;
     const frames = send.mock.calls.map((call) => JSON.parse(call[0] as string));
     expect(frames).toEqual([{ type: "capabilities_request", sessionId: "w1:p1" }]);
+  });
+});
+
+
+describe("PickerSheetTerminates", () => {
+  let prevWs: WebSocket | null;
+
+  beforeEach(() => {
+    const internal = wsService as unknown as { ws: WebSocket | null };
+    prevWs = internal.ws;
+    internal.ws = { send: mock((_data: string) => {}) } as unknown as WebSocket;
+    useAppStore.setState({ sessions: new Map(), activeSessionId: null, inputDraft: "" });
+  });
+
+  afterEach(() => {
+    (wsService as unknown as { ws: WebSocket | null }).ws = prevWs;
+    cleanup();
+  });
+
+  function seed(cap: Parameters<typeof useAppStore.getState>[0] extends never
+    ? never
+    : ReturnType<typeof useAppStore.getState>["sessions"] extends Map<string, infer S>
+      ? S["capabilities"]
+      : never) {
+    const store = useAppStore.getState();
+    store.addSession("s1", "/tmp/cc-mobile");
+    store.setActiveSession("s1");
+    if (cap) store.setSessionCapabilities("s1", cap);
+  }
+
+  test("T1: loading slash sheet shows Loading…", () => {
+    seed({ status: "loading", sentAt: 1 });
+    const { getByLabelText, getByText, queryByText } = render(<ChatScreen onNavigate={() => {}} />);
+    fireEvent.click(getByLabelText("Insert slash command"));
+    expect(getByText("Loading…")).not.toBeNull();
+    expect(queryByText("No commands available.")).toBeNull();
+  });
+
+  test("T2: ready commands render name and description, not Loading…", () => {
+    seed({ status: "ready", commands: [{ name: "help", description: "H" }], agents: [] });
+    const { getByLabelText, getByText, queryByText } = render(
+      <ChatScreen onNavigate={() => {}} />,
+    );
+    fireEvent.click(getByLabelText("Insert slash command"));
+    expect(getByText("help")).not.toBeNull();
+    expect(getByText("H")).not.toBeNull();
+    expect(queryByText("Loading…")).toBeNull();
+  });
+
+  test("T3: ready with no agents shows No agents available", () => {
+    seed({ status: "ready", commands: [{ name: "help", description: "H" }], agents: [] });
+    const { getByLabelText, getByText, queryByText } = render(<ChatScreen onNavigate={() => {}} />);
+    fireEvent.click(getByLabelText("Insert agent mention"));
+    expect(getByText("No agents available.")).not.toBeNull();
+    expect(queryByText("Loading…")).toBeNull();
+  });
+
+  test("T4: empty ready slash shows No commands available", () => {
+    seed({ status: "ready", commands: [], agents: [] });
+    const { getByLabelText, getByText, queryByText } = render(<ChatScreen onNavigate={() => {}} />);
+    fireEvent.click(getByLabelText("Insert slash command"));
+    expect(getByText("No commands available.")).not.toBeNull();
+    expect(queryByText("Loading…")).toBeNull();
+  });
+
+  test("T5: unsupported slash shows the empty command copy", () => {
+    seed({ status: "unavailable", reason: "unsupported" });
+    const { getByLabelText, getByText, queryByText } = render(<ChatScreen onNavigate={() => {}} />);
+    fireEvent.click(getByLabelText("Insert slash command"));
+    expect(getByText("No commands available.")).not.toBeNull();
+    expect(queryByText("Loading…")).toBeNull();
+  });
+
+  test("T6: failed agent sheet shows the empty agent copy", () => {
+    seed({ status: "unavailable", reason: "failed" });
+    const { getByLabelText, getByText, queryByText } = render(<ChatScreen onNavigate={() => {}} />);
+    fireEvent.click(getByLabelText("Insert agent mention"));
+    expect(getByText("No agents available.")).not.toBeNull();
+    expect(queryByText("Loading…")).toBeNull();
+  });
+
+  test("T7: a bare command has no description row", () => {
+    seed({ status: "ready", commands: [{ name: "bare" }], agents: [] });
+    const { getByLabelText, getByText, container } = render(<ChatScreen onNavigate={() => {}} />);
+    fireEvent.click(getByLabelText("Insert slash command"));
+    expect(getByText("bare")).not.toBeNull();
+    expect(container.querySelector(".lin-settings-row-desc")).toBeNull();
+  });
+
+  test("T8: a disconnected socket opens to the empty command copy", () => {
+    (wsService as unknown as { ws: WebSocket | null }).ws = null;
+    seed(undefined);
+    const { getByLabelText, getByText, queryByText } = render(<ChatScreen onNavigate={() => {}} />);
+    fireEvent.click(getByLabelText("Insert slash command"));
+    expect(getByText("No commands available.")).not.toBeNull();
+    expect(queryByText("Loading…")).toBeNull();
+  });
+
+  test("T9: selecting help inserts /help", async () => {
+    seed({ status: "ready", commands: [{ name: "help", description: "H" }], agents: [] });
+    const { getByLabelText, getByText } = render(<ChatScreen onNavigate={() => {}} />);
+    fireEvent.click(getByLabelText("Insert slash command"));
+    fireEvent.click(getByText("help"));
+    await waitFor(() => {
+      expect(useAppStore.getState().inputDraft).toContain("/help");
+    });
   });
 });

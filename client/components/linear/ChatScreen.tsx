@@ -372,11 +372,11 @@ export default function ChatScreen({ onNavigate }: Props) {
         isStreaming={isStreaming}
         onSlashClick={() => {
           setPickerKind("slash");
-          wsService.requestCapabilities(activeSessionId);
+          if (!session.capabilities) wsService.requestCapabilities(activeSessionId);
         }}
         onAtClick={() => {
           setPickerKind("agent");
-          wsService.requestCapabilities(activeSessionId);
+          if (!session.capabilities) wsService.requestCapabilities(activeSessionId);
         }}
       />
 
