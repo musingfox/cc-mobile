@@ -264,6 +264,23 @@ describe("UnattendedDenyForSelfLaunched — omp", () => {
     expect(pending?.timerId).not.toBeUndefined();
     expect(h.permission.pendingCount()).toBe(1);
   });
+
+  it("cancels an unanswered omp prompt exactly at the deny boundary", async () => {
+    const h = harness({ origin: "self" });
+    h.screen.text = ompScreen(0, "echo hello");
+    await h.permission.onStatus(PANE, "blocked");
+
+    const pending = h.permission.pendingFor(PANE);
+    expect(pending?.dialect).toBe("omp");
+
+    await h.clock.advance(UNATTENDED_DENY_MS - 1);
+    expect(h.keys).toEqual([]);
+    expect(h.permission.pendingCount()).toBe(1);
+
+    await h.clock.advance(1);
+    expect(h.keys).toEqual([{ pane: PANE, keys: ["esc"] }]);
+    expect(h.permission.pendingCount()).toBe(0);
+  });
 });
 
 describe("UnattendedDenyForSelfLaunched — across a disconnect", () => {
