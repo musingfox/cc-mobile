@@ -865,52 +865,43 @@ describe("ConversationModeAutoPage", () => {
 });
 
 describe("ScrollRulesIntact", () => {
-  test("T1: switching Conversation to Full from mid-list does not jump to the bottom, for either first-message role", () => {
-    const cases: Array<{ first: Message; rest: Message[] }> = [
+  // T1 and T2 guard the same gesture against two different hazards, and each
+  // has its own way of throwing the reader to the bottom. Here the first
+  // message survives the switch, so the list reads as the same conversation and
+  // it is the near-bottom band that would follow the end; in T2 the first
+  // message is a tool card that Conversation drops, so it is the epoch-reset
+  // arm. Both are only held off by the mode-switch branch classifying first.
+  test("T1: a mode switch from a near-bottom parking spot stays put, in both directions", () => {
+    const messages: Message[] = [
+      { id: "id-u", role: "user", content: "p", timestamp: 0, recordId: "u", seq: 1 },
+      toolPart("tu", 2),
       {
-        first: { id: "id-u", role: "user", content: "p", timestamp: 0, recordId: "u", seq: 1 },
-        rest: [
-          toolPart("tu", 2),
-          {
-            id: "id-a",
-            role: "assistant",
-            content: "a",
-            timestamp: 3,
-            recordId: "a",
-            seq: 3,
-            stopReason: "end_turn",
-          },
-        ],
-      },
-      {
-        first: toolPart("tu0", 1),
-        rest: [
-          { id: "id-u", role: "user", content: "p", timestamp: 2, recordId: "u", seq: 2 },
-          {
-            id: "id-a",
-            role: "assistant",
-            content: "a",
-            timestamp: 3,
-            recordId: "a",
-            seq: 3,
-            stopReason: "end_turn",
-          },
-        ],
+        id: "id-a",
+        role: "assistant",
+        content: "a",
+        timestamp: 3,
+        recordId: "a",
+        seq: 3,
+        stopReason: "end_turn",
       },
     ];
 
-    for (const c of cases) {
+    for (const [from, to] of [
+      ["conversation", "full"],
+      ["full", "conversation"],
+    ] as const) {
       cleanup();
       useAppStore.setState({ sessions: new Map(), activeSessionId: null, inputDraft: "" });
-      useSettingsStore.getState().setReadingMode("conversation");
-      openSession({ readable: true, messages: [c.first, ...c.rest] });
+      useSettingsStore.getState().setReadingMode(from);
+      openSession({ readable: true, messages });
       const { container } = render(<ChatScreen onNavigate={() => {}} />);
-      const scroller = stubScroller(container, 2000, 800, 600);
+      // 2000 - 1336 - 600 = 64: inside the band that follows a live arrival.
+      const scroller = stubScroller(container, 2000, 1336, 600);
       fireEvent.scroll(scroller);
       act(() => {
-        useSettingsStore.getState().setReadingMode("full");
+        useSettingsStore.getState().setReadingMode(to);
       });
-      expect(scroller.scrollTop).toBe(800);
+      expect(scroller.scrollTop).toBe(1336);
       expect(scroller.scrollTop).not.toBe(scroller.scrollHeight);
     }
   });
