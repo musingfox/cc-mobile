@@ -164,6 +164,7 @@ describe("Settings schema", () => {
       theme: "light",
       notificationsEnabled: true,
       hapticsEnabled: true,
+      readingMode: "conversation",
     });
     const s = loadSettings();
     expect(s.notificationsEnabled).toBe(true);
