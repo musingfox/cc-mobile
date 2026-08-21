@@ -91,7 +91,7 @@ export function loadSessionState(sessionId: string): SessionState | null {
     if (!json) return null;
 
     const parsed = JSON.parse(json) as SerializableSessionState;
-    Reflect.deleteProperty(parsed as object, ["current", "StreamMessageId"].join(""));
+    Reflect.deleteProperty(parsed as object, "currentStreamMessageId");
 
     // Deserialize Maps and provide defaults for new fields.
     //
