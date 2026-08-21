@@ -14,17 +14,30 @@
  * (a terminal `/clear`) since the client last read it. A receipt that does not
  * check out is not an error — it degrades to the newest page of the current
  * file, self-described by the `epoch` in the reply.
+ *
+ * Reads are bounded to one byte window ending at the validated cursor (or EOF).
+ * Cursor validation is a targeted probe at `before.seq`, not a scan of the page.
  */
 
 import { epochOf } from "./epoch";
+import {
+  defaultTranscriptReadFs,
+  readTranscriptWindow,
+  TRANSCRIPT_WINDOW_BYTES,
+  type TranscriptReadFs,
+} from "./reader";
 import { transcriptRecordToChunk } from "./records";
-import { readTranscriptSince, type TranscriptReadFs } from "./reader";
 
 /**
  * Records per page. Fixed on the server and absent from the wire: a client
  * cannot ask for a bigger frame than the server is willing to build.
  */
 export const TRANSCRIPT_PAGE_SIZE = 50;
+
+/** Probe budget for proving the record at `before.seq`. */
+export const TRANSCRIPT_PROBE_BYTES = 256 * 1024;
+
+const MAX_EMPTY_WINDOW_HOPS = 4;
 
 /** Where a page stops, and which file that position is measured in. */
 export interface PageCursor {
@@ -51,6 +64,8 @@ export interface ReadPageInput {
   before?: PageCursor | null;
   limit?: number;
   fs?: TranscriptReadFs;
+  maxBytes?: number;
+  probeBytes?: number;
 }
 
 interface PageItem {
@@ -59,52 +74,98 @@ interface PageItem {
   recordId?: string;
 }
 
+function recordIdOf(record: unknown, chunk: Record<string, unknown> | null): string | undefined {
+  if (chunk && typeof chunk.recordId === "string") return chunk.recordId;
+  const fields = record as { uuid?: unknown; id?: unknown } | null;
+  if (typeof fields?.uuid === "string") return fields.uuid;
+  if (typeof fields?.id === "string") return fields.id;
+  return undefined;
+}
+
 /**
- * Index the page ends at. A cursor is honoured only when it names the file we
- * just read *and* the record living at that byte offset still carries the id
- * the client remembers. Anything else — a rotated file, an in-place rewrite
- * that shifted the offsets, a position past EOF — falls through to "the newest
- * page", which is always a correct answer about the current conversation.
+ * Prove `before` against the file. Returns the exclusive end offset to read
+ * up to, or `null` to take the newest page (EOF).
  */
-function cutIndexFor(items: PageItem[], before: PageCursor | null, epoch: string): number {
-  if (!before || before.epoch !== epoch) return items.length;
-  const index = items.findIndex(
-    (item) => item.seq === before.seq && item.recordId === before.recordId,
-  );
-  return index >= 0 ? index : items.length;
+async function endOffsetForCursor(
+  fs: TranscriptReadFs,
+  path: string,
+  size: number,
+  before: PageCursor | null,
+  epoch: string,
+  probeBytes: number,
+): Promise<number> {
+  if (!before || before.epoch !== epoch) return size;
+  if (before.seq < 0 || before.seq >= size) return size;
+
+  const probeEnd = Math.min(size, before.seq + probeBytes);
+  const slice = await fs.readSlice(path, before.seq, probeEnd);
+  const newlineAt = slice.indexOf("\n");
+  if (newlineAt === -1) {
+    // Failing to prove is not disproving: accept the cursor.
+    return before.seq;
+  }
+  const line = slice.slice(0, newlineAt);
+  try {
+    const record = JSON.parse(line) as unknown;
+    const chunk = transcriptRecordToChunk(record);
+    const id = recordIdOf(record, chunk);
+    if (id === before.recordId) return before.seq;
+  } catch {
+    return size;
+  }
+  return size;
+}
+
+function itemsFromWindow(
+  records: unknown[],
+  offsets: number[],
+  endExclusive: number,
+): PageItem[] {
+  const items: PageItem[] = [];
+  for (let index = 0; index < records.length; index++) {
+    const chunk = transcriptRecordToChunk(records[index]);
+    if (!chunk) continue;
+    const seq = offsets[index] ?? 0;
+    if (seq >= endExclusive) continue;
+    const recordId = typeof chunk.recordId === "string" ? chunk.recordId : undefined;
+    items.push({ chunk, seq, recordId });
+  }
+  return items;
 }
 
 /** Returns the page of mapper-non-null records immediately older than `before`. */
 export async function readTranscriptPage(input: ReadPageInput): Promise<TranscriptPage> {
   const { path, before = null, limit = TRANSCRIPT_PAGE_SIZE } = input;
+  const fs = input.fs ?? defaultTranscriptReadFs;
+  const maxBytes = input.maxBytes ?? TRANSCRIPT_WINDOW_BYTES;
+  const probeBytes = input.probeBytes ?? TRANSCRIPT_PROBE_BYTES;
   const epoch = epochOf(path);
 
-  // Whole-file read: the reader's cursor is forward-only, and a backward window
-  // has no anchor to start from until the records are known. Measured at 14–32 ms
-  // on the largest transcripts on this machine (12.9 MB / 11.4 MB).
-  const { records: raw, offsets } = await readTranscriptSince({
-    path,
-    cursor: { byteOffset: 0, lastUuid: null },
-    ...(input.fs ? { fs: input.fs } : {}),
-  });
+  const size = await fs.size(path);
+  if (size === null) return { epoch, records: [], nextBefore: null };
 
-  const items: PageItem[] = [];
-  for (let index = 0; index < raw.length; index++) {
-    const chunk = transcriptRecordToChunk(raw[index]);
-    if (!chunk) continue;
-    const recordId = typeof chunk.recordId === "string" ? chunk.recordId : undefined;
-    items.push({ chunk, seq: offsets[index] ?? 0, recordId });
+  const endOffset = await endOffsetForCursor(fs, path, size, before, epoch, probeBytes);
+
+  let hopEnd = endOffset;
+  let windowStart = hopEnd;
+  let items: PageItem[] = [];
+  for (let hop = 0; hop < MAX_EMPTY_WINDOW_HOPS; hop++) {
+    const window = await readTranscriptWindow({ path, end: hopEnd, maxBytes, fs });
+    windowStart = window.windowStart;
+    items = itemsFromWindow(window.records, window.offsets, hopEnd);
+    if (items.length > 0) break;
+    if (window.windowStart === 0) break;
+    hopEnd = window.windowStart;
   }
+
   if (items.length === 0) return { epoch, records: [], nextBefore: null };
 
-  const cut = cutIndexFor(items, before, epoch);
-  const start = Math.max(0, cut - limit);
-  const take = items.slice(start, cut);
-
-  // `nextBefore` can only name a record that has an id. Every claude and omp
-  // record does; a page whose oldest entries somehow have none names the oldest
-  // one that does, so the next request still moves backwards.
-  const anchor = start > 0 ? take.find((item) => item.recordId !== undefined) : undefined;
+  const start = Math.max(0, items.length - limit);
+  const take = items.slice(start);
+  const reachedHead = windowStart === 0;
+  const tookEvery = start === 0;
+  const emitNull = reachedHead && tookEvery;
+  const anchor = !emitNull ? take.find((item) => item.recordId !== undefined) : undefined;
 
   return {
     epoch,

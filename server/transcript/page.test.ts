@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { epochOf } from "./epoch";
 import { readTranscriptPage } from "./page";
+import { defaultTranscriptReadFs, TRANSCRIPT_WINDOW_BYTES, type TranscriptReadFs } from "./reader";
 
 let dir: string;
 
@@ -161,5 +162,197 @@ describe("TranscriptPageCursorGuard", () => {
     const path = await sevenRecordFile();
     const res = await readTranscriptPage({ path, before: null, limit: 3 });
     for (const record of res.records) expect(record.epoch).toBe(epochOf(path));
+  });
+});
+
+function trackingFs(): { fs: TranscriptReadFs; slices: Array<{ start: number; end: number }> } {
+  const slices: Array<{ start: number; end: number }> = [];
+  const fs: TranscriptReadFs = {
+    size: (path) => defaultTranscriptReadFs.size(path),
+    async readSlice(path, start, end) {
+      slices.push({ start, end });
+      return defaultTranscriptReadFs.readSlice(path, start, end);
+    },
+  };
+  return { fs, slices };
+}
+
+function paddedRec(id: string, targetBytes: number) {
+  let text = "x";
+  let rec = makeRec(id, text);
+  while (Buffer.byteLength(JSON.stringify(rec), "utf8") + 1 < targetBytes) {
+    text += "y";
+    rec = makeRec(id, text);
+  }
+  return rec;
+}
+
+function metaRec(id: string, targetBytes: number) {
+  let extra = "";
+  let rec: Record<string, unknown> = { uuid: id, type: "user", isMeta: true, message: { role: "user", content: extra } };
+  while (Buffer.byteLength(JSON.stringify(rec), "utf8") + 1 < targetBytes) {
+    extra += "m";
+    rec = { uuid: id, type: "user", isMeta: true, message: { role: "user", content: extra } };
+  }
+  return rec;
+}
+
+describe("PageReadsOneWindow", () => {
+  it("T2: injected maxBytes bounds every readSlice; page matches the uncapped result", async () => {
+    const recs = Array.from({ length: 7 }, (_, i) => makeRec("u" + (i + 1), "t" + (i + 1)));
+    const path = await writeLines("p.jsonl", recs);
+    const { fs, slices } = trackingFs();
+    const windowed = await readTranscriptPage({ path, before: null, maxBytes: 1_000_000, fs });
+    const today = await readTranscriptPage({ path, before: null });
+    expect(slices.every((c) => c.end - c.start <= 1_000_000)).toBe(true);
+    expect(windowed).toEqual(today);
+  });
+
+  it("T3: a 250-byte window on a 600-byte file yields only the newest 2 records and a non-null nextBefore", async () => {
+    const recs = Array.from({ length: 6 }, (_, i) => paddedRec("u" + (i + 1), 100));
+    const path = await writeLines("p.jsonl", recs);
+    const res = await readTranscriptPage({ path, before: null, limit: 50, maxBytes: 250 });
+    expect(res.records.map((r: any) => r.recordId)).toEqual(["u5", "u6"]);
+    expect(res.nextBefore).not.toBeNull();
+    expect(res.nextBefore?.recordId).toBe("u5");
+  });
+
+  it("T4: paging with maxBytes:250 moves strictly backwards from the previous page's oldest", async () => {
+    const recs = Array.from({ length: 6 }, (_, i) => paddedRec("u" + (i + 1), 100));
+    const path = await writeLines("p.jsonl", recs);
+    const first = await readTranscriptPage({ path, before: null, limit: 50, maxBytes: 250 });
+    expect(first.nextBefore).not.toBeNull();
+    const second = await readTranscriptPage({
+      path,
+      before: first.nextBefore,
+      limit: 50,
+      maxBytes: 250,
+    });
+    expect(second.records.length).toBeGreaterThan(0);
+    for (const rec of second.records) {
+      expect(rec.seq as number).toBeLessThan(first.nextBefore!.seq);
+    }
+  });
+
+  it("T5: nextBefore is null only when the window starts at 0 and the page took every item", async () => {
+    const recs = Array.from({ length: 3 }, (_, i) => makeRec("u" + (i + 1), "t" + (i + 1)));
+    const path = await writeLines("p.jsonl", recs);
+    const res = await readTranscriptPage({ path, before: null, limit: 50, maxBytes: 1_000_000 });
+    expect(res.records.map((r: any) => r.recordId)).toEqual(["u1", "u2", "u3"]);
+    expect(res.nextBefore).toBeNull();
+  });
+
+  it("T6: a valid before cursor ends the page immediately before that record; probe is at most 256 KiB", async () => {
+    const recs = Array.from({ length: 7 }, (_, i) => makeRec("u" + (i + 1), "t" + (i + 1)));
+    const path = await writeLines("p.jsonl", recs);
+    const current = epochOf(path);
+    const full = await readTranscriptPage({ path, before: null, limit: 99 });
+    const rec5 = full.records.find((r: any) => r.recordId === "u5") as any;
+    const { fs, slices } = trackingFs();
+    const res = await readTranscriptPage({
+      path,
+      before: { epoch: current, seq: rec5.seq as number, recordId: "u5" },
+      limit: 3,
+      fs,
+    });
+    expect(res.records.map((r: any) => r.recordId)).toEqual(["u2", "u3", "u4"]);
+    const probes = slices.filter((c) => c.start === rec5.seq);
+    expect(probes.length).toBeGreaterThan(0);
+    expect(probes.every((c) => c.end - c.start <= 256 * 1024)).toBe(true);
+  });
+
+  it("T7: in-place rewrite (seq holds a different recordId) degrades to the newest page", async () => {
+    const recs = Array.from({ length: 7 }, (_, i) => makeRec("u" + (i + 1), "t" + (i + 1)));
+    const path = await writeLines("p.jsonl", recs);
+    const current = epochOf(path);
+    const full = await readTranscriptPage({ path, before: null, limit: 99 });
+    const rec3 = full.records.find((r: any) => r.recordId === "u3") as any;
+    const res = await readTranscriptPage({
+      path,
+      before: { epoch: current, seq: rec3.seq as number, recordId: "u9" },
+      limit: 3,
+    });
+    expect(res.records.map((r: any) => r.recordId)).toEqual(["u5", "u6", "u7"]);
+    expect(res.epoch).toBe(current);
+  });
+
+  it("T8: before.seq past EOF yields the newest page without throwing", async () => {
+    const recs = Array.from({ length: 7 }, (_, i) => makeRec("u" + (i + 1), "t" + (i + 1)));
+    const path = await writeLines("p.jsonl", recs);
+    const res = await readTranscriptPage({
+      path,
+      before: { epoch: epochOf(path), seq: 999999, recordId: "u9" },
+      limit: 3,
+    });
+    expect(res.records.map((r: any) => r.recordId)).toEqual(["u5", "u6", "u7"]);
+  });
+
+  it("T9: a cursor from a retired epoch skips the probe and returns the newest page", async () => {
+    const recs = Array.from({ length: 7 }, (_, i) => makeRec("u" + (i + 1), "t" + (i + 1)));
+    const path = await writeLines("p.jsonl", recs);
+    const current = epochOf(path);
+    const { fs, slices } = trackingFs();
+    const res = await readTranscriptPage({
+      path,
+      before: { epoch: "deadbeefdeadbeef", seq: 4000, recordId: "u9" },
+      limit: 3,
+      fs,
+    });
+    expect(res.records.map((r: any) => r.recordId)).toEqual(["u5", "u6", "u7"]);
+    expect(res.epoch).toBe(current);
+    expect(slices.every((c) => c.start !== 4000)).toBe(true);
+  });
+
+  it("T10: a record larger than the probe budget is still accepted as the cut", async () => {
+    const head = [makeRec("u1", "a"), makeRec("u2", "b")];
+    const giant = makeRec("giant", "G".repeat(400));
+    const tail = [makeRec("u3", "c"), makeRec("u4", "d")];
+    const path = await writeLines("p.jsonl", [...head, giant, ...tail]);
+    const full = await readTranscriptPage({ path, before: null, limit: 99 });
+    const g = full.records.find((r: any) => r.recordId === "giant") as any;
+    const res = await readTranscriptPage({
+      path,
+      before: { epoch: epochOf(path), seq: g.seq as number, recordId: "giant" },
+      limit: 50,
+      probeBytes: 8,
+    });
+    expect(res.records.every((r: any) => (r.seq as number) < g.seq)).toBe(true);
+    expect(res.records.map((r: any) => r.recordId)).toEqual(["u1", "u2"]);
+  });
+
+  it("T11: a trailing window of only bookkeeping hops back to a non-empty page", async () => {
+    const older = Array.from({ length: 3 }, (_, i) => paddedRec("u" + (i + 1), 100));
+    const metas = Array.from({ length: 4 }, (_, i) => metaRec("m" + i, 80));
+    const path = await writeLines("p.jsonl", [...older, ...metas]);
+    const { fs, slices } = trackingFs();
+    const res = await readTranscriptPage({
+      path,
+      before: null,
+      limit: 50,
+      maxBytes: 250,
+      fs,
+    });
+    expect(res.records.length).toBeGreaterThan(0);
+    expect(res.nextBefore).not.toBeNull();
+    const windowReads = slices.filter((c) => c.end - c.start > 1);
+    expect(windowReads.length).toBeLessThanOrEqual(4);
+    expect(windowReads.every((c) => c.end - c.start <= 250)).toBe(true);
+  });
+
+  it("T12: omitting maxBytes keeps the production signature and applies the 4 MiB default", async () => {
+    const recs = Array.from({ length: 3 }, (_, i) => makeRec("u" + (i + 1), "t"));
+    const path = await writeLines("p.jsonl", recs);
+    const res = await readTranscriptPage({ path, before: null });
+    expect(res.records).toHaveLength(3);
+    expect(TRANSCRIPT_WINDOW_BYTES).toBe(4 * 1024 * 1024);
+  });
+
+  it("T13: a page from a 250-byte window is bounded by that window plus seq/epoch stamps", async () => {
+    const recs = Array.from({ length: 6 }, (_, i) => paddedRec("u" + (i + 1), 100));
+    const path = await writeLines("p.jsonl", recs);
+    const page = await readTranscriptPage({ path, before: null, limit: 50, maxBytes: 250 });
+    const bytes = Buffer.byteLength(JSON.stringify(page.records), "utf8");
+    expect(page.records.length).toBeLessThanOrEqual(3);
+    expect(bytes).toBeLessThan(250 + 128 * page.records.length);
   });
 });
