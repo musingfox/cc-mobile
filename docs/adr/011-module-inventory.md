@@ -146,3 +146,18 @@ Playwright e2e：
 
 `server/__tests__/dead-code-residue.test.ts` 掃描 `server/` 與 `client/`，任何一條
 指回上述已刪模組的引用都會讓測試變紅。
+
+## capabilities-from-agent 後現況（2026-08-21）
+
+上表與「#25 後現況」寫下時為真，原文不改。此後 capabilities 改為**向活著的
+agent 現問**（`server/capabilities/`：`claude-probe.ts` 一次性探測 +
+`enrich.ts` 補述 + `cache.ts` 的記憶體快取，鍵為 `(kind, cwd)`），
+以下兩處因此失效：
+
+- 檔案分類表的 `capabilities-cache.ts | KEEP`：該檔已刪。它快取的是 SDK
+  control methods 的結果，而 SDK 路徑本身在 #25 就沒了；讀取端
+  `loadCachedCapabilities` 在這輪一併移除，`~/.claude-mobile/` 不再是
+  capabilities 的來源。
+- 「實際刪除清單（#25）」裡「`saveCachedCapabilities`（`KEEP` 降為唯讀）」：
+  唯讀的那一半也結束了，整個檔案連同其測試刪除。快取不再落磁碟——
+  新的快取活在 backend 實例的記憶體裡，隨行程結束而亡。

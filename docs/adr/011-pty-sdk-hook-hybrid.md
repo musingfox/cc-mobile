@@ -102,3 +102,11 @@ turn-13 Divergence 揭露：上述驅動是「**一次性** prompt → poll 等 
 - **經濟性**：✅ 技術跑得起來，但**划不划算**須待 2026-06-15 計費新規生效後，於互動模式實際量測訂閱桶用量才能定（與技術可行性是兩回事）。
 
 **端到端 live（EX-11，待使用者配合真 claude + 手機 client）**：真 claude → hook → server → 手機核准 → 回 hook 的完整迴路；須在 session 模型拍板、H2-B/H1-C 解掉後再跑（否則 60s 即逾時）。
+
+## capabilities-from-agent 後現況（2026-08-21）
+
+〈已確認事實〉第 4 條列的免費控制協定面，作為 2026-06-09 對 SDK 的查證仍是
+當時的紀錄，原文不改。但 cc-mobile 這一側已無 SDK（#25 刪除 query() 路徑），
+其中 `accountInfo()` 這一項在這輪連同 `model` / `models` 一起從協定與 UI
+退場——沒有帳號資訊要顯示，也沒有管道拿。cc-mobile 現在向活著的 agent 現問
+命令與 subagent 清單（`server/capabilities/`），其餘控制協定面不再有消費者。
