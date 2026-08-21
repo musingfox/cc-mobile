@@ -11,7 +11,14 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initCursorAtEof, readTranscriptSince, type TranscriptCursor } from "./reader";
+import {
+  defaultTranscriptReadFs,
+  initCursorAtEof,
+  readTranscriptSince,
+  readTranscriptWindow,
+  type TranscriptCursor,
+  type TranscriptReadFs,
+} from "./reader";
 
 const FIXTURE = join(import.meta.dir, "fixtures", "probe-session.jsonl");
 
@@ -284,5 +291,175 @@ describe("TranscriptReadRecordOffsets", () => {
 
     expect(res.records).toEqual([]);
     expect(res.cursor).toEqual(cur);
+  });
+});
+
+function makeExactLine(target: number, id: string): string {
+  let s = JSON.stringify({ u: id });
+  while (Buffer.byteLength(s, "utf8") + 1 < target) s += " ";
+  return s;
+}
+
+function trackingFs(): { fs: TranscriptReadFs; slices: Array<{ start: number; end: number }> } {
+  const slices: Array<{ start: number; end: number }> = [];
+  const fs: TranscriptReadFs = {
+    size: (path) => defaultTranscriptReadFs.size(path),
+    async readSlice(path, start, end) {
+      slices.push({ start, end });
+      return defaultTranscriptReadFs.readSlice(path, start, end);
+    },
+  };
+  return { fs, slices };
+}
+
+describe("WindowedTranscriptRead", () => {
+  it("T1: given a fixture far smaller than maxBytes, window matches a full since-read and windowStart === 0", async () => {
+    const path = await writeTranscript("w.jsonl", [
+      makeExactLine(10, "0"),
+      makeExactLine(20, "1"),
+      makeExactLine(30, "2"),
+    ]);
+    const size = Bun.file(path).size;
+    const window = await readTranscriptWindow({ path, end: size, maxBytes: 1_000_000 });
+    const since = await readTranscriptSince({ path, cursor: START });
+    expect(window.records).toEqual(since.records);
+    expect(window.offsets).toEqual(since.offsets);
+    expect(window.windowStart).toBe(0);
+  });
+
+  it("T2: window start on a line boundary keeps lines 2 and 3 with absolute offsets [20, 40]", async () => {
+    const path = await writeTranscript("w.jsonl", [
+      makeExactLine(20, "0"),
+      makeExactLine(20, "1"),
+      makeExactLine(20, "2"),
+    ]);
+    const window = await readTranscriptWindow({ path, end: 60, maxBytes: 40 });
+    expect(window.windowStart).toBe(20);
+    expect(window.offsets).toEqual([20, 40]);
+    expect((window.records[0] as { u: string }).u).toBe("1");
+    expect((window.records[1] as { u: string }).u).toBe("2");
+  });
+
+  it("T3: window start mid-record discards the partial line; offsets stay absolute", async () => {
+    const path = await writeTranscript("w.jsonl", [
+      makeExactLine(20, "0"),
+      makeExactLine(20, "1"),
+      makeExactLine(20, "2"),
+    ]);
+    const window = await readTranscriptWindow({ path, end: 60, maxBytes: 35 });
+    expect(window.windowStart).toBe(25);
+    expect(window.records).toHaveLength(1);
+    expect((window.records[0] as { u: string }).u).toBe("2");
+    expect(window.offsets).toEqual([40]);
+  });
+
+  it("T4: end is exclusive — no record at or after byte 30", async () => {
+    const path = await writeTranscript("w.jsonl", [
+      makeExactLine(10, "0"),
+      makeExactLine(20, "1"),
+      makeExactLine(30, "2"),
+    ]);
+    const window = await readTranscriptWindow({ path, end: 30, maxBytes: 1_000_000 });
+    expect(window.records).toHaveLength(2);
+    expect((window.records[0] as { u: string }).u).toBe("0");
+    expect((window.records[1] as { u: string }).u).toBe("1");
+    expect(window.offsets.every((o) => o < 30)).toBe(true);
+  });
+
+  it("T5: CJK first line reports the second offset as byte length, not character length", async () => {
+    const line1 = JSON.stringify({ t: "測試" });
+    const line2 = '{"u":"x"}';
+    const path = await writeTranscript("cjk.jsonl", [line1, line2]);
+    const window = await readTranscriptWindow({
+      path,
+      end: Bun.file(path).size,
+      maxBytes: 1_000_000,
+    });
+    expect(window.offsets[1]).toBe(Buffer.byteLength(line1, "utf8") + 1);
+  });
+
+  it("T6: a window with no complete line returns empty without throwing", async () => {
+    const path = await writeTranscript("w.jsonl", [makeExactLine(10, "0"), makeExactLine(30, "1")]);
+    const size = Bun.file(path).size;
+    const window = await readTranscriptWindow({ path, end: size, maxBytes: 5 });
+    expect(window).toEqual({ records: [], offsets: [], windowStart: size - 5 });
+  });
+
+  it("T7: restart path with maxBytes starts at line 2, absolute offsets, cursor at EOF", async () => {
+    const path = await writeTranscript("w.jsonl", [
+      makeExactLine(20, "0"),
+      makeExactLine(20, "1"),
+      makeExactLine(20, "2"),
+    ]);
+    const { records, offsets, cursor } = await readTranscriptSince({
+      path,
+      cursor: { byteOffset: 20, lastUuid: "wrong-uuid" },
+      maxBytes: 40,
+    });
+    expect((records[0] as { u: string }).u).toBe("1");
+    expect(offsets).toEqual([20, 40]);
+    expect(cursor.byteOffset).toBe(60);
+  });
+
+  it("T8: restart path never readSlice-s more than maxBytes or from byte 0", async () => {
+    const path = await writeTranscript("w.jsonl", [
+      makeExactLine(20, "0"),
+      makeExactLine(20, "1"),
+      makeExactLine(20, "2"),
+    ]);
+    const { fs, slices } = trackingFs();
+    await readTranscriptSince({
+      path,
+      cursor: { byteOffset: 9999, lastUuid: "x" },
+      maxBytes: 40,
+      fs,
+    });
+    expect(slices.every((c) => c.end - c.start <= 40)).toBe(true);
+    expect(slices.every((c) => c.start !== 0)).toBe(true);
+  });
+
+  it("T10: maxBytes is inert on a matching forward continuation", async () => {
+    const path = await writeTranscript("w.jsonl", [
+      makeExactLine(20, "0"),
+      makeExactLine(20, "1"),
+      makeExactLine(20, "2"),
+    ]);
+    const first = await readTranscriptSince({
+      path,
+      cursor: { byteOffset: 0, lastUuid: null },
+    });
+    const mid = {
+      byteOffset: 20,
+      lastUuid: uuidOf(first.records[0]),
+    };
+    const today = await readTranscriptSince({ path, cursor: mid });
+    const capped = await readTranscriptSince({ path, cursor: mid, maxBytes: 40 });
+    expect(capped.records).toEqual(today.records);
+    expect(capped.offsets).toEqual(today.offsets);
+    expect(capped.cursor).toEqual(today.cursor);
+  });
+
+  it("T11: missing file returns empty window without throwing", async () => {
+    const window = await readTranscriptWindow({
+      path: "/nope/missing.jsonl",
+      end: 0,
+      maxBytes: 4096,
+    });
+    expect(window).toEqual({ records: [], offsets: [], windowStart: 0 });
+  });
+
+  it("T12: malformed middle line is skipped; following offset stays absolute", async () => {
+    const l0 = makeExactLine(20, "0");
+    const bad = "{not json";
+    const l2 = makeExactLine(20, "2");
+    const path = await writeTranscript("mal.jsonl", [l0, bad, l2]);
+    const window = await readTranscriptWindow({
+      path,
+      end: Bun.file(path).size,
+      maxBytes: 1_000_000,
+    });
+    expect(window.records).toHaveLength(2);
+    const expected = 20 + Buffer.byteLength(bad, "utf8") + 1;
+    expect(window.offsets[1]).toBe(expected);
   });
 });

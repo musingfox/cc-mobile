@@ -23,6 +23,9 @@
 /** How far back to look for the record that must end at `byteOffset`. */
 const TAIL_WINDOW_BYTES = 64 * 1024;
 
+/** Byte window for a bounded transcript read. One page of 50 records fits with margin. */
+export const TRANSCRIPT_WINDOW_BYTES = 4 * 1024 * 1024;
+
 export interface TranscriptCursor {
   /** Byte offset of the end of the last record handed out. */
   byteOffset: number;
@@ -118,6 +121,89 @@ export interface ReadTranscriptSinceInput {
   path: string;
   cursor: TranscriptCursor;
   fs?: TranscriptReadFs;
+  /** Cap applied only on the restart path. Forward-only reads ignore it. */
+  maxBytes?: number;
+}
+
+export interface ReadTranscriptWindowInput {
+  path: string;
+  /** Exclusive end byte. */
+  end: number;
+  maxBytes: number;
+  fs?: TranscriptReadFs;
+}
+
+export interface TranscriptWindowResult {
+  records: unknown[];
+  offsets: number[];
+  windowStart: number;
+}
+
+function parseCompleteRecords(
+  chunk: string,
+  start: number,
+): { records: unknown[]; offsets: number[]; consumedEnd: number } {
+  const { lines, consumedBytes } = completeLines(chunk);
+  const records: unknown[] = [];
+  const offsets: number[] = [];
+  let lineStart = start;
+  for (const line of lines) {
+    const lineBytes = byteLength(line) + 1;
+    if (line.trim().length === 0) {
+      lineStart += lineBytes;
+      continue;
+    }
+    let record: unknown;
+    try {
+      record = JSON.parse(line);
+    } catch {
+      lineStart += lineBytes;
+      continue;
+    }
+    records.push(record);
+    offsets.push(lineStart);
+    lineStart += lineBytes;
+  }
+  return { records, offsets, consumedEnd: start + consumedBytes };
+}
+
+/**
+ * Records in `[max(0, end - maxBytes), end)`. A window that starts mid-record
+ * drops the partial first line. Offsets are absolute file bytes (`seq`).
+ */
+export async function readTranscriptWindow(
+  input: ReadTranscriptWindowInput,
+): Promise<TranscriptWindowResult> {
+  const { path, end: requestedEnd, maxBytes } = input;
+  const fs = input.fs ?? defaultTranscriptReadFs;
+  const size = await fs.size(path);
+  if (size === null) {
+    return { records: [], offsets: [], windowStart: Math.max(0, requestedEnd - maxBytes) };
+  }
+
+  const end = Math.max(0, Math.min(requestedEnd, size));
+  const windowStart = Math.max(0, end - maxBytes);
+  if (windowStart >= end) {
+    return { records: [], offsets: [], windowStart };
+  }
+
+  let chunk = await fs.readSlice(path, windowStart, end);
+  let dataStart = windowStart;
+  if (windowStart > 0) {
+    const prev = await fs.readSlice(path, windowStart - 1, windowStart);
+    if (prev !== "\n") {
+      const newlineAt = chunk.indexOf("\n");
+      if (newlineAt === -1) {
+        return { records: [], offsets: [], windowStart };
+      }
+      const skip = byteLength(chunk.slice(0, newlineAt + 1));
+      chunk = chunk.slice(newlineAt + 1);
+      dataStart = windowStart + skip;
+    }
+  }
+
+  const parsed = parseCompleteRecords(chunk, dataStart);
+  return { records: parsed.records, offsets: parsed.offsets, windowStart };
 }
 
 /**
@@ -138,49 +224,49 @@ export async function readTranscriptSince(
   if (size === null) return { records: [], offsets: [], cursor };
 
   let start = cursor.byteOffset;
+  let restarted = false;
   if (start > size) {
     start = 0;
+    restarted = true;
   } else if (cursor.lastUuid !== null && start > 0) {
     const anchor = await recordEndingAt(fs, path, start);
-    if (uuidOf(anchor) !== cursor.lastUuid) start = 0;
+    if (uuidOf(anchor) !== cursor.lastUuid) {
+      start = 0;
+      restarted = true;
+    }
   }
 
-  const restarted = start !== cursor.byteOffset;
+  if (restarted) {
+    const cap = input.maxBytes ?? TRANSCRIPT_WINDOW_BYTES;
+    const window = await readTranscriptWindow({ path, end: size, maxBytes: cap, fs });
+    const last = window.records.length > 0 ? window.records[window.records.length - 1] : null;
+    return {
+      records: window.records,
+      offsets: window.offsets,
+      cursor: { byteOffset: size, lastUuid: uuidOf(last) },
+    };
+  }
+
   if (start === size) {
     return {
       records: [],
       offsets: [],
-      cursor: restarted ? { byteOffset: start, lastUuid: null } : cursor,
+      cursor,
     };
   }
 
   const chunk = await fs.readSlice(path, start, size);
-  const { lines, consumedBytes } = completeLines(chunk);
+  const parsed = parseCompleteRecords(chunk, start);
+  const lastUuid =
+    parsed.records.length > 0
+      ? uuidOf(parsed.records[parsed.records.length - 1])
+      : cursor.lastUuid;
 
-  const records: unknown[] = [];
-  const offsets: number[] = [];
-  let lastUuid = restarted ? null : cursor.lastUuid;
-  let lineStart = start;
-  for (const line of lines) {
-    const lineBytes = byteLength(line) + 1;
-    if (line.trim().length === 0) {
-      lineStart += lineBytes;
-      continue;
-    }
-    let record: unknown;
-    try {
-      record = JSON.parse(line);
-    } catch {
-      lineStart += lineBytes;
-      continue;
-    }
-    records.push(record);
-    offsets.push(lineStart);
-    lastUuid = uuidOf(record);
-    lineStart += lineBytes;
-  }
-
-  return { records, offsets, cursor: { byteOffset: start + consumedBytes, lastUuid } };
+  return {
+    records: parsed.records,
+    offsets: parsed.offsets,
+    cursor: { byteOffset: parsed.consumedEnd, lastUuid },
+  };
 }
 
 /**
