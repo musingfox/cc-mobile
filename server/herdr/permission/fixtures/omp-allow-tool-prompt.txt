@@ -1,0 +1,13 @@
+ ⠧ Run both echo commands ⟨esc⟩
+
+──────────────────────────────────────────────────────────────────────────
+
+ Allow tool: bash
+ Command: echo PERM-SPIKE-1 && echo PERM-SPIKE-2
+
+  Approve
+   Deny
+
+ up/down navigate  enter select  esc cancel
+
+──────────────────────────────────────────────────────────────────────────
