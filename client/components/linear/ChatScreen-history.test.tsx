@@ -821,3 +821,209 @@ describe("ConversationModeAutoPage", () => {
     expect(scroller.scrollTop).toBe(200);
   });
 });
+
+describe("ScrollRulesIntact", () => {
+  test("T1: switching Conversation to Full from mid-list does not jump to the bottom, for either first-message role", () => {
+    const cases: Array<{ first: Message; rest: Message[] }> = [
+      {
+        first: { id: "id-u", role: "user", content: "p", timestamp: 0, recordId: "u", seq: 1 },
+        rest: [
+          toolPart("tu", 2),
+          {
+            id: "id-a",
+            role: "assistant",
+            content: "a",
+            timestamp: 3,
+            recordId: "a",
+            seq: 3,
+            stopReason: "end_turn",
+          },
+        ],
+      },
+      {
+        first: toolPart("tu0", 1),
+        rest: [
+          { id: "id-u", role: "user", content: "p", timestamp: 2, recordId: "u", seq: 2 },
+          {
+            id: "id-a",
+            role: "assistant",
+            content: "a",
+            timestamp: 3,
+            recordId: "a",
+            seq: 3,
+            stopReason: "end_turn",
+          },
+        ],
+      },
+    ];
+
+    for (const c of cases) {
+      cleanup();
+      useAppStore.setState({ sessions: new Map(), activeSessionId: null, inputDraft: "" });
+      useSettingsStore.getState().setReadingMode("conversation");
+      openSession({ readable: true, messages: [c.first, ...c.rest] });
+      const { container } = render(<ChatScreen onNavigate={() => {}} />);
+      const scroller = stubScroller(container, 2000, 800, 600);
+      fireEvent.scroll(scroller);
+      act(() => {
+        useSettingsStore.getState().setReadingMode("full");
+      });
+      expect(scroller.scrollTop).toBe(800);
+      expect(scroller.scrollTop).not.toBe(scroller.scrollHeight);
+    }
+  });
+
+  test("T2: switching Full to Conversation from mid-list keeps the same defined stay-put behaviour", () => {
+    useSettingsStore.getState().setReadingMode("full");
+    openSession({
+      readable: true,
+      messages: [
+        toolPart("tu0", 1),
+        { id: "id-u", role: "user", content: "p", timestamp: 2, recordId: "u", seq: 2 },
+        {
+          id: "id-a",
+          role: "assistant",
+          content: "a",
+          timestamp: 3,
+          recordId: "a",
+          seq: 3,
+          stopReason: "end_turn",
+        },
+      ],
+    });
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    const scroller = stubScroller(container, 2000, 800, 600);
+    fireEvent.scroll(scroller);
+    act(() => {
+      useSettingsStore.getState().setReadingMode("conversation");
+    });
+    expect(scroller.scrollTop).toBe(800);
+  });
+
+  test("T3: a live assistant chunk while more than 64px from the bottom leaves scrollTop unchanged", () => {
+    openSession({ readable: true, messages: [record("a", 10)] });
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    const scroller = stubScroller(container, 1000, 0, 600);
+    fireEvent.scroll(scroller);
+    act(() => {
+      Object.defineProperty(scroller, "scrollHeight", { value: 1200, configurable: true });
+      useAppStore.getState().applyTranscriptMessages("s1", {
+        epoch: "aaaa",
+        messages: [record("b", 20)],
+      });
+    });
+    expect(scroller.scrollTop).toBe(0);
+  });
+
+  test("T4: the same arrival within 64px of the bottom still scrolls to the bottom", () => {
+    openSession({ readable: true, messages: [record("a", 10)] });
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    const scroller = stubScroller(container, 1000, 336, 600);
+    fireEvent.scroll(scroller);
+    act(() => {
+      Object.defineProperty(scroller, "scrollHeight", { value: 1200, configurable: true });
+      useAppStore.getState().applyTranscriptMessages("s1", {
+        epoch: "aaaa",
+        messages: [record("b", 20)],
+      });
+    });
+    expect(scroller.scrollTop).toBe(1200);
+  });
+
+  test("T5: a prepend shorter than 50 records still compensates by the growth in scrollHeight", () => {
+    openSession({ readable: true, messages: [record("tail", 1000)] });
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    const scroller = stubScroller(container, 1000, 200, 600);
+    fireEvent.scroll(scroller);
+    Object.defineProperty(scroller, "scrollHeight", { value: 1300, configurable: true });
+    act(() => {
+      useAppStore.getState().applyTranscriptMessages("s1", {
+        epoch: "aaaa",
+        messages: Array.from({ length: 20 }, (_, i) => record(`old${i}`, i)),
+      });
+    });
+    expect(scroller.scrollTop).toBe(500);
+  });
+
+  test("T6: a Full-mode prepend of thinking and tool messages still preserves position", () => {
+    useSettingsStore.getState().setReadingMode("full");
+    openSession({ readable: true, messages: [record("tail", 1000)] });
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    const scroller = stubScroller(container, 1000, 0, 600);
+    fireEvent.scroll(scroller);
+    Object.defineProperty(scroller, "scrollHeight", { value: 1600, configurable: true });
+    act(() => {
+      useAppStore.getState().applyTranscriptMessages("s1", {
+        epoch: "aaaa",
+        messages: [thinkingPart("th", 1), toolPart("tu", 2)],
+      });
+    });
+    expect(scroller.scrollTop).toBe(600);
+  });
+
+  test("T7: an epoch reset while mid-list still forces the view to the bottom", () => {
+    openSession({ readable: true, messages: [record("old1", 10), record("old2", 20)] });
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    act(() => {
+      useAppStore.getState().applyTranscriptMessages("s1", { epoch: "aaaa", messages: [] });
+    });
+    const scroller = stubScroller(container, 1000, 200, 600);
+    fireEvent.scroll(scroller);
+    Object.defineProperty(scroller, "scrollHeight", { value: 400, configurable: true });
+    act(() => {
+      useAppStore.getState().applyTranscriptMessages("s1", {
+        epoch: "bbbb",
+        messages: [record("new1", 0)],
+      });
+    });
+    expect(scroller.scrollTop).toBe(400);
+  });
+
+  test("T8: sending from the composer while scrolled up still jumps to the bottom", () => {
+    openSession({ readable: true, messages: [record("a", 10)] });
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    const scroller = stubScroller(container, 1000, 0, 600);
+    fireEvent.scroll(scroller);
+    act(() => {
+      Object.defineProperty(scroller, "scrollHeight", { value: 1100, configurable: true });
+      useAppStore.getState().addMessage("s1", {
+        id: "user-1",
+        role: "user",
+        content: "hi",
+        timestamp: Date.now(),
+      });
+    });
+    expect(scroller.scrollTop).toBe(1100);
+  });
+
+  test("T9: the first mount of a session lands on the newest message", () => {
+    openSession({ readable: true, messages: [record("a", 10), record("b", 20)] });
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    const el = container.querySelector(".lin-chat-scroll") as HTMLElement;
+    expect(el.scrollTop).toBe(el.scrollHeight);
+  });
+
+  test("T10: copy controls do not change scroll classification versus a clipboard-less mount", () => {
+    function prependTop(clipboard: unknown) {
+      cleanup();
+      useAppStore.setState({ sessions: new Map(), activeSessionId: null, inputDraft: "" });
+      Object.defineProperty(navigator, "clipboard", { configurable: true, value: clipboard });
+      openSession({ readable: true, messages: [record("tail", 1000)] });
+      const { container } = render(<ChatScreen onNavigate={() => {}} />);
+      const scroller = stubScroller(container, 1000, 0);
+      fireEvent.scroll(scroller);
+      Object.defineProperty(scroller, "scrollHeight", { value: 1600, configurable: true });
+      act(() => {
+        useAppStore.getState().applyTranscriptMessages("s1", {
+          epoch: "aaaa",
+          messages: Array.from({ length: 10 }, (_, i) => record(`old${i}`, i)),
+        });
+      });
+      return scroller.scrollTop;
+    }
+    const withCopy = prependTop({ writeText: async () => {} });
+    const without = prependTop(undefined);
+    expect(withCopy).toBe(without);
+    expect(withCopy).toBe(600);
+  });
+});
