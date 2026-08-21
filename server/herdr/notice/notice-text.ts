@@ -58,7 +58,7 @@ function clipHead(text: string): string {
 export function noticeTextFrom(screen: string): string | null {
   const redacted = redactSecrets(screen);
   if (redacted.trim() === "") return null;
-  const inner = redacted.split("\n").slice(-LAST_LINES).join("\n");
+  const inner = redacted.split("\n").slice(-LAST_LINES).join("\n").trim();
   const fence = wrappingFence(inner);
   return clipHead(`\n${fence}\n${inner}\n${fence}`);
 }
