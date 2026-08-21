@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { wsService } from "../../services/ws-service";
-import { useAppStore } from "../../stores/app-store";
+import { type SessionCapabilitiesState, useAppStore } from "../../stores/app-store";
 import ChatScreen from "./ChatScreen";
 
 describe("ChatScreen", () => {
@@ -383,5 +383,67 @@ describe("RateLimitChipRemoved", () => {
 
   test("T3: store has no setRateLimitInfo", () => {
     expect("setRateLimitInfo" in useAppStore.getState()).toBe(false);
+  });
+});
+
+describe("PickerSheetUnavailableRetry", () => {
+  let prevWs: WebSocket | null;
+
+  beforeEach(() => {
+    const internal = wsService as unknown as { ws: WebSocket | null };
+    prevWs = internal.ws;
+    internal.ws = { send: mock((_data: string) => {}) } as unknown as WebSocket;
+    useAppStore.setState({ sessions: new Map(), activeSessionId: null, inputDraft: "" });
+  });
+
+  afterEach(() => {
+    (wsService as unknown as { ws: WebSocket | null }).ws = prevWs;
+    cleanup();
+  });
+
+  function seed(cap: SessionCapabilitiesState) {
+    const store = useAppStore.getState();
+    store.addSession("s1", "/tmp/cc-mobile");
+    store.setActiveSession("s1");
+    store.setSessionCapabilities("s1", cap);
+  }
+
+  function frames() {
+    const send = (wsService as unknown as { ws: { send: ReturnType<typeof mock> } }).ws.send;
+    return send.mock.calls.map((call) => JSON.parse(call[0] as string));
+  }
+
+  test("T1: a failed probe leaves a retry the user can press, and it re-probes", () => {
+    seed({ status: "unavailable", reason: "failed" });
+    const { getByLabelText, getByText } = render(<ChatScreen onNavigate={() => {}} />);
+    fireEvent.click(getByLabelText("Insert slash command"));
+    fireEvent.click(getByText("Retry"));
+    expect(frames()).toEqual([{ type: "capabilities_request", sessionId: "s1", refresh: true }]);
+  });
+
+  test("T2: unsupported gets the same retry — kind detection is snapshot-time", () => {
+    seed({ status: "unavailable", reason: "unsupported" });
+    const { getByLabelText, getByText } = render(<ChatScreen onNavigate={() => {}} />);
+    fireEvent.click(getByLabelText("Insert agent mention"));
+    fireEvent.click(getByText("Retry"));
+    expect(frames()).toEqual([{ type: "capabilities_request", sessionId: "s1", refresh: true }]);
+  });
+
+  test("T3: an answered empty list is not a failure, so it offers no retry", () => {
+    seed({ status: "ready", commands: [], agents: [] });
+    const { getByLabelText, getByText, queryByText } = render(<ChatScreen onNavigate={() => {}} />);
+    fireEvent.click(getByLabelText("Insert slash command"));
+    expect(getByText("No commands available.")).not.toBeNull();
+    expect(queryByText("Retry")).toBeNull();
+  });
+
+  test("T4: pressing retry puts the sheet back into Loading…", async () => {
+    seed({ status: "unavailable", reason: "failed" });
+    const { getByLabelText, getByText } = render(<ChatScreen onNavigate={() => {}} />);
+    fireEvent.click(getByLabelText("Insert slash command"));
+    fireEvent.click(getByText("Retry"));
+    await waitFor(() => {
+      expect(getByText("Loading…")).not.toBeNull();
+    });
   });
 });

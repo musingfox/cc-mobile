@@ -17,6 +17,8 @@
 .lin-picker-state {
   min-height: 140px;
   display: flex;
+  flex-direction: column;
+  gap: 12px;
   align-items: center;
   justify-content: center;
   text-align: center;
@@ -24,4 +26,14 @@
   color: #6a6a6a;
   font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
+}
+
+.lin-picker-retry {
+  min-height: 44px;
+  padding: 0 20px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: transparent;
+  color: #d0d0d0;
+  font: inherit;
 }

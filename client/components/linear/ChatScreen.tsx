@@ -383,6 +383,11 @@ export default function ChatScreen({ onNavigate }: Props) {
           onClose={() => setPickerKind(null)}
           onSelect={handlePickerSelect}
           loading={capState?.status === "loading"}
+          {...(capState?.status === "unavailable"
+            ? {
+                onRetry: () => wsService.requestCapabilities(activeSessionId, { refresh: true }),
+              }
+            : {})}
           items={pickerItems.map((item) => ({
             name: item.name,
             ...(item.description ? { description: item.description } : {}),

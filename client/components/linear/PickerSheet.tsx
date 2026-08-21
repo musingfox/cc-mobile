@@ -16,6 +16,13 @@ interface PickerSheetProps {
   onClose: () => void;
   open: boolean;
   loading?: boolean;
+  /**
+   * Present only when the empty list is a probe that never answered, never
+   * when it is an answer that happened to be empty. It is the one way out of
+   * `unavailable`: the failure is cached server-side under (kind, cwd), so
+   * without a re-probe that cwd stays empty until the server restarts.
+   */
+  onRetry?: () => void;
 }
 
 export default function PickerSheet({
@@ -25,6 +32,7 @@ export default function PickerSheet({
   onClose,
   open,
   loading = false,
+  onRetry,
 }: PickerSheetProps) {
   const title = kind === "slash" ? "Commands" : "Agents";
 
@@ -42,6 +50,18 @@ export default function PickerSheet({
         ) : items.length === 0 ? (
           <div className="lin-picker-state">
             {kind === "slash" ? "No commands available." : "No agents available."}
+            {onRetry && (
+              <button
+                type="button"
+                className="lin-picker-retry"
+                onClick={() => {
+                  hapticService.tap();
+                  onRetry();
+                }}
+              >
+                Retry
+              </button>
+            )}
           </div>
         ) : (
           <div className="lin-picker-list">
