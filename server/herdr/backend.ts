@@ -23,6 +23,7 @@ import { type PageCursor, readTranscriptPage, type TranscriptPage } from "../tra
 import { type AgentState, statesFromSnapshot } from "./agent-state";
 import { createHerdrClient, type HerdrClient, SUPPORTED_PROTOCOL } from "./client";
 import { createHerdrPaneEvents } from "./pane-events";
+import { createAgentNotice } from "./notice/agent-notice";
 import { createNativePermission } from "./permission/native-permission";
 import { createHerdrRegistry } from "./registry";
 import { createHerdrSendRouting } from "./send-routing";
@@ -250,6 +251,10 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
    * read and parsed, the phone answers with a keystroke. This works for panes
    * cc-mobile never launched, which a PreToolUse hook it installs never could.
    */
+  const notice = createAgentNotice({
+    getSink: (sessionId) => routing.getClient(sessionId),
+  });
+
   const permission = createNativePermission({
     client: {
       agentGet: (target) => client.agentGet(target),
@@ -257,6 +262,8 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
       paneSendKeys: (paneId, keys) => client.paneSendKeys(paneId, keys),
     },
     getSink: (sessionId) => routing.getClient(sessionId),
+    onUnparsedBlockedScreen: (sessionId, screen) =>
+      notice.announceBlockedScreen(sessionId, screen),
     // Recorded at emit time because it gates the automated deny (Decision H2),
     // which must not depend on a listing succeeding 90 s later.
     originOf: async (sessionId) => {
@@ -304,6 +311,7 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
       : {}),
     permission: {
       onStatus: (sessionId, status, kind) => {
+        if (status !== "blocked") notice.forgetEpisode(sessionId);
         if (!permissionAppliesTo(status, kind)) return;
         return permission.onStatus(sessionId, status, kind);
       },
@@ -364,6 +372,7 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
     paneEvents.forget(sessionId);
     delivery.forget(sessionId);
     permission.forget(sessionId);
+    notice.forgetEpisode(sessionId);
   }
 
   return {
