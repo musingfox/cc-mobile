@@ -188,7 +188,11 @@ emit time — a human at the terminal may have moved the selection. omp's marker
 API failures too, and a blocked screen without that marker is a state, not a
 question. That state is sent once as `{type:"error", code:"agent_blocked_notice"}`
 with the screen's own words (fenced); an empty screen is silent. The same
-screen is not repeated until the blocked episode ends. `PermissionOption.keystroke`
+screen is not repeated until the blocked episode ends. Claude's first-run
+workspace-trust dialog is reported as `idle`, not `blocked`; that screen is
+announced once as `{type:"error", code:"agent_attention_notice"}` (fenced,
+redacted). The idle path only reads — it never presses a key, never arms the
+90 s deny, and never raises a permission card. `PermissionOption.keystroke`
 is therefore optional on the wire, absent
 for omp; the client answers with `optionId` either way.
 

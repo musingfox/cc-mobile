@@ -1,18 +1,23 @@
 /**
- * agent-notice.test.ts — AnnounceOnceLedger + BlockedScreenNoticeDelivery.
+ * agent-notice.test.ts — AnnounceOnceLedger + BlockedScreenNoticeDelivery
+ * + ClaudeIdleAttentionNoticeDelivery and the D3a negative contracts.
  *
  * The same screen is announced once per session. After the caller declares the
  * episode over, that screen may be announced again. Ledgers are per session.
  * A blocked non-prompt screen's own words go out as an error frame, once.
+ * An idle claude trust dialog is announced as attention, never as a keystroke.
  */
 
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { createAgentNotice } from "./agent-notice";
+import { createAgentNotice, type AgentNoticeOptions } from "./agent-notice";
 
 const FIXTURES = join(import.meta.dir, "../permission/fixtures");
 const OMP_API_FAILURE = readFileSync(join(FIXTURES, "omp-api-failure.txt"), "utf8");
+const TRUST_DIALOG = readFileSync(join(FIXTURES, "trust-dialog.txt"), "utf8");
+const IDLE_COMPOSER = readFileSync(join(FIXTURES, "claude-idle-composer.txt"), "utf8");
+const BASH_PROMPT = readFileSync(join(FIXTURES, "blocked-bash-prompt.txt"), "utf8");
 
 function ledger() {
   return createAgentNotice({ getSink: () => undefined });
@@ -45,8 +50,7 @@ describe("AnnounceOnceLedger", () => {
   });
 
   test('T5: clear("nobody") does not throw', () => {
-    const n = ledger();
-    expect(() => n.clear("nobody")).not.toThrow();
+    expect(() => ledger().clear("nobody")).not.toThrow();
   });
 });
 
@@ -121,5 +125,230 @@ describe("BlockedScreenNoticeDelivery", () => {
     expect(() => notice.announceBlockedScreen("unknown-pane", "text")).not.toThrow();
     expect(sink).toEqual([]);
     expectNoPermissionRequest(sink);
+  });
+});
+
+type PaneReadFn = (params: {
+  pane_id: string;
+  source: "detection";
+}) => Promise<{ text: string; revision: number }>;
+
+function idleHarness(input: {
+  screen?: string;
+  paneRead?: "missing" | "throw" | "reject" | PaneReadFn;
+} = {}) {
+  const sink: Record<string, unknown>[] = [];
+  const reads: unknown[] = [];
+  const keys: { pane: string; keys: string[] }[] = [];
+  const warnings: string[] = [];
+  const screen = input.screen ?? TRUST_DIALOG;
+
+  let paneRead: PaneReadFn | undefined = async (params) => {
+    reads.push(params);
+    return { text: screen, revision: 1 };
+  };
+
+  if (input.paneRead === "missing") {
+    paneRead = undefined;
+  } else if (input.paneRead === "throw") {
+    paneRead = () => {
+      reads.push("throw");
+      throw new Error("sync paneRead boom");
+    };
+  } else if (input.paneRead === "reject") {
+    paneRead = async (params) => {
+      reads.push(params);
+      throw new Error("pane.read rejected");
+    };
+  } else if (typeof input.paneRead === "function") {
+    paneRead = input.paneRead;
+  }
+
+  const client = {
+    ...(paneRead ? { paneRead } : {}),
+    paneSendKeys: async (paneId: string, sent: string[]) => {
+      keys.push({ pane: paneId, keys: sent });
+    },
+  };
+
+  const notice = createAgentNotice({
+    getSink: () => (msg) => sink.push(msg),
+    client: client as AgentNoticeOptions["client"],
+    warn: (message) => warnings.push(message),
+  });
+
+  return { notice, sink, reads, keys, warnings };
+}
+
+function attentionFrames(sink: Record<string, unknown>[]) {
+  return sink.filter((msg) => msg.code === "agent_attention_notice");
+}
+
+describe("ClaudeIdleAttentionNoticeDelivery", () => {
+  test("T1: idle claude trust dialog is one attention error containing Quick safety check", async () => {
+    const h = idleHarness({ screen: TRUST_DIALOG });
+    await h.notice.onStatus("w3V:p1", "idle", "claude");
+    expect(attentionFrames(h.sink)).toHaveLength(1);
+    expect(h.sink[0]).toMatchObject({
+      type: "error",
+      code: "agent_attention_notice",
+      sessionId: "w3V:p1",
+    });
+    expect(String(h.sink[0]?.message)).toContain("Quick safety check");
+  });
+
+  test("T2: idle with kind not yet detected still announces the dialog", async () => {
+    const h = idleHarness({ screen: TRUST_DIALOG });
+    await h.notice.onStatus("w3V:p1", "idle");
+    expect(attentionFrames(h.sink)).toHaveLength(1);
+  });
+
+  test("T3: idle omp never reads the pane", async () => {
+    const h = idleHarness({ screen: TRUST_DIALOG });
+    await h.notice.onStatus("w3V:p1", "idle", "omp");
+    expect(h.reads).toHaveLength(0);
+    expect(h.sink).toEqual([]);
+  });
+
+  test("T4: ordinary idle claude Empty state reads once and sends nothing", async () => {
+    const h = idleHarness({ screen: IDLE_COMPOSER });
+    await h.notice.onStatus("w3V:p1", "idle", "claude");
+    expect(h.reads).toHaveLength(1);
+    expect(h.sink).toEqual([]);
+  });
+
+  test("T5: working claude never reads", async () => {
+    const h = idleHarness({ screen: TRUST_DIALOG });
+    await h.notice.onStatus("w3V:p1", "working", "claude");
+    expect(h.reads).toHaveLength(0);
+    expect(h.sink).toEqual([]);
+  });
+
+  test("T6: idle ledger is not cleared by a status change", async () => {
+    const h = idleHarness({ screen: TRUST_DIALOG });
+    await h.notice.onStatus("p1", "idle", "claude");
+    await h.notice.onStatus("p1", "working", "claude");
+    await h.notice.onStatus("p1", "idle", "claude");
+    expect(attentionFrames(h.sink)).toHaveLength(1);
+  });
+
+  test("T7: rejecting paneRead resolves, sends nothing, warns once", async () => {
+    const h = idleHarness({ paneRead: "reject" });
+    await expect(h.notice.onStatus("p1", "idle", "claude")).resolves.toBeUndefined();
+    expect(h.sink).toEqual([]);
+    expect(h.warnings).toHaveLength(1);
+  });
+
+  test("T8: missing or throwing paneRead resolves, sends nothing, warns once", async () => {
+    const missing = idleHarness({ paneRead: "missing" });
+    await expect(missing.notice.onStatus("p1", "idle", "claude")).resolves.toBeUndefined();
+    expect(missing.sink).toEqual([]);
+    expect(missing.warnings).toHaveLength(1);
+    expect(missing.keys).toEqual([]);
+
+    const thrown = idleHarness({ paneRead: "throw" });
+    await expect(thrown.notice.onStatus("p1", "idle", "claude")).resolves.toBeUndefined();
+    expect(thrown.sink).toEqual([]);
+    expect(thrown.warnings).toHaveLength(1);
+    expect(thrown.keys).toEqual([]);
+  });
+});
+
+describe("IdlePathSendsNoKeystroke", () => {
+  test("T1: trust-dialog idle claude sends no keys", async () => {
+    const h = idleHarness({ screen: TRUST_DIALOG });
+    await h.notice.onStatus("p1", "idle", "claude");
+    expect(h.keys).toHaveLength(0);
+  });
+
+  test("T2: trust-dialog idle with no kind sends no keys", async () => {
+    const h = idleHarness({ screen: TRUST_DIALOG });
+    await h.notice.onStatus("p1", "idle");
+    expect(h.keys).toHaveLength(0);
+  });
+
+  test("T3: unrecognised idle screen sends no keys", async () => {
+    const h = idleHarness({ screen: IDLE_COMPOSER });
+    await h.notice.onStatus("p1", "idle", "claude");
+    expect(h.keys).toHaveLength(0);
+  });
+
+  test("T4: an immediate setTimeout stub still sends no keys", async () => {
+    const h = idleHarness({ screen: TRUST_DIALOG });
+    const real = globalThis.setTimeout;
+    const stub = ((fn: TimerHandler) => {
+      if (typeof fn === "function") fn();
+      return 0;
+    }) as typeof setTimeout;
+    globalThis.setTimeout = stub;
+    try {
+      await h.notice.onStatus("p1", "idle", "claude");
+    } finally {
+      globalThis.setTimeout = real;
+    }
+    expect(h.keys).toHaveLength(0);
+  });
+});
+
+describe("IdlePathArmsNoUnattendedDeny", () => {
+  test("T1: trust-dialog idle schedules no delay >= 1000 ms", async () => {
+    const h = idleHarness({ screen: TRUST_DIALOG });
+    const recorded: number[] = [];
+    const real = globalThis.setTimeout;
+    const spy = ((fn: TimerHandler, delay?: number, ...args: unknown[]) => {
+      recorded.push(delay ?? 0);
+      return real(fn as () => void, delay, ...args);
+    }) as unknown as typeof setTimeout;
+    globalThis.setTimeout = spy;
+    try {
+      await h.notice.onStatus("p1", "idle", "claude");
+    } finally {
+      globalThis.setTimeout = real;
+    }
+    expect(recorded.filter((ms) => ms >= 1000)).toEqual([]);
+  });
+
+  test("T2: unrecognised idle screen schedules no delay >= 1000 ms", async () => {
+    const h = idleHarness({ screen: IDLE_COMPOSER });
+    const recorded: number[] = [];
+    const real = globalThis.setTimeout;
+    const spy = ((fn: TimerHandler, delay?: number, ...args: unknown[]) => {
+      recorded.push(delay ?? 0);
+      return real(fn as () => void, delay, ...args);
+    }) as unknown as typeof setTimeout;
+    globalThis.setTimeout = spy;
+    try {
+      await h.notice.onStatus("p1", "idle", "claude");
+    } finally {
+      globalThis.setTimeout = real;
+    }
+    expect(recorded.filter((ms) => ms >= 1000)).toEqual([]);
+  });
+
+  test("T3: construction options cannot be configured to send", () => {
+    type Forbidden = keyof AgentNoticeOptions & ("originOf" | "timeoutMs" | "paneSendKeys");
+    const empty: Record<Forbidden, never> = {};
+    expect(Object.keys(empty)).toEqual([]);
+    const options: AgentNoticeOptions = { getSink: () => undefined };
+    expect("originOf" in options).toBe(false);
+    expect("timeoutMs" in options).toBe(false);
+    expect("paneSendKeys" in options).toBe(false);
+  });
+});
+
+describe("IdlePathRaisesNoPermissionRequest", () => {
+  test("T1: trust dialog idle yields only error frames, never a permission card", async () => {
+    const h = idleHarness({ screen: TRUST_DIALOG });
+    await h.notice.onStatus("p1", "idle", "claude");
+    expect(h.sink.length).toBeGreaterThan(0);
+    expect(h.sink.every((msg) => msg.type === "error")).toBe(true);
+    expect(h.sink.filter((msg) => msg.type === "permission_request")).toEqual([]);
+  });
+
+  test("T2: a real permission prompt seen while idle raises nothing", async () => {
+    const h = idleHarness({ screen: BASH_PROMPT });
+    await h.notice.onStatus("p1", "idle", "claude");
+    expect(h.sink).toEqual([]);
+    expect(h.sink.filter((msg) => msg.type === "permission_request")).toEqual([]);
   });
 });

@@ -726,3 +726,173 @@ describe("BlockedScreenNoticeDelivery wiring", () => {
     expect(h.sent.filter((msg) => msg.type === "error" || msg.type === "permission_request")).toEqual([]);
   });
 });
+
+// ── ClaudeIdleAttentionNoticeDelivery (backend wiring) ───────────────────────
+
+describe("ClaudeIdleAttentionNoticeDelivery wiring", () => {
+  const TRUST_DIALOG = readFileSync(
+    join(import.meta.dir, "permission/fixtures/trust-dialog.txt"),
+    "utf8",
+  );
+  const IDLE_COMPOSER = readFileSync(
+    join(import.meta.dir, "permission/fixtures/claude-idle-composer.txt"),
+    "utf8",
+  );
+  const BASH_PROMPT = readFileSync(
+    join(import.meta.dir, "permission/fixtures/blocked-bash-prompt.txt"),
+    "utf8",
+  );
+
+  function attentionBackend(opts: {
+    screen: string;
+    paneRead?: "ok" | "missing" | "throw";
+    keys?: { pane: string; keys: string[] }[];
+  }) {
+    let emit: ((event: { event: string; data: unknown }) => void) | undefined;
+    const reads: unknown[] = [];
+    const keys = opts.keys ?? [];
+    const mode = opts.paneRead ?? "ok";
+    const client = {
+      call: async () => ({ type: "ok" }),
+      agentGet: async () => ({ agent_status: "idle" }),
+      paneRead:
+        mode === "missing"
+          ? undefined
+          : mode === "throw"
+            ? () => {
+                reads.push("throw");
+                throw new Error("sync paneRead boom");
+              }
+            : async () => {
+                reads.push("read");
+                return { text: opts.screen, revision: 1 };
+              },
+      paneSendText: async () => {},
+      paneSendKeys: async (paneId: string, sent: string[]) => {
+        keys.push({ pane: paneId, keys: sent });
+      },
+      subscribeEvents: async (options: {
+        onEvent: (event: { event: string; data: unknown }) => void;
+      }) => {
+        emit = options.onEvent;
+        return { stop: () => {} };
+      },
+    } as unknown as NonNullable<HerdrBackendOptions["client"]>;
+
+    const backend = createHerdrBackend({ client });
+    const sent: Record<string, unknown>[] = [];
+    return {
+      backend,
+      sent,
+      reads,
+      keys,
+      async open(sessionId: string) {
+        backend.registerClient(sessionId, (msg) => sent.push(msg));
+        await backend.listSessionDescriptors();
+      },
+      async report(paneId: string, status: string, agent?: string) {
+        emit?.({
+          event: "pane_updated",
+          data: { pane: { pane_id: paneId, agent_status: status, ...(agent ? { agent } : {}) } },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      },
+    };
+  }
+
+  test("T1: idle claude trust dialog reaches the phone as agent_attention_notice", async () => {
+    const h = attentionBackend({ screen: TRUST_DIALOG });
+    await h.open("w3V:p1");
+    await h.report("w3V:p1", "idle", "claude");
+    const notices = h.sent.filter((msg) => msg.code === "agent_attention_notice");
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toMatchObject({
+      type: "error",
+      code: "agent_attention_notice",
+      sessionId: "w3V:p1",
+    });
+    expect(String(notices[0]?.message)).toContain("Quick safety check");
+  });
+
+  test("T2: idle with kind not yet detected still announces the dialog", async () => {
+    const h = attentionBackend({ screen: TRUST_DIALOG });
+    await h.open("w3V:p1");
+    await h.report("w3V:p1", "idle");
+    expect(h.sent.filter((msg) => msg.code === "agent_attention_notice")).toHaveLength(1);
+  });
+
+  test("T3: idle omp does not read the pane", async () => {
+    const h = attentionBackend({ screen: TRUST_DIALOG });
+    await h.open("w3V:p1");
+    await h.report("w3V:p1", "idle", "omp");
+    expect(h.reads).toHaveLength(0);
+    expect(h.sent.filter((msg) => msg.code === "agent_attention_notice")).toHaveLength(0);
+  });
+
+  test("T4: ordinary idle claude Empty state reads once and sends no notice", async () => {
+    const h = attentionBackend({ screen: IDLE_COMPOSER });
+    await h.open("w3V:p1");
+    await h.report("w3V:p1", "idle", "claude");
+    expect(h.reads).toHaveLength(1);
+    expect(h.sent.filter((msg) => msg.code === "agent_attention_notice")).toHaveLength(0);
+  });
+
+  test("T5: working claude does not read", async () => {
+    const h = attentionBackend({ screen: TRUST_DIALOG });
+    await h.open("w3V:p1");
+    await h.report("w3V:p1", "working", "claude");
+    expect(h.reads).toHaveLength(0);
+    expect(h.sent.filter((msg) => msg.code === "agent_attention_notice")).toHaveLength(0);
+  });
+
+  test("T6: idle ledger is not cleared by working then idle again", async () => {
+    const h = attentionBackend({ screen: TRUST_DIALOG });
+    await h.open("p1");
+    await h.report("p1", "idle", "claude");
+    await h.report("p1", "working", "claude");
+    await h.report("p1", "idle", "claude");
+    expect(h.sent.filter((msg) => msg.code === "agent_attention_notice")).toHaveLength(1);
+  });
+
+  test("T8: missing paneRead on idle does not send keys; claude blocked Cancel still presses esc", async () => {
+    const keys: { pane: string; keys: string[] }[] = [];
+    const missing = attentionBackend({ screen: TRUST_DIALOG, paneRead: "missing", keys });
+    await missing.open("p1");
+    await missing.report("p1", "idle", "claude");
+    expect(keys).toEqual([]);
+
+    // H1: the unattended/user deny key for claude remains esc (native-permission.ts:255).
+    let emit: ((event: { event: string; data: unknown }) => void) | undefined;
+    const client = {
+      call: async () => ({ type: "ok" }),
+      agentGet: async () => ({ agent_status: "blocked" }),
+      paneRead: async () => ({ text: BASH_PROMPT, revision: 1 }),
+      paneSendText: async () => {},
+      paneSendKeys: async (paneId: string, sent: string[]) => {
+        keys.push({ pane: paneId, keys: sent });
+      },
+      subscribeEvents: async (options: {
+        onEvent: (event: { event: string; data: unknown }) => void;
+      }) => {
+        emit = options.onEvent;
+        return { stop: () => {} };
+      },
+    } as unknown as NonNullable<HerdrBackendOptions["client"]>;
+    const backend = createHerdrBackend({ client });
+    const sent: Record<string, unknown>[] = [];
+    backend.registerClient("p1", (msg) => sent.push(msg));
+    await backend.listSessionDescriptors();
+    emit?.({
+      event: "pane_updated",
+      data: { pane: { pane_id: "p1", agent_status: "blocked", agent: "claude" } },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const request = sent.find((msg) => msg.type === "permission_request") as
+      | { requestId: string }
+      | undefined;
+    expect(request?.requestId).toBeDefined();
+    await backend.resolvePermission(request!.requestId, { allow: false });
+    expect(keys).toEqual([{ pane: "p1", keys: ["esc"] }]);
+  });
+});
+

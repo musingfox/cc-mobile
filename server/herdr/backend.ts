@@ -252,6 +252,10 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
    * cc-mobile never launched, which a PreToolUse hook it installs never could.
    */
   const notice = createAgentNotice({
+    // Read-only slice: the idle path must not be able to press a key.
+    client: {
+      paneRead: (params) => client.paneRead(params),
+    },
     getSink: (sessionId) => routing.getClient(sessionId),
   });
 
@@ -312,8 +316,11 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
     permission: {
       onStatus: (sessionId, status, kind) => {
         if (status !== "blocked") notice.forgetEpisode(sessionId);
-        if (!permissionAppliesTo(status, kind)) return;
-        return permission.onStatus(sessionId, status, kind);
+        const noticed = notice.onStatus(sessionId, status, kind);
+        if (!permissionAppliesTo(status, kind)) return noticed;
+        return Promise.all([noticed, permission.onStatus(sessionId, status, kind)]).then(
+          () => undefined,
+        );
       },
     },
     transcript: {
@@ -372,7 +379,7 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
     paneEvents.forget(sessionId);
     delivery.forget(sessionId);
     permission.forget(sessionId);
-    notice.forgetEpisode(sessionId);
+    notice.forget(sessionId);
   }
 
   return {
