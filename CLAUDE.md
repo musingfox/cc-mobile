@@ -186,7 +186,10 @@ its answer is a **distance** measured against the screen at answer time, not at
 emit time — a human at the terminal may have moved the selection. omp's marker
 `Allow tool: ` doubles as the classifier: its extension reports `blocked` for
 API failures too, and a blocked screen without that marker is a state, not a
-question. `PermissionOption.keystroke` is therefore optional on the wire, absent
+question. That state is sent once as `{type:"error", code:"agent_blocked_notice"}`
+with the screen's own words (fenced); an empty screen is silent. The same
+screen is not repeated until the blocked episode ends. `PermissionOption.keystroke`
+is therefore optional on the wire, absent
 for omp; the client answers with `optionId` either way.
 
 `gated` is read in each kind's own vocabulary, and the defaults point opposite
