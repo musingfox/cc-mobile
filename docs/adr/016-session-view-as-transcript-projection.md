@@ -104,3 +104,9 @@ Decision M1（不重塑內容）不受影響：歷史信封裡的 record body �
 手機不再是「你在手機上打的東西的紀錄」，而是這個 session 的鏡子。這讓終端機打的字第一次出現在手機上，也讓歷史可以被安全地重複抓取——後者是前者的直接結果，不是另外加上去的機制。
 
 決策過程與各方向的權衡見 [`spiral-016/`](spiral-016/)：[方法層定案](spiral-016/L1-plan.md)、[當初的四條路](spiral-016/L1-a1-directions.md)。
+
+## 2026-08-21 修訂（閱讀模式與排除規則成文）
+
+- **閱讀模式是 client 端的投影選擇**，不改動決策 3（畫面順序是檔案順序），也不改動 ADR-015 Decision M1（server 仍不重塑、含它沒見過的 block 一併轉送）。thinking 由 server 刻意保留；是否畫出來是 L2 的事。
+- **「N=50 界不住 payload」的風險由讀層視窗消化**，頁的單位仍是 mapper 回傳非 null 的 record，沒有改成分頁位元組上限、也沒有為了體積去動「不重塑」。
+- **排除規則清單現在寫在** [`docs/transcript-visibility.md`](../transcript-visibility.md)，並且是兩層兩種尺度的聯集（server record-unit ∪ client block-unit），不是假裝成一層。

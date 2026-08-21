@@ -17,16 +17,18 @@
  *
  * Three `user`/`assistant` records are bookkeeping too, and are dropped by flag
  * rather than by type (shapes confirmed against real transcripts under
- * `~/.claude/projects`, 2026-08-02):
- *   isSidechain      — a sub-agent's own conversation. Current claude writes it
- *                      to `<session>/subagents/*.jsonl`, but the flag rides on
- *                      the record, so a build that inlines it into the main file
- *                      cannot flood the phone with a Task tool's internals.
- *   isMeta           — text claude injects on the user's behalf: skill preludes,
- *                      `<local-command-caveat>` and friends. Nobody typed it.
- *   isCompactSummary — the "This session is being continued from a previous
- *                      conversation…" record written after a compaction, which
- *                      reads exactly like a user prompt and is not one.
+ * `~/.claude/projects`, 2026-08-02). Rule ids: docs/transcript-visibility.md.
+ *   isSidechain      — L1-isSidechain. A sub-agent's own conversation. Current
+ *                      claude writes it to `<session>/subagents/*.jsonl`, but the
+ *                      flag rides on the record, so a build that inlines it into
+ *                      the main file cannot flood the phone with a Task tool's
+ *                      internals.
+ *   isMeta           — L1-isMeta. Text claude injects on the user's behalf: skill
+ *                      preludes, `<local-command-caveat>` and friends. Nobody typed it.
+ *   isCompactSummary — L1-isCompactSummary. The "This session is being continued
+ *                      from a previous conversation…" record written after a
+ *                      compaction, which reads exactly like a user prompt and is
+ *                      not one.
  *
  * ── omp (#32) ───────────────────────────────────────────────────────────────
  * omp writes a different vocabulary into its own file, and this one function
@@ -38,14 +40,14 @@
  * produces a path, so its records never reach here to be misread.
  *
  * Types observed across every omp transcript on this machine (11 kinds, 2026-08-06):
- * `message` is the only conversational one. `custom` (pure event data),
+ * `message` is the only conversational one (L1-omp-type-not-message). `custom` (pure event data),
  * `custom_message` (advisor/plugin output — `attribution:"agent"`, rendered as
  * agent speech if forwarded, which nothing asks for), `session`, `title`,
  * `title_change`, `model_change`, `thinking_level_change`, `compaction`,
  * `service_tier_change`, `ttsr_injection` and `credential_pin` are all
  * bookkeeping and yield `null`, exactly as claude's non-conversational types do.
  *
- * Of omp's six roles only `assistant` and `user` are forwarded. `toolResult`,
+ * Of omp's six roles only `assistant` and `user` are forwarded (L1-omp-role-not-user-assistant). `toolResult`,
  * `developer`, `fileMention` and `bashExecution` are dropped: the client renders
  * `text` blocks on assistant records and nothing else, so forwarding them would
  * add invisible traffic, not visible content. Its `thinking` and `toolCall`
@@ -84,6 +86,7 @@ export function transcriptRecordToChunk(record: unknown): TranscriptChunk | null
 
   const fields = record as Record<string, unknown>;
   for (const flag of SUPPRESSING_FLAGS) {
+    // L1-isSidechain / L1-isMeta / L1-isCompactSummary
     if (fields[flag] === true) return null;
   }
 
@@ -95,8 +98,9 @@ export function transcriptRecordToChunk(record: unknown): TranscriptChunk | null
     if (rid) (chunk as any).recordId = rid;
     return chunk;
   }
+  // L1-claude-type-not-user-assistant (and L1-omp-type-not-message for non-message types)
   if (typeof type !== "string" || !RENDERABLE_TYPES.has(type)) return null;
-  // A conversational record with no message body carries nothing to show.
+  // L1-conversational-no-message-body
   if (typeof message !== "object" || message === null) return null;
 
   const chunk: TranscriptChunk = { type, message };
