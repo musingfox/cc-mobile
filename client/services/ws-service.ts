@@ -243,23 +243,6 @@ export const MAX_TOKENS_FALLBACK = 200_000;
 /** Server probe budget is 30s; 45s is that ceiling plus margin for a dropped reply. */
 export const CAPABILITIES_REQUEST_TIMEOUT_MS = 45_000;
 
-// Context window for the 1M-context beta models (marked with a "[1m]" suffix in
-// the model string, e.g. "claude-opus-4-8[1m]").
-export const ONE_MILLION_CONTEXT = 1_000_000;
-
-/**
- * Resolve the effective context window for a model. The catalogued contextLength
- * does not reflect the 1M beta, so a "[1m]" suffix in the model string overrides
- * it. Returns undefined when neither signal is present (caller falls back).
- */
-export function resolveContextWindow(
-  modelValue: string | undefined,
-  contextLength: number | undefined,
-): number | undefined {
-  if (modelValue?.includes("[1m]")) return ONE_MILLION_CONTEXT;
-  return contextLength;
-}
-
 /**
  * Derive an aggregate context-occupancy snapshot from a `result.usage` payload.
  * Sums input, output, and cached input tokens (the same components Anthropic
