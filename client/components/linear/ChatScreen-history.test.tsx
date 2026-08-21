@@ -587,6 +587,48 @@ describe("StayPutOnLiveArrival", () => {
 
     expect(scroller.scrollTop).toBe(1100);
   });
+
+  // T8/T9 are the other shape of growth: not a new message, the same one. A
+  // record whose `recordId#blockIndex` is already on screen is merged in place
+  // (app-store `applyTranscriptMessages`), because claude rewrites a record as
+  // the answer fills in — the bubble gets taller and the list does not.
+  test("T8: the same record arriving longer while parked mid-list leaves the view alone", () => {
+    openSession({ readable: true, messages: [record("a", 10)] });
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    const scroller = stubScroller(container, 1000, 0, 600);
+    fireEvent.scroll(scroller);
+
+    act(() => {
+      Object.defineProperty(scroller, "scrollHeight", { value: 1400, configurable: true });
+      useAppStore.getState().applyTranscriptMessages("s1", {
+        epoch: "aaaa",
+        messages: [{ ...record("a", 10), content: "a …more tokens" }],
+      });
+    });
+
+    // The growth really was in place: one message, longer.
+    expect(useAppStore.getState().sessions.get("s1")?.messages).toHaveLength(1);
+    expect(useAppStore.getState().sessions.get("s1")?.messages[0]?.content).toBe("a …more tokens");
+    expect(scroller.scrollTop).toBe(0);
+  });
+
+  test("T9: the same record arriving longer while stuck to the bottom still tracks the answer", () => {
+    openSession({ readable: true, messages: [record("a", 10)] });
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    const scroller = stubScroller(container, 1000, 336, 600);
+    fireEvent.scroll(scroller);
+
+    act(() => {
+      Object.defineProperty(scroller, "scrollHeight", { value: 1400, configurable: true });
+      useAppStore.getState().applyTranscriptMessages("s1", {
+        epoch: "aaaa",
+        messages: [{ ...record("a", 10), content: "a …more tokens" }],
+      });
+    });
+
+    expect(useAppStore.getState().sessions.get("s1")?.messages).toHaveLength(1);
+    expect(scroller.scrollTop).toBe(1400);
+  });
 });
 
 function toolPart(recordId: string, seq: number): Message {
