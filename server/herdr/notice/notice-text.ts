@@ -21,8 +21,26 @@ const SK_ANT = /\bsk-ant-[A-Za-z0-9-]+\b/g;
 const XAI_KEY = /\bxai-[A-Za-z0-9]+\b/g;
 /** Herd-style credential wrappers. */
 const DOLLAR_CREDENTIAL = /\$\$CREDENTIAL_[^$\s]+\$\$/g;
+/** GitHub tokens: personal access, oauth, user, server, refresh. */
+const GITHUB_TOKEN = /\bgh[pousr]_[A-Za-z0-9]{20,}\b/g;
+/** OpenAI-style keys, including the `sk-proj-` project form. */
+const SK_KEY = /\bsk-[A-Za-z0-9_-]{20,}\b/g;
+/** Slack tokens: bot, user, app, workspace, refresh. */
+const SLACK_TOKEN = /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/g;
+/** AWS access key ids — the fixed `AKIA` prefix plus 16 uppercase chars. */
+const AWS_ACCESS_KEY = /\bAKIA[A-Z0-9]{16}\b/g;
 /** A password labeled as such — the value, not the label. */
-const PASSWORD_VALUE = /((?:password|passwd)\s*:\s*)\S+/gi;
+const PASSWORD_VALUE = /((?:password|passwd)\s*[:=]\s*)\S+/gi;
+
+/*
+ * Deliberately absent: bare 64-char hex and JWTs whose header does not start
+ * with `eyJ`. Both are pure length/charset shapes with no distinguishing
+ * prefix, so they match far more than credentials — a 64-char hex string is
+ * just as likely a commit sha or a checksum, and redacting it would turn the
+ * error message this feature exists to surface into something unreadable.
+ * Over-redaction is a functional failure here, not a safe default (D4: keep
+ * this a small, auditable allow-list of high-precision shapes).
+ */
 
 /**
  * Replace credential-shaped substrings with a placeholder.
@@ -34,6 +52,10 @@ export function redactSecrets(text: string): string {
     .replace(SK_ANT, PLACEHOLDER)
     .replace(XAI_KEY, PLACEHOLDER)
     .replace(DOLLAR_CREDENTIAL, PLACEHOLDER)
+    .replace(GITHUB_TOKEN, PLACEHOLDER)
+    .replace(SK_KEY, PLACEHOLDER)
+    .replace(SLACK_TOKEN, PLACEHOLDER)
+    .replace(AWS_ACCESS_KEY, PLACEHOLDER)
     .replace(PASSWORD_VALUE, `$1${PLACEHOLDER}`);
 }
 

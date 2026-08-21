@@ -73,7 +73,12 @@ describe("ScreenSecretRedaction", () => {
     expect(out).not.toContain("xai-9f8e7d6c5b4a3f2e1d0c9b8a7");
   });
 
-  test("T4: redacts a $$CREDENTIAL_…$$ wrapper", () => {
+  test("T4: redacts a GitHub token", () => {
+    const out = redactSecrets("token: ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789");
+    expect(out).not.toContain("ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789");
+  });
+
+  test("T4b: redacts a $$CREDENTIAL_…$$ wrapper", () => {
     const out = redactSecrets("token: $$CREDENTIAL_R3XKAAHRGEB4:M$$");
     expect(out).not.toContain("$$CREDENTIAL_R3XKAAHRGEB4:M$$");
   });
@@ -97,5 +102,31 @@ describe("ScreenSecretRedaction", () => {
   test("T8: leaves a file path untouched", () => {
     const path = "/Users/nick/workspace/cc-mobile/server/herdr/notice/agent-notice.ts:44";
     expect(redactSecrets(path)).toBe(path);
+  });
+
+  test("T9: redacts an OpenAI project key", () => {
+    const key = "sk-proj-AAAABBBBCCCCDDDDEEEEFFFFGGGGHHHH";
+    expect(redactSecrets(`OPENAI_API_KEY=${key}`)).not.toContain(key);
+  });
+
+  test("T10: redacts a Slack bot token", () => {
+    // Synthetic fixture, kept in Slack's real shape so the rule is tested
+    // against what it must catch — hence the scanner exemption.
+    const token = "xoxb-2468013579-1357924680-AbCdEfGhIjKlMnOpQrStUvWx"; // gitleaks:allow
+    expect(redactSecrets(`slack post failed: ${token}`)).not.toContain(token);
+  });
+
+  test("T11: redacts an AWS access key id", () => {
+    const key = "AKIAIOSFODNN7EXAMPLE";
+    expect(redactSecrets(`aws_access_key_id = ${key}`)).not.toContain(key);
+  });
+
+  test("T12: redacts a password value behind an equals sign", () => {
+    expect(redactSecrets("PASSWORD=hunter2hunter2")).not.toContain("hunter2hunter2");
+  });
+
+  test("T13: leaves a bare 64-char hex string alone (checksums are not tokens)", () => {
+    const line = `sha256 ${"a1b2c3d4".repeat(8)}`;
+    expect(redactSecrets(line)).toBe(line);
   });
 });
