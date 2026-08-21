@@ -370,7 +370,7 @@ interface AppState {
 
   /**
    * The one door transcript-derived content comes through, whether it arrived
-   * live, in a history page, or in a reconnect replay. Keys by `recordId`,
+   * live, in a history page, or in a reconnect replay. Keys by `${recordId}#${blockIndex ?? 0}`,
    * orders by `seq`, and owns the epoch rules — see the implementation for the
    * branch order, which is the contract.
    */
