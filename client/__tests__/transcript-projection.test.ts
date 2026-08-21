@@ -78,7 +78,7 @@ describe("projectChunk — which parts does this record project to", () => {
         delta: { type: "text_delta", text: "Hello" },
       },
     };
-    expect(projectChunk(chunk)).toEqual([{ kind: "text", text: "Hello" }]);
+    expect(projectChunk(chunk)).toEqual([]);
   });
 
   test("stream_event with thinking_delta projects to no parts", () => {

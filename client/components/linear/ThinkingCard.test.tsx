@@ -12,17 +12,8 @@ describe("ThinkingCard", () => {
     const card = container.querySelector(".lin-thinking");
 
     expect(card).not.toBeNull();
-    expect(card?.classList.contains("lin-thinking--streaming")).toBe(false);
     expect(card?.classList.contains("lin-thinking--waiting")).toBe(false);
     expect(getByText("Thinking")).not.toBeNull();
-  });
-
-  test("renders streaming variant", () => {
-    const { container, getByText } = render(<ThinkingCard kind="streaming" />);
-    const card = container.querySelector(".lin-thinking");
-
-    expect(card?.classList.contains("lin-thinking--streaming")).toBe(true);
-    expect(getByText("Streaming")).not.toBeNull();
   });
 
   test("renders waiting-permission variant", () => {

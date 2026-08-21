@@ -184,7 +184,6 @@ export type SessionState = {
   messages: Message[];
   pendingPermission: PendingPermission | null;
   isStreaming: boolean;
-  currentStreamMessageId: string | null;
   activeToolStatus?: { toolName: string; description: string } | null;
   activeTools: Map<string, ActiveTool>;
   activeAgents: Map<string, ActiveAgent>;
@@ -294,8 +293,6 @@ interface AppState {
   // Messages
   addMessage: (sessionId: string, message: Message) => void;
   removeMessage: (sessionId: string, messageId: string) => void;
-  appendToLastAssistantMessage: (sessionId: string, text: string) => void;
-  startStreamMessage: (sessionId: string, messageId: string, text: string) => void;
 
   // Streaming
   setStreaming: (sessionId: string, streaming: boolean) => void;
@@ -307,12 +304,6 @@ interface AppState {
   setActiveToolStatus: (
     sessionId: string,
     status: { toolName: string; description: string } | null,
-  ) => void;
-  addToolMessage: (
-    sessionId: string,
-    toolName: string,
-    summary: string,
-    attribution?: { agentLabel: string; agentDescription: string },
   ) => void;
 
   // Active Tool Management
@@ -428,7 +419,6 @@ export const useAppStore = create<AppState>((set) => ({
         messages: [],
         pendingPermission: null,
         isStreaming: false,
-        currentStreamMessageId: null,
         activeToolStatus: null,
         activeTools: new Map(),
         activeAgents: new Map(),
@@ -479,7 +469,6 @@ export const useAppStore = create<AppState>((set) => ({
           messages: [],
           pendingPermission: null,
           isStreaming: false,
-          currentStreamMessageId: null,
           activeToolStatus: null,
           activeTools: new Map(),
           activeAgents: new Map(),
@@ -552,41 +541,11 @@ export const useAppStore = create<AppState>((set) => ({
       })),
     })),
 
-  appendToLastAssistantMessage: (sessionId, text) =>
-    set((state) => ({
-      sessions: updateSession(state.sessions, sessionId, (s) => {
-        const last = s.messages[s.messages.length - 1];
-        if (!last || last.id !== s.currentStreamMessageId) return s;
-        return {
-          ...s,
-          messages: [...s.messages.slice(0, -1), { ...last, content: last.content + text }],
-        };
-      }),
-    })),
-
-  startStreamMessage: (sessionId, messageId, text) =>
-    set((state) => ({
-      sessions: updateSession(state.sessions, sessionId, (s) => ({
-        ...s,
-        currentStreamMessageId: messageId,
-        messages: [
-          ...s.messages,
-          {
-            id: messageId,
-            role: "assistant" as const,
-            content: text,
-            timestamp: Date.now(),
-          },
-        ],
-      })),
-    })),
-
   setStreaming: (sessionId, streaming) =>
     set((state) => ({
       sessions: updateSession(state.sessions, sessionId, (s) => ({
         ...s,
         isStreaming: streaming,
-        ...(streaming ? {} : { currentStreamMessageId: null }),
       })),
     })),
 
@@ -603,29 +562,6 @@ export const useAppStore = create<AppState>((set) => ({
       sessions: updateSession(state.sessions, sessionId, (s) => ({
         ...s,
         activeToolStatus: status,
-      })),
-    })),
-
-  addToolMessage: (sessionId, toolName, summary, attribution) =>
-    set((state) => ({
-      sessions: updateSession(state.sessions, sessionId, (s) => ({
-        ...s,
-        messages: [
-          ...s.messages,
-          {
-            id: `tool-${Date.now()}-${Math.random()}`,
-            role: "tool" as const,
-            toolName,
-            content: summary,
-            timestamp: Date.now(),
-            ...(attribution
-              ? {
-                  agentLabel: attribution.agentLabel,
-                  agentDescription: attribution.agentDescription,
-                }
-              : {}),
-          },
-        ],
       })),
     })),
 

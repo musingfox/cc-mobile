@@ -101,18 +101,6 @@ function toolResultText(block: Record<string, unknown>): string {
  * position of the first text block.
  */
 export function projectChunk(chunk: Record<string, unknown>): ProjectedPart[] {
-  if (chunk.type === "stream_event") {
-    const event = chunk.event as Record<string, unknown> | undefined;
-    if (!event) return [];
-    if (event.type === "content_block_delta") {
-      const delta = event.delta as Record<string, unknown> | undefined;
-      if (delta?.type === "text_delta" && typeof delta.text === "string") {
-        return [{ kind: "text", text: delta.text }];
-      }
-    }
-    return [];
-  }
-
   const message = chunk.message as Record<string, unknown> | undefined;
   const isUser = chunk.type === "user" || message?.role === "user";
   if (chunk.type !== "assistant" && !isUser) return [];

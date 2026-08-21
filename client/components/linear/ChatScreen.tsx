@@ -190,7 +190,6 @@ export default function ChatScreen({ onNavigate }: Props) {
 
   const pendingPermission = session.pendingPermission;
   const isStreaming = session.isStreaming;
-  const currentStreamMessageId = session.currentStreamMessageId;
   const activeTools = session.activeTools;
   const activeAgents = session.activeAgents;
   const usage = session.usage;
@@ -219,17 +218,11 @@ export default function ChatScreen({ onNavigate }: Props) {
           : []
       : [];
 
-  const streamMessage = currentStreamMessageId
-    ? messages.find((m) => m.id === currentStreamMessageId)
-    : undefined;
-  const hasStreamContent = Boolean(streamMessage?.content);
   const thinkingKind: ThinkingCardKind | null = pendingPermission
     ? "waiting-permission"
-    : isStreaming && hasStreamContent
-      ? "streaming"
-      : isStreaming
-        ? "thinking"
-        : null;
+    : isStreaming
+      ? "thinking"
+      : null;
 
   return (
     <div className="lin-chat">
@@ -317,13 +310,11 @@ export default function ChatScreen({ onNavigate }: Props) {
               />
             );
           }
-          const showCaret = isStreaming && m.id === currentStreamMessageId && m.content.length > 0;
           return (
             <div key={m.id} className="lin-msg lin-msg--claude">
               <div className="lin-msg-label">CLAUDE</div>
               <div className="lin-msg-body lin-md">
-                <MarkdownRenderer content={m.content} isStreaming={showCaret} />
-                {showCaret && <span className="lin-caret" />}
+                <MarkdownRenderer content={m.content} isStreaming={false} />
               </div>
             </div>
           );
@@ -404,23 +395,20 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
-type ThinkingCardKind = "thinking" | "streaming" | "waiting-permission";
+type ThinkingCardKind = "thinking" | "waiting-permission";
 
 const THINKING_LABELS: Record<ThinkingCardKind, string> = {
   thinking: "Thinking",
-  streaming: "Streaming",
   "waiting-permission": "Waiting for permission",
 };
 
 const THINKING_MODIFIERS: Record<ThinkingCardKind, string> = {
   thinking: "",
-  streaming: "lin-thinking--streaming",
   "waiting-permission": "lin-thinking--waiting",
 };
 
 export function ThinkingCard({ kind = "thinking" }: { kind?: ThinkingCardKind }) {
-  const safeKind: ThinkingCardKind =
-    kind === "streaming" || kind === "waiting-permission" ? kind : "thinking";
+  const safeKind: ThinkingCardKind = kind === "waiting-permission" ? kind : "thinking";
   const modifier = THINKING_MODIFIERS[safeKind];
   const classes = modifier ? `lin-thinking ${modifier}` : "lin-thinking";
 

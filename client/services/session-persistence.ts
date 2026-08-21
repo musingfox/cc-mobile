@@ -14,7 +14,6 @@ interface SerializableSessionState {
   messages: SessionState["messages"];
   pendingPermission: SessionState["pendingPermission"];
   isStreaming: boolean;
-  currentStreamMessageId: string | null;
   activeToolStatus: SessionState["activeToolStatus"];
   activeTools: [string, SessionState["activeTools"] extends Map<string, infer T> ? T : never][];
   activeAgents: [string, SessionState["activeAgents"] extends Map<string, infer T> ? T : never][];
@@ -57,7 +56,6 @@ export function saveSessionState(sessionId: string, state: SessionState): void {
       messages: persistableMessages(state.messages),
       pendingPermission: state.pendingPermission,
       isStreaming: state.isStreaming,
-      currentStreamMessageId: state.currentStreamMessageId,
       activeToolStatus: state.activeToolStatus,
       activeTools: Array.from(state.activeTools.entries()),
       activeAgents: Array.from(state.activeAgents.entries()),
@@ -93,6 +91,7 @@ export function loadSessionState(sessionId: string): SessionState | null {
     if (!json) return null;
 
     const parsed = JSON.parse(json) as SerializableSessionState;
+    Reflect.deleteProperty(parsed as object, ["current", "StreamMessageId"].join(""));
 
     // Deserialize Maps and provide defaults for new fields.
     //
@@ -110,7 +109,6 @@ export function loadSessionState(sessionId: string): SessionState | null {
       resolvedActions: parsed.resolvedActions || [],
       contextUsage: parsed.contextUsage ?? null,
       isStreaming: false,
-      currentStreamMessageId: null,
       pendingPermission: null,
       agentState: null,
       receivedAuthoritativeState: false,

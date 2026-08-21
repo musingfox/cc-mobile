@@ -1,29 +1,3 @@
-export type ToolStartEvent = {
-  type: "stream_event";
-  event: {
-    type: "content_block_start";
-    content_block: {
-      type: "tool_use";
-      name: string;
-      id: string;
-    };
-  };
-};
-
-export type ToolProgressEvent = {
-  type: "tool_progress";
-  tool_use_id: string;
-  tool_name: string;
-  parent_tool_use_id: string | null;
-  elapsed_time_seconds: number;
-};
-
-export type ToolUseSummaryEvent = {
-  type: "tool_use_summary";
-  summary: string;
-  preceding_tool_use_ids: string[];
-};
-
 export type TaskStartedEvent = {
   type: "system";
   subtype: "task_started";
@@ -89,24 +63,6 @@ export type ResultMessage = {
   error?: string;
   terminal_reason?: TerminalReason;
 };
-
-export function isToolStart(chunk: Record<string, unknown>): chunk is ToolStartEvent {
-  if (chunk.type !== "stream_event") return false;
-  const event = chunk.event as Record<string, unknown> | undefined;
-  if (!event || event.type !== "content_block_start") return false;
-  const block = event.content_block as Record<string, unknown> | undefined;
-  return (
-    block?.type === "tool_use" && typeof block.name === "string" && typeof block.id === "string"
-  );
-}
-
-export function isToolProgress(chunk: Record<string, unknown>): chunk is ToolProgressEvent {
-  return chunk.type === "tool_progress" && typeof chunk.tool_name === "string";
-}
-
-export function isToolUseSummary(chunk: Record<string, unknown>): chunk is ToolUseSummaryEvent {
-  return chunk.type === "tool_use_summary" && typeof chunk.summary === "string";
-}
 
 export function isTaskStarted(chunk: Record<string, unknown>): chunk is TaskStartedEvent {
   return (

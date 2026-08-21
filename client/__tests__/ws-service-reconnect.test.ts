@@ -31,7 +31,7 @@ describe("extractTextFromChunk", () => {
     };
 
     const result = extractTextFromChunk(chunk);
-    expect(result).toBe("streaming text");
+    expect(result).toBeNull();
   });
 
   test("TC-WSR3: returns null for non-text chunks", () => {

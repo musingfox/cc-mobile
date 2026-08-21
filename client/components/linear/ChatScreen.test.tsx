@@ -119,23 +119,22 @@ describe("ChatScreen", () => {
     const card = container.querySelector(".lin-thinking");
 
     expect(card).not.toBeNull();
-    expect(card?.classList.contains("lin-thinking--streaming")).toBe(false);
     expect(card?.classList.contains("lin-thinking--waiting")).toBe(false);
     expect(getByText("Thinking")).not.toBeNull();
   });
 
-  test("shows streaming card when streamed assistant content is present", () => {
+  test("thinking card still shows from isStreaming when assistant text is already on screen", () => {
     const store = useAppStore.getState();
     store.addSession("s1", "/tmp/project");
     store.setActiveSession("s1");
     store.setStreaming("s1", true);
-    store.startStreamMessage("s1", "m1", "Hello");
+    store.addMessage("s1", { id: "m1", role: "assistant", content: "Hello", timestamp: 1 });
 
     const { container, getByText } = render(<ChatScreen onNavigate={() => {}} />);
     const card = container.querySelector(".lin-thinking");
 
-    expect(card?.classList.contains("lin-thinking--streaming")).toBe(true);
-    expect(getByText("Streaming")).not.toBeNull();
+    expect(card).not.toBeNull();
+    expect(getByText("Thinking")).not.toBeNull();
   });
 
   test("shows waiting card when pending permission exists", () => {
@@ -159,7 +158,7 @@ describe("ChatScreen", () => {
     store.addSession("s1", "/tmp/project");
     store.setActiveSession("s1");
     store.setStreaming("s1", true);
-    store.startStreamMessage("s1", "m1", "Hello");
+    store.addMessage("s1", { id: "m1", role: "assistant", content: "Hello", timestamp: 1 });
     store.setPermission("s1", {
       requestId: "p1",
       tool: { name: "Bash", parameters: {} },

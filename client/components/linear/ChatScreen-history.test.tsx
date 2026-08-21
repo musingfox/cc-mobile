@@ -533,15 +533,13 @@ describe("StayPutOnLiveArrival", () => {
     fireEvent.scroll(scroller);
 
     act(() => {
-      useAppStore.setState((state) => {
-        const sessions = new Map(state.sessions);
-        const session = sessions.get("s1");
-        if (!session) return state;
-        sessions.set("s1", { ...session, currentStreamMessageId: "id-a" });
-        return { sessions };
-      });
       Object.defineProperty(scroller, "scrollHeight", { value: 1400, configurable: true });
-      useAppStore.getState().appendToLastAssistantMessage("s1", " …more tokens");
+      useAppStore.getState().addMessage("s1", {
+        id: "id-grow",
+        role: "assistant",
+        content: " …more tokens",
+        timestamp: Date.now(),
+      });
     });
 
     expect(scroller.scrollTop).toBe(1400);

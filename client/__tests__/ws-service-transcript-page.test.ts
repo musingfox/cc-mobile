@@ -92,10 +92,8 @@ describe("HistoryPageApplyIsolated", () => {
 
   test("T3: a page for an idle session never starts a stream", () => {
     expect(session().isStreaming).toBe(false);
-    const before = session().currentStreamMessageId;
     internals().handleMessage(pageFrame("aaaa", [assistantRecord("p1", 10)]));
     expect(session().isStreaming).toBe(false);
-    expect(session().currentStreamMessageId).toBe(before);
   });
 
   test("T4: a page arriving while a permission is pending leaves the prompt up", () => {

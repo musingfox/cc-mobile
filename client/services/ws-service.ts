@@ -31,9 +31,6 @@ import {
   isTaskNotification,
   isTaskProgress,
   isTaskStarted,
-  isToolProgress,
-  isToolStart,
-  isToolUseSummary,
   type MemoryRecallEvent,
   type PermissionDeniedEvent,
   type TerminalReason,
@@ -337,7 +334,6 @@ class WsService {
   private capabilitiesTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
   private reconnectTimeout: number | null = null;
   private reconnectDelay = 1000;
-  private lastToolBatchTime = 0;
   // Per-session replay cursor. eventIds are assigned per-session by the server
   // (starting at 1), so a single global cursor would mis-baseline replay across
   // sessions and silently drop missed events on reconnect (→ stuck spinner).
@@ -681,99 +677,6 @@ class WsService {
           break;
         }
 
-        // When the model starts producing text, all tools are done
-        if (
-          chunk.type === "stream_event" &&
-          (chunk.event as Record<string, unknown> | undefined)?.type === "content_block_start" &&
-          (
-            (chunk.event as Record<string, unknown> | undefined)?.content_block as
-              | Record<string, unknown>
-              | undefined
-          )?.type === "text"
-        ) {
-          store.clearActiveTools(sessionId);
-          store.setActiveToolStatus(sessionId, null);
-        }
-
-        // Handle tool start (earliest signal)
-        if (isToolStart(chunk)) {
-          const { event } = chunk;
-          const { content_block } = event;
-          const now = Date.now();
-
-          // Detect new tool batch: if >200ms since last tool start,
-          // this is a new sequential tool (not parallel). Clean up
-          // stale root tools from the previous batch, since tool_use_summary
-          // may not reliably fire for every tool.
-          if (now - this.lastToolBatchTime > 200) {
-            const session = store.sessions.get(sessionId);
-            if (session) {
-              for (const [toolId, tool] of session.activeTools) {
-                if (!tool.parentToolUseId) {
-                  store.removeActiveTool(sessionId, toolId);
-                }
-              }
-            }
-          }
-          this.lastToolBatchTime = now;
-
-          store.addActiveTool(sessionId, content_block.id, {
-            toolName: content_block.name,
-            startedAt: now,
-          });
-          store.setActiveToolStatus(sessionId, {
-            toolName: content_block.name,
-            description: content_block.name,
-          });
-          break;
-        }
-
-        // Handle tool progress updates
-        if (isToolProgress(chunk)) {
-          if (chunk.tool_use_id) {
-            store.updateActiveTool(sessionId, chunk.tool_use_id, {
-              ...(chunk.elapsed_time_seconds !== undefined && {
-                elapsedSeconds: chunk.elapsed_time_seconds,
-              }),
-              ...(chunk.parent_tool_use_id !== undefined && {
-                parentToolUseId: chunk.parent_tool_use_id,
-              }),
-            });
-          }
-          // Maintain backward compatibility
-          store.setActiveToolStatus(sessionId, {
-            toolName: chunk.tool_name,
-            description: chunk.tool_name,
-          });
-          break;
-        }
-
-        // Handle tool completion summary
-        if (isToolUseSummary(chunk)) {
-          const session = store.sessions.get(sessionId);
-          const toolName = session?.activeToolStatus?.toolName ?? "Tool";
-          const precedingIds = Array.isArray(chunk.preceding_tool_use_ids)
-            ? chunk.preceding_tool_use_ids
-            : [];
-          // Resolve attribution BEFORE removeActiveTool clears entries.
-          const attribution = session ? resolveAgentAttribution(session, precedingIds) : null;
-          store.addToolMessage(
-            sessionId,
-            toolName,
-            chunk.summary,
-            attribution
-              ? { agentLabel: attribution.label, agentDescription: attribution.description }
-              : undefined,
-          );
-          // Remove all completed tools
-          precedingIds.forEach((id) => {
-            store.removeActiveTool(sessionId, id);
-          });
-          // Clear legacy status
-          store.setActiveToolStatus(sessionId, null);
-          break;
-        }
-
         // Handle agent/task started
         if (isTaskStarted(chunk)) {
           store.addActiveAgent(sessionId, chunk.task_id, {
@@ -866,35 +769,13 @@ class WsService {
         const projected = messagesFromProjectedChunk(chunk, (part, index) =>
           `msg-${typeof chunk.recordId === "string" ? chunk.recordId : Date.now()}-${index}-${Math.random()}`,
         );
-        const visibleText = projected.find((m) => m.kind === undefined)?.content ?? null;
-
         const session = store.sessions.get(sessionId);
         if (!session) break;
-
-        // Handle stream_event chunks: create/append incrementally
-        if (chunk.type === "stream_event") {
-          if (!visibleText) break;
-          store.setStreaming(sessionId, true);
-          if (session.currentStreamMessageId) {
-            store.appendToLastAssistantMessage(sessionId, visibleText);
-          } else {
-            const newId = `msg-${Date.now()}-${Math.random()}`;
-            store.startStreamMessage(sessionId, newId, visibleText);
-          }
-          break;
-        }
 
         if (projected.length === 0) break;
 
         if (chunk.type === "assistant") {
           store.setStreaming(sessionId, true);
-          const assistantText = projected.find((m) => m.kind === undefined && m.role === "assistant")?.content;
-          if (session.currentStreamMessageId && assistantText) {
-            const lastMsg = session.messages[session.messages.length - 1];
-            if (lastMsg?.id === session.currentStreamMessageId && lastMsg.content === assistantText) {
-              break;
-            }
-          }
           store.applyTranscriptMessages(sessionId, {
             epoch: epochOfChunk(chunk),
             messages: projected,

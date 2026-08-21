@@ -23,7 +23,6 @@ describe("session-persistence", () => {
       messages: [{ id: "m1", role: "user", content: "hello", timestamp: 123 }],
       pendingPermission: null,
       isStreaming: false,
-      currentStreamMessageId: null,
       activeToolStatus: null,
       activeTools: new Map(),
       activeAgents: new Map(),
@@ -58,7 +57,6 @@ describe("session-persistence", () => {
       ],
       pendingPermission: null,
       isStreaming: false,
-      currentStreamMessageId: null,
       activeToolStatus: null,
       activeTools: new Map(),
       activeAgents: new Map(),
@@ -90,7 +88,6 @@ describe("session-persistence", () => {
       messages: [],
       pendingPermission: null,
       isStreaming: false,
-      currentStreamMessageId: null,
       activeToolStatus: null,
       activeTools: new Map(),
       activeAgents: new Map(),
@@ -124,7 +121,6 @@ describe("session-persistence", () => {
       messages: [],
       pendingPermission: null,
       isStreaming: false,
-      currentStreamMessageId: null,
       activeToolStatus: null,
       activeTools: new Map([
         ["tool1", { toolName: "Read", startedAt: 1000 }],
@@ -162,7 +158,6 @@ describe("session-persistence", () => {
       messages: [],
       pendingPermission: null,
       isStreaming: false,
-      currentStreamMessageId: null,
       activeToolStatus: null,
       activeTools: new Map(),
       activeAgents: new Map(),
@@ -181,7 +176,6 @@ describe("session-persistence", () => {
       messages: [],
       pendingPermission: null,
       isStreaming: false,
-      currentStreamMessageId: null,
       activeToolStatus: null,
       activeTools: new Map(),
       activeAgents: new Map(),
@@ -200,7 +194,6 @@ describe("session-persistence", () => {
       messages: [],
       pendingPermission: null,
       isStreaming: false,
-      currentStreamMessageId: null,
       activeToolStatus: null,
       activeTools: new Map(),
       activeAgents: new Map(),
@@ -247,7 +240,6 @@ describe("session-persistence", () => {
       messages: [],
       pendingPermission: null,
       isStreaming: false,
-      currentStreamMessageId: null,
       activeToolStatus: null,
       activeTools: new Map(),
       activeAgents: new Map(),
@@ -311,7 +303,6 @@ describe("session-persistence", () => {
     expect(loaded?.agentState).toBeNull();
     expect(loaded?.receivedAuthoritativeState).toBe(false);
     expect(loaded?.pendingPermission).toBeNull();
-    expect(loaded?.currentStreamMessageId).toBeNull();
     // The content cache half is untouched.
     expect(loaded?.messages).toHaveLength(1);
     expect(loaded?.cwd).toBe("/p");
@@ -365,7 +356,6 @@ describe("session-persistence", () => {
       ],
       pendingPermission: null,
       isStreaming: false,
-      currentStreamMessageId: null,
       activeToolStatus: null,
       activeTools: new Map(),
       activeAgents: new Map(),
