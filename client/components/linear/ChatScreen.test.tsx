@@ -228,11 +228,7 @@ describe("PickerSheetTerminates", () => {
     cleanup();
   });
 
-  function seed(cap: Parameters<typeof useAppStore.getState>[0] extends never
-    ? never
-    : ReturnType<typeof useAppStore.getState>["sessions"] extends Map<string, infer S>
-      ? S["capabilities"]
-      : never) {
+  function seed(cap: SessionCapabilitiesState | undefined) {
     const store = useAppStore.getState();
     store.addSession("s1", "/tmp/cc-mobile");
     store.setActiveSession("s1");
@@ -357,11 +353,6 @@ describe("ChatHeaderModelLabelRemoved", () => {
 
 describe("RateLimitChipRemoved", () => {
   beforeEach(() => {
-    const current = useAppStore.getState() as Record<string, unknown>;
-    const next = { ...current };
-    delete next.rateLimitInfo;
-    delete next.setRateLimitInfo;
-    useAppStore.setState(next as typeof current, true);
     useAppStore.setState({ sessions: new Map(), activeSessionId: null, inputDraft: "" });
   });
 

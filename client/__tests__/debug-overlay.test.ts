@@ -83,11 +83,6 @@ describe("DebugOverlay debugLog", () => {
 
 describe("GlobalCapabilitiesSlotRemoved", () => {
   beforeEach(() => {
-    const current = useAppStore.getState() as Record<string, unknown>;
-    const next = { ...current };
-    delete next.capabilities;
-    delete next.setCapabilities;
-    useAppStore.setState(next as typeof current, true);
     useAppStore.setState({ sessions: new Map(), activeSessionId: null });
   });
 

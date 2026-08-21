@@ -175,7 +175,6 @@ describe("InputBarA — ungated session disclosure", () => {
   function seedWithFlags(gated: boolean) {
     useAppStore.setState({
       inputDraft: "",
-      capabilities: null,
       sessions: new Map([
         [
           "s1",
