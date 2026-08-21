@@ -7,8 +7,14 @@ function isMarker(message: Message): boolean {
   return message.kind === "compact_boundary" || message.kind === "permission_denied";
 }
 
+/**
+ * A prompt is what the human typed. The projection hands tool_result parts
+ * role "user" too (transcript-projection.ts `roleForPart`), so role alone
+ * would let a tool's stdout open a turn — and be rendered as the user's own
+ * bubble. The block kind is what separates the two.
+ */
 function isUserPrompt(message: Message): boolean {
-  return message.role === "user" && !isMarker(message);
+  return message.role === "user" && message.kind !== "tool_result" && !isMarker(message);
 }
 
 function isTextBubble(message: Message): boolean {

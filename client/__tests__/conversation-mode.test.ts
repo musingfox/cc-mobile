@@ -107,6 +107,16 @@ describe("ConversationModeSelection", () => {
     expect(selectConversationMessages([userA, end, echo])).toEqual([userA, end, echo]);
   });
 
+  test("T13: a tool_result is neither an answer nor a prompt, and does not split the turn", () => {
+    const userA = msg({ id: "uA", role: "user", content: "A" });
+    const use = msg({ id: "tu", role: "assistant", kind: "tool_use", toolName: "Bash", content: "" });
+    // The projection gives a tool_result role "user" (transcript-projection.ts
+    // roleForPart), which is why role alone cannot decide what a prompt is.
+    const result = msg({ id: "tr", role: "user", kind: "tool_result", content: "stdout blah" });
+    const end = msg({ id: "end", role: "assistant", stopReason: "end_turn", content: "answer" });
+    expect(selectConversationMessages([userA, use, result, end])).toEqual([userA, end]);
+  });
+
   test("T12: pure — same input yields equal output and input is not mutated", () => {
     const userA = msg({ id: "uA", role: "user", content: "A" });
     const end = msg({ id: "end", role: "assistant", stopReason: "end_turn", content: "answer" });
