@@ -253,3 +253,39 @@ describe("ClaudeIdleAttentionNoticeDelivery", () => {
     expect(thrown.keys).toEqual([]);
   });
 });
+
+describe("IdlePathSendsNoKeystroke", () => {
+  test("T1: trust-dialog idle claude sends no keys", async () => {
+    const h = idleHarness({ screen: TRUST_DIALOG });
+    await h.notice.onStatus("p1", "idle", "claude");
+    expect(h.keys).toHaveLength(0);
+  });
+
+  test("T2: trust-dialog idle with no kind sends no keys", async () => {
+    const h = idleHarness({ screen: TRUST_DIALOG });
+    await h.notice.onStatus("p1", "idle");
+    expect(h.keys).toHaveLength(0);
+  });
+
+  test("T3: unrecognised idle screen sends no keys", async () => {
+    const h = idleHarness({ screen: IDLE_COMPOSER });
+    await h.notice.onStatus("p1", "idle", "claude");
+    expect(h.keys).toHaveLength(0);
+  });
+
+  test("T4: an immediate setTimeout stub still sends no keys", async () => {
+    const h = idleHarness({ screen: TRUST_DIALOG });
+    const real = globalThis.setTimeout;
+    const stub = ((fn: TimerHandler) => {
+      if (typeof fn === "function") fn();
+      return 0;
+    }) as typeof setTimeout;
+    globalThis.setTimeout = stub;
+    try {
+      await h.notice.onStatus("p1", "idle", "claude");
+    } finally {
+      globalThis.setTimeout = real;
+    }
+    expect(h.keys).toHaveLength(0);
+  });
+});
