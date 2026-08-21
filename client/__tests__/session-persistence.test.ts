@@ -399,4 +399,87 @@ describe("session-persistence", () => {
 
     expect(JSON.parse(localStorage.getItem("ccm:lastEventIds") ?? "{}")).toEqual({ u1: 5 });
   });
+  describe("TranscriptPartsNotPersisted", () => {
+    function base(messages: SessionState["messages"]): SessionState {
+      return {
+        id: "sess-parts",
+        cwd: "/test",
+        sdkSessionId: null,
+        messages,
+        pendingPermission: null,
+        isStreaming: false,
+        currentStreamMessageId: null,
+        activeToolStatus: null,
+        activeTools: new Map(),
+        activeAgents: new Map(),
+        activeHook: null,
+        usage: null,
+        contextUsage: null,
+        promptSuggestion: null,
+        resolvedActions: [],
+        agentState: null,
+        receivedAuthoritativeState: false,
+      };
+    }
+
+    const mixed: SessionState["messages"] = [
+      { id: "u", role: "user", content: "hi", timestamp: 1, recordId: "r-u", seq: 10 },
+      { id: "th", role: "assistant", content: "plan", timestamp: 2, recordId: "r-a", seq: 20, blockIndex: 0, kind: "thinking" },
+      { id: "tu", role: "assistant", content: "", timestamp: 2, recordId: "r-a", seq: 20, blockIndex: 1, kind: "tool_use", toolName: "Read" },
+      { id: "tx", role: "assistant", content: "done", timestamp: 2, recordId: "r-a", seq: 20, blockIndex: 2, stopReason: "end_turn" },
+    ];
+
+    test("T1: localStorage JSON contains only the two text messages", () => {
+      saveSessionState("sess-parts", base(mixed));
+      const stored = JSON.parse(localStorage.getItem("ccm:session:sess-parts") ?? "{}");
+      expect(stored.messages.map((m: { id: string }) => m.id)).toEqual(["u", "tx"]);
+      expect(stored.messages.some((m: { kind?: string }) => m.kind === "thinking" || m.kind === "tool_use")).toBe(false);
+    });
+
+    test("T2: restore keeps the two text messages in order with recordId/seq/stopReason", () => {
+      saveSessionState("sess-parts", base(mixed));
+      const loaded = loadSessionState("sess-parts");
+      expect(loaded?.messages.map((m) => m.id)).toEqual(["u", "tx"]);
+      expect(loaded?.messages[0].recordId).toBe("r-u");
+      expect(loaded?.messages[0].seq).toBe(10);
+      expect(loaded?.messages[1].recordId).toBe("r-a");
+      expect(loaded?.messages[1].seq).toBe(20);
+      expect(loaded?.messages[1].stopReason).toBe("end_turn");
+    });
+
+    test("T3: local-only messages with no recordId all persist", () => {
+      const locals: SessionState["messages"] = [
+        { id: "l1", role: "user", content: "a", timestamp: 1 },
+        { id: "l2", role: "assistant", content: "b", timestamp: 2 },
+      ];
+      saveSessionState("sess-parts", base(locals));
+      expect(loadSessionState("sess-parts")?.messages.map((m) => m.id)).toEqual(["l1", "l2"]);
+    });
+
+    test("T5: older payload that already contains tool/thinking is filtered on load", () => {
+      localStorage.setItem(
+        "ccm:session:sess-parts",
+        JSON.stringify({
+          id: "sess-parts",
+          cwd: "/test",
+          sdkSessionId: null,
+          messages: mixed,
+          pendingPermission: null,
+          isStreaming: false,
+          currentStreamMessageId: null,
+          activeToolStatus: null,
+          activeTools: [],
+          activeAgents: [],
+          activeHook: null,
+          usage: null,
+          promptSuggestion: null,
+          resolvedActions: [],
+          agentState: null,
+          receivedAuthoritativeState: false,
+        }),
+      );
+      const loaded = loadSessionState("sess-parts");
+      expect(loaded?.messages.map((m) => m.id)).toEqual(["u", "tx"]);
+    });
+  });
 });

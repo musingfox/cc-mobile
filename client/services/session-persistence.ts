@@ -42,13 +42,19 @@ interface SerializableSessionState {
   epoch?: string;
 }
 
+const TRANSIENT_PART_KINDS = new Set(["thinking", "tool_use", "tool_result"]);
+
+function persistableMessages(messages: SessionState["messages"]): SessionState["messages"] {
+  return messages.filter((message) => !message.kind || !TRANSIENT_PART_KINDS.has(message.kind));
+}
+
 export function saveSessionState(sessionId: string, state: SessionState): void {
   try {
     const serializable: SerializableSessionState = {
       id: state.id,
       cwd: state.cwd,
       sdkSessionId: state.sdkSessionId,
-      messages: state.messages,
+      messages: persistableMessages(state.messages),
       pendingPermission: state.pendingPermission,
       isStreaming: state.isStreaming,
       currentStreamMessageId: state.currentStreamMessageId,
@@ -97,6 +103,7 @@ export function loadSessionState(sessionId: string): SessionState | null {
     // only from the server, via the live-session reply.
     return {
       ...parsed,
+      messages: persistableMessages(parsed.messages ?? []),
       sdkSessionId: parsed.sdkSessionId ?? null,
       activeTools: new Map(parsed.activeTools),
       activeAgents: new Map(parsed.activeAgents),
