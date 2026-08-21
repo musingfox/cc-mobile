@@ -31,7 +31,9 @@ describe("UserRecordBubble", () => {
 
   test("T2: given user tool_result -> 0", () => {
     getInternal().handleMessage({ type: "stream_chunk", sessionId: "s1", chunk: { type: "user", message: { role: "user", content: [{type:"tool_result"}] }, recordId: "u2", seq: 20 } });
-    expect(useAppStore.getState().sessions.get("s1")!.messages.length).toBe(0);
+    const msgs = useAppStore.getState().sessions.get("s1")!.messages;
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0].kind).toBe("tool_result");
   });
 
   test("T3: command-name -> 0", () => {

@@ -15,6 +15,7 @@ import { hapticService } from "./haptic";
 import { notificationService } from "./notification";
 import { saveProject } from "./projects";
 import { toastService } from "./toast-service";
+import { messagesFromProjectedChunk } from "./transcript-projection";
 import {
   type CompactBoundaryEvent,
   isApiRetry,
@@ -298,47 +299,7 @@ function epochOfChunk(chunk: Record<string, unknown>): string | null {
   return typeof chunk.epoch === "string" && chunk.epoch !== "" ? chunk.epoch : null;
 }
 
-export function extractTextFromChunk(chunk: Record<string, unknown>): string | null {
-  const message = chunk.message as
-    | { role?: string; content?: Array<{ type: string; text?: string }> | string }
-    | undefined;
-
-  const isUser = chunk.type === "user" || message?.role === "user";
-
-  if (chunk.type === "assistant" || isUser) {
-    if (!message) return null;
-    if (typeof message.content === "string") {
-      const s = message.content;
-      if (s.includes("<command-name>") || s.includes("<local-command-stdout>")) return null;
-      return s || null;
-    }
-    if (!message.content || !Array.isArray(message.content)) return null;
-    // drop if only tool_result or wrappers
-    const texts = message.content
-      .filter((b: any) => b && b.type === "text" && typeof b.text === "string")
-      .map((b: any) => b.text);
-    if (texts.length === 0) return null;
-    const joined = texts.join("");
-    if (joined.includes("<command-name>") || joined.includes("<local-command-stdout>")) return null;
-    return joined || null;
-  }
-
-  if (chunk.type === "stream_event") {
-    const event = chunk.event as Record<string, unknown> | undefined;
-    if (!event) return null;
-
-    if (event.type === "content_block_delta") {
-      const delta = event.delta as Record<string, unknown> | undefined;
-      if (!delta) return null;
-
-      if (delta.type === "text_delta") {
-        return (delta.text as string) ?? null;
-      }
-    }
-  }
-
-  return null;
-}
+export { extractTextFromChunk } from "./transcript-projection";
 
 export function getTerminalReasonMessage(reason: TerminalReason | undefined): string | null {
   if (!reason || reason === "completed") return null;
@@ -902,79 +863,65 @@ class WsService {
           }
         }
 
-        const text = extractTextFromChunk(chunk);
-        if (!text) break;
+        const projected = messagesFromProjectedChunk(chunk, (part, index) =>
+          `msg-${typeof chunk.recordId === "string" ? chunk.recordId : Date.now()}-${index}-${Math.random()}`,
+        );
+        const visibleText = projected.find((m) => m.kind === undefined)?.content ?? null;
 
         const session = store.sessions.get(sessionId);
         if (!session) break;
 
-        store.setStreaming(sessionId, true);
-
         // Handle stream_event chunks: create/append incrementally
         if (chunk.type === "stream_event") {
+          if (!visibleText) break;
+          store.setStreaming(sessionId, true);
           if (session.currentStreamMessageId) {
-            store.appendToLastAssistantMessage(sessionId, text);
+            store.appendToLastAssistantMessage(sessionId, visibleText);
           } else {
             const newId = `msg-${Date.now()}-${Math.random()}`;
-            store.startStreamMessage(sessionId, newId, text);
+            store.startStreamMessage(sessionId, newId, visibleText);
           }
+          break;
         }
-        // Handle assistant messages: dedup if already streamed
-        else if (chunk.type === "assistant") {
-          // Dedup: skip if this is the final message matching the current stream
-          if (session.currentStreamMessageId) {
+
+        if (projected.length === 0) break;
+
+        if (chunk.type === "assistant") {
+          store.setStreaming(sessionId, true);
+          const assistantText = projected.find((m) => m.kind === undefined && m.role === "assistant")?.content;
+          if (session.currentStreamMessageId && assistantText) {
             const lastMsg = session.messages[session.messages.length - 1];
-            if (lastMsg?.id === session.currentStreamMessageId && lastMsg.content === text) {
+            if (lastMsg?.id === session.currentStreamMessageId && lastMsg.content === assistantText) {
               break;
             }
           }
-          // Not a duplicate: through the transcript door, so a chunk the event
-          // buffer replays after a reconnect merges onto the message it already
-          // produced instead of drawing a second bubble.
           store.applyTranscriptMessages(sessionId, {
             epoch: epochOfChunk(chunk),
-            messages: [
-              {
-                id: `msg-${Date.now()}-${Math.random()}`,
-                role: "assistant",
-                content: text,
-                timestamp: Date.now(),
-                ...transcriptPositionOf(chunk),
-              },
-            ],
+            messages: projected,
           });
         } else if (chunk.type === "user") {
-          // What the user typed at the terminal. The bubble the phone drew the
-          // instant *it* sent is the same message read back, so it is superseded
-          // rather than left sitting next to a copy of itself: first pending
-          // send for this session whose text matches after trimming, inside the
-          // window, measured on this device's clock (the dev machine's is a
-          // different one, and a skew would silently break the pairing).
+          const userText = projected.find((m) => m.kind === undefined && m.role === "user")?.content;
           const pending = this.lastOptimisticSend.get(sessionId) ?? [];
           const now = Date.now();
-          const paired = pending.findIndex(
-            (send) => send.prompt.trim() === text.trim() && now - send.sentAt < ECHO_PAIRING_WINDOW_MS,
-          );
-          let messageId = `user-${Date.now()}-${Math.random()}`;
-          if (paired >= 0) {
-            const [echo] = pending.splice(paired, 1);
-            if (pending.length === 0) this.lastOptimisticSend.delete(sessionId);
-            else this.lastOptimisticSend.set(sessionId, pending);
-            // Re-key the same slot: the echo becomes the record it always was.
-            store.removeMessage(sessionId, echo.messageId);
-            messageId = echo.messageId;
+          let echoId: string | undefined;
+          if (userText) {
+            const paired = pending.findIndex(
+              (send) => send.prompt.trim() === userText.trim() && now - send.sentAt < ECHO_PAIRING_WINDOW_MS,
+            );
+            if (paired >= 0) {
+              const [echo] = pending.splice(paired, 1);
+              if (pending.length === 0) this.lastOptimisticSend.delete(sessionId);
+              else this.lastOptimisticSend.set(sessionId, pending);
+              store.removeMessage(sessionId, echo.messageId);
+              echoId = echo.messageId;
+            }
           }
+          const messages = projected.map((m, i) =>
+            i === 0 && echoId && m.kind === undefined ? { ...m, id: echoId } : m,
+          );
           store.applyTranscriptMessages(sessionId, {
             epoch: epochOfChunk(chunk),
-            messages: [
-              {
-                id: messageId,
-                role: "user",
-                content: text,
-                timestamp: Date.now(),
-                ...transcriptPositionOf(chunk),
-              },
-            ],
+            messages,
           });
         }
 
@@ -1091,15 +1038,10 @@ class WsService {
         const records = (msg.records as Record<string, unknown>[]) ?? [];
         const messages: Message[] = [];
         for (const record of records) {
-          const text = extractTextFromChunk(record);
-          if (!text) continue;
-          messages.push({
-            id: `page-${(record.recordId as string) ?? messages.length}-${Math.random()}`,
-            role: record.type === "user" ? "user" : "assistant",
-            content: text,
-            timestamp: Date.now(),
-            ...transcriptPositionOf(record),
-          });
+          const parts = messagesFromProjectedChunk(record, (_part, index) =>
+            `page-${(record.recordId as string) ?? messages.length}-${index}-${Math.random()}`,
+          );
+          messages.push(...parts);
         }
 
         store.applyTranscriptMessages(sessionId, {

@@ -32,11 +32,16 @@ export type Message = {
   contentBlocks?: ContentBlock[];
   agentLabel?: string;
   agentDescription?: string;
-  kind?: "compact_boundary" | "permission_denied";
+  kind?: "compact_boundary" | "permission_denied" | "thinking" | "tool_use" | "tool_result";
   compactMetadata?: CompactMetadata;
   /** From transcript record for history / dedup */
   recordId?: string;
   seq?: number;
+  /** Index of this part within the source record's projected parts. */
+  blockIndex?: number;
+  /** Wire stop reason on a text part (`stop_reason` / `stopReason`). */
+  stopReason?: string;
+  toolUseId?: string;
 };
 
 /** One choice the terminal is offering, in its own wording (server-supplied). */
@@ -891,15 +896,18 @@ export const useAppStore = create<AppState>((set) => ({
 
       const messages = [...kept];
       const indexOfRecord = new Map<string, number>();
+      const keyOf = (message: { recordId?: string; blockIndex?: number }) =>
+        message.recordId === undefined ? undefined : `${message.recordId}#${message.blockIndex ?? 0}`;
       messages.forEach((message, index) => {
-        if (message.recordId !== undefined) indexOfRecord.set(message.recordId, index);
+        const key = keyOf(message);
+        if (key !== undefined) indexOfRecord.set(key, index);
       });
 
       for (const arrival of apply.messages) {
-        const recordId = arrival.recordId;
-        const at = recordId === undefined ? undefined : indexOfRecord.get(recordId);
+        const key = keyOf(arrival);
+        const at = key === undefined ? undefined : indexOfRecord.get(key);
         if (at === undefined) {
-          if (recordId !== undefined) indexOfRecord.set(recordId, messages.length);
+          if (key !== undefined) indexOfRecord.set(key, messages.length);
           messages.push(arrival);
           continue;
         }

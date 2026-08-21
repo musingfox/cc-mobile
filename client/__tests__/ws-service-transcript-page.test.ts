@@ -257,3 +257,49 @@ describe("TranscriptMessageUpsert — through the live dispatcher", () => {
     expect(session().messages).toHaveLength(1);
   });
 });
+
+describe("ChunkProjectsToTypedParts — same projection on both paths", () => {
+  test("T12: page and live stream_chunk both project via projectChunk with blockIndex", () => {
+    const mixed = {
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: "plan" },
+          { type: "tool_use", id: "t1", name: "Read", input: { path: "a.ts" } },
+          { type: "text", text: "answer" },
+        ],
+      },
+      recordId: "same",
+      seq: 42,
+    };
+
+    internals().handleMessage(pageFrame("aaaa", [mixed]));
+    const fromPage = session().messages.map((m) => ({
+      kind: m.kind,
+      content: m.content,
+      blockIndex: m.blockIndex,
+      recordId: m.recordId,
+      toolName: m.toolName,
+    }));
+
+    useAppStore.setState({ sessions: new Map(), activeSessionId: null });
+    useAppStore.getState().addSession("s1", "/cwd");
+
+    internals().handleMessage({
+      type: "stream_chunk",
+      sessionId: "s1",
+      chunk: { ...mixed, epoch: "aaaa" },
+    });
+    const fromLive = session().messages.map((m) => ({
+      kind: m.kind,
+      content: m.content,
+      blockIndex: m.blockIndex,
+      recordId: m.recordId,
+      toolName: m.toolName,
+    }));
+
+    expect(fromPage).toEqual(fromLive);
+    expect(fromPage.map((m) => m.blockIndex)).toEqual([0, 1, 2]);
+  });
+});
