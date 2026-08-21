@@ -565,3 +565,92 @@ describe("ReadingModeToggle", () => {
     expect(slice).not.toContain("mode");
   });
 });
+
+describe("CopyMessageMarkdown", () => {
+  const markdown = "# Title\n\n- a\n- b";
+
+  beforeEach(() => {
+    useAppStore.setState({ sessions: new Map(), activeSessionId: null, inputDraft: "" });
+    useSettingsStore.getState().setReadingMode("conversation");
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  function seed(role: "user" | "assistant") {
+    const store = useAppStore.getState();
+    store.addSession("s1", "/tmp/project");
+    store.setActiveSession("s1");
+    store.addMessage("s1", {
+      id: "m1",
+      role,
+      content: markdown,
+      timestamp: 1,
+      ...(role === "assistant" ? { stopReason: "end_turn" } : {}),
+    });
+  }
+
+  test("T1: copying an assistant bubble writes the pre-render Markdown once", async () => {
+    const writeText = mock(async (text: string) => {
+      void text;
+    });
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    seed("assistant");
+    const { getByLabelText } = render(<ChatScreen onNavigate={() => {}} />);
+    fireEvent.click(getByLabelText("Copy message"));
+    await waitFor(() => {
+      expect(writeText.mock.calls).toEqual([[markdown]]);
+    });
+  });
+
+  test("T2: copying a user bubble writes that message's content once", async () => {
+    const writeText = mock(async (text: string) => {
+      void text;
+    });
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    seed("user");
+    const { getByLabelText } = render(<ChatScreen onNavigate={() => {}} />);
+    fireEvent.click(getByLabelText("Copy message"));
+    await waitFor(() => {
+      expect(writeText.mock.calls).toEqual([[markdown]]);
+    });
+  });
+
+  test("T3: without clipboard, no copy control is rendered and render does not throw", () => {
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: undefined });
+    seed("assistant");
+    const { queryByLabelText } = render(<ChatScreen onNavigate={() => {}} />);
+    expect(queryByLabelText("Copy message")).toBeNull();
+  });
+
+  test("T4: a rejected write tells the user copy failed", async () => {
+    const writeText = mock(async () => {
+      throw new Error("denied");
+    });
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    seed("assistant");
+    const { getByLabelText, findByRole } = render(<ChatScreen onNavigate={() => {}} />);
+    fireEvent.click(getByLabelText("Copy message"));
+    const status = await findByRole("status");
+    expect(status.textContent).toBe("Copy failed");
+  });
+
+  test("T5: Message gains no raw-markdown field and stores no whole message object", () => {
+    const src = readFileSync("client/stores/app-store.ts", "utf-8");
+    const start = src.indexOf("export type Message = {");
+    const slice = src.slice(start, src.indexOf("};", start) + 2);
+    expect(slice).toContain("content: string");
+    expect(slice).not.toMatch(/rawMarkdown|raw_markdown|sourceMarkdown/);
+    expect(slice).not.toMatch(/message:\s*Message/);
+  });
+});

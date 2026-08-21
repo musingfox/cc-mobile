@@ -60,6 +60,17 @@ export default function ChatScreen({ onNavigate }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<InputBarAHandle>(null);
   const [pickerKind, setPickerKind] = useState<"slash" | "agent" | null>(null);
+  const [copyNotice, setCopyNotice] = useState<string | null>(null);
+  const canCopy =
+    typeof navigator !== "undefined" && typeof navigator.clipboard?.writeText === "function";
+
+  const copyMarkdown = (content: string) => {
+    if (!navigator.clipboard?.writeText) return;
+    void navigator.clipboard.writeText(content).then(
+      () => setCopyNotice("Copied"),
+      () => setCopyNotice("Copy failed"),
+    );
+  };
 
   const storeMessages = session?.messages ?? [];
   const messages = useMemo(
@@ -335,7 +346,19 @@ export default function ChatScreen({ onNavigate }: Props) {
           if (m.role === "user") {
             return (
               <div key={m.id} className="lin-msg lin-msg--user">
-                <div className="lin-msg-label">YOU</div>
+                <div className="lin-msg-head">
+                  <div className="lin-msg-label">YOU</div>
+                  {canCopy && (
+                    <button
+                      type="button"
+                      className="lin-msg-copy"
+                      aria-label="Copy message"
+                      onClick={() => copyMarkdown(m.content)}
+                    >
+                      <Icon name="copy" size={14} color={T.fg2} />
+                    </button>
+                  )}
+                </div>
                 <div className="lin-msg-body">{m.content}</div>
               </div>
             );
@@ -354,7 +377,19 @@ export default function ChatScreen({ onNavigate }: Props) {
           }
           return (
             <div key={m.id} className="lin-msg lin-msg--claude">
-              <div className="lin-msg-label">CLAUDE</div>
+              <div className="lin-msg-head">
+                <div className="lin-msg-label">CLAUDE</div>
+                {canCopy && (
+                  <button
+                    type="button"
+                    className="lin-msg-copy"
+                    aria-label="Copy message"
+                    onClick={() => copyMarkdown(m.content)}
+                  >
+                    <Icon name="copy" size={14} color={T.fg2} />
+                  </button>
+                )}
+              </div>
               <div className="lin-msg-body lin-md">
                 <MarkdownRenderer content={m.content} isStreaming={false} />
               </div>
@@ -383,6 +418,12 @@ export default function ChatScreen({ onNavigate }: Props) {
       )}
 
       {messages.length === 0 && <QuickActions />}
+
+      {copyNotice && (
+        <div className="lin-copy-toast" role="status">
+          {copyNotice}
+        </div>
+      )}
 
       <PromptSuggestionChip sessionId={activeSessionId} />
 
