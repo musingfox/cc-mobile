@@ -7,12 +7,20 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { createNativePermission, type NativePermissionClient } from "./native-permission";
+import {
+  createNativePermission,
+  UNATTENDED_DENY_MS,
+  type NativePermissionClient,
+} from "./native-permission";
 
 const FIXTURES = join(import.meta.dir, "fixtures");
 const BASH_PROMPT = readFileSync(join(FIXTURES, "blocked-bash-prompt.txt"), "utf8");
 const OTHER_PROMPT = BASH_PROMPT.replaceAll("canary2.txt", "somethingelse.txt");
 const UNPARSEABLE = "❯ waiting\n\n  the screen says nothing we understand\n";
+
+const OMP_API_FAILURE = readFileSync(join(FIXTURES, "omp-api-failure.txt"), "utf8");
+const OMP_ALLOW_TOOL = readFileSync(join(FIXTURES, "omp-allow-tool-prompt.txt"), "utf8");
+const OMP_NO_API_KEY = readFileSync(join(FIXTURES, "omp-no-api-key.txt"), "utf8");
 
 const PANE = "w3V:p1";
 
@@ -25,6 +33,36 @@ interface Harness {
   client: NativePermissionClient;
 }
 
+
+function makeFakeClock(startMs = 1_000_000) {
+  let current = startMs;
+  type Timer = { id: number; fireAt: number; fn: () => void; cleared: boolean };
+  const timers: Timer[] = [];
+  let nextId = 1;
+
+  return {
+    now: () => current,
+    setTimeoutFn: (fn: () => void, ms: number) => {
+      const timer: Timer = { id: nextId++, fireAt: current + ms, fn, cleared: false };
+      timers.push(timer);
+      return timer.id;
+    },
+    clearTimeoutFn: (id: unknown) => {
+      const timer = timers.find((candidate) => candidate.id === id);
+      if (timer) timer.cleared = true;
+    },
+    async advance(ms: number) {
+      current += ms;
+      for (const timer of [...timers]) {
+        if (timer.cleared || timer.fireAt > current) continue;
+        timer.cleared = true;
+        timer.fn();
+      }
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    },
+  };
+}
+
 function harness(
   overrides: Partial<{
     origin: "self" | "foreign";
@@ -32,7 +70,9 @@ function harness(
     agentGet: NativePermissionClient["agentGet"];
     sink: boolean;
     onPermissionPrompt: (sessionId: string, origin: "self" | "foreign") => Promise<void> | void;
+    onUnparsedBlockedScreen: (sessionId: string, screen: string) => void;
     warn: (message: string) => void;
+    clock: ReturnType<typeof makeFakeClock>;
   }> = {},
 ): Harness {
   const sent: Record<string, unknown>[] = [];
@@ -57,6 +97,14 @@ function harness(
     newRequestId: () => `r${++counter}`,
     warn: overrides.warn ?? (() => {}),
     onPermissionPrompt: overrides.onPermissionPrompt,
+    onUnparsedBlockedScreen: overrides.onUnparsedBlockedScreen,
+    ...(overrides.clock
+      ? {
+          setTimeoutFn: overrides.clock.setTimeoutFn,
+          clearTimeoutFn: overrides.clock.clearTimeoutFn,
+          now: overrides.clock.now,
+        }
+      : {}),
   });
 
   return { permission, sent, keys, screen, status, client };
@@ -422,5 +470,172 @@ describe("PushPermissionTrigger", () => {
     expect(h.permission.pendingCount()).toBe(1);
     expect(h.permission.pendingFor(PANE)?.timerId).not.toBeUndefined();
     expect(warnings.some((message) => message.includes("notifier boom"))).toBe(true);
+  });
+});
+
+describe("SuppressUnanswerablePermissionCard", () => {
+  test("T1: omp blocked with an API-failure screen raises no permission card", async () => {
+    const h = harness();
+    h.screen.text = OMP_API_FAILURE;
+
+    await h.permission.onStatus(PANE, "blocked", "omp");
+
+    expect(h.sent.filter((msg) => msg.type === "permission_request")).toHaveLength(0);
+    expect(h.permission.pendingCount()).toBe(0);
+  });
+
+  test("T2: claude blocked on an unparseable screen still raises Cancel-only", async () => {
+    const h = harness();
+    h.screen.text = UNPARSEABLE;
+
+    await h.permission.onStatus(PANE, "blocked", "claude");
+
+    const requests = h.sent.filter((msg) => msg.type === "permission_request");
+    expect(requests).toHaveLength(1);
+    const request = requests[0] as {
+      tool: { name: string };
+      options: { id: string; label: string; keystroke: string }[];
+    };
+    expect(request.tool.name).toBe("Permission required");
+    expect(request.options).toEqual([{ id: "cancel", label: "Cancel", keystroke: "esc" }]);
+  });
+
+  test("T3: omp Allow-tool bash still raises a real permission card", async () => {
+    const h = harness();
+    h.screen.text = OMP_ALLOW_TOOL;
+
+    await h.permission.onStatus(PANE, "blocked", "omp");
+
+    const requests = h.sent.filter((msg) => msg.type === "permission_request");
+    expect(requests).toHaveLength(1);
+    expect((requests[0] as { tool: { name: string } }).tool.name).toBe("bash");
+  });
+
+  test("T4: claude bash prompt still raises Bash command with 3 options", async () => {
+    const h = harness();
+    h.screen.text = BASH_PROMPT;
+
+    await h.permission.onStatus(PANE, "blocked", "claude");
+
+    const requests = h.sent.filter((msg) => msg.type === "permission_request");
+    expect(requests).toHaveLength(1);
+    const request = requests[0] as {
+      tool: { name: string };
+      options: unknown[];
+    };
+    expect(request.tool.name).toBe("Bash command");
+    expect(request.options).toHaveLength(3);
+  });
+
+  test("T5: kind-absent unparseable screen raises Cancel-only", async () => {
+    const h = harness();
+    h.screen.text = UNPARSEABLE;
+
+    await h.permission.onStatus(PANE, "blocked");
+
+    const requests = h.sent.filter((msg) => msg.type === "permission_request");
+    expect(requests).toHaveLength(1);
+    const request = requests[0] as {
+      tool: { name: string };
+      options: unknown[];
+    };
+    expect(request.tool.name).toBe("Permission required");
+    expect(request.options).toEqual([{ id: "cancel", label: "Cancel", keystroke: "esc" }]);
+  });
+
+  test("T6: omp unparseable self pane does not unattended-esc after 90s", async () => {
+    const clock = makeFakeClock();
+    const h = harness({ origin: "self", clock });
+    h.screen.text = UNPARSEABLE;
+
+    await h.permission.onStatus(PANE, "blocked", "omp");
+    await clock.advance(UNATTENDED_DENY_MS);
+
+    expect(h.keys).toHaveLength(0);
+  });
+
+  test("T8: claude unparseable self pane still unattended-esc after 90s", async () => {
+    const clock = makeFakeClock();
+    const h = harness({ origin: "self", clock });
+    h.screen.text = UNPARSEABLE;
+
+    await h.permission.onStatus(PANE, "blocked", "claude");
+    await clock.advance(UNATTENDED_DENY_MS);
+
+    expect(h.keys).toEqual([{ pane: PANE, keys: ["esc"] }]);
+  });
+});
+
+describe("UnparsedBlockedScreenHandoff", () => {
+  test("T1: omp unparseable screen is handed to the collaborator untrimmed", async () => {
+    const handed: Array<[string, string]> = [];
+    const h = harness({
+      onUnparsedBlockedScreen: (sessionId, screen) => {
+        handed.push([sessionId, screen]);
+      },
+    });
+    h.screen.text = OMP_NO_API_KEY;
+
+    await h.permission.onStatus(PANE, "blocked", "omp");
+
+    expect(handed).toEqual([[PANE, OMP_NO_API_KEY]]);
+    expect(handed[0][1]).toBe("Error: No API key found for anthropic.\n");
+  });
+
+  test("T2: omp Allow-tool prompt does not hand off", async () => {
+    const handed: Array<[string, string]> = [];
+    const h = harness({
+      onUnparsedBlockedScreen: (sessionId, screen) => {
+        handed.push([sessionId, screen]);
+      },
+    });
+    h.screen.text = OMP_ALLOW_TOOL;
+
+    await h.permission.onStatus(PANE, "blocked", "omp");
+
+    expect(handed).toHaveLength(0);
+  });
+
+  test("T3: kind-absent unparseable screen does not hand off", async () => {
+    const handed: Array<[string, string]> = [];
+    const h = harness({
+      onUnparsedBlockedScreen: (sessionId, screen) => {
+        handed.push([sessionId, screen]);
+      },
+    });
+    h.screen.text = UNPARSEABLE;
+
+    await h.permission.onStatus(PANE, "blocked");
+
+    expect(handed).toHaveLength(0);
+  });
+
+  test("T3b: claude unparseable screen does not hand off", async () => {
+    const handed: Array<[string, string]> = [];
+    const h = harness({
+      onUnparsedBlockedScreen: (sessionId, screen) => {
+        handed.push([sessionId, screen]);
+      },
+    });
+    h.screen.text = UNPARSEABLE;
+
+    await h.permission.onStatus(PANE, "blocked", "claude");
+
+    expect(handed).toHaveLength(0);
+  });
+
+  test("T4: a throwing collaborator does not reject onStatus and is warned", async () => {
+    const warnings: string[] = [];
+    const h = harness({
+      warn: (message) => warnings.push(message),
+      onUnparsedBlockedScreen: () => {
+        throw new Error("boom");
+      },
+    });
+    h.screen.text = OMP_NO_API_KEY;
+
+    await expect(h.permission.onStatus(PANE, "blocked", "omp")).resolves.toBeUndefined();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("boom");
   });
 });

@@ -305,7 +305,7 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
     permission: {
       onStatus: (sessionId, status, kind) => {
         if (!permissionAppliesTo(status, kind)) return;
-        return permission.onStatus(sessionId, status);
+        return permission.onStatus(sessionId, status, kind);
       },
     },
     transcript: {
