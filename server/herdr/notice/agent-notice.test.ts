@@ -298,7 +298,7 @@ describe("IdlePathArmsNoUnattendedDeny", () => {
     const spy = ((fn: TimerHandler, delay?: number, ...args: unknown[]) => {
       recorded.push(delay ?? 0);
       return real(fn as () => void, delay, ...args);
-    }) as typeof setTimeout;
+    }) as unknown as typeof setTimeout;
     globalThis.setTimeout = spy;
     try {
       await h.notice.onStatus("p1", "idle", "claude");
@@ -315,7 +315,7 @@ describe("IdlePathArmsNoUnattendedDeny", () => {
     const spy = ((fn: TimerHandler, delay?: number, ...args: unknown[]) => {
       recorded.push(delay ?? 0);
       return real(fn as () => void, delay, ...args);
-    }) as typeof setTimeout;
+    }) as unknown as typeof setTimeout;
     globalThis.setTimeout = spy;
     try {
       await h.notice.onStatus("p1", "idle", "claude");
