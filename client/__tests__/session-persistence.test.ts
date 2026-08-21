@@ -398,7 +398,6 @@ describe("session-persistence", () => {
         messages,
         pendingPermission: null,
         isStreaming: false,
-        currentStreamMessageId: null,
         activeToolStatus: null,
         activeTools: new Map(),
         activeAgents: new Map(),
