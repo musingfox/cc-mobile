@@ -18,7 +18,9 @@ function defaultSpawn(spec: ProbeSpec): { stdout: Promise<string>; kill(): void 
     cwd: spec.cwd,
     env: spec.env,
     stdout: "pipe",
-    stderr: "pipe",
+    // Never "pipe": nothing here drains stderr, so a chatty child would fill
+    // the OS pipe buffer and block until the 30s timeout killed it.
+    stderr: "ignore",
   });
   return {
     stdout: new Response(proc.stdout).text(),
