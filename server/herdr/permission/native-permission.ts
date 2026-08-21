@@ -265,7 +265,11 @@ export function createNativePermission(options: NativePermissionOptions) {
    * Leaving `blocked` drops the pending record without a keystroke: whoever
    * answered — the human at the terminal, or the phone — has already been heard.
    */
-  async function onStatus(sessionId: string, status: string): Promise<void> {
+  async function onStatus(
+    sessionId: string,
+    status: string,
+    kind?: string,
+  ): Promise<void> {
     if (status !== "blocked") {
       drop(sessionId);
       return;
@@ -277,6 +281,13 @@ export function createNativePermission(options: NativePermissionOptions) {
     const fingerprint = sample.parsed?.fingerprint ?? UNPARSED_FINGERPRINT;
     // Same question, seen twice: the phone already has it.
     if (pending.get(sessionId)?.fingerprint === fingerprint) return;
+
+    // H1: only omp drops the unanswerable card. claude and an absent kind keep
+    // Cancel-only so the phone still has a way off that screen.
+    if (!sample.parsed && kind === "omp") {
+      drop(sessionId);
+      return;
+    }
 
     emit(sessionId, sample, await originOf(sessionId));
   }
