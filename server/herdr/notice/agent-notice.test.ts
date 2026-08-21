@@ -335,3 +335,20 @@ describe("IdlePathArmsNoUnattendedDeny", () => {
     expect("paneSendKeys" in options).toBe(false);
   });
 });
+
+describe("IdlePathRaisesNoPermissionRequest", () => {
+  test("T1: trust dialog idle yields only error frames, never a permission card", async () => {
+    const h = idleHarness({ screen: TRUST_DIALOG });
+    await h.notice.onStatus("p1", "idle", "claude");
+    expect(h.sink.length).toBeGreaterThan(0);
+    expect(h.sink.every((msg) => msg.type === "error")).toBe(true);
+    expect(h.sink.filter((msg) => msg.type === "permission_request")).toEqual([]);
+  });
+
+  test("T2: a real permission prompt seen while idle raises nothing", async () => {
+    const h = idleHarness({ screen: BASH_PROMPT });
+    await h.notice.onStatus("p1", "idle", "claude");
+    expect(h.sink).toEqual([]);
+    expect(h.sink.filter((msg) => msg.type === "permission_request")).toEqual([]);
+  });
+});
