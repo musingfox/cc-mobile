@@ -187,6 +187,18 @@ function paddedRec(id: string, targetBytes: number) {
   return rec;
 }
 
+/** Kept by the mapper, but with no uuid/id: nothing can name it in a cursor. */
+function anonymousRec(targetBytes: number) {
+  let text = "x";
+  const build = () => ({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text }] } });
+  let rec = build();
+  while (Buffer.byteLength(JSON.stringify(rec), "utf8") + 1 < targetBytes) {
+    text += "y";
+    rec = build();
+  }
+  return rec;
+}
+
 function metaRec(id: string, targetBytes: number) {
   let extra = "";
   let rec: Record<string, unknown> = { uuid: id, type: "user", isMeta: true, message: { role: "user", content: extra } };
@@ -354,5 +366,47 @@ describe("PageReadsOneWindow", () => {
     const bytes = Buffer.byteLength(JSON.stringify(page.records), "utf8");
     expect(page.records.length).toBeLessThanOrEqual(3);
     expect(bytes).toBeLessThan(250 + 128 * page.records.length);
+  });
+
+  it("T14: hops exhausted mid-file still hands back a cursor, and the older records stay reachable", async () => {
+    // Four 250-byte hops cannot cross 1280 bytes of bookkeeping, so the page
+    // comes back empty with the three real records still ahead of it.
+    const older = Array.from({ length: 3 }, (_, i) => paddedRec("u" + (i + 1), 100));
+    const metas = Array.from({ length: 16 }, (_, i) => metaRec("m" + i, 80));
+    const path = await writeLines("p.jsonl", [...older, ...metas]);
+
+    const first = await readTranscriptPage({ path, before: null, limit: 50, maxBytes: 250 });
+    expect(first.records).toEqual([]);
+    // null here would tell the phone the conversation starts at this page.
+    expect(first.nextBefore).not.toBeNull();
+
+    const seen: string[] = [];
+    let cursor = first.nextBefore;
+    for (let hop = 0; hop < 10 && cursor !== null; hop++) {
+      const page = await readTranscriptPage({ path, before: cursor, limit: 50, maxBytes: 250 });
+      seen.push(...page.records.map((r: any) => r.recordId as string));
+      cursor = page.nextBefore;
+    }
+    expect(seen).toContain("u3");
+    expect(seen).toContain("u1");
+  });
+
+  it("T15: a page whose records cannot name themselves hands back the caller's own cursor, never null", async () => {
+    const named = [paddedRec("u1", 100), paddedRec("u2", 100)];
+    const anonymous = Array.from({ length: 4 }, () => anonymousRec(100));
+    const tail = paddedRec("last", 100);
+    const path = await writeLines("p.jsonl", [...named, ...anonymous, tail]);
+    const current = epochOf(path);
+    const full = await readTranscriptPage({ path, before: null, limit: 99 });
+    const last = full.records.find((r: any) => r.recordId === "last") as any;
+    const before = { epoch: current, seq: last.seq as number, recordId: "last" };
+
+    const res = await readTranscriptPage({ path, before, limit: 50, maxBytes: 250 });
+
+    // Records the mapper keeps but nothing can address: the page is real, and
+    // the file head is still 400 bytes further back.
+    expect(res.records.length).toBeGreaterThan(0);
+    expect(res.records.every((r: any) => r.recordId === undefined)).toBe(true);
+    expect(res.nextBefore).toEqual(before);
   });
 });

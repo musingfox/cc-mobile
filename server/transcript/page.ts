@@ -52,9 +52,14 @@ export interface TranscriptPage {
   /** Mapper-non-null chunks, oldest→newest, each stamped with `seq` and `epoch`. */
   records: Array<Record<string, unknown>>;
   /**
-   * Names the oldest record in this page, for the next request. `null` means
-   * no mapper-non-null record exists before this page — the conversation
-   * starts here.
+   * Names the oldest record in this page, for the next request. `null` is a
+   * statement about the file, not about this read: it means the window reached
+   * byte 0 with nothing older left — the conversation starts here — and the
+   * phone retires its "load earlier" entrance on it. A read that simply could
+   * not name a record (hops spent, or a page of records with no id of their
+   * own) hands back the deepest cursor it can prove instead, down to the
+   * caller's own; only a file with no addressable record anywhere is left with
+   * `null` as the sole expressible answer.
    */
   nextBefore: PageCursor | null;
 }
@@ -116,6 +121,27 @@ async function endOffsetForCursor(
   return size;
 }
 
+/**
+ * The oldest record in the window that can name itself and sits before
+ * `limitSeq`. Mapper-null records count: `endOffsetForCursor` proves a cursor
+ * off the raw record, so a bookkeeping line is a perfectly good place to stop.
+ */
+function oldestNamedCursor(
+  records: unknown[],
+  offsets: number[],
+  limitSeq: number,
+  epoch: string,
+): PageCursor | null {
+  for (let index = 0; index < records.length; index++) {
+    const seq = offsets[index] ?? 0;
+    if (seq >= limitSeq) continue;
+    const record = records[index];
+    const id = recordIdOf(record, transcriptRecordToChunk(record));
+    if (id !== undefined) return { epoch, seq, recordId: id };
+  }
+  return null;
+}
+
 function itemsFromWindow(
   records: unknown[],
   offsets: number[],
@@ -146,30 +172,64 @@ export async function readTranscriptPage(input: ReadPageInput): Promise<Transcri
 
   const endOffset = await endOffsetForCursor(fs, path, size, before, epoch, probeBytes);
 
+  // Only a cursor the probe accepted may be handed back: reflecting a rejected
+  // one would send the client round a loop that degrades to the newest page.
+  const honouredBefore = before !== null && endOffset === before.seq ? before : null;
+
   let hopEnd = endOffset;
   let windowStart = hopEnd;
   let items: PageItem[] = [];
+  let lastRecords: unknown[] = [];
+  let lastOffsets: number[] = [];
+  // The end the last window was actually read to — `hopEnd` walks past it.
+  let lastEnd = hopEnd;
   for (let hop = 0; hop < MAX_EMPTY_WINDOW_HOPS; hop++) {
     const window = await readTranscriptWindow({ path, end: hopEnd, maxBytes, fs });
     windowStart = window.windowStart;
+    lastEnd = hopEnd;
+    lastRecords = window.records;
+    lastOffsets = window.offsets;
     items = itemsFromWindow(window.records, window.offsets, hopEnd);
     if (items.length > 0) break;
     if (window.windowStart === 0) break;
     hopEnd = window.windowStart;
   }
 
-  if (items.length === 0) return { epoch, records: [], nextBefore: null };
+  if (items.length === 0) {
+    // Reaching byte 0 with nothing renderable is the head. Spending the hop
+    // budget is not: the file goes on, and everything hopped over was
+    // mapper-null, so the oldest of those is a cursor that both keeps the
+    // entrance open and makes real progress.
+    if (windowStart === 0) return { epoch, records: [], nextBefore: null };
+    const deeper = oldestNamedCursor(lastRecords, lastOffsets, lastEnd, epoch);
+    return { epoch, records: [], nextBefore: deeper ?? honouredBefore };
+  }
 
   const start = Math.max(0, items.length - limit);
   const take = items.slice(start);
-  const reachedHead = windowStart === 0;
   const tookEvery = start === 0;
-  const emitNull = reachedHead && tookEvery;
-  const anchor = !emitNull ? take.find((item) => item.recordId !== undefined) : undefined;
+  const reachedHead = windowStart === 0 && tookEvery;
+
+  let nextBefore: PageCursor | null = null;
+  if (!reachedHead) {
+    const anchor = take.find((item) => item.recordId !== undefined);
+    if (anchor) {
+      nextBefore = { epoch, seq: anchor.seq, recordId: anchor.recordId as string };
+    } else {
+      // Nothing in the page can name itself. A record older than the page is
+      // safe to point at only when the page took every item this window kept —
+      // then all that is skipped is mapper-null. Otherwise the caller's own
+      // cursor: the same page again, which costs a re-read but hides nothing.
+      const deeper = tookEvery
+        ? oldestNamedCursor(lastRecords, lastOffsets, take[0]?.seq ?? lastEnd, epoch)
+        : null;
+      nextBefore = deeper ?? honouredBefore;
+    }
+  }
 
   return {
     epoch,
     records: take.map((item) => ({ ...item.chunk, seq: item.seq, epoch })),
-    nextBefore: anchor ? { epoch, seq: anchor.seq, recordId: anchor.recordId as string } : null,
+    nextBefore,
   };
 }
