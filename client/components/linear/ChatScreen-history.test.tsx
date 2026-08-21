@@ -588,3 +588,236 @@ describe("StayPutOnLiveArrival", () => {
     expect(scroller.scrollTop).toBe(1100);
   });
 });
+
+function toolPart(recordId: string, seq: number): Message {
+  return {
+    id: `id-${recordId}`,
+    role: "assistant",
+    content: "tool",
+    timestamp: 0,
+    recordId,
+    seq,
+    kind: "tool_use",
+    toolUseId: recordId,
+    toolName: "Bash",
+    stopReason: "tool_use",
+  };
+}
+
+function thinkingPart(recordId: string, seq: number): Message {
+  return {
+    id: `id-${recordId}`,
+    role: "assistant",
+    content: "hmm",
+    timestamp: 0,
+    recordId,
+    seq,
+    kind: "thinking",
+  };
+}
+
+function visibleTurn(): Message[] {
+  return [
+    { id: "id-u", role: "user", content: "prompt", timestamp: 0, recordId: "u", seq: 500 },
+    {
+      id: "id-a",
+      role: "assistant",
+      content: "answer",
+      timestamp: 1,
+      recordId: "a",
+      seq: 600,
+      stopReason: "end_turn",
+    },
+  ];
+}
+
+function arrive(messages: Message[], nextBefore: TranscriptCursor | null) {
+  act(() => {
+    useAppStore.getState().applyTranscriptMessages("s1", {
+      epoch: "aaaa",
+      messages,
+      nextBefore,
+    });
+    useAppStore.getState().setTranscriptPageRequest("s1", null);
+  });
+}
+
+describe("ConversationModeAutoPage", () => {
+  const older = { epoch: "aaaa", seq: 100, recordId: "old" } as TranscriptCursor;
+
+  beforeEach(() => {
+    useSettingsStore.getState().setReadingMode("conversation");
+  });
+
+  test("T1: a zero-gain Conversation page with a cursor auto-requests the next page once", () => {
+    openSession({
+      readable: true,
+      messages: visibleTurn(),
+      pagingCursor: CURSOR,
+      inFlight: true,
+    });
+    render(<ChatScreen onNavigate={() => {}} />);
+    requests = [];
+    arrive([toolPart("tu", 50), thinkingPart("th", 51)], older);
+    expect(requests).toEqual([{ sessionId: "s1", before: older }]);
+  });
+
+  test("T2: three consecutive zero-gain pages send exactly 3 automatic requests then stop", () => {
+    openSession({
+      readable: true,
+      messages: visibleTurn(),
+      pagingCursor: CURSOR,
+      inFlight: true,
+    });
+    render(<ChatScreen onNavigate={() => {}} />);
+    requests = [];
+
+    arrive([toolPart("a", 10)], { epoch: "aaaa", seq: 90, recordId: "c1" });
+    act(() => useAppStore.getState().setTranscriptPageRequest("s1", { sentAt: 1 }));
+    arrive([toolPart("b", 9)], { epoch: "aaaa", seq: 80, recordId: "c2" });
+    act(() => useAppStore.getState().setTranscriptPageRequest("s1", { sentAt: 2 }));
+    arrive([toolPart("c", 8)], { epoch: "aaaa", seq: 70, recordId: "c3" });
+    act(() => useAppStore.getState().setTranscriptPageRequest("s1", { sentAt: 3 }));
+    arrive([toolPart("d", 7)], { epoch: "aaaa", seq: 60, recordId: "c4" });
+
+    expect(requests).toHaveLength(3);
+  });
+
+  test("T3: a page that adds a rendered message does not auto-follow", () => {
+    openSession({
+      readable: true,
+      messages: visibleTurn(),
+      pagingCursor: CURSOR,
+      inFlight: true,
+    });
+    render(<ChatScreen onNavigate={() => {}} />);
+    requests = [];
+    arrive(
+      [
+        { id: "id-u0", role: "user", content: "older", timestamp: 0, recordId: "u0", seq: 40 },
+        {
+          id: "id-a0",
+          role: "assistant",
+          content: "older-a",
+          timestamp: 1,
+          recordId: "a0",
+          seq: 41,
+          stopReason: "end_turn",
+        },
+      ],
+      older,
+    );
+    expect(requests).toHaveLength(0);
+  });
+
+  test("T4: a zero-gain page at the head (nextBefore null) does not auto-request", () => {
+    openSession({
+      readable: true,
+      messages: visibleTurn(),
+      pagingCursor: CURSOR,
+      inFlight: true,
+    });
+    render(<ChatScreen onNavigate={() => {}} />);
+    requests = [];
+    arrive([toolPart("tu", 50)], null);
+    expect(requests).toHaveLength(0);
+  });
+
+  test("T5: Full mode does not auto-hop a page of tool plumbing", () => {
+    useSettingsStore.getState().setReadingMode("full");
+    openSession({
+      readable: true,
+      messages: visibleTurn(),
+      pagingCursor: CURSOR,
+      inFlight: true,
+    });
+    render(<ChatScreen onNavigate={() => {}} />);
+    requests = [];
+    arrive([toolPart("tu", 50)], older);
+    expect(requests).toHaveLength(0);
+  });
+
+  test("T6: switching session, switching mode, or tapping Load earlier resets the hop budget", () => {
+    openSession({
+      readable: true,
+      messages: visibleTurn(),
+      pagingCursor: CURSOR,
+      inFlight: true,
+    });
+    const { getByText, rerender } = render(<ChatScreen onNavigate={() => {}} />);
+    requests = [];
+    arrive([toolPart("a", 10)], { epoch: "aaaa", seq: 90, recordId: "c1" });
+    act(() => useAppStore.getState().setTranscriptPageRequest("s1", { sentAt: 1 }));
+    arrive([toolPart("b", 9)], { epoch: "aaaa", seq: 80, recordId: "c2" });
+    act(() => useAppStore.getState().setTranscriptPageRequest("s1", { sentAt: 2 }));
+    arrive([toolPart("c", 8)], { epoch: "aaaa", seq: 70, recordId: "c3" });
+    expect(requests).toHaveLength(3);
+    requests = [];
+
+    fireEvent.click(getByText("Load earlier messages"));
+    expect(requests).toHaveLength(1);
+    requests = [];
+    act(() => useAppStore.getState().setTranscriptPageRequest("s1", { sentAt: 9 }));
+    arrive([toolPart("d", 7)], { epoch: "aaaa", seq: 60, recordId: "c4" });
+    expect(requests).toHaveLength(1);
+
+    requests = [];
+    useSettingsStore.getState().setReadingMode("full");
+    rerender(<ChatScreen onNavigate={() => {}} />);
+    useSettingsStore.getState().setReadingMode("conversation");
+    rerender(<ChatScreen onNavigate={() => {}} />);
+    act(() => useAppStore.getState().setTranscriptPageRequest("s1", { sentAt: 10 }));
+    arrive([toolPart("e", 6)], { epoch: "aaaa", seq: 50, recordId: "c5" });
+    expect(requests).toHaveLength(1);
+
+    requests = [];
+    const store = useAppStore.getState();
+    store.addSession("s2", "/tmp/other");
+    store.setActiveSession("s2");
+    useAppStore.setState((state) => {
+      const sessions = new Map(state.sessions);
+      const session = sessions.get("s2");
+      if (!session) return state;
+      sessions.set("s2", {
+        ...session,
+        messages: visibleTurn(),
+        descriptor: {
+          agent: "claude",
+          origin: "self",
+          drivable: true,
+          readable: true,
+          gated: false,
+        },
+        pagingCursor: CURSOR,
+        transcriptPageRequest: { sentAt: 1 },
+      });
+      return { sessions };
+    });
+    rerender(<ChatScreen onNavigate={() => {}} />);
+    requests = [];
+    act(() => {
+      useAppStore.getState().applyTranscriptMessages("s2", {
+        epoch: "aaaa",
+        messages: [toolPart("z", 1)],
+        nextBefore: older,
+      });
+      useAppStore.getState().setTranscriptPageRequest("s2", null);
+    });
+    expect(requests).toEqual([{ sessionId: "s2", before: older }]);
+  });
+
+  test("T7: a zero-gain auto-hop while mid-list leaves scrollTop unchanged", () => {
+    openSession({
+      readable: true,
+      messages: visibleTurn(),
+      pagingCursor: CURSOR,
+      inFlight: true,
+    });
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    const scroller = stubScroller(container, 1000, 200, 600);
+    fireEvent.scroll(scroller);
+    requests = [];
+    arrive([toolPart("tu", 50)], older);
+    expect(scroller.scrollTop).toBe(200);
+  });
+});

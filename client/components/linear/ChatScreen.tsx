@@ -108,6 +108,35 @@ export default function ChatScreen({ onNavigate }: Props) {
   const beforeCommit = useRef<ScrollSnapshot>({ scrollTop: 0, scrollHeight: 0, clientHeight: 0 });
   const previousFirstId = useRef<string | undefined>(undefined);
   const previousReadingMode = useRef(readingMode);
+  const autoHopsRef = useRef(0);
+  const renderedCountRef = useRef(0);
+  const wasLoadingRef = useRef(false);
+  const hopSessionRef = useRef(activeSessionId);
+  const hopModeRef = useRef(readingMode);
+
+  if (hopSessionRef.current !== activeSessionId) {
+    autoHopsRef.current = 0;
+    hopSessionRef.current = activeSessionId;
+  }
+  if (hopModeRef.current !== readingMode) {
+    autoHopsRef.current = 0;
+    hopModeRef.current = readingMode;
+  }
+
+  useEffect(() => {
+    const arrived = wasLoadingRef.current && !historyLoading;
+    wasLoadingRef.current = historyLoading;
+    const prevCount = renderedCountRef.current;
+    const nextCount = messages.length;
+    renderedCountRef.current = nextCount;
+    if (!arrived) return;
+    if (readingMode !== "conversation") return;
+    if (nextCount > prevCount) return;
+    if (!activeSessionId || !historyReadable || !pagingCursor) return;
+    if (autoHopsRef.current >= 3) return;
+    autoHopsRef.current += 1;
+    wsService.requestTranscriptPage(activeSessionId, pagingCursor);
+  }, [historyLoading, messages, pagingCursor, readingMode, activeSessionId, historyReadable]);
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -186,6 +215,7 @@ export default function ChatScreen({ onNavigate }: Props) {
     // stream of scroll events from even reaching it, and is what the loading
     // row corresponds to on screen.
     if (!activeSessionId || !historyReadable || !pagingCursor || historyLoading) return;
+    autoHopsRef.current = 0;
     wsService.requestTranscriptPage(activeSessionId, pagingCursor);
   };
 
