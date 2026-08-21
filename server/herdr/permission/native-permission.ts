@@ -59,6 +59,11 @@ export interface NativePermissionOptions {
    * is elsewhere). Must be called regardless of getSink result.
    */
   onPermissionPrompt?: (sessionId: string, origin: "self" | "foreign") => Promise<void> | void;
+  /**
+   * An omp blocked screen that is not a permission prompt: hand the raw text
+   * to the announcement path instead of raising an unanswerable card.
+   */
+  onUnparsedBlockedScreen?: (sessionId: string, screen: string) => void | Promise<void>;
 }
 
 /**
@@ -115,6 +120,7 @@ export function createNativePermission(options: NativePermissionOptions) {
   const warn =
     options.warn ?? ((message: string) => console.warn(`[herdr] permission: ${message}`));
   const onPermissionPrompt = options.onPermissionPrompt ?? (() => {});
+  const onUnparsedBlockedScreen = options.onUnparsedBlockedScreen ?? (() => {});
 
   const pending = new Map<string, PendingNativePermission>();
   /** requestId → sessionId, so an answer finds its pane in one lookup. */
@@ -286,6 +292,13 @@ export function createNativePermission(options: NativePermissionOptions) {
     // Cancel-only so the phone still has a way off that screen.
     if (!sample.parsed && kind === "omp") {
       drop(sessionId);
+      try {
+        Promise.resolve(onUnparsedBlockedScreen(sessionId, sample.text)).catch((error: unknown) => {
+          warn(`onUnparsedBlockedScreen rejected for ${sessionId}: ${describe(error)}`);
+        });
+      } catch (error) {
+        warn(`onUnparsedBlockedScreen threw for ${sessionId}: ${describe(error)}`);
+      }
       return;
     }
 

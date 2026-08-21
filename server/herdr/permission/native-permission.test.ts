@@ -70,6 +70,7 @@ function harness(
     agentGet: NativePermissionClient["agentGet"];
     sink: boolean;
     onPermissionPrompt: (sessionId: string, origin: "self" | "foreign") => Promise<void> | void;
+    onUnparsedBlockedScreen: (sessionId: string, screen: string) => void;
     warn: (message: string) => void;
     clock: ReturnType<typeof makeFakeClock>;
   }> = {},
@@ -96,6 +97,7 @@ function harness(
     newRequestId: () => `r${++counter}`,
     warn: overrides.warn ?? (() => {}),
     onPermissionPrompt: overrides.onPermissionPrompt,
+    onUnparsedBlockedScreen: overrides.onUnparsedBlockedScreen,
     ...(overrides.clock
       ? {
           setTimeoutFn: overrides.clock.setTimeoutFn,
@@ -561,5 +563,79 @@ describe("SuppressUnanswerablePermissionCard", () => {
     await clock.advance(UNATTENDED_DENY_MS);
 
     expect(h.keys).toEqual([{ pane: PANE, keys: ["esc"] }]);
+  });
+});
+
+describe("UnparsedBlockedScreenHandoff", () => {
+  test("T1: omp unparseable screen is handed to the collaborator untrimmed", async () => {
+    const handed: Array<[string, string]> = [];
+    const h = harness({
+      onUnparsedBlockedScreen: (sessionId, screen) => {
+        handed.push([sessionId, screen]);
+      },
+    });
+    h.screen.text = OMP_NO_API_KEY;
+
+    await h.permission.onStatus(PANE, "blocked", "omp");
+
+    expect(handed).toEqual([[PANE, OMP_NO_API_KEY]]);
+    expect(handed[0][1]).toBe("Error: No API key found for anthropic.\n");
+  });
+
+  test("T2: omp Allow-tool prompt does not hand off", async () => {
+    const handed: Array<[string, string]> = [];
+    const h = harness({
+      onUnparsedBlockedScreen: (sessionId, screen) => {
+        handed.push([sessionId, screen]);
+      },
+    });
+    h.screen.text = OMP_ALLOW_TOOL;
+
+    await h.permission.onStatus(PANE, "blocked", "omp");
+
+    expect(handed).toHaveLength(0);
+  });
+
+  test("T3: kind-absent unparseable screen does not hand off", async () => {
+    const handed: Array<[string, string]> = [];
+    const h = harness({
+      onUnparsedBlockedScreen: (sessionId, screen) => {
+        handed.push([sessionId, screen]);
+      },
+    });
+    h.screen.text = UNPARSEABLE;
+
+    await h.permission.onStatus(PANE, "blocked");
+
+    expect(handed).toHaveLength(0);
+  });
+
+  test("T3b: claude unparseable screen does not hand off", async () => {
+    const handed: Array<[string, string]> = [];
+    const h = harness({
+      onUnparsedBlockedScreen: (sessionId, screen) => {
+        handed.push([sessionId, screen]);
+      },
+    });
+    h.screen.text = UNPARSEABLE;
+
+    await h.permission.onStatus(PANE, "blocked", "claude");
+
+    expect(handed).toHaveLength(0);
+  });
+
+  test("T4: a throwing collaborator does not reject onStatus and is warned", async () => {
+    const warnings: string[] = [];
+    const h = harness({
+      warn: (message) => warnings.push(message),
+      onUnparsedBlockedScreen: () => {
+        throw new Error("boom");
+      },
+    });
+    h.screen.text = OMP_NO_API_KEY;
+
+    await expect(h.permission.onStatus(PANE, "blocked", "omp")).resolves.toBeUndefined();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("boom");
   });
 });
