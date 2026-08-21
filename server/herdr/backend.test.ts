@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createApp } from "../app";
@@ -643,5 +643,86 @@ describe("CapabilitiesBackendPort", () => {
     await backend.readCapabilities("w1:p1");
     await backend.readCapabilities("w1:p1", { refresh: true });
     expect(fetchCalls()).toBe(2);
+  });
+});
+
+// ── BlockedScreenNoticeDelivery (backend wiring) ─────────────────────────────
+
+describe("BlockedScreenNoticeDelivery wiring", () => {
+  const OMP_NO_API_KEY = readFileSync(
+    join(import.meta.dir, "permission/fixtures/omp-no-api-key.txt"),
+    "utf8",
+  );
+  const OMP_API_FAILURE = readFileSync(
+    join(import.meta.dir, "permission/fixtures/omp-api-failure.txt"),
+    "utf8",
+  );
+
+  function noticeBackend(screen: string) {
+    let emit: ((event: { event: string; data: unknown }) => void) | undefined;
+    const client = {
+      call: async () => ({ type: "ok" }),
+      agentGet: async () => ({ agent_status: "blocked" }),
+      paneRead: async () => ({ text: screen, revision: 1 }),
+      paneSendText: async () => {},
+      paneSendKeys: async () => {},
+      subscribeEvents: async (options: {
+        onEvent: (event: { event: string; data: unknown }) => void;
+      }) => {
+        emit = options.onEvent;
+        return { stop: () => {} };
+      },
+    } as unknown as NonNullable<HerdrBackendOptions["client"]>;
+
+    const backend = createHerdrBackend({ client });
+    const sent: Record<string, unknown>[] = [];
+    return {
+      sent,
+      async open(sessionId: string) {
+        backend.registerClient(sessionId, (msg) => sent.push(msg));
+        await backend.listSessionDescriptors();
+      },
+      async report(paneId: string, status: string, agent?: string) {
+        emit?.({
+          event: "pane_updated",
+          data: { pane: { pane_id: paneId, agent_status: status, ...(agent ? { agent } : {}) } },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      },
+    };
+  }
+
+  test("an omp API-key screen reaches the phone as an error frame, not a prompt", async () => {
+    const h = noticeBackend(OMP_NO_API_KEY + "\n");
+    await h.open("w3V:p1");
+    await h.report("w3V:p1", "blocked", "omp");
+    const notices = h.sent.filter((msg) => msg.type === "error");
+    expect(notices).toEqual([
+      {
+        type: "error",
+        code: "agent_blocked_notice",
+        sessionId: "w3V:p1",
+        message: "\n```\nError: No API key found for anthropic.\n```",
+      },
+    ]);
+    expect(h.sent.some((msg) => msg.type === "permission_request")).toBe(false);
+  });
+
+  test("an omp 429 screen is announced once even if the pane ticks again", async () => {
+    const h = noticeBackend(OMP_API_FAILURE);
+    await h.open("w3V:p1");
+    await h.report("w3V:p1", "blocked", "omp");
+    await h.report("w3V:p1", "blocked", "omp");
+    const notices = h.sent.filter((msg) => msg.code === "agent_blocked_notice");
+    expect(notices).toHaveLength(1);
+    expect(String(notices[0]?.message)).toContain("429");
+    expect(h.sent.some((msg) => msg.type === "permission_request")).toBe(false);
+  });
+
+  test("an empty omp blocked screen sends no frames", async () => {
+    const h = noticeBackend("");
+    await h.open("w3V:p1");
+    await h.report("w3V:p1", "blocked", "omp");
+    expect(h.sent.filter((msg) => msg.type === "error" || msg.type === "permission_request")).toEqual([]);
   });
 });

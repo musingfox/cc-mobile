@@ -109,7 +109,7 @@ a page reload.
   claudeUuids: string[],
   states?: Record<string, "idle" | "running" | "requires_action"> }
 { type: "session_state", sessionId: string, state: "idle" | "running" | "requires_action" }
-{ type: "error", code: string, message: string, sessionId?: string }
+{ type: "error", code: string, message: string, sessionId?: string } // agent_blocked_notice: fenced blocked-screen words
 { type: "server_config", config: { allowedRoots?: string[] | null, homeDirectory?: string,
                                   availableAgents?: ("claude"|"omp")[] } }
 { type: "transcript_page", sessionId: string, epoch: string,
