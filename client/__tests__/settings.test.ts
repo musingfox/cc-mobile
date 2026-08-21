@@ -29,10 +29,11 @@ describe("settings service", () => {
       theme: "light",
       notificationsEnabled: false,
       hapticsEnabled: false,
+      readingMode: "conversation",
     });
     const stored = mockStorage.get("cc-mobile-settings");
     expect(stored).toBe(
-      '{"defaultCwd":"/tmp","theme":"light","notificationsEnabled":false,"hapticsEnabled":false}',
+      '{"defaultCwd":"/tmp","theme":"light","notificationsEnabled":false,"hapticsEnabled":false,"readingMode":"conversation"}',
     );
   });
 
@@ -44,6 +45,7 @@ describe("settings service", () => {
       theme: "dark",
       notificationsEnabled: false,
       hapticsEnabled: false,
+      readingMode: "conversation",
     });
   });
 
@@ -55,6 +57,7 @@ describe("settings service", () => {
       theme: "dark",
       notificationsEnabled: false,
       hapticsEnabled: false,
+      readingMode: "conversation",
     });
   });
 
@@ -72,6 +75,28 @@ describe("settings service", () => {
       theme: "claude",
       notificationsEnabled: false,
       hapticsEnabled: false,
+      readingMode: "conversation",
     });
+  });
+});
+
+describe("ReadingModeToggle", () => {
+  beforeEach(() => {
+    mockStorage.clear();
+  });
+
+  test("T1: a fresh client with no stored setting defaults to conversation", () => {
+    expect(loadSettings().readingMode).toBe("conversation");
+  });
+
+  test("T2: switching to Full is persisted through the same settings path", () => {
+    saveSettings({
+      defaultCwd: "",
+      theme: "dark",
+      notificationsEnabled: false,
+      hapticsEnabled: false,
+      readingMode: "full",
+    });
+    expect(loadSettings().readingMode).toBe("full");
   });
 });

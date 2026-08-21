@@ -13,6 +13,7 @@ import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { wsService } from "../../services/ws-service";
 import type { Message, TranscriptCursor } from "../../stores/app-store";
 import { useAppStore } from "../../stores/app-store";
+import { useSettingsStore } from "../../stores/settings-store";
 import ChatScreen from "./ChatScreen";
 
 const CURSOR: TranscriptCursor = { epoch: "aaaa", seq: 400, recordId: "u9" };
@@ -36,7 +37,14 @@ function stubScroller(
 }
 
 function record(recordId: string, seq: number): Message {
-  return { id: `id-${recordId}`, role: "assistant", content: recordId, timestamp: 0, recordId, seq };
+  return {
+    id: `id-${recordId}`,
+    role: "assistant",
+    content: recordId,
+    timestamp: 0,
+    recordId,
+    seq,
+  };
 }
 
 function openSession(options: {
@@ -81,6 +89,7 @@ beforeEach(() => {
     return true;
   }) as typeof wsService.requestTranscriptPage;
   useAppStore.setState({ sessions: new Map(), activeSessionId: null, inputDraft: "" });
+  useSettingsStore.getState().setReadingMode("full");
 });
 
 afterEach(() => {
@@ -135,7 +144,11 @@ describe("HistoryAffordanceFollowsReadable", () => {
   });
 
   test("T5: an agent exiting takes the affordance away and leaves the messages", () => {
-    openSession({ readable: true, messages: [record("a", 10), record("b", 20)], pagingCursor: CURSOR });
+    openSession({
+      readable: true,
+      messages: [record("a", 10), record("b", 20)],
+      pagingCursor: CURSOR,
+    });
     const { queryByText, getByText } = render(<ChatScreen onNavigate={() => {}} />);
     expect(queryByText("Load earlier messages")).not.toBeNull();
 
@@ -194,7 +207,9 @@ describe("SessionOpenNewestPage — the rendering side", () => {
     const { rerender } = render(<ChatScreen onNavigate={() => {}} />);
     rerender(<ChatScreen onNavigate={() => {}} />);
     act(() => {
-      useAppStore.getState().addMessage("s1", { id: "m", role: "user", content: "x", timestamp: 1 });
+      useAppStore
+        .getState()
+        .addMessage("s1", { id: "m", role: "user", content: "x", timestamp: 1 });
     });
     expect(requests).toHaveLength(0);
   });
@@ -485,7 +500,16 @@ describe("StayPutOnLiveArrival", () => {
       Object.defineProperty(scroller, "scrollHeight", { value: 1200, configurable: true });
       useAppStore.getState().applyTranscriptMessages("s1", {
         epoch: "aaaa",
-        messages: [{ id: "id-u1", role: "user", content: "from terminal", timestamp: 0, recordId: "u1", seq: 30 }],
+        messages: [
+          {
+            id: "id-u1",
+            role: "user",
+            content: "from terminal",
+            timestamp: 0,
+            recordId: "u1",
+            seq: 30,
+          },
+        ],
       });
     });
 

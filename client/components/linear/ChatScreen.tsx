@@ -1,8 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "../../design/icons";
 import { tokens as T } from "../../design/tokens";
+import { mergeToolParts, selectConversationMessages } from "../../services/conversation-mode";
 import { wsService } from "../../services/ws-service";
 import { useAppStore } from "../../stores/app-store";
+import { useSettingsStore } from "../../stores/settings-store";
 import MarkdownRenderer from "../MarkdownRenderer";
 import ActivityStrip from "./ActivityStrip";
 import type { LinearScreen } from "./AppShell";
@@ -43,17 +45,30 @@ function basename(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
+function snapshotOf(el: HTMLDivElement): ScrollSnapshot {
+  return { scrollTop: el.scrollTop, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight };
+}
+
 export default function ChatScreen({ onNavigate }: Props) {
   const activeSessionId = useAppStore((s) => s.activeSessionId);
   const setInputDraft = useAppStore((s) => s.setInputDraft);
   const session = useAppStore((s) =>
     activeSessionId ? s.sessions.get(activeSessionId) : undefined,
   );
+  const readingMode = useSettingsStore((s) => s.readingMode);
+  const setReadingMode = useSettingsStore((s) => s.setReadingMode);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<InputBarAHandle>(null);
   const [pickerKind, setPickerKind] = useState<"slash" | "agent" | null>(null);
 
-  const messages = session?.messages ?? [];
+  const storeMessages = session?.messages ?? [];
+  const messages = useMemo(
+    () =>
+      readingMode === "conversation"
+        ? selectConversationMessages(storeMessages)
+        : mergeToolParts(storeMessages),
+    [readingMode, storeMessages],
+  );
   const lastContent = messages[messages.length - 1]?.content ?? "";
 
   // History is offered only where replies can be read back at all, and
@@ -81,6 +96,7 @@ export default function ChatScreen({ onNavigate }: Props) {
   // live-arrival gate can ask whether the reader was already at the bottom.
   const beforeCommit = useRef<ScrollSnapshot>({ scrollTop: 0, scrollHeight: 0, clientHeight: 0 });
   const previousFirstId = useRef<string | undefined>(undefined);
+  const previousReadingMode = useRef(readingMode);
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -88,6 +104,17 @@ export default function ChatScreen({ onNavigate }: Props) {
 
     const firstId = messages[0]?.id;
     const previousFirst = previousFirstId.current;
+
+    // Mode switch swaps the rendered list wholesale. Classify it before
+    // prepend/epoch-reset can see a new first id and throw the reader to the
+    // bottom. The defined action is: keep the viewport where it is.
+    if (previousReadingMode.current !== readingMode) {
+      previousReadingMode.current = readingMode;
+      previousFirstId.current = firstId;
+      beforeCommit.current = snapshotOf(el);
+      return;
+    }
+
     // A prepend, as opposed to a reset: the message that used to be at the top
     // is still in the list, just no longer first. An epoch reset replaces the
     // whole list, so its old first message is gone and the view belongs at the
@@ -99,8 +126,9 @@ export default function ChatScreen({ onNavigate }: Props) {
     previousFirstId.current = firstId;
 
     if (isPrepend) {
-      el.scrollTop = beforeCommit.current.scrollTop + (el.scrollHeight - beforeCommit.current.scrollHeight);
-      beforeCommit.current = { scrollTop: el.scrollTop, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight };
+      el.scrollTop =
+        beforeCommit.current.scrollTop + (el.scrollHeight - beforeCommit.current.scrollHeight);
+      beforeCommit.current = snapshotOf(el);
       return;
     }
 
@@ -110,8 +138,7 @@ export default function ChatScreen({ onNavigate }: Props) {
     // Epoch reset: the first id changed and the old first is gone (otherwise
     // isPrepend would have returned). The remembered offset points into a
     // conversation that no longer exists, so the gate does not apply.
-    const isEpochReset =
-      previousFirst !== undefined && firstId !== previousFirst;
+    const isEpochReset = previousFirst !== undefined && firstId !== previousFirst;
     const isSameConversationTail = firstId === previousFirst;
     const last = messages[messages.length - 1];
     // Own send: a local echo from the composer (role user, no recordId).
@@ -120,23 +147,25 @@ export default function ChatScreen({ onNavigate }: Props) {
 
     if (isEpochReset || isFirstMount || isOwnSend || !isSameConversationTail) {
       el.scrollTop = el.scrollHeight;
-      beforeCommit.current = { scrollTop: el.scrollTop, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight };
+      beforeCommit.current = snapshotOf(el);
       return;
     }
 
     if (!wasNearBottom(beforeCommit.current)) {
-      beforeCommit.current = { scrollTop: el.scrollTop, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight };
+      beforeCommit.current = snapshotOf(el);
       return;
     }
 
     el.scrollTop = el.scrollHeight;
-    beforeCommit.current = { scrollTop: el.scrollTop, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight };
-  }, [messages, lastContent]);
+    beforeCommit.current = snapshotOf(el);
+    // lastContent: same-message streaming can grow height without a new first id
+    void lastContent;
+  }, [messages, lastContent, readingMode]);
 
   const handleScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
-    beforeCommit.current = { scrollTop: el.scrollTop, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight };
+    beforeCommit.current = snapshotOf(el);
     if (el.scrollTop > 0) return;
     loadOlder();
   };
@@ -224,6 +253,8 @@ export default function ChatScreen({ onNavigate }: Props) {
       ? "thinking"
       : null;
 
+  const storeCount = storeMessages.length;
+
   return (
     <div className="lin-chat">
       <header className="lin-chat-bar">
@@ -240,6 +271,17 @@ export default function ChatScreen({ onNavigate }: Props) {
           <span className="lin-chat-title">{projectName}</span>
           <span className="lin-chat-path">{displayPath}</span>
         </div>
+        <button
+          type="button"
+          className="lin-reading-mode"
+          aria-pressed={readingMode === "full"}
+          aria-label={
+            readingMode === "conversation" ? "Reading mode: Conversation" : "Reading mode: Full"
+          }
+          onClick={() => setReadingMode(readingMode === "conversation" ? "full" : "conversation")}
+        >
+          {readingMode === "conversation" ? "Conversation" : "Full"}
+        </button>
         <ContextUsageChip contextUsage={contextUsage} />
       </header>
 
@@ -250,11 +292,11 @@ export default function ChatScreen({ onNavigate }: Props) {
             has nothing on screen yet is "the conversation", anything after that
             is "earlier messages". Both suppress the scroll-triggered request
             until they resolve. */}
-        {historyLoading && messages.length === 0 && (
+        {historyLoading && storeCount === 0 && (
           <div className="lin-chat-empty-inline">Loading conversation…</div>
         )}
 
-        {historyLoading && messages.length > 0 && (
+        {historyLoading && storeCount > 0 && (
           <div className="lin-chat-empty-inline">Loading earlier messages…</div>
         )}
 
@@ -341,7 +383,6 @@ export default function ChatScreen({ onNavigate }: Props) {
       )}
 
       {messages.length === 0 && <QuickActions />}
-
 
       <PromptSuggestionChip sessionId={activeSessionId} />
 

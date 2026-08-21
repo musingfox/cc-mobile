@@ -1,10 +1,12 @@
 export type Theme = "dark" | "light" | "claude" | "ember";
+export type ReadingMode = "conversation" | "full";
 
 export interface Settings {
   defaultCwd: string;
   theme: Theme;
   notificationsEnabled: boolean;
   hapticsEnabled: boolean;
+  readingMode: ReadingMode;
 }
 
 const SETTINGS_KEY = "cc-mobile-settings";
@@ -14,6 +16,7 @@ const defaultSettings: Settings = {
   theme: "dark",
   notificationsEnabled: false,
   hapticsEnabled: false,
+  readingMode: "conversation",
 };
 
 export function saveSettings(settings: Settings): void {
@@ -44,6 +47,7 @@ export function loadSettings(): Settings {
         typeof parsed.hapticsEnabled === "boolean"
           ? parsed.hapticsEnabled
           : defaultSettings.hapticsEnabled,
+      readingMode: parsed.readingMode === "full" ? "full" : defaultSettings.readingMode,
     };
   } catch (error) {
     console.error("[settings] failed to load, using defaults:", error);

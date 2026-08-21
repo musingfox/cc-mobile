@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { wsService } from "../../services/ws-service";
 import { type SessionCapabilitiesState, useAppStore } from "../../stores/app-store";
+import { useSettingsStore } from "../../stores/settings-store";
 import ChatScreen from "./ChatScreen";
 
 describe("ChatScreen", () => {
@@ -183,7 +184,6 @@ describe("ChatScreen", () => {
   });
 });
 
-
 describe("CapabilityRequestIssuedOnPickerOpen", () => {
   let prevWs: WebSocket | null;
 
@@ -210,7 +210,6 @@ describe("CapabilityRequestIssuedOnPickerOpen", () => {
     expect(frames).toEqual([{ type: "capabilities_request", sessionId: "w1:p1" }]);
   });
 });
-
 
 describe("PickerSheetTerminates", () => {
   let prevWs: WebSocket | null;
@@ -244,9 +243,7 @@ describe("PickerSheetTerminates", () => {
 
   test("T2: ready commands render name and description, not Loading…", () => {
     seed({ status: "ready", commands: [{ name: "help", description: "H" }], agents: [] });
-    const { getByLabelText, getByText, queryByText } = render(
-      <ChatScreen onNavigate={() => {}} />,
-    );
+    const { getByLabelText, getByText, queryByText } = render(<ChatScreen onNavigate={() => {}} />);
     fireEvent.click(getByLabelText("Insert slash command"));
     expect(getByText("help")).not.toBeNull();
     expect(getByText("H")).not.toBeNull();
@@ -313,7 +310,6 @@ describe("PickerSheetTerminates", () => {
   });
 });
 
-
 describe("ChatHeaderModelLabelRemoved", () => {
   beforeEach(() => {
     useAppStore.setState({ sessions: new Map(), activeSessionId: null, inputDraft: "" });
@@ -348,7 +344,6 @@ describe("ChatHeaderModelLabelRemoved", () => {
     expect(header?.textContent?.toLowerCase().includes("claude")).toBe(false);
   });
 });
-
 
 describe("RateLimitChipRemoved", () => {
   beforeEach(() => {
@@ -435,5 +430,138 @@ describe("PickerSheetUnavailableRetry", () => {
     await waitFor(() => {
       expect(getByText("Loading…")).not.toBeNull();
     });
+  });
+});
+
+describe("ReadingModeToggle", () => {
+  let requests: Array<Record<string, unknown>> = [];
+  let originalRequest: typeof wsService.requestTranscriptPage;
+
+  beforeEach(() => {
+    requests = [];
+    originalRequest = wsService.requestTranscriptPage;
+    wsService.requestTranscriptPage = mock((sessionId: string, before?: unknown) => {
+      requests.push({ type: "transcript_page_request", sessionId, before });
+      return true;
+    }) as typeof wsService.requestTranscriptPage;
+    useAppStore.setState({ sessions: new Map(), activeSessionId: null, inputDraft: "" });
+    useSettingsStore.getState().setReadingMode("conversation");
+  });
+
+  afterEach(() => {
+    wsService.requestTranscriptPage = originalRequest;
+    cleanup();
+  });
+
+  function seedTurn() {
+    const store = useAppStore.getState();
+    store.addSession("s1", "/tmp/project");
+    store.setActiveSession("s1");
+    store.addMessage("s1", { id: "u1", role: "user", content: "prompt", timestamp: 1 });
+    store.addMessage("s1", {
+      id: "tu1",
+      role: "assistant",
+      content: "call",
+      timestamp: 2,
+      kind: "tool_use",
+      toolName: "Bash",
+      toolUseId: "t1",
+      toolInput: { command: "ls" },
+      stopReason: "tool_use",
+    });
+    store.addMessage("s1", {
+      id: "tr1",
+      role: "assistant",
+      content: "ok",
+      timestamp: 3,
+      kind: "tool_result",
+      toolUseId: "t1",
+    });
+    store.addMessage("s1", {
+      id: "a1",
+      role: "assistant",
+      content: "answer",
+      timestamp: 4,
+      stopReason: "end_turn",
+    });
+    useAppStore.setState((state) => {
+      const sessions = new Map(state.sessions);
+      const session = sessions.get("s1");
+      if (!session) return state;
+      sessions.set("s1", {
+        ...session,
+        pagingCursor: { epoch: "aaaa", seq: 10, recordId: "u1" },
+      });
+      return { sessions };
+    });
+  }
+
+  test("T1: a fresh client with no stored setting uses Conversation", () => {
+    const store = useAppStore.getState();
+    store.addSession("s1", "/tmp/project");
+    store.setActiveSession("s1");
+    const { getByLabelText } = render(<ChatScreen onNavigate={() => {}} />);
+    expect(getByLabelText("Reading mode: Conversation")).not.toBeNull();
+    expect(useSettingsStore.getState().readingMode).toBe("conversation");
+  });
+
+  test("T3: Conversation shows two bubbles; Full shows prompt, tool card, answer; switch sends no page request", () => {
+    seedTurn();
+    const { container, getByLabelText, queryByText } = render(<ChatScreen onNavigate={() => {}} />);
+    requests = [];
+    expect(container.querySelectorAll(".lin-msg")).toHaveLength(2);
+    expect(container.querySelector(".lin-tool-card")).toBeNull();
+    expect(queryByText("prompt")).not.toBeNull();
+    expect(queryByText("answer")).not.toBeNull();
+
+    fireEvent.click(getByLabelText("Reading mode: Conversation"));
+
+    expect(getByLabelText("Reading mode: Full")).not.toBeNull();
+    expect(container.querySelectorAll(".lin-msg")).toHaveLength(2);
+    expect(container.querySelector(".lin-tool-card")).not.toBeNull();
+    expect(requests.filter((r) => r.type === "transcript_page_request")).toHaveLength(0);
+  });
+
+  test("T4: pagingCursor is unchanged across a mode switch", () => {
+    seedTurn();
+    const before = useAppStore.getState().sessions.get("s1")?.pagingCursor;
+    const { getByLabelText } = render(<ChatScreen onNavigate={() => {}} />);
+    fireEvent.click(getByLabelText("Reading mode: Conversation"));
+    expect(useAppStore.getState().sessions.get("s1")?.pagingCursor).toEqual(before);
+  });
+
+  test("T5: switching mode while a turn is running leaves streaming state untouched", () => {
+    seedTurn();
+    useAppStore.setState((state) => {
+      const sessions = new Map(state.sessions);
+      const session = sessions.get("s1");
+      if (!session) return state;
+      const tools = new Map(session.activeTools);
+      tools.set("t1", { toolName: "Bash", startedAt: 1, input: {} });
+      sessions.set("s1", {
+        ...session,
+        isStreaming: true,
+        activeTools: tools,
+        pendingPermission: {
+          requestId: "p1",
+          tool: { name: "Bash", parameters: {} },
+        },
+      });
+      return { sessions };
+    });
+    const { getByLabelText } = render(<ChatScreen onNavigate={() => {}} />);
+    fireEvent.click(getByLabelText("Reading mode: Conversation"));
+    const session = useAppStore.getState().sessions.get("s1");
+    expect(session?.isStreaming).toBe(true);
+    expect(session?.activeTools.size).toBe(1);
+    expect(session?.pendingPermission?.requestId).toBe("p1");
+  });
+
+  test("T6: protocol transcript_page_request has no mode field", () => {
+    const src = readFileSync("server/protocol.ts", "utf-8");
+    const start = src.indexOf("const TranscriptPageRequestMessage");
+    const slice = src.slice(start, start + 400);
+    expect(slice).toContain('type: z.literal("transcript_page_request")');
+    expect(slice).not.toContain("mode");
   });
 });
