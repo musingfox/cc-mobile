@@ -289,3 +289,49 @@ describe("IdlePathSendsNoKeystroke", () => {
     expect(h.keys).toHaveLength(0);
   });
 });
+
+describe("IdlePathArmsNoUnattendedDeny", () => {
+  test("T1: trust-dialog idle schedules no delay >= 1000 ms", async () => {
+    const h = idleHarness({ screen: TRUST_DIALOG });
+    const recorded: number[] = [];
+    const real = globalThis.setTimeout;
+    const spy = ((fn: TimerHandler, delay?: number, ...args: unknown[]) => {
+      recorded.push(delay ?? 0);
+      return real(fn as () => void, delay, ...args);
+    }) as typeof setTimeout;
+    globalThis.setTimeout = spy;
+    try {
+      await h.notice.onStatus("p1", "idle", "claude");
+    } finally {
+      globalThis.setTimeout = real;
+    }
+    expect(recorded.filter((ms) => ms >= 1000)).toEqual([]);
+  });
+
+  test("T2: unrecognised idle screen schedules no delay >= 1000 ms", async () => {
+    const h = idleHarness({ screen: IDLE_COMPOSER });
+    const recorded: number[] = [];
+    const real = globalThis.setTimeout;
+    const spy = ((fn: TimerHandler, delay?: number, ...args: unknown[]) => {
+      recorded.push(delay ?? 0);
+      return real(fn as () => void, delay, ...args);
+    }) as typeof setTimeout;
+    globalThis.setTimeout = spy;
+    try {
+      await h.notice.onStatus("p1", "idle", "claude");
+    } finally {
+      globalThis.setTimeout = real;
+    }
+    expect(recorded.filter((ms) => ms >= 1000)).toEqual([]);
+  });
+
+  test("T3: construction options cannot be configured to send", () => {
+    type Forbidden = keyof AgentNoticeOptions & ("originOf" | "timeoutMs" | "paneSendKeys");
+    const empty: Record<Forbidden, never> = {};
+    expect(Object.keys(empty)).toEqual([]);
+    const options: AgentNoticeOptions = { getSink: () => undefined };
+    expect("originOf" in options).toBe(false);
+    expect("timeoutMs" in options).toBe(false);
+    expect("paneSendKeys" in options).toBe(false);
+  });
+});
