@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { createAuditLog } from "./audit-log";
+import { AUDIT_ACTIONS, AUDIT_OUTCOMES, createAuditLog } from "./audit-log";
 
 const tempDirs: string[] = [];
 
@@ -154,5 +154,72 @@ describe("audit log write failures", () => {
 
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("audit log");
+  });
+});
+
+describe("audit record shape", () => {
+  test("writes exactly the six public fields with an ISO timestamp", async () => {
+    const path = temporaryAuditPath();
+
+    await createAuditLog({ path }).append({
+      action: "prompt_send",
+      paneId: "%1",
+      ip: "::ffff:127.0.0.1",
+      device: "UA/1",
+      outcome: "dispatched",
+    });
+
+    const saved = JSON.parse(readFileSync(path, "utf8"));
+    expect(Object.keys(saved).sort()).toEqual(["action", "device", "ip", "outcome", "paneId", "ts"]);
+    expect(saved.action).toBe("prompt_send");
+    expect(saved.paneId).toBe("%1");
+    expect(saved.outcome).toBe("dispatched");
+    expect(new Date(saved.ts).toISOString()).toBe(saved.ts);
+  });
+
+  test("preserves null identity fields instead of omitting them", async () => {
+    const path = temporaryAuditPath();
+
+    await createAuditLog({ path }).append({
+      action: "permission_keys_send",
+      paneId: null,
+      ip: null,
+      device: null,
+      outcome: "sent",
+    });
+
+    const saved = JSON.parse(readFileSync(path, "utf8"));
+    expect(Object.keys(saved)).toHaveLength(6);
+    expect(saved.paneId).toBeNull();
+  });
+
+  test("accepts only the four actions and six outcomes", async () => {
+    const path = temporaryAuditPath();
+    const log = createAuditLog({ path });
+
+    for (const action of AUDIT_ACTIONS) {
+      await log.append({ ...record, action });
+    }
+
+    const saved = readFileSync(path, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(saved).toHaveLength(4);
+    expect(saved.every((item) => AUDIT_ACTIONS.includes(item.action))).toBe(true);
+    expect(AUDIT_ACTIONS).toHaveLength(4);
+    expect(AUDIT_OUTCOMES).toHaveLength(6);
+  });
+
+  test("keeps consecutive records independently parseable", async () => {
+    const path = temporaryAuditPath();
+    const log = createAuditLog({ path });
+
+    await log.append(record);
+    await log.append(record);
+
+    const lines = readFileSync(path, "utf8").trim().split("\n");
+    expect(lines).toHaveLength(2);
+    for (const line of lines) expect(() => JSON.parse(line)).not.toThrow();
   });
 });
