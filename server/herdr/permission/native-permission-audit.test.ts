@@ -112,6 +112,87 @@ describe("AutoDenyKeysSendAudited", () => {
   });
 });
 
+describe("PermissionKeysSendAudited", () => {
+  test.each([
+    ["sent" as const, false],
+    ["failed" as const, true],
+  ])("reports one %s result when an answer becomes pane keys", async (outcome, rejectSend) => {
+    const observed: unknown[][] = [];
+    const sent: Record<string, unknown>[] = [];
+    const permission = createNativePermission({
+      client: {
+        agentGet: async () => ({ agent_status: "blocked" }),
+        paneRead: async () => ({ text: SCREEN, revision: 1 }),
+        paneSendKeys: async () => {
+          if (rejectSend) throw new Error("send failed");
+        },
+      },
+      getSink: () => (message) => sent.push(message),
+      originOf: () => "foreign",
+      newRequestId: () => "perm-1",
+      warn: () => {},
+      onKeysSent: (...args) => {
+        observed.push(args);
+      },
+    });
+
+    await permission.onStatus("%1", "blocked");
+    expect(await permission.resolve("perm-1", { optionId: "1" })).toBe(true);
+
+    expect(observed).toEqual([["%1", "permission_answer", outcome]]);
+    if (rejectSend) {
+      expect(sent.some((message) => message.code === "permission_answer_failed")).toBe(true);
+    }
+  });
+
+  test("does not report an option the prompt never offered", async () => {
+    const observed: unknown[][] = [];
+    const permission = createNativePermission({
+      client: {
+        agentGet: async () => ({ agent_status: "blocked" }),
+        paneRead: async () => ({ text: SCREEN, revision: 1 }),
+        paneSendKeys: async () => {},
+      },
+      getSink: () => () => {},
+      originOf: () => "foreign",
+      newRequestId: () => "perm-1",
+      onKeysSent: (...args) => {
+        observed.push(args);
+      },
+    });
+
+    await permission.onStatus("%1", "blocked");
+    await permission.resolve("perm-1", { optionId: "99" });
+
+    expect(observed).toEqual([]);
+  });
+
+  test("contains a synchronous observer failure after keys are sent", async () => {
+    let sends = 0;
+    const permission = createNativePermission({
+      client: {
+        agentGet: async () => ({ agent_status: "blocked" }),
+        paneRead: async () => ({ text: SCREEN, revision: 1 }),
+        paneSendKeys: async () => {
+          sends += 1;
+        },
+      },
+      getSink: () => () => {},
+      originOf: () => "foreign",
+      newRequestId: () => "perm-1",
+      onKeysSent: () => {
+        throw new Error("audit down");
+      },
+    });
+
+    await permission.onStatus("%1", "blocked");
+
+    expect(await permission.resolve("perm-1", { optionId: "1" })).toBe(true);
+    expect(sends).toBe(1);
+  });
+});
+
+
 describe("AuditCarriesNoUserText — native key send", () => {
   test("pane errors never enter the audit record", async () => {
     const dir = mkdtempSync(join(tmpdir(), "cc-mobile-native-audit-"));
