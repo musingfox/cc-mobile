@@ -81,6 +81,12 @@ export interface HerdrBackendOptions {
    */
   capabilitiesListing?: () => Promise<CapabilityListing[]>;
   capabilityFetcherFor?: (agent: string | undefined) => CapabilityFetcher | undefined;
+  /** 稽核觀察者只看送鍵來源與結果，不接觸 prompt 或答案內容。 */
+  onKeysSent?: (
+    paneId: string,
+    source: "permission_answer" | "auto_deny",
+    outcome: "sent" | "failed",
+  ) => Promise<void> | void;
 }
 
 /**
@@ -279,6 +285,7 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
     // Announced for every emitted request, sink or no sink — a prompt that
     // appears while the phone is asleep is exactly the case push exists for.
     onPermissionPrompt: (sessionId) => options.push?.onPermissionPrompt?.(sessionId),
+    onKeysSent: options.onKeysSent,
   });
 
   // Bound once: the poll below runs for the life of the process, and a client
