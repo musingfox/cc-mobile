@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { createAuditLog } from "./audit-log";
@@ -50,5 +59,37 @@ describe("audit log directory mode", () => {
 
     expect(path.endsWith("/.claude-mobile/audit/audit.jsonl")).toBe(true);
     expect(basename(dirname(path))).toBe("audit");
+  });
+});
+
+describe("audit log file mode", () => {
+  test("creates the active file with mode 0600", async () => {
+    const path = temporaryAuditPath();
+
+    await createAuditLog({ path }).append(record);
+
+    expect(statSync(path).mode & 0o777).toBe(0o600);
+  });
+
+  test("tightens an existing active file to mode 0600", async () => {
+    const path = temporaryAuditPath();
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, "");
+    chmodSync(path, 0o644);
+
+    await createAuditLog({ path }).append(record);
+
+    expect(statSync(path).mode & 0o777).toBe(0o600);
+  });
+
+  test("keeps active and rotated files at mode 0600", async () => {
+    const path = temporaryAuditPath();
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, " ".repeat(5 * 1024 * 1024));
+
+    await createAuditLog({ path }).append(record);
+
+    expect(statSync(path).mode & 0o777).toBe(0o600);
+    expect(statSync(`${path}.1`).mode & 0o777).toBe(0o600);
   });
 });

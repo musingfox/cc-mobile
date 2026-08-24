@@ -1,6 +1,8 @@
-import { appendFile, chmod, mkdir } from "node:fs/promises";
+import { appendFile, chmod, mkdir, rename, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
+
+const MAX_AUDIT_FILE_BYTES = 5 * 1024 * 1024;
 
 export const AUDIT_ACTIONS = [
   "prompt_send",
@@ -40,6 +42,12 @@ export function createAuditLog(options: {
       try {
         await mkdir(dirname(path), { recursive: true, mode: 0o700 });
         await chmod(dirname(path), 0o700);
+        const current = await stat(path).catch(() => null);
+        if (current && current.size >= MAX_AUDIT_FILE_BYTES) {
+          await chmod(path, 0o600);
+          await rm(`${path}.1`, { force: true });
+          await rename(path, `${path}.1`);
+        }
         await appendFile(path, `${JSON.stringify({ ts: new Date().toISOString(), ...record })}\n`, {
           mode: 0o600,
         });
