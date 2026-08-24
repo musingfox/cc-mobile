@@ -192,6 +192,28 @@ describe("PermissionKeysSendAudited", () => {
   });
 });
 
+describe("PermissionRequestPaneLookup", () => {
+  test("finds an emitted request until its answer is sent", async () => {
+    const permission = createNativePermission({
+      client: {
+        agentGet: async () => ({ agent_status: "blocked" }),
+        paneRead: async () => ({ text: SCREEN, revision: 1 }),
+        paneSendKeys: async () => {},
+      },
+      getSink: () => () => {},
+      originOf: () => "foreign",
+      newRequestId: () => "perm-1",
+    });
+
+    await permission.onStatus("%1", "blocked");
+    expect(permission.sessionOfRequest("perm-1")).toBe("%1");
+    expect(permission.sessionOfRequest("perm-never-issued")).toBeUndefined();
+
+    expect(await permission.resolve("perm-1", { optionId: "1" })).toBe(true);
+    expect(permission.sessionOfRequest("perm-1")).toBeUndefined();
+  });
+});
+
 
 describe("AuditCarriesNoUserText — native key send", () => {
   test("pane errors never enter the audit record", async () => {

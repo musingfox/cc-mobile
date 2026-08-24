@@ -540,6 +540,10 @@ export function createNativePermission(options: NativePermissionOptions) {
     drop(sessionId);
   }
 
+  function sessionOfRequest(requestId: string): string | undefined {
+    return bySessionOfRequest.get(requestId);
+  }
+
   function pendingFor(sessionId: string): PendingNativePermission | undefined {
     return pending.get(sessionId);
   }
@@ -548,7 +552,16 @@ export function createNativePermission(options: NativePermissionOptions) {
     return pending.size;
   }
 
-  return { onStatus, resolve, pause, resume, forget, pendingFor, pendingCount };
+  return {
+    onStatus,
+    resolve,
+    pause,
+    resume,
+    forget,
+    sessionOfRequest,
+    pendingFor,
+    pendingCount,
+  };
 }
 
 export type NativePermission = ReturnType<typeof createNativePermission>;

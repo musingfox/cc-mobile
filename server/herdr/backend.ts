@@ -134,6 +134,8 @@ export interface HerdrTerminalBackend extends TerminalBackend {
     requestId: string,
     answer: { optionId?: string; allow?: boolean },
   ): Promise<boolean>;
+  /** Finds the pane for a pending request before resolving and dropping it. */
+  paneIdForRequest(requestId: string): string | undefined;
   /** Connection lost: stop treating pending prompts as seen by the phone. */
   pausePermissions(): void;
   /** Reconnect: re-read and re-emit every prompt still on screen. */
@@ -464,6 +466,7 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
      * relay for a request that came from there instead.
      */
     resolvePermission: (requestId, answer) => permission.resolve(requestId, answer),
+    paneIdForRequest: (requestId) => permission.sessionOfRequest(requestId),
     pausePermissions: () => permission.pause(),
     resumePermissions: () => permission.resume(),
     pushSubscriberCount: () => options.push?.subscriberCount?.() ?? 0,
