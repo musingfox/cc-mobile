@@ -25,7 +25,7 @@ export const DEFAULT_AGENT_KIND: LaunchableAgentKind = "claude";
  *
  * ponytail: PATH only. herdr's integration status (the other half of the
  * question, and the one that decides whether `agent_status` is ever reported)
- * has no socket method — the daemon's method list at protocol 19 carries
+ * has no socket method — the daemon's method list at protocol 20 carries
  * `integration.install`/`uninstall` and no `status` — so answering it would
  * mean shelling out to the `herdr` binary, which ADR-015 makes the trunk's
  * business and not cc-mobile's. Installing the integration stays the one-time

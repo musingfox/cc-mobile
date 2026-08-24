@@ -49,7 +49,7 @@ function fakeTransport(handler: (call: RecordedCall) => unknown) {
 }
 
 describe("herdr client: ProtocolHandshake", () => {
-  it("T1: assertCompatible resolves pong info when the daemon speaks protocol 19", async () => {
+  it("T1: assertCompatible resolves pong info when the daemon speaks protocol 20", async () => {
     const { transport, calls } = fakeTransport(() => resultOf(PONG_LINE));
     const client = createHerdrClient({ transport });
 
@@ -57,11 +57,11 @@ describe("herdr client: ProtocolHandshake", () => {
 
     expect(calls[0]?.method).toBe("ping");
     expect(calls[0]?.params).toEqual({});
-    expect(pong.version).toBe("0.8.0");
-    expect(pong.protocol).toBe(19);
+    expect(pong.version).toBe("0.8.2");
+    expect(pong.protocol).toBe(20);
   });
 
-  it("T2: assertCompatible throws HerdrProtocolError naming 18 and 19 on mismatch", async () => {
+  it("T2: assertCompatible throws HerdrProtocolError naming 18 and 20 on mismatch", async () => {
     const { transport } = fakeTransport(() => resultOf(PONG_PROTOCOL_18_LINE));
     const client = createHerdrClient({ transport });
 
@@ -69,7 +69,7 @@ describe("herdr client: ProtocolHandshake", () => {
 
     expect(error).toBeInstanceOf(HerdrProtocolError);
     expect((error as Error).message).toContain("18");
-    expect((error as Error).message).toContain("19");
+    expect((error as Error).message).toContain("20");
   });
 });
 

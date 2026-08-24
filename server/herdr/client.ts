@@ -35,12 +35,18 @@ import {
  * and this JSON-RPC socket API. 17 -> 18 (e7fc85bf, kitty key releases) and
  * 18 -> 19 (b76adc15, input lease lifecycle) both changed only the former,
  * which cc-mobile never speaks -- every method and result shape used here is
- * byte-identical between herdr v0.7.5 and v0.8.0. So a bump usually means
- * nothing to us, and the equality check stays strict anyway: herdr's own
- * client does the same (src/cli/protocol_guard.rs), and a floor check would
- * trade one clear boot error for Zod failures scattered across call sites.
+ * byte-identical between herdr v0.7.5 and v0.8.0. 19 -> 20 (v0.8.2) is the
+ * same story: an audit of the daemon's own bundled schema (`herdr api schema
+ * --json`, 2026-08-24) found every surface cc-mobile speaks unchanged -- all
+ * 14 methods, every field this client requires, the ReadSource enum, all seven
+ * result discriminators, both request param sets, and the `pane.updated`
+ * subscription (still `required: [type]`, still `data.pane: PaneInfo`).
+ * So a bump usually means nothing to us, and the equality check stays strict
+ * anyway: herdr's own client does the same (src/cli/protocol_guard.rs), and a
+ * floor check would trade one clear boot error for Zod failures scattered
+ * across call sites.
  */
-export const SUPPORTED_PROTOCOL = 19;
+export const SUPPORTED_PROTOCOL = 20;
 
 /** Default daemon-side wait budget when the caller passes no timeout_ms. */
 const DEFAULT_AGENT_WAIT_TIMEOUT_MS = 60_000;
