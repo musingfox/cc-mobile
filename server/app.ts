@@ -19,6 +19,7 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Elysia } from "elysia";
+import { createAuditLog } from "./audit/audit-log";
 import type { ServerConfig } from "./config";
 import { EventBuffer } from "./event-buffer";
 import { createHerdrBackend } from "./herdr/backend";
@@ -78,6 +79,10 @@ export interface AppTestDeps {
    * daemon without stubbing anything above it.
    */
   herdrClient?: NonNullable<Parameters<typeof createHerdrBackend>[0]>["client"];
+  /** 讓活體 e2e 的 pane 保留在預設 backend 組裝出的事件管線中。 */
+  suppressSessionLabel?: NonNullable<
+    Parameters<typeof createHerdrBackend>[0]
+  >["suppressSessionLabel"];
   /**
    * The transport boundary, and the only thing a test may stand in for on the
    * push path: everything between `createApp` and here must be the real
@@ -86,6 +91,8 @@ export interface AppTestDeps {
   pushSend?: PushTransport;
   /** Keeps a probe's attempt lines out of the developer's own `~/.claude-mobile`. */
   pushAttemptLogPath?: string;
+  /** 測試可注入路徑，避免把稽核紀錄寫進開發者的 `~/.claude-mobile`。 */
+  auditLogPath?: string;
   /**
    * The push scope tracker. Injectable so an assembled-server test can drive
    * "the phone sent this" without going through a real pane.
@@ -104,6 +111,9 @@ export interface AppTestDeps {
 /** Builds the whole server. The returned app has not been listened on. */
 export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
   const sessionManager = deps.sessionManager ?? new SessionManager();
+  // WebSocket 入口與原生 pane 送鍵共用同一支延遲寫入器；
+  // 只有真正寫入時才會建立目錄與檔案，單純組裝或 listen 不碰磁碟。
+  const auditLog = createAuditLog(deps.auditLogPath ? { path: deps.auditLogPath } : {});
 
   // Persistent across reconnects; the WS plugin appends to it and replays from it.
   const eventBuffer = new EventBuffer(500);
@@ -142,6 +152,7 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
     deps.backend ??
     createHerdrBackend({
       ...(deps.herdrClient ? { client: deps.herdrClient } : {}),
+      ...(deps.suppressSessionLabel ? { suppressSessionLabel: deps.suppressSessionLabel } : {}),
       push: {
         onPromptSent: (paneId) => phoneDriven.markSent(paneId),
         onTurnStart: (paneId) => phoneDriven.onTurnStart(paneId),
@@ -154,6 +165,14 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
         onPermissionPrompt: (paneId) => notifier.onPermissionPrompt(paneId),
         subscriberCount: () => pushStore.count(),
       },
+      onKeysSent: (paneId, source, outcome) =>
+        auditLog.append({
+          action: source === "auto_deny" ? "auto_deny" : "permission_keys_send",
+          paneId,
+          ip: null,
+          device: null,
+          outcome,
+        }),
     });
 
   if (deps.backendRef) deps.backendRef.current = backend;
@@ -175,7 +194,9 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
     },
   })
     .onRequest(({ request }) => evaluateRequestGate(request, deps.gateEnv ?? process.env))
-    .use(createWsPlugin(sessionManager, serverConfig, { backend, eventBuffer, clientSink }))
+    .use(
+      createWsPlugin(sessionManager, serverConfig, { backend, eventBuffer, clientSink, auditLog }),
+    )
     .use(createUploadPlugin(serverConfig))
     .use(createUploadImagePlugin(serverConfig))
     .use(createPushPlugin({ store: pushStore, config: serverConfig }))

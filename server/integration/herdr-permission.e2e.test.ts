@@ -1,10 +1,9 @@
 import { expect, it } from "bun:test";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type AppBackend, createApp } from "../app";
+import { createApp } from "../app";
 import type { ServerConfig } from "../config";
-import { createHerdrBackend } from "../herdr/backend";
 import { createHerdrClient } from "../herdr/client";
 import { OkResultSchema } from "../herdr/schema";
 import { resolveSocketPath } from "../herdr/transport";
@@ -51,8 +50,19 @@ const TURN_DEADLINE_MS = 120_000;
 const UNBLOCK_DEADLINE_MS = 10_000;
 const TEST_TIMEOUT_MS = 400_000;
 
+function auditActions(path: string): string[] {
+  try {
+    return readFileSync(path, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line).action as string);
+  } catch {
+    return [];
+  }
+}
+
 it.skipIf(!existsSync(socketPath))(
-  "live herdr: a blocked pane raises the terminal's own options, and No blocks the tool",
+  "live herdr: a blocked pane is denied and both sends share one audit file",
   async () => {
     const port = reserveEphemeralPort();
     const serverConfig: ServerConfig = {
@@ -63,10 +73,13 @@ it.skipIf(!existsSync(socketPath))(
       pushScope: "phone-last" as const,
       basePath: "",
     };
-    // Same deviation as the foreign suite: this asserts on a pane it labelled
-    // `ccme2e-`, which the production listing hides.
-    const backend = createHerdrBackend({ suppressSessionLabel: () => false }) as AppBackend;
-    const app = createApp(serverConfig, { backend });
+    const auditDir = mkdtempSync(join(tmpdir(), "ccme2e-audit-"));
+    const auditLogPath = join(auditDir, "audit.jsonl");
+    // 此測試自行標記 ccme2e pane；保留它才能走完整的真實訂閱與權限管線。
+    const app = createApp(serverConfig, {
+      auditLogPath,
+      suppressSessionLabel: () => false,
+    });
     app.listen({ port, hostname: "127.0.0.1" });
 
     const client = createHerdrClient({ socketPath });
@@ -133,6 +146,11 @@ it.skipIf(!existsSync(socketPath))(
           content: `Run this exact bash command: touch ${canaryPath}`,
         }),
       );
+      await waitUntil(
+        () => Promise.resolve(auditActions(auditLogPath).includes("prompt_send")),
+        UNBLOCK_DEADLINE_MS,
+        "prompt_send audit record",
+      );
 
       // The prompt reaches the phone in the terminal's own wording.
       const request = await collector.next(
@@ -175,6 +193,14 @@ it.skipIf(!existsSync(socketPath))(
       );
       expect(end.sessionId).toBe(sessionId);
       expect(existsSync(canaryPath)).toBe(false);
+      await waitUntil(
+        () => Promise.resolve(auditActions(auditLogPath).includes("permission_keys_send")),
+        UNBLOCK_DEADLINE_MS,
+        "permission_keys_send audit record",
+      );
+      const actions = auditActions(auditLogPath);
+      expect(actions).toContain("prompt_send");
+      expect(actions).toContain("permission_keys_send");
     } finally {
       try {
         ws?.close();
@@ -187,6 +213,7 @@ it.skipIf(!existsSync(socketPath))(
           .catch(() => {});
       }
       rmSync(canaryDir, { recursive: true, force: true });
+      rmSync(auditDir, { recursive: true, force: true });
       await app.stop(true);
     }
   },
