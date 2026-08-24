@@ -43,6 +43,9 @@ export interface WsHarnessOverrides {
   /** A real SessionManager, for the cases that assert on server-held state. */
   sessionManager?: SessionManager;
   auditLog?: AuditLog;
+  /** Bun-only client headers; unsupported runtimes may omit them. */
+  headers?: Record<string, string>;
+  deviceName?: string;
 }
 
 export async function startWsHarness(
@@ -65,7 +68,12 @@ export async function startWsHarness(
     .listen(0);
 
   const port = (app.server as { port: number }).port;
-  const socket = new WebSocket(`ws://127.0.0.1:${port}${serverConfig.basePath}/ws`);
+  const query = overrides.deviceName
+    ? `?device=${encodeURIComponent(overrides.deviceName)}`
+    : "";
+  const url = `ws://127.0.0.1:${port}${serverConfig.basePath}/ws${query}`;
+  // happy-dom's client accepts browser protocols only, not Bun's header option.
+  const socket = new WebSocket(url);
   const received: Record<string, unknown>[] = [];
   const listeners: ((msg: Record<string, unknown>) => void)[] = [];
 

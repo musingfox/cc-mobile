@@ -48,6 +48,8 @@ export default function SettingsScreen({ onNavigate }: Props) {
   const setNotificationsEnabled = useSettingsStore((s) => s.setNotificationsEnabled);
   const hapticsEnabled = useSettingsStore((s) => s.hapticsEnabled);
   const setHapticsEnabled = useSettingsStore((s) => s.setHapticsEnabled);
+  const deviceName = useSettingsStore((s) => s.deviceName);
+  const setDeviceName = useSettingsStore((s) => s.setDeviceName);
 
   const defaultCwd = useSettingsStore((s) => s.defaultCwd);
 
@@ -203,6 +205,19 @@ export default function SettingsScreen({ onNavigate }: Props) {
         <section className="lin-settings-group">
           <div className="lin-settings-group-label">WORKSPACE</div>
           <div className="lin-settings-card">
+            <label className="lin-settings-row is-static">
+              <div className="lin-settings-row-main">
+                <div className="lin-settings-row-title">Device name</div>
+                <div className="lin-settings-row-desc">Identifies this device in the audit log</div>
+              </div>
+              <input
+                className="lin-settings-row-value"
+                value={deviceName}
+                maxLength={200}
+                onChange={(event) => setDeviceName(event.target.value)}
+                aria-label="Device name"
+              />
+            </label>
             <div className="lin-settings-row is-static">
               <div className="lin-settings-row-main">
                 <div className="lin-settings-row-title">Default folder</div>

@@ -329,6 +329,17 @@ export function getTerminalReasonMessage(reason: TerminalReason | undefined): st
   }
 }
 
+export function buildWsUrl(
+  protocol: "ws:" | "wss:",
+  host: string,
+  basePath: string,
+  deviceName: string,
+): string {
+  const name = deviceName.trim();
+  const query = name ? `?device=${encodeURIComponent(name)}` : "";
+  return `${protocol}//${host}${basePath}/ws${query}`;
+}
+
 class WsService {
   private ws: WebSocket | null = null;
   private capabilitiesTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
@@ -382,7 +393,9 @@ class WsService {
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const basePath = (window as typeof window & { __BASE_PATH__?: string }).__BASE_PATH__ || "";
-    const ws = new WebSocket(`${protocol}//${window.location.host}${basePath}/ws`);
+    const ws = new WebSocket(
+      buildWsUrl(protocol, window.location.host, basePath, useSettingsStore.getState().deviceName),
+    );
 
     ws.onopen = () => {
       console.log("[ws-service] connected");

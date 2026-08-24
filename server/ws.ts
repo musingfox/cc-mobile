@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { Elysia, t } from "elysia";
 import type { AuditLog, AuditRecordInput } from "./audit/audit-log";
+import { captureClientIdentity } from "./audit/client-identity";
 import { availableAgentKinds } from "./agents/kinds";
 import type { ServerConfig } from "./config";
 import { listDirectories } from "./directory-listing";
@@ -140,6 +141,26 @@ export function createWsPlugin(
     return ws.raw ?? ws;
   }
 
+  function identityOf(ws: {
+    data?: { request?: Request };
+    remoteAddress?: string;
+  }): { ip: string | null; device: string | null } {
+    const request = ws.data?.request;
+    let deviceName: string | null = null;
+    if (request) {
+      try {
+        deviceName = new URL(request.url).searchParams.get("device");
+      } catch {
+        // 無法解析 URL 時仍保留 socket 與 header 身分。
+      }
+    }
+    return captureClientIdentity({
+      headers: request?.headers,
+      remoteAddress: ws.remoteAddress,
+      deviceName,
+    });
+  }
+
   // Helper to send buffered messages
   function sendBuffered(ws: any, sessionId: string, message: Record<string, unknown>) {
     // Append to the buffer FIRST so the event survives a dead/mid-close socket:
@@ -256,6 +277,7 @@ export function createWsPlugin(
             // express that at the schema, so it is enforced here rather than
             // silently treating "no answer" as a denial.
             const paneId = backend.paneIdForRequest?.(message.requestId) ?? null;
+            const identity = identityOf(ws);
             if (message.optionId === undefined && message.allow === undefined) {
               ws.send({
                 type: "error",
@@ -265,8 +287,7 @@ export function createWsPlugin(
               await audit({
                 action: "permission_answer",
                 paneId,
-                ip: null,
-                device: null,
+                ...identity,
                 outcome: "rejected",
               });
               break;
@@ -290,8 +311,7 @@ export function createWsPlugin(
             await audit({
               action: "permission_answer",
               paneId,
-              ip: null,
-              device: null,
+              ...identity,
               outcome,
             });
             break;
@@ -471,6 +491,7 @@ export function createWsPlugin(
             // Arms one-per-turn waiter via shared response relay; delivers via independent sink map.
             // Does not touch SessionManager.
             const { claudeUuid, content } = message;
+            const identity = identityOf(ws);
             // Register (or rebind) this ws as the owner for replies/perms for this claudeUuid
             backend.registerClient(
               claudeUuid,
@@ -486,16 +507,14 @@ export function createWsPlugin(
               await audit({
                 action: "prompt_send",
                 paneId: claudeUuid,
-                ip: null,
-                device: null,
+                ...identity,
                 outcome: "dispatched",
               });
             } catch (error) {
               await audit({
                 action: "prompt_send",
                 paneId: claudeUuid,
-                ip: null,
-                device: null,
+                ...identity,
                 outcome: "failed",
               });
               throw error;

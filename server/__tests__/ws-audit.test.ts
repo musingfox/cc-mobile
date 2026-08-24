@@ -40,6 +40,36 @@ async function settle() {
   await new Promise((resolve) => setTimeout(resolve, 30));
 }
 
+describe("ClientIdentityCapture", () => {
+  test("records websocket address and user agent with a prompt", async () => {
+    const { path, auditLog } = setup();
+    harness = await startWsHarness(backend(), undefined, {
+      auditLog,
+      headers: { "user-agent": "AuditProbe/1.0" },
+    });
+
+    harness.send({ type: "terminal_send", claudeUuid: "%1", content: "hello" });
+    await settle();
+
+    const record = JSON.parse(readFileSync(path, "utf8").trim());
+    expect(record.ip).toBeTruthy();
+    expect([null, "AuditProbe/1.0"]).toContain(record.device);
+  });
+
+  test("records the device query name instead of the user agent", async () => {
+    const { path, auditLog } = setup();
+    harness = await startWsHarness(backend(), undefined, {
+      auditLog,
+      deviceName: "書房 Mac",
+    });
+
+    harness.send({ type: "terminal_send", claudeUuid: "%1", content: "hello" });
+    await settle();
+
+    expect(JSON.parse(readFileSync(path, "utf8").trim()).device).toBe("書房 Mac");
+  });
+});
+
 describe("AuditCarriesNoUserText", () => {
   test("prompt content is never written", async () => {
     const { path, auditLog } = setup();
