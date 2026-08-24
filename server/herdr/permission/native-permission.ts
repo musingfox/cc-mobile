@@ -64,6 +64,12 @@ export interface NativePermissionOptions {
    * to the announcement path instead of raising an unanswerable card.
    */
   onUnparsedBlockedScreen?: (sessionId: string, screen: string) => void | Promise<void>;
+  /** 稽核只接收列舉結果，不接收 prompt、答案或錯誤文字。 */
+  onKeysSent?: (
+    sessionId: string,
+    source: "permission_answer" | "auto_deny",
+    outcome: "sent" | "failed",
+  ) => Promise<void> | void;
 }
 
 /**
@@ -121,6 +127,7 @@ export function createNativePermission(options: NativePermissionOptions) {
     options.warn ?? ((message: string) => console.warn(`[herdr] permission: ${message}`));
   const onPermissionPrompt = options.onPermissionPrompt ?? (() => {});
   const onUnparsedBlockedScreen = options.onUnparsedBlockedScreen ?? (() => {});
+  const onKeysSent = options.onKeysSent ?? (() => {});
 
   const pending = new Map<string, PendingNativePermission>();
   /** requestId → sessionId, so an answer finds its pane in one lookup. */
@@ -129,6 +136,18 @@ export function createNativePermission(options: NativePermissionOptions) {
 
   function describe(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
+  }
+
+  async function reportKeys(
+    sessionId: string,
+    source: "permission_answer" | "auto_deny",
+    outcome: "sent" | "failed",
+  ): Promise<void> {
+    try {
+      await onKeysSent(sessionId, source, outcome);
+    } catch {
+      // 稽核觀察者失敗不能影響送鍵結果。
+    }
   }
 
   function drop(sessionId: string): void {
@@ -259,7 +278,9 @@ export function createNativePermission(options: NativePermissionOptions) {
     }
     try {
       await client.paneSendKeys(sessionId, ["esc"]);
+      await reportKeys(sessionId, "auto_deny", "sent");
     } catch (error) {
+      await reportKeys(sessionId, "auto_deny", "failed");
       warn(`${sessionId}: unattended deny failed: ${describe(error)}`);
     }
     drop(sessionId);
@@ -363,7 +384,9 @@ export function createNativePermission(options: NativePermissionOptions) {
 
     try {
       await client.paneSendKeys(sessionId, keys);
+      await reportKeys(sessionId, "permission_answer", "sent");
     } catch (error) {
+      await reportKeys(sessionId, "permission_answer", "failed");
       warn(`${sessionId}: pane.send_keys failed: ${describe(error)}`);
       sendError(
         sessionId,

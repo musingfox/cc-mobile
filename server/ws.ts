@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { Elysia, t } from "elysia";
+import type { AuditLog, AuditRecordInput } from "./audit/audit-log";
 import { availableAgentKinds } from "./agents/kinds";
 import type { ServerConfig } from "./config";
 import { listDirectories } from "./directory-listing";
@@ -56,6 +57,7 @@ export interface WsBackend extends TerminalControlBackend {
     requestId: string,
     answer: { optionId?: string; allow?: boolean },
   ): Promise<boolean>;
+  paneIdForRequest?(requestId: string): string | undefined;
   /**
    * One page of a session's own transcript backlog, older than `before`.
    * Resolves `null` when there is no transcript to read at all, which the
@@ -105,6 +107,7 @@ export interface WsCollaborators {
   backend: WsBackend;
   eventBuffer: EventBuffer;
   clientSink: ClientSink;
+  auditLog?: AuditLog;
 }
 
 export function createWsPlugin(
@@ -112,8 +115,15 @@ export function createWsPlugin(
   serverConfig: ServerConfig,
   collaborators: WsCollaborators,
 ) {
-  const { backend, eventBuffer, clientSink } = collaborators;
+  const { backend, eventBuffer, clientSink, auditLog } = collaborators;
   const wsPath = buildUrl(serverConfig.basePath, "/ws");
+  async function audit(record: AuditRecordInput): Promise<void> {
+    try {
+      await auditLog?.append(record);
+    } catch {
+      // 稽核失敗不能改變 WebSocket 主流程。
+    }
+  }
 
   /**
    * The connection's stable identity, used as the sink-ownership key.
@@ -245,11 +255,19 @@ export function createWsPlugin(
             // Exactly one answer form is required. A discriminated union cannot
             // express that at the schema, so it is enforced here rather than
             // silently treating "no answer" as a denial.
+            const paneId = backend.paneIdForRequest?.(message.requestId) ?? null;
             if (message.optionId === undefined && message.allow === undefined) {
               ws.send({
                 type: "error",
                 code: "invalid_message",
                 message: "permission requires optionId or allow",
+              });
+              await audit({
+                action: "permission_answer",
+                paneId,
+                ip: null,
+                device: null,
+                outcome: "rejected",
               });
               break;
             }
@@ -258,16 +276,24 @@ export function createWsPlugin(
             // not know is a silent no-op, exactly as the deleted hook relay was:
             // a stale sheet answering a prompt that has already been dealt with
             // must not raise an error at the user.
-            await backend
-              .resolvePermission?.(message.requestId, {
+            let outcome: "owned" | "unowned" | "failed";
+            try {
+              outcome = (await backend.resolvePermission?.(message.requestId, {
                 ...(message.optionId !== undefined ? { optionId: message.optionId } : {}),
                 ...(message.allow !== undefined ? { allow: message.allow } : {}),
-              })
-              .catch((error: unknown) => {
-                console.warn(
-                  `[ws] permission answer failed: ${error instanceof Error ? error.message : String(error)}`,
-                );
-              });
+              }))
+                ? "owned"
+                : "unowned";
+            } catch {
+              outcome = "failed";
+            }
+            await audit({
+              action: "permission_answer",
+              paneId,
+              ip: null,
+              device: null,
+              outcome,
+            });
             break;
           }
 
@@ -454,8 +480,26 @@ export function createWsPlugin(
             // Any prompt still blocked from before the disconnect is re-read
             // from the live screen and re-raised to the freshly-rebound sink,
             // rather than replayed from a stored payload.
-            await backend.resumePermissions?.();
-            await backend.send({ claudeUuid, content });
+            try {
+              await backend.resumePermissions?.();
+              await backend.send({ claudeUuid, content });
+              await audit({
+                action: "prompt_send",
+                paneId: claudeUuid,
+                ip: null,
+                device: null,
+                outcome: "dispatched",
+              });
+            } catch (error) {
+              await audit({
+                action: "prompt_send",
+                paneId: claudeUuid,
+                ip: null,
+                device: null,
+                outcome: "failed",
+              });
+              throw error;
+            }
             break;
           }
 

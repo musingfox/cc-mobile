@@ -11,6 +11,7 @@
 import type { ServerConfig } from "../config";
 import { EventBuffer } from "../event-buffer";
 import type { SessionManager } from "../session-manager";
+import type { AuditLog } from "../audit/audit-log";
 import { createWsPlugin, type WsBackend } from "../ws";
 
 export const testServerConfig: ServerConfig = {
@@ -41,6 +42,7 @@ export interface WsHarness {
 export interface WsHarnessOverrides {
   /** A real SessionManager, for the cases that assert on server-held state. */
   sessionManager?: SessionManager;
+  auditLog?: AuditLog;
 }
 
 export async function startWsHarness(
@@ -57,6 +59,7 @@ export async function startWsHarness(
         backend: backend as WsBackend,
         eventBuffer,
         clientSink: { current: null },
+        auditLog: overrides.auditLog,
       }),
     )
     .listen(0);
