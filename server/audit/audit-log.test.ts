@@ -21,6 +21,10 @@ function temporaryAuditPath() {
   return join(root, "nested", "audit.jsonl");
 }
 
+function jsonLineOfSize(size: number) {
+  return `${JSON.stringify("x".repeat(size - 3))}\n`;
+}
+
 const record = {
   action: "prompt_send" as const,
   paneId: "%1",
@@ -91,5 +95,44 @@ describe("audit log file mode", () => {
 
     expect(statSync(path).mode & 0o777).toBe(0o600);
     expect(statSync(`${path}.1`).mode & 0o777).toBe(0o600);
+  });
+});
+
+describe("audit log rotation", () => {
+  test("rotates an oversized file and starts a one-record active file", async () => {
+    const path = temporaryAuditPath();
+    const size = 5 * 1024 * 1024 + 1;
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, jsonLineOfSize(size));
+
+    await createAuditLog({ path }).append({ ...record, paneId: "%9" });
+
+    const lines = readFileSync(path, "utf8").trim().split("\n");
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0]!).paneId).toBe("%9");
+    expect(statSync(`${path}.1`).size).toBe(size);
+  });
+
+  test("does not rotate a file below the limit", async () => {
+    const path = temporaryAuditPath();
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, jsonLineOfSize(1024));
+
+    await createAuditLog({ path }).append(record);
+
+    expect(existsSync(`${path}.1`)).toBe(false);
+    expect(readFileSync(path, "utf8").trim().split("\n")).toHaveLength(2);
+  });
+
+  test("keeps only the latest rotated file", async () => {
+    const path = temporaryAuditPath();
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(`${path}.1`, "OLD");
+    writeFileSync(path, jsonLineOfSize(5 * 1024 * 1024));
+
+    await createAuditLog({ path }).append(record);
+
+    expect(readFileSync(`${path}.1`, "utf8")).not.toContain("OLD");
+    expect(readFileSync(path, "utf8").trim().split("\n")).toHaveLength(1);
   });
 });
