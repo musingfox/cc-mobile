@@ -144,6 +144,53 @@ describe("PermissionAnswerAudited", () => {
   });
 });
 
+describe("PromptSendAudited", () => {
+  test("records a dispatched prompt with its pane", async () => {
+    const { path, auditLog } = setup();
+    harness = await startWsHarness(backend(), undefined, { auditLog });
+
+    harness.send({ type: "terminal_send", claudeUuid: "%3", content: "hello" });
+    await settle();
+
+    expect(readRecord(path)).toMatchObject({
+      action: "prompt_send",
+      paneId: "%3",
+      outcome: "dispatched",
+    });
+  });
+
+  test.each([
+    ["send", { send: async () => Promise.reject(new Error("boom")) }],
+    [
+      "permission resume",
+      { resumePermissions: async () => Promise.reject(new Error("resume failed")) },
+    ],
+  ])("records failed when %s rejects", async (_step, overrides) => {
+    const { path, auditLog } = setup();
+    harness = await startWsHarness(backend(overrides), undefined, { auditLog });
+
+    harness.send({ type: "terminal_send", claudeUuid: "%3", content: "hello" });
+    const error = await harness.waitFor(
+      (message) => message.type === "error" && message.code === "session_error",
+    );
+    await settle();
+
+    expect(error.code).toBe("session_error");
+    expect(readRecord(path).outcome).toBe("failed");
+  });
+
+  test("dispatches normally when no audit log is injected", async () => {
+    const send = mock(async () => {});
+    harness = await startWsHarness(backend({ send }));
+
+    harness.send({ type: "terminal_send", claudeUuid: "%3", content: "hello" });
+    await settle();
+
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(harness.received.filter((message) => message.type === "error")).toEqual([]);
+  });
+});
+
 describe("AuditCarriesNoUserText", () => {
   test("prompt content is never written", async () => {
     const { path, auditLog } = setup();
