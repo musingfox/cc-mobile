@@ -233,7 +233,7 @@ describe("AuditCarriesNoUserText — native key send", () => {
       warn: () => {},
       onKeysSent: (paneId, source, outcome) =>
         auditLog.append({
-          action: source === "auto_deny" ? "auto_deny" : "permission_keys_send",
+          action: source === "auto_deny" ? "auto_deny_keys_send" : "permission_keys_send",
           paneId,
           ip: null,
           device: null,

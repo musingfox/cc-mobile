@@ -216,6 +216,24 @@ describe("audit record shape", () => {
     expect(saved.every((item) => AUDIT_ACTIONS.includes(item.action))).toBe(true);
     expect(AUDIT_ACTIONS).toHaveLength(4);
     expect(AUDIT_OUTCOMES).toHaveLength(6);
+    // 名稱本身就是磁碟格式：第一行寫下去之後，這四個詞就是日後每一次
+    // grep 這份稽核檔所用的詞，改名等於讓既有紀錄變成讀不懂的資料。
+    // 只釘長度與集合成員抓不到改名（一次真實漂移就是這樣溜過閘門的），
+    // 所以逐字釘死。
+    expect([...AUDIT_ACTIONS]).toEqual([
+      "prompt_send",
+      "permission_answer",
+      "permission_keys_send",
+      "auto_deny_keys_send",
+    ]);
+    expect([...AUDIT_OUTCOMES]).toEqual([
+      "dispatched",
+      "failed",
+      "owned",
+      "unowned",
+      "rejected",
+      "sent",
+    ]);
   });
 
   test("keeps consecutive records independently parseable", async () => {

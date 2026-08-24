@@ -8,7 +8,7 @@ export const AUDIT_ACTIONS = [
   "prompt_send",
   "permission_answer",
   "permission_keys_send",
-  "auto_deny",
+  "auto_deny_keys_send",
 ] as const;
 export const AUDIT_OUTCOMES = [
   "dispatched",
