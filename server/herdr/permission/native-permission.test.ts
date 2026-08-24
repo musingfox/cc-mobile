@@ -9,8 +9,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   createNativePermission,
-  UNATTENDED_DENY_MS,
   type NativePermissionClient,
+  UNATTENDED_DENY_MS,
 } from "./native-permission";
 
 const FIXTURES = join(import.meta.dir, "fixtures");
@@ -32,7 +32,6 @@ interface Harness {
   status: { value: string };
   client: NativePermissionClient;
 }
-
 
 function makeFakeClock(startMs = 1_000_000) {
   let current = startMs;

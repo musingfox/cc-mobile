@@ -1,6 +1,6 @@
 import { appendFile, chmod, mkdir, rename, rm, stat } from "node:fs/promises";
-import { dirname, join } from "node:path";
 import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 
 const MAX_AUDIT_FILE_BYTES = 5 * 1024 * 1024;
 
@@ -10,7 +10,14 @@ export const AUDIT_ACTIONS = [
   "permission_keys_send",
   "auto_deny",
 ] as const;
-export const AUDIT_OUTCOMES = ["dispatched", "failed", "owned", "unowned", "rejected", "sent"] as const;
+export const AUDIT_OUTCOMES = [
+  "dispatched",
+  "failed",
+  "owned",
+  "unowned",
+  "rejected",
+  "sent",
+] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 export type AuditOutcome = (typeof AUDIT_OUTCOMES)[number];
@@ -28,10 +35,9 @@ export interface AuditLog {
   getPath(): string;
 }
 
-export function createAuditLog(options: {
-  path?: string;
-  warn?: (message: string) => void;
-} = {}): AuditLog {
+export function createAuditLog(
+  options: { path?: string; warn?: (message: string) => void } = {},
+): AuditLog {
   const path = options.path ?? join(homedir(), ".claude-mobile", "audit", "audit.jsonl");
   const warn = options.warn ?? console.warn;
   let warned = false;

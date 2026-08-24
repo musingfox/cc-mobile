@@ -292,11 +292,7 @@ export function createNativePermission(options: NativePermissionOptions) {
    * Leaving `blocked` drops the pending record without a keystroke: whoever
    * answered — the human at the terminal, or the phone — has already been heard.
    */
-  async function onStatus(
-    sessionId: string,
-    status: string,
-    kind?: string,
-  ): Promise<void> {
+  async function onStatus(sessionId: string, status: string, kind?: string): Promise<void> {
     if (status !== "blocked") {
       drop(sessionId);
       return;

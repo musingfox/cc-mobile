@@ -214,7 +214,6 @@ describe("PermissionRequestPaneLookup", () => {
   });
 });
 
-
 describe("AuditCarriesNoUserText — native key send", () => {
   test("pane errors never enter the audit record", async () => {
     const dir = mkdtempSync(join(tmpdir(), "cc-mobile-native-audit-"));

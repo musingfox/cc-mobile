@@ -2,8 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import {
   chmodSync,
   existsSync,
-  mkdtempSync,
   mkdirSync,
+  mkdtempSync,
   readFileSync,
   rmSync,
   statSync,
@@ -170,7 +170,14 @@ describe("audit record shape", () => {
     });
 
     const saved = JSON.parse(readFileSync(path, "utf8"));
-    expect(Object.keys(saved).sort()).toEqual(["action", "device", "ip", "outcome", "paneId", "ts"]);
+    expect(Object.keys(saved).sort()).toEqual([
+      "action",
+      "device",
+      "ip",
+      "outcome",
+      "paneId",
+      "ts",
+    ]);
     expect(saved.action).toBe("prompt_send");
     expect(saved.paneId).toBe("%1");
     expect(saved.outcome).toBe("dispatched");

@@ -26,9 +26,9 @@ describe("ClientIdentityCapture", () => {
   });
 
   test("caps device strings at 200 characters", () => {
-    expect(captureClientIdentity({ headers: { "user-agent": "x".repeat(500) } }).device).toHaveLength(
-      200,
-    );
+    expect(
+      captureClientIdentity({ headers: { "user-agent": "x".repeat(500) } }).device,
+    ).toHaveLength(200);
     expect(
       captureClientIdentity({ headers: { "user-agent": "UA" }, deviceName: "y".repeat(500) })
         .device,
@@ -37,8 +37,7 @@ describe("ClientIdentityCapture", () => {
 
   test("a non-empty custom name takes precedence over an identical user agent", () => {
     const headers = {
-      "user-agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15",
     };
     const mac = captureClientIdentity({ headers, deviceName: "書房 Mac" });
     const ipad = captureClientIdentity({ headers, deviceName: "iPad" });
