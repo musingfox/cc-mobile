@@ -136,3 +136,23 @@ describe("audit log rotation", () => {
     expect(readFileSync(path, "utf8").trim().split("\n")).toHaveLength(1);
   });
 });
+
+describe("audit log write failures", () => {
+  test("resolves every append and warns only once", async () => {
+    const root = mkdtempSync(join(tmpdir(), "cc-mobile-audit-"));
+    tempDirs.push(root);
+    const blocker = join(root, "blocker");
+    writeFileSync(blocker, "");
+    const warnings: string[] = [];
+    const log = createAuditLog({
+      path: join(blocker, "nested", "audit.jsonl"),
+      warn: (message) => warnings.push(message),
+    });
+
+    await expect(log.append(record)).resolves.toBeUndefined();
+    await expect(log.append(record)).resolves.toBeUndefined();
+
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("audit log");
+  });
+});
