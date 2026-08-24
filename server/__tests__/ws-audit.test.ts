@@ -22,6 +22,10 @@ function setup() {
   return { path, auditLog };
 }
 
+function readRecord(path: string) {
+  return JSON.parse(readFileSync(path, "utf8").trim());
+}
+
 function backend(overrides: Record<string, unknown> = {}) {
   return {
     createSession: async () => ({ name: "n", paneRef: "p1" }),
@@ -67,6 +71,76 @@ describe("ClientIdentityCapture", () => {
     await settle();
 
     expect(JSON.parse(readFileSync(path, "utf8").trim()).device).toBe("書房 Mac");
+  });
+});
+
+describe("PermissionAnswerAudited", () => {
+  test.each([
+    [true, "owned"],
+    [false, "unowned"],
+  ])("records a pane lookup and %s ownership", async (resolved, outcome) => {
+    const { path, auditLog } = setup();
+    harness = await startWsHarness(
+      backend({
+        paneIdForRequest: () => "%5",
+        resolvePermission: async () => resolved,
+      }),
+      undefined,
+      { auditLog },
+    );
+
+    harness.send({ type: "permission", requestId: "R", optionId: "1" });
+    await settle();
+
+    expect(readRecord(path)).toMatchObject({
+      action: "permission_answer",
+      paneId: "%5",
+      outcome,
+    });
+  });
+
+  test("records rejected when the answer form is missing and keeps the protocol error", async () => {
+    const { path, auditLog } = setup();
+    harness = await startWsHarness(backend(), undefined, { auditLog });
+
+    harness.send({ type: "permission", requestId: "R" });
+    const error = await harness.waitFor((message) => message.type === "error");
+    await settle();
+
+    expect(error.code).toBe("invalid_message");
+    expect(readRecord(path).outcome).toBe("rejected");
+  });
+
+  test("records failed without emitting a second error when resolution rejects", async () => {
+    const { path, auditLog } = setup();
+    harness = await startWsHarness(
+      backend({
+        resolvePermission: async () => {
+          throw new Error("x");
+        },
+      }),
+      undefined,
+      { auditLog },
+    );
+
+    harness.send({ type: "permission", requestId: "R", optionId: "1" });
+    await settle();
+
+    expect(readRecord(path).outcome).toBe("failed");
+    expect(harness.received.filter((message) => message.type === "error")).toEqual([]);
+  });
+
+  test("records unowned when the backend has no permission resolver", async () => {
+    const { path, auditLog } = setup();
+    // `delete` 需要 optional 屬性；改以解構省略同名鍵建出「沒有 resolvePermission
+    // 的 backend」，語意相同而不必放寬型別。
+    const { resolvePermission: _omitted, ...withoutResolver } = backend();
+    harness = await startWsHarness(withoutResolver, undefined, { auditLog });
+
+    harness.send({ type: "permission", requestId: "R", optionId: "1" });
+    await settle();
+
+    expect(readRecord(path).outcome).toBe("unowned");
   });
 });
 
