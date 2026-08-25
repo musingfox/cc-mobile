@@ -218,6 +218,44 @@ Schemas defined in `server/protocol.ts`. Full spec in `cc-mobile.md`.
 - VAPID from CC_MOBILE_VAPID_* envs; positive TTL (0→1); 410/404 prunes subscription.
 - Subscribe at /api/push/subscribe (dedup by endpoint, allowlist apple, max 10); public key at /api/push/public-key (503 if unset).
 
+## Write Audit
+
+Every write cc-mobile causes is appended to `~/.claude-mobile/audit/audit.jsonl`,
+one JSON object per line, exactly six fields:
+`{ts, action, paneId, ip, device, outcome}`. The file is created lazily — a
+server nobody has spoken to writes nothing — and one log is shared by the whole
+process.
+
+`action` is one of `prompt_send`, `permission_answer`, `permission_keys_send`,
+`auto_deny_keys_send`; `outcome` one of `dispatched`, `failed`, `owned`,
+`unowned`, `rejected`, `sent`. Both are closed enums pinned verbatim by a test:
+these names *are* the on-disk format, so renaming one is a format change, not a
+refactor.
+
+The record carries **no prompt or response text, ever** — not the message sent,
+not the tool's arguments, not the pane's error text. It answers "which device
+caused a write to which pane, and did it land", never "what was said".
+
+`device` is the phone's own name rather than a sniffed one. The client generates
+`device-<4hex>` on first run (`Math.random`, deliberately not
+`crypto.randomUUID`, which throws on a non-secure origin), keeps it in
+`localStorage`, and sends it on the WS URL as `?device=` — a browser `WebSocket`
+constructor takes only `(url, protocols)`, so a header was never available. A
+name set in Settings replaces it; absent both, the `User-Agent` stands in. Capped
+at 200 characters. `ip` prefers the first hop of `X-Forwarded-For` (what
+`tailscale serve` injects) over the socket's remote address.
+
+The server-initiated 90-second auto-deny is audited too, as
+`auto_deny_keys_send` with `ip` and `device` null — no device pressed it.
+
+Directory 0700, file 0600, both re-asserted on every append. At 5 MiB the file is
+renamed `.1` (chmod first, so the rotated copy inherits 0600) and a fresh one
+started; exactly one rotated copy is kept.
+
+Writing is **inert on failure**: a full disk or a bad mode never blocks a prompt
+or a permission answer — it warns once and the dispatch proceeds. An audit log
+that can refuse a keystroke is a worse failure than a missing line.
+
 ## Security Constraints
 
 - cc-mobile sets no agent settings: no `--permission-mode` on launch, no CLI flag, and `set_permission_mode` / `set_model` / `set_effort` / `set_env_vars` are refused by the Zod gate. Each agent runs at its own configured posture (ADR-003 superseded; ADR-015 §2026-08-06). `sessions[].gated` still discloses an ungated pane by reading its argv.
@@ -236,4 +274,6 @@ Schemas defined in `server/protocol.ts`. Full spec in `cc-mobile.md`.
   `CC_MOBILE_ALLOWED_ORIGINS` (comma-separated) accepts listed origins regardless. Refusals are
   `403 forbidden: origin`. Trusting `Host` is deliberate — see the module docstring before
   "fixing" it.
+- Every write is recorded — see **Write Audit** above. The log names the device and the
+  outcome, never the text; it is evidence of what was done, not a copy of it.
 - If exposing via Cloudflare Tunnel, auth must be added

@@ -456,6 +456,7 @@ cloudflared tunnel --url http://localhost:3001
 3. **The session list discloses an ungated pane** — a `no permission gate` badge means that agent's argv says it will not stop to ask. Reading that flag is not setting it, and the badge never blocks driving the pane (Decision H4).
 4. **Session persistence** — SDK sessions are resumed via `resume: sessionId` option in each `query()` call.
 5. **WebSocket reconnect** — client auto-reconnects with exponential backoff (1s → 30s max).
+6. **Every write is recorded** — `~/.claude-mobile/audit/audit.jsonl`, one line per prompt send, permission answer, and key send, 0600 in a 0700 directory. It names the device and the outcome and never the text, so it is evidence of what was done rather than a copy of it. Full description in CLAUDE.md's **Write Audit** section.
 
 ## SDK API Quick Reference
 
