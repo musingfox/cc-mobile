@@ -276,3 +276,15 @@ cc-mobile 從手機啟動 omp 時**不帶任何 approval 旗標**，沿用 omp �
 [ADR-016](016-session-view-as-transcript-projection.md) 決定手機的 session 畫面是這個 session 的 transcript 的投影：既有對話由 client 主動往回拉，走一組自己的請求／回應對、貼在畫面上方，不冒充剛剛說的話。原本那句話的意圖因此完整保留——重播的顧慮是「被當成新訊息」，不是「看得到舊訊息」。
 
 Decision M1（不重塑內容）不受影響：歷史信封裡的 record body 與 live 路徑共用同一個 `transcriptRecordToChunk`。`readable` 的「只揭露、不封鎖」也沿用：不可讀的 session 沒有歷史 affordance，但 `drivable` 仍為 true、composer 仍可用。
+
+## 2026-08-25 增修：omp 的畫面改版，§#33 對形狀的斷言不再成立
+
+§「#33 omp 權限流」寫「提示同樣被水平規則上下包夾，形狀跟 claude 同構」——那是 omp 17.2.9 的實測，17.4.1 已經不是。提示現在畫在方框面板裡：marker 搬進框線標題（`╭─ Allow tool: bash ───╮`）、每個選項和頁尾各多一個 `│`、marker 與參數之間多一列空白填充。三個解析錨點同時落空。
+
+**決定本身沒有變**，這一段記的是它的有效期限：認 `Allow tool: ` 當 marker 兼分類器、答題是距離不是鍵、游標不進 fingerprint、讀不到游標就不送鍵——每一條都原封不動，只是讀到那些字之前要先把框線剝掉（`stripBorder`，剝的是兩端的 Box Drawing 字元）。游標仍是 U+F054，落在 Box Drawing 區段之外，所以選取狀態照樣讀得到。
+
+真正該記的是**失效的形狀**。這不是會爆的那種故障：沒有例外、沒有紅字，pane 就停在 blocked，手機從頭到尾沒被問過。單元 fixture 釘在 17.2.9，全程綠燈——上游改版在釘死的樣本上永遠看不見。抓到它的只有 `herdr-omp-permission.e2e.test.ts`，因為只有活體 e2e 會碰到真實畫面。
+
+因此：**升級本機 agent 工具（herdr / omp / claude）後跑一次 `bun run test:herdr`**。同一天（2026-08-24）herdr 協定號從 19 跳到 20 也咬了一次，但那個是開機就 throw、聲音很大；畫面文字是靜默的，兩種警覺不能互相取代。
+
+畫面解析這類程式碼天生會腐爛。`omp-prompt.ts` 的 `ponytail:` 註記標了這個天花板，兩種形狀（扁平 17.2.9、方框 17.4.1）現在都釘在 `omp-prompt.test.ts` 與 `native-permission.test.ts`——不是為了支援舊版，是為了讓下一次改版失敗在 `bun test`，而不是在生產環境。
