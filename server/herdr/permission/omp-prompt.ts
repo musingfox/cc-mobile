@@ -24,6 +24,30 @@
  *
  *     ────────────────────────────────────────────
  *
+ * omp 17.4.1 (capture 2026-08-25) draws the same prompt inside a panel, and
+ * the rewrite it forced is the reason `stripBorder` exists:
+ *
+ *     \u256d\u2500 Allow tool: bash \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e
+ *     \u2502                                    \u2502
+ *     \u2502 Command: touch /tmp/\u2026/canary.txt    \u2502
+ *     \u2502                                    \u2502
+ *     \u2502   Approve                          \u2502   <- \u2502, two spaces, then U+F054
+ *     \u2502    Deny                            \u2502
+ *     \u2502                                    \u2502
+ *     \u2502 up/down navigate  enter select     \u2502
+ *     \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f
+ *
+ * The words did not change; their frame did. The marker moved into the title
+ * rule, the footer and every option gained a `\u2502`, and a blank padding row
+ * appeared between the marker and the arguments. All three parse anchors missed
+ * at once, and nothing failed loudly: the pane sat blocked and the phone was
+ * never asked. Only a live capture shows this \u2014 the unit fixtures were pinned
+ * to 17.2.9 and stayed green throughout.
+ *
+ * ponytail: parsing another program's screen rots by design. Expect the next
+ * omp release to move something again; the live e2e is the only check that sees
+ * it.
+ *
  * Two things the ticket predicted turned out otherwise, and this file follows
  * the capture rather than the prediction:
  *
@@ -44,6 +68,26 @@
 
 import { createHash } from "node:crypto";
 import type { ParsedPrompt, PromptOption } from "./prompt-parse";
+
+/**
+ * The box omp draws around the prompt, removed before anything else is read.
+ *
+ * 17.2.9 printed the prompt as bare lines between two horizontal rules; 17.4.1
+ * puts it in a panel, which moved the marker into the box's title rule and put
+ * `\u2502` in front of every option and the footer. Stripping the decoration at
+ * both ends is what lets one set of anchors read both shapes: a flat line has
+ * nothing to strip but its own indentation, which they trimmed anyway.
+ *
+ * ponytail: the whole Box Drawing block, from either end, greedily. A tool
+ * argument that itself ends in `\u2500` loses that character from the text shown
+ * on the phone. Narrow it if a real prompt ever gets clipped — the keystroke
+ * path never reads these bytes, so the blast radius is display only.
+ */
+const BORDER = /^[\s\u2500-\u257F]+|[\s\u2500-\u257F]+$/gu;
+
+function stripBorder(line: string): string {
+  return line.replace(BORDER, "");
+}
 
 /** The marker every omp permission prompt carries, and the tool it names. */
 const ALLOW_TOOL = /^\s*Allow tool:\s*(\S.*?)\s*$/;
@@ -87,7 +131,7 @@ function fingerprintOf(parts: {
  * an exception in the event stream.
  */
 export function parseOmpPrompt(input: { text: string }): ParsedPrompt | null {
-  const lines = input.text.split("\n");
+  const lines = input.text.split("\n").map(stripBorder);
 
   // Last marker wins: an answered prompt may still be visible in scrollback.
   let markerIndex = -1;
@@ -106,8 +150,12 @@ export function parseOmpPrompt(input: { text: string }): ParsedPrompt | null {
   const header: string[] = [];
   const headerCeiling = Math.min(lines.length, markerIndex + 1 + MAX_HEADER_LOOKBACK);
   let cursor = markerIndex + 1;
+  // The panel pads a blank row under its title rule; the flat shape put the
+  // arguments straight after the marker. Skipping leading blanks reads both,
+  // and costs nothing on a screen that has none.
+  while (cursor < headerCeiling && (lines[cursor] ?? "").length === 0) cursor += 1;
   for (; cursor < headerCeiling; cursor += 1) {
-    const line = (lines[cursor] ?? "").trim();
+    const line = lines[cursor] ?? "";
     if (line.length === 0) break;
     header.push(line);
   }

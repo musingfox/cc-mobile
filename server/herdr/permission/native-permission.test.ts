@@ -20,6 +20,8 @@ const UNPARSEABLE = "❯ waiting\n\n  the screen says nothing we understand\n";
 
 const OMP_API_FAILURE = readFileSync(join(FIXTURES, "omp-api-failure.txt"), "utf8");
 const OMP_ALLOW_TOOL = readFileSync(join(FIXTURES, "omp-allow-tool-prompt.txt"), "utf8");
+/** The same prompt as omp 17.4.1 draws it: inside a box. Live capture 2026-08-25. */
+const OMP_BORDERED = readFileSync(join(FIXTURES, "omp-bordered-prompt.txt"), "utf8");
 const OMP_NO_API_KEY = readFileSync(join(FIXTURES, "omp-no-api-key.txt"), "utf8");
 
 const PANE = "w3V:p1";
@@ -508,6 +510,28 @@ describe("SuppressUnanswerablePermissionCard", () => {
     const requests = h.sent.filter((msg) => msg.type === "permission_request");
     expect(requests).toHaveLength(1);
     expect((requests[0] as { tool: { name: string } }).tool.name).toBe("bash");
+  });
+
+  test("T3b: the boxed omp prompt raises the same card as the flat one", async () => {
+    // The regression that motivated this test cost nothing at this layer: omp
+    // 17.4.1 boxed the prompt, every parse anchor missed, and the pane simply
+    // sat blocked while the phone was never asked. Nothing threw, and the
+    // suite above stayed green against its 17.2.9 fixture. Pinning both shapes
+    // here is what makes the next re-draw fail in `bun test` rather than in
+    // production.
+    const h = harness();
+    h.screen.text = OMP_BORDERED;
+
+    await h.permission.onStatus(PANE, "blocked", "omp");
+
+    const requests = h.sent.filter((msg) => msg.type === "permission_request");
+    expect(requests).toHaveLength(1);
+    const request = requests[0] as {
+      tool: { name: string };
+      options: { id: string; label: string }[];
+    };
+    expect(request.tool.name).toBe("bash");
+    expect(request.options.map((option) => option.label)).toEqual(["Approve", "Deny"]);
   });
 
   test("T4: claude bash prompt still raises Bash command with 3 options", async () => {

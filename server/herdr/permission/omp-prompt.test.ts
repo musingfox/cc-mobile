@@ -7,8 +7,12 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { ompAnswerKeys, parseOmpPrompt } from "./omp-prompt";
 import { parseBlockedPrompt } from "./prompt-parse";
+
+const FIXTURES = join(import.meta.dir, "fixtures");
 
 /** The cursor omp draws, verbatim from the capture's bytes (ef 81 94). */
 const CURSOR = "\uF054";
@@ -160,5 +164,49 @@ describe("OmpAnswerKeys", () => {
     // Enter would then choose whatever the cursor sits on — on an
     // Approve/Deny prompt, a coin flip between allowing and refusing a tool.
     expect(ompAnswerKeys(0, undefined)).toBeUndefined();
+  });
+});
+
+/**
+ * OmpBorderedPrompt — omp 17.4.1 draws the same prompt inside a box.
+ *
+ * Live capture 2026-08-25 (`pane.read --source detection`, byte-identical to
+ * `--source visible`), read from the fixture rather than retyped: the cursor is
+ * still U+F054 and would not survive transcription. Every anchor the flat-text
+ * capture above relies on now carries border decoration — the marker sits in
+ * the box's title rule, and the options and footer each sit behind `│`.
+ *
+ * The two shapes are tested side by side on purpose. omp's screen is upstream
+ * text this repo does not control, so the older one is kept as a regression:
+ * a fix for the box that quietly stopped parsing the flat prompt would be a
+ * trade, not a fix.
+ */
+describe("OmpBorderedPrompt", () => {
+  const BORDERED = readFileSync(join(FIXTURES, "omp-bordered-prompt.txt"), "utf8");
+
+  test("parses the boxed prompt the current omp draws", () => {
+    const parsed = parseOmpPrompt({ text: BORDERED });
+    expect(parsed).not.toBeNull();
+    expect(parsed?.dialect).toBe("omp");
+    expect(parsed?.toolLabel).toBe("bash");
+    expect(parsed?.options.map((option) => option.label)).toEqual(["Approve", "Deny"]);
+  });
+
+  test("keeps the box out of the arguments it shows the phone", () => {
+    const parsed = parseOmpPrompt({ text: BORDERED });
+    expect(parsed?.argumentText).toContain("Command: touch ");
+    expect(parsed?.argumentText).not.toContain("│");
+  });
+
+  test("reads the selection through the border", () => {
+    // The glyph sits behind `│` and two spaces now. Losing it would not fail
+    // loudly — `ompAnswerKeys` refuses to guess, so the prompt would simply
+    // stop being answerable from the phone.
+    expect(parseOmpPrompt({ text: BORDERED })?.selectedIndex).toBe(0);
+  });
+
+  test("still refuses a boxed screen that carries no marker", () => {
+    const notAPrompt = BORDERED.replace("Allow tool: bash", "Update Available: 18.0.4");
+    expect(parseOmpPrompt({ text: notAPrompt })).toBeNull();
   });
 });
