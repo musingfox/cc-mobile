@@ -370,6 +370,20 @@ const TerminalSessionDescriptor = z.object({
   origin: z.enum(["self", "foreign"]),
   drivable: z.boolean(),
   readable: z.boolean(),
+  /**
+   * Why `readable` is false, sent only when it is. `readable` alone cannot tell
+   * "nobody has spoken to this pane yet" (`"pending"` — an omp whose first turn
+   * has not written its file) from "this build cannot read that kind back at
+   * all" (`"unsupported"` — no key, or no registered reader), and a screen with
+   * nothing on it has to say opposite things about the two: one invites a
+   * message, the other explains a silence that typing will not end.
+   *
+   * Optional rather than a widened `readable`, so a bundle cached before this
+   * field keeps reading the boolean it already knows. `"unsupported"` describes
+   * now, not forever — an undetected kind lands there and leaves it on the
+   * listing after herdr reports one.
+   */
+  unreadableReason: z.enum(["pending", "unsupported"]).optional(),
   gated: z.boolean(),
   state: z.enum(["idle", "running", "requires_action"]).optional(),
 });

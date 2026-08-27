@@ -1,8 +1,8 @@
 import { homedir } from "node:os";
 import { Elysia, t } from "elysia";
+import { availableAgentKinds } from "./agents/kinds";
 import type { AuditLog, AuditRecordInput } from "./audit/audit-log";
 import { captureClientIdentity } from "./audit/client-identity";
-import { availableAgentKinds } from "./agents/kinds";
 import type { ServerConfig } from "./config";
 import { listDirectories } from "./directory-listing";
 import type { EventBuffer } from "./event-buffer";
@@ -37,6 +37,8 @@ export interface WsBackend extends TerminalControlBackend {
       origin: "self" | "foreign";
       drivable: boolean;
       readable: boolean;
+      /** Why `readable` is false; absent when it is true. */
+      unreadableReason?: "pending" | "unsupported";
       gated: boolean;
       state?: "idle" | "running" | "requires_action";
     }[]
@@ -66,10 +68,7 @@ export interface WsBackend extends TerminalControlBackend {
    * Optional: only a backend that can locate a pane's transcript has one, and
    * its absence answers "unavailable" for every session.
    */
-  readTranscriptPage?(
-    sessionId: string,
-    before: PageCursor | null,
-  ): Promise<TranscriptPage | null>;
+  readTranscriptPage?(sessionId: string, before: PageCursor | null): Promise<TranscriptPage | null>;
   /**
    * The command / agent list for one live session. Optional: a backend without
    * a fetcher answers unsupported for every session, mirroring a missing
@@ -141,10 +140,10 @@ export function createWsPlugin(
     return ws.raw ?? ws;
   }
 
-  function identityOf(ws: {
-    data?: { request?: Request };
-    remoteAddress?: string;
-  }): { ip: string | null; device: string | null } {
+  function identityOf(ws: { data?: { request?: Request }; remoteAddress?: string }): {
+    ip: string | null;
+    device: string | null;
+  } {
     const request = ws.data?.request;
     let deviceName: string | null = null;
     if (request) {
@@ -430,6 +429,10 @@ export function createWsPlugin(
                 origin: session.origin,
                 drivable: session.drivable,
                 readable: session.readable,
+                // Omitted rather than sent undefined, same as `agent` above:
+                // the field's absence is what says "there is nothing to
+                // explain", and a present `undefined` would not survive JSON.
+                ...(session.unreadableReason ? { unreadableReason: session.unreadableReason } : {}),
                 gated: session.gated,
                 ...(session.state ? { state: session.state } : {}),
               })),
@@ -529,10 +532,7 @@ export function createWsPlugin(
             let result: Awaited<ReturnType<NonNullable<WsBackend["readCapabilities"]>>>;
             try {
               result = backend.readCapabilities
-                ? await backend.readCapabilities(
-                    sessionId,
-                    refresh ? { refresh: true } : undefined,
-                  )
+                ? await backend.readCapabilities(sessionId, refresh ? { refresh: true } : undefined)
                 : { ok: false, reason: "unsupported" };
             } catch {
               result = { ok: false, reason: "failed" };

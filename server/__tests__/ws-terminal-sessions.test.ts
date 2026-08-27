@@ -129,6 +129,29 @@ describe("TerminalSessionsPayload — handler", () => {
     expect(harness.received.some((msg) => msg.type === "event")).toBe(false);
   });
 
+  test("the reason a session is unreadable survives the handler, not just the schema", async () => {
+    // ws.ts spreads this one conditionally; a dropped spread would leave the
+    // phone unable to tell an unwritten transcript from an unreadable pane,
+    // and every schema test above would still pass.
+    harness = await startWsHarness(
+      backendListing([
+        descriptor({ readable: false, unreadableReason: "unsupported" }),
+        descriptor({ sessionId: "w9:p1", readable: false, unreadableReason: "pending" }),
+        descriptor({ sessionId: "w7:p1" }),
+      ]),
+    );
+
+    harness.send({ type: "list_terminal_sessions" });
+    const reply = await harness.waitFor((msg) => msg.type === "terminal_sessions");
+
+    const sessions = reply.sessions as Record<string, unknown>[];
+    expect(sessions[0]?.unreadableReason).toBe("unsupported");
+    expect(sessions[1]?.unreadableReason).toBe("pending");
+    // A readable pane carries no key at all, rather than an explicit undefined
+    // that JSON would drop anyway.
+    expect(Object.keys(sessions[2] ?? {})).not.toContain("unreadableReason");
+  });
+
   test("each card is told which kind of agent it is looking at", async () => {
     harness = await startWsHarness(
       backendListing([
