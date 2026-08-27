@@ -267,6 +267,60 @@ describe("GlobalClaudeSessionListing", () => {
     expect(after[0]?.readable).toBe(true);
   });
 
+  test("names why a session is unreadable, so a blank screen can say which", async () => {
+    // `readable` alone cannot tell "nobody has spoken to it yet" from "there is
+    // no reader for this kind" — and those two want opposite things said on a
+    // screen with nothing on it. The reason is present only when the flag is
+    // false, so `readable` stays exactly what a cached bundle already reads.
+    const { client } = fakeClient({
+      agents: [
+        agentEntry(),
+        agentEntry({ pane_id: "w4A:p1", workspace_id: "w4A", agent_session: undefined }),
+        agentEntry({ pane_id: "w6C:p1", workspace_id: "w6C", agent: "codex" }),
+        agentEntry({ pane_id: "w9:p1", workspace_id: "w9", agent: undefined }),
+      ],
+      workspaces: [
+        workspace("w3V", "dev"),
+        workspace("w4A", "dev"),
+        workspace("w6C", "dev"),
+        workspace("w9", "dev"),
+      ],
+    });
+
+    const sessions = await listClaudeSessions({ client, warn: () => {} });
+
+    expect(sessions[0]?.readable).toBe(true);
+    expect(sessions[0]?.unreadableReason).toBeUndefined();
+    // No transcript key, no reader for codex, and no kind detected yet all end
+    // at the same place: this build has no way to read that pane back.
+    expect(sessions[1]?.unreadableReason).toBe("unsupported");
+    expect(sessions[2]?.unreadableReason).toBe("unsupported");
+    expect(sessions[3]?.unreadableReason).toBe("unsupported");
+  });
+
+  test("a path key whose file is not written yet is pending, not unsupported", async () => {
+    // The omp case from #32 seen from the other side: everything needed to read
+    // this pane exists except the first turn, so the phone must say "type
+    // something", not "this cannot be read".
+    const OMP_PATH = "/home/u/.omp/agent/sessions/-dev/2026-08-06T13-53-02Z_019fd759.jsonl";
+    const ompSession = { agent: "omp", kind: "path", source: "herdr:omp", value: OMP_PATH };
+    const agents = [agentEntry({ agent: "omp", agent_session: ompSession })];
+
+    const before = await listClaudeSessions({
+      client: fakeClient({ agents }).client,
+      warn: () => {},
+      exists: async () => false,
+    });
+    expect(before[0]?.unreadableReason).toBe("pending");
+
+    const after = await listClaudeSessions({
+      client: fakeClient({ agents }).client,
+      warn: () => {},
+      exists: async (path) => path === OMP_PATH,
+    });
+    expect(after[0]?.unreadableReason).toBeUndefined();
+  });
+
   test("a claude key costs no fs call, so the listing never pays for the scan", async () => {
     let checked = 0;
 

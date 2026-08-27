@@ -80,6 +80,18 @@ export interface SessionDescriptor {
    * read or ask permission because it is false.
    */
   readable: boolean;
+  /**
+   * Why `readable` is false, absent whenever it is true.
+   *
+   * `readable` alone cannot separate the two, and a screen with nothing on it
+   * has to say opposite things about them: `"pending"` is an omp whose first
+   * turn has not written the file yet, where typing is what fixes it, while
+   * `"unsupported"` is a pane this build has no way to read back at all — no
+   * key, or no reader for the kind. `"unsupported"` is still a statement about
+   * now, not forever: an undetected kind lands there and leaves it as soon as
+   * herdr reports one.
+   */
+  unreadableReason?: UnreadableReason;
   /** Advisory: false means claude runs with no permission gate in that pane. */
   gated: boolean;
   state?: AgentState;
@@ -162,8 +174,12 @@ function reportedTitle(value: string | null | undefined): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
+/** Why a pane's replies cannot be read back; `undefined` means they can. */
+export type UnreadableReason = "pending" | "unsupported";
+
 /**
- * Whether this pane's replies can be read back right now.
+ * Why this pane's replies cannot be read back right now — `undefined` when
+ * they can, which is what `readable` is derived from.
  *
  * Deliberately asymmetric on the last check. A `path` key names the file
  * directly, so one `access()` answers "does the conversation exist yet" — and
@@ -174,17 +190,21 @@ function reportedTitle(value: string | null | undefined): string | undefined {
  * multi-directory scan `resolveTranscriptPath` does, on every listing, for
  * every pane on the machine — for an answer that is effectively always yes,
  * since claude has written the file by the time it has an id.
+ *
+ * That same asymmetry is why `"pending"` is a `path`-key answer only: it is the
+ * one branch that knows the difference between "not written yet" and "not
+ * readable", because it is the one branch that looked.
  */
-async function isReadable(input: {
+async function unreadableReasonFor(input: {
   kind: string | undefined;
   agentSessionKind: string | undefined;
   agentSessionValue: string | null;
   exists: (path: string) => Promise<boolean>;
-}): Promise<boolean> {
+}): Promise<UnreadableReason | undefined> {
   const { kind, agentSessionKind, agentSessionValue, exists } = input;
-  if (!hasTranscriptReader(kind) || agentSessionValue === null) return false;
-  if (agentSessionKind !== "path") return true;
-  return exists(agentSessionValue);
+  if (!hasTranscriptReader(kind) || agentSessionValue === null) return "unsupported";
+  if (agentSessionKind !== "path") return undefined;
+  return (await exists(agentSessionValue)) ? undefined : "pending";
 }
 
 /**
@@ -257,6 +277,12 @@ export async function listClaudeSessions(
       // duplicates `state` and would freeze mid-spin once snapshotted.
       const title =
         reportedTitle(live.terminal_title_stripped) ?? reportedTitle(agent.terminal_title_stripped);
+      const unreadableReason = await unreadableReasonFor({
+        kind,
+        agentSessionKind,
+        agentSessionValue,
+        exists,
+      });
 
       return {
         sessionId: agent.pane_id,
@@ -274,8 +300,10 @@ export async function listClaudeSessions(
         // discloses rather than locks.
         drivable: true,
         // The lookup is the whole rule — an undetected kind falls out of it by
-        // missing, with no branch of its own.
-        readable: await isReadable({ kind, agentSessionKind, agentSessionValue, exists }),
+        // missing, with no branch of its own. `readable` is derived from the
+        // reason rather than computed beside it, so the two can never disagree.
+        readable: unreadableReason === undefined,
+        ...(unreadableReason ? { unreadableReason } : {}),
         gated: await readGatedFlag(client, agent.pane_id, kind, warn),
         ...(state ? { state } : {}),
       };
