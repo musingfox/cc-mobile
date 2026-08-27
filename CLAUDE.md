@@ -148,7 +148,7 @@ Since #29 the session key on the wire is herdr's `pane_id`, not a claude uuid: i
 exists for every pane and survives a `/clear`. `terminal_sessions` carries
 `sessions[]` — one descriptor per **agent** running **anywhere on the machine**,
 including ones the user started in their own terminal — with
-`{sessionId, agent?, agentSessionValue, cwd, origin, drivable, readable, gated, state?}`.
+`{sessionId, agent?, agentSessionValue, cwd, origin, drivable, readable, unreadableReason?, gated, state?}`.
 
 Since #30 the listing is no longer filtered to claude: every entry herdr's
 `agent.list` returns is listed, and `agent` names the kind it detected
@@ -168,7 +168,16 @@ after 120s). One `access()` answers that. claude's key is an `id`, and asking
 the same question there means the multi-directory scan on every listing for
 every pane — not paid, since claude has written the file by the time it has an
 id. Like `gated`, `readable` is a badge and never a lock: `drivable` stays
-`true` whatever the kind, and the composer stays enabled. `unknownUuids` is gone with the startup remount scan that
+`true` whatever the kind, and the composer stays enabled.
+
+`unreadableReason` is sent only when `readable` is false, and says which kind of
+false it is: `"pending"` — the transcript is not written yet, which a message
+fixes — or `"unsupported"` — no key, or no reader for that kind. The phone needs
+the split because both look identical on an empty screen and want opposite
+things said: one is the ordinary invitation to type, the other explains a
+silence typing will not end. `"unsupported"` is about now, not forever: a pane
+whose kind herdr has not detected lands there and leaves it on the listing after
+detection. `unknownUuids` is gone with the startup remount scan that
 produced it; `claudeUuids` mirrors `sessions[].sessionId` (an outdated name kept
 for cached bundles — it holds pane ids of every kind now) and `states` is
 pane-keyed.

@@ -104,7 +104,8 @@ a page reload.
 { type: "terminal_sessions",
   sessions: { sessionId: string, agent?: string, agentSessionValue: string | null,
               cwd: string, origin: "self" | "foreign", drivable: boolean,
-              readable: boolean, gated: boolean,
+              readable: boolean, unreadableReason?: "pending" | "unsupported",
+              gated: boolean,
               state?: "idle" | "running" | "requires_action" }[],
   claudeUuids: string[],
   states?: Record<string, "idle" | "running" | "requires_action"> }
@@ -195,6 +196,15 @@ readable once it has said something. claude's `id` key is not checked the same
 way: answering it means `resolveTranscriptPath`'s directory scan, on every
 listing for every pane, for an answer that is always yes by the time an id
 exists.
+
+`unreadableReason` names which kind of `readable:false` it is, and is absent
+whenever `readable` is true. `"pending"` is exactly the omp case above — every
+part of the readback path exists except the first turn — and `"unsupported"` is
+no key or no registered reader. The phone draws a different empty screen for
+each: `"pending"` keeps the ordinary invitation to type, `"unsupported"` says
+the replies cannot be read back, because a blank screen there was being read as
+a broken app. A pane whose kind is not detected yet counts as `"unsupported"`
+and stops being one once herdr reports a kind, so the wording is present-tense.
 
 The key kind is server-side only — `ws.ts` projects the wire fields by name, so
 `agentSessionKind` never reaches the phone.
