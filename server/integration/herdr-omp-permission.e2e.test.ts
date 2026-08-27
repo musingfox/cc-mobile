@@ -65,7 +65,9 @@ it.skipIf(!existsSync(socketPath))(
     // Same deviation as the foreign suite: this asserts on a pane it labelled
     // `ccme2e-`, which the production listing hides.
     const backend = createHerdrBackend({ suppressSessionLabel: () => false }) as AppBackend;
-    const app = createApp(serverConfig, { backend });
+    // 稽核紀錄寫進本次測試自己的暫存檔，不碰開發者的 `~/.claude-mobile`。
+    const auditDir = mkdtempSync(join(tmpdir(), "ccme2e-audit-"));
+    const app = createApp(serverConfig, { backend, auditLogPath: join(auditDir, "audit.jsonl") });
     app.listen({ port, hostname: "127.0.0.1" });
 
     const client = createHerdrClient({ socketPath });
@@ -173,6 +175,7 @@ it.skipIf(!existsSync(socketPath))(
           .catch(() => {});
       }
       rmSync(canaryDir, { recursive: true, force: true });
+      rmSync(auditDir, { recursive: true, force: true });
       await app.stop(true);
     }
   },

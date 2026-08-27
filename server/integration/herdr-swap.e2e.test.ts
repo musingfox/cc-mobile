@@ -1,5 +1,6 @@
 import { expect, it } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import { createApp } from "../app";
@@ -118,7 +119,9 @@ it.skipIf(!existsSync(socketPath))(
       pushScope: "phone-last" as const,
       basePath: "",
     };
-    const app = createApp(serverConfig);
+    // 稽核紀錄寫進本次測試自己的暫存檔，不碰開發者的 `~/.claude-mobile`。
+    const auditDir = mkdtempSync(join(tmpdir(), "ccme2e-audit-"));
+    const app = createApp(serverConfig, { auditLogPath: join(auditDir, "audit.jsonl") });
     app.listen({ port, hostname: "127.0.0.1" });
 
     const client = createHerdrClient({ socketPath });
@@ -295,6 +298,7 @@ it.skipIf(!existsSync(socketPath))(
       // force-close: default stop() awaits lingering keep-alive connections
       // (observed 300s hang after a full herdr lifecycle); production shutdown
       // is SIGTERM + process exit, so graceful drain is not what we verify here.
+      rmSync(auditDir, { recursive: true, force: true });
       await app.stop(true);
     }
   },

@@ -1,5 +1,6 @@
 import { expect, it } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createApp } from "../app";
 import type { ServerConfig } from "../config";
@@ -46,7 +47,9 @@ it.skipIf(!existsSync(socketPath))(
       pushScope: "phone-last" as const,
       basePath: "",
     };
-    const app = createApp(serverConfig);
+    // 稽核紀錄寫進本次測試自己的暫存檔，不碰開發者的 `~/.claude-mobile`。
+    const auditDir = mkdtempSync(join(tmpdir(), "ccme2e-audit-"));
+    const app = createApp(serverConfig, { auditLogPath: join(auditDir, "audit.jsonl") });
     app.listen({ port, hostname: "127.0.0.1" });
 
     const client = createHerdrClient({ socketPath });
@@ -146,6 +149,7 @@ it.skipIf(!existsSync(socketPath))(
           .call("workspace.close", { workspace_id: workspaceId }, OkResultSchema)
           .catch(() => {});
       }
+      rmSync(auditDir, { recursive: true, force: true });
       await app.stop(true);
     }
   },

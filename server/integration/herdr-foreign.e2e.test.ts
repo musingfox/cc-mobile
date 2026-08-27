@@ -1,5 +1,6 @@
 import { expect, it } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AppBackend, createApp } from "../app";
 import type { ServerConfig } from "../config";
@@ -52,7 +53,9 @@ it.skipIf(!existsSync(socketPath))(
     // The one deviation from production wiring: this suite is asserting on a
     // pane it labelled `ccme2e-`, which the real listing deliberately hides.
     const backend = createHerdrBackend({ suppressSessionLabel: () => false }) as AppBackend;
-    const app = createApp(serverConfig, { backend });
+    // 稽核紀錄寫進本次測試自己的暫存檔，不碰開發者的 `~/.claude-mobile`。
+    const auditDir = mkdtempSync(join(tmpdir(), "ccme2e-audit-"));
+    const app = createApp(serverConfig, { backend, auditLogPath: join(auditDir, "audit.jsonl") });
     app.listen({ port, hostname: "127.0.0.1" });
 
     const client = createHerdrClient({ socketPath });
@@ -140,6 +143,7 @@ it.skipIf(!existsSync(socketPath))(
       }
       // cwd is the repo itself — nothing to remove, and removing it would be
       // catastrophic.
+      rmSync(auditDir, { recursive: true, force: true });
       await app.stop(true);
     }
   },
