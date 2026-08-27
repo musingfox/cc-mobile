@@ -9,7 +9,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { AUDIT_ACTIONS, AUDIT_OUTCOMES, createAuditLog } from "./audit-log";
 
@@ -246,5 +246,23 @@ describe("audit record shape", () => {
     const lines = readFileSync(path, "utf8").trim().split("\n");
     expect(lines).toHaveLength(2);
     for (const line of lines) expect(() => JSON.parse(line)).not.toThrow();
+  });
+  describe("default path", () => {
+    test("CC_MOBILE_AUDIT_LOG names the file when no path is injected", () => {
+      const path = temporaryAuditPath();
+      expect(createAuditLog({ env: { CC_MOBILE_AUDIT_LOG: path } }).getPath()).toBe(path);
+    });
+
+    test("a whitespace-only override counts as unset, like CC_MOBILE_TRUSTED_USER", () => {
+      const fallback = createAuditLog({ env: { CC_MOBILE_AUDIT_LOG: "   " } }).getPath();
+      expect(fallback).toBe(join(homedir(), ".claude-mobile", "audit", "audit.jsonl"));
+    });
+
+    test("an injected path still wins over the environment", () => {
+      const path = temporaryAuditPath();
+      expect(
+        createAuditLog({ path, env: { CC_MOBILE_AUDIT_LOG: "/nowhere/audit.jsonl" } }).getPath(),
+      ).toBe(path);
+    });
   });
 });

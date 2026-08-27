@@ -35,10 +35,28 @@ export interface AuditLog {
   getPath(): string;
 }
 
+/**
+ * Where the log lives when nobody names a path.
+ *
+ * `CC_MOBILE_AUDIT_LOG` exists for the one caller injection cannot reach: an
+ * e2e that spawns `bun server/index.ts` as a real child process has no seam
+ * into `createApp`, and redirecting `HOME` instead would move the herdr socket
+ * and claude's transcripts along with it. Whitespace-only counts as unset, the
+ * same convention `CC_MOBILE_TRUSTED_USER` uses in `request-gate.ts`.
+ */
+function defaultAuditLogPath(env: Record<string, string | undefined>): string {
+  const override = env.CC_MOBILE_AUDIT_LOG?.trim();
+  return override ? override : join(homedir(), ".claude-mobile", "audit", "audit.jsonl");
+}
+
 export function createAuditLog(
-  options: { path?: string; warn?: (message: string) => void } = {},
+  options: {
+    path?: string;
+    warn?: (message: string) => void;
+    env?: Record<string, string | undefined>;
+  } = {},
 ): AuditLog {
-  const path = options.path ?? join(homedir(), ".claude-mobile", "audit", "audit.jsonl");
+  const path = options.path ?? defaultAuditLogPath(options.env ?? process.env);
   const warn = options.warn ?? console.warn;
   let warned = false;
 
