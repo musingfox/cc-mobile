@@ -84,6 +84,13 @@ export type SessionDescriptorFlags = {
   origin: "self" | "foreign";
   drivable: boolean;
   readable: boolean;
+  /**
+   * Why `readable` is false; absent when it is true. `"pending"` means the
+   * transcript is not written yet and a message will start it, `"unsupported"`
+   * means this build cannot read that pane back at all — the difference between
+   * an empty screen that is waiting for you and one that will stay empty.
+   */
+  unreadableReason?: "pending" | "unsupported";
   gated: boolean;
   /**
    * Which agent runs in that pane, in herdr's own wording. Absent when herdr
@@ -833,7 +840,9 @@ export const useAppStore = create<AppState>((set) => ({
       const messages = [...kept];
       const indexOfRecord = new Map<string, number>();
       const keyOf = (message: { recordId?: string; blockIndex?: number }) =>
-        message.recordId === undefined ? undefined : `${message.recordId}#${message.blockIndex ?? 0}`;
+        message.recordId === undefined
+          ? undefined
+          : `${message.recordId}#${message.blockIndex ?? 0}`;
       messages.forEach((message, index) => {
         const key = keyOf(message);
         if (key !== undefined) indexOfRecord.set(key, index);
@@ -873,11 +882,7 @@ export const useAppStore = create<AppState>((set) => ({
       // A reset invalidates the cursor (it points into the file we just left),
       // but this very delivery may be the page that supplies the new one.
       const pagingCursor =
-        apply.nextBefore !== undefined
-          ? apply.nextBefore
-          : isReset
-            ? null
-            : session.pagingCursor;
+        apply.nextBefore !== undefined ? apply.nextBefore : isReset ? null : session.pagingCursor;
 
       const next = new Map(state.sessions);
       next.set(sessionId, {

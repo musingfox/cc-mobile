@@ -88,6 +88,14 @@ export default function ChatScreen({ onNavigate }: Props) {
   // becomes readable then. Nothing pushes the change, so the affordance follows
   // whatever the most recent listing said.
   const historyReadable = session?.descriptor?.readable === true;
+  // The blank screen this ticket exists to kill. A pane whose kind has no
+  // reader shows nothing and never will, which reads as a broken app rather
+  // than as a missing capability; one that is merely unwritten wants the
+  // ordinary invitation to type instead.
+  const unreadableNotice =
+    session?.descriptor?.unreadableReason === "unsupported"
+      ? "Replies can't be read back for this session."
+      : null;
   const pagingCursor = session?.pagingCursor ?? null;
   const historyLoading = Boolean(session?.transcriptPageRequest);
 
@@ -351,7 +359,9 @@ export default function ChatScreen({ onNavigate }: Props) {
         )}
 
         {messages.length === 0 && !isStreaming && !terminalStarting && !historyLoading && (
-          <div className="lin-chat-empty-inline">Type a message to start.</div>
+          <div className="lin-chat-empty-inline">
+            {unreadableNotice ?? "Type a message to start."}
+          </div>
         )}
 
         {messages.map((m) => {

@@ -15,7 +15,6 @@ import { hapticService } from "./haptic";
 import { notificationService } from "./notification";
 import { saveProject } from "./projects";
 import { toastService } from "./toast-service";
-import { messagesFromProjectedChunk } from "./transcript-projection";
 import {
   type CompactBoundaryEvent,
   isApiRetry,
@@ -35,6 +34,7 @@ import {
   type PermissionDeniedEvent,
   type TerminalReason,
 } from "./tool-events";
+import { messagesFromProjectedChunk } from "./transcript-projection";
 
 /**
  * Resolve the subagent attribution for a completed tool by walking
@@ -366,7 +366,10 @@ class WsService {
   // reply that means the turn never happened: the bubble has to come back off
   // the screen and the text has to go back in the composer, or the user loses
   // what they typed to a send that was never made.
-  private lastOptimisticSend = new Map<string, Array<{ messageId: string; prompt: string; sentAt: number }>>();
+  private lastOptimisticSend = new Map<
+    string,
+    Array<{ messageId: string; prompt: string; sentAt: number }>
+  >();
 
   private sendMessage(msg: Record<string, unknown>) {
     if (!this.ws) return;
@@ -568,6 +571,9 @@ class WsService {
             origin: entry.origin === "self" ? "self" : "foreign",
             drivable: entry.drivable !== false,
             readable: entry.readable === true,
+            ...(entry.unreadableReason === "pending" || entry.unreadableReason === "unsupported"
+              ? { unreadableReason: entry.unreadableReason }
+              : {}),
             gated: entry.gated !== false,
             agent: typeof entry.agent === "string" ? entry.agent : undefined,
           });
@@ -779,8 +785,10 @@ class WsService {
           }
         }
 
-        const projected = messagesFromProjectedChunk(chunk, (part, index) =>
-          `msg-${typeof chunk.recordId === "string" ? chunk.recordId : Date.now()}-${index}-${Math.random()}`,
+        const projected = messagesFromProjectedChunk(
+          chunk,
+          (part, index) =>
+            `msg-${typeof chunk.recordId === "string" ? chunk.recordId : Date.now()}-${index}-${Math.random()}`,
         );
         const session = store.sessions.get(sessionId);
         if (!session) break;
@@ -794,13 +802,17 @@ class WsService {
             messages: projected,
           });
         } else if (chunk.type === "user") {
-          const userText = projected.find((m) => m.kind === undefined && m.role === "user")?.content;
+          const userText = projected.find(
+            (m) => m.kind === undefined && m.role === "user",
+          )?.content;
           const pending = this.lastOptimisticSend.get(sessionId) ?? [];
           const now = Date.now();
           let echoId: string | undefined;
           if (userText) {
             const paired = pending.findIndex(
-              (send) => send.prompt.trim() === userText.trim() && now - send.sentAt < ECHO_PAIRING_WINDOW_MS,
+              (send) =>
+                send.prompt.trim() === userText.trim() &&
+                now - send.sentAt < ECHO_PAIRING_WINDOW_MS,
             );
             if (paired >= 0) {
               const [echo] = pending.splice(paired, 1);
@@ -932,8 +944,10 @@ class WsService {
         const records = (msg.records as Record<string, unknown>[]) ?? [];
         const messages: Message[] = [];
         for (const record of records) {
-          const parts = messagesFromProjectedChunk(record, (_part, index) =>
-            `page-${(record.recordId as string) ?? messages.length}-${index}-${Math.random()}`,
+          const parts = messagesFromProjectedChunk(
+            record,
+            (_part, index) =>
+              `page-${(record.recordId as string) ?? messages.length}-${index}-${Math.random()}`,
           );
           messages.push(...parts);
         }
@@ -1036,7 +1050,8 @@ class WsService {
           const arr = this.lastOptimisticSend.get(sessionId) || [];
           if (arr.length) {
             const attempted = arr.pop()!;
-            if (arr.length === 0) this.lastOptimisticSend.delete(sessionId); else this.lastOptimisticSend.set(sessionId, arr);
+            if (arr.length === 0) this.lastOptimisticSend.delete(sessionId);
+            else this.lastOptimisticSend.set(sessionId, arr);
             store.removeMessage(sessionId, attempted.messageId);
             if (store.activeSessionId === sessionId && store.inputDraft.trim() === "") {
               store.setInputDraft(attempted.prompt);

@@ -47,8 +47,12 @@ function record(recordId: string, seq: number): Message {
   };
 }
 
+/** The one string the unreadable notice renders; pinned so a reword breaks here. */
+const UNREADABLE_NOTICE = "Replies can't be read back for this session.";
+
 function openSession(options: {
   readable?: boolean | undefined;
+  unreadableReason?: "pending" | "unsupported";
   messages?: Message[];
   pagingCursor?: TranscriptCursor | null;
   inFlight?: boolean;
@@ -71,6 +75,7 @@ function openSession(options: {
               origin: "self",
               drivable: true,
               readable: options.readable,
+              ...(options.unreadableReason ? { unreadableReason: options.unreadableReason } : {}),
               gated: false,
             },
           }),
@@ -137,10 +142,29 @@ describe("HistoryAffordanceFollowsReadable", () => {
     expect(requests).toHaveLength(0);
   });
 
-  test("T4: an unreadable session with no messages keeps the existing empty state", () => {
-    openSession({ readable: false });
+  test("T4: a session nobody has spoken to yet keeps the existing empty state", () => {
+    // omp before its first turn: the transcript is missing because there is
+    // nothing to say yet, and the invitation to type is exactly right.
+    openSession({ readable: false, unreadableReason: "pending" });
     const { queryByText } = render(<ChatScreen onNavigate={() => {}} />);
     expect(queryByText("Type a message to start.")).not.toBeNull();
+    expect(queryByText(UNREADABLE_NOTICE)).toBeNull();
+  });
+
+  test("T4b: a session with no reader says so instead of showing a blank", () => {
+    // The failure this whole ticket exists to kill: a pane running a kind this
+    // build cannot read back looked identical to a brand-new session, so the
+    // silence read as "broken" rather than "no readback here".
+    openSession({ readable: false, unreadableReason: "unsupported" });
+    const { queryByText } = render(<ChatScreen onNavigate={() => {}} />);
+    expect(queryByText(UNREADABLE_NOTICE)).not.toBeNull();
+    expect(queryByText("Type a message to start.")).toBeNull();
+  });
+
+  test("T4c: a session with messages on screen is not blank, so it gets no notice", () => {
+    openSession({ readable: false, unreadableReason: "unsupported", messages: [record("a", 10)] });
+    const { queryByText } = render(<ChatScreen onNavigate={() => {}} />);
+    expect(queryByText(UNREADABLE_NOTICE)).toBeNull();
   });
 
   test("T5: an agent exiting takes the affordance away and leaves the messages", () => {
