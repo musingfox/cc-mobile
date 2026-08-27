@@ -1,5 +1,6 @@
 import { expect, it } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import { createHerdrClient } from "../herdr/client";
@@ -59,12 +60,21 @@ function reserveEphemeralPort(): number {
   return port;
 }
 
-/** Spawns `bun server/index.ts --port <port>` as a real killable OS process. */
-function spawnServer(port: number): Bun.Subprocess {
+/**
+ * Spawns `bun server/index.ts --port <port>` as a real killable OS process.
+ *
+ * The server runs in its own process, so there is no `createApp` seam to inject
+ * an audit path through; `CC_MOBILE_AUDIT_LOG` is the only way to keep this
+ * suite's records out of the developer's own `~/.claude-mobile`. `process.env`
+ * is spread rather than replaced — the child still needs PATH and whatever
+ * resolves the herdr socket.
+ */
+function spawnServer(port: number, auditDir: string): Bun.Subprocess {
   return Bun.spawn(
     [process.execPath, SERVER_ENTRY, "--port", String(port), "--hostname", "127.0.0.1"],
     {
       cwd: REPO_ROOT,
+      env: { ...process.env, CC_MOBILE_AUDIT_LOG: join(auditDir, "audit.jsonl") },
       stdout: "inherit",
       stderr: "inherit",
     },
@@ -255,10 +265,11 @@ it.skipIf(!existsSync(socketPath))(
     let wsB: WebSocket | undefined;
     let workspaceId: string | undefined;
     let tornDown = false;
+    const auditDir = mkdtempSync(join(tmpdir(), "ccme2e-audit-"));
 
     try {
       // Step 1: server process A — a real OS process we can kill.
-      procA = spawnServer(port);
+      procA = spawnServer(port, auditDir);
       await waitForServerReady(procA, port, "server A");
 
       // Step 2: create the live session over the mobile protocol.
@@ -304,7 +315,7 @@ it.skipIf(!existsSync(socketPath))(
 
       // Step 6: server process B on the same port.
       const t6 = Date.now();
-      procB = spawnServer(port);
+      procB = spawnServer(port, auditDir);
       await waitForServerReady(procB, port, "server B");
       console.log(`[e2e] step 6 server B ready in ${Date.now() - t6}ms`);
 
@@ -362,6 +373,7 @@ it.skipIf(!existsSync(socketPath))(
       }
       await killQuietly(procA);
       await killQuietly(procB);
+      rmSync(auditDir, { recursive: true, force: true });
     }
   },
   TEST_TIMEOUT_MS,
