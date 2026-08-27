@@ -248,6 +248,12 @@ at 200 characters. `ip` prefers the first hop of `X-Forwarded-For` (what
 The server-initiated 90-second auto-deny is audited too, as
 `auto_deny_keys_send` with `ip` and `device` null — no device pressed it.
 
+`CC_MOBILE_AUDIT_LOG` moves the file. It exists for the one caller a test cannot
+inject into — an e2e that spawns `bun server/index.ts` as its own OS process has
+no `createApp` seam, and redirecting `HOME` instead would move the herdr socket
+and claude's transcripts with it. Whitespace-only counts as unset, the same
+convention `CC_MOBILE_TRUSTED_USER` uses.
+
 Directory 0700, file 0600, both re-asserted on every append. At 5 MiB the file is
 renamed `.1` (chmod first, so the rotated copy inherits 0600) and a fresh one
 started; exactly one rotated copy is kept.
