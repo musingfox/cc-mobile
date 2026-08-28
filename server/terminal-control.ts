@@ -13,8 +13,8 @@
 
 import type { LaunchableAgentKind } from "./agents/kinds";
 import type { AgentProfileSource } from "./agents/profiles";
-import type { CreateSessionInput } from "./terminal-backend";
 import { expandPath, validateAllowedPath, validateCwd } from "./path-utils";
+import type { CreateSessionInput } from "./terminal-backend";
 
 /** The slice of the terminal backend these handlers need. */
 export interface TerminalControlBackend {
@@ -61,6 +61,14 @@ export async function handleTerminalCreate(
   const profile = msg.profileId
     ? deps.agentProfiles?.list().find(({ id }) => id === msg.profileId)
     : undefined;
+  if (msg.profileId && !profile) {
+    send({
+      type: "error",
+      code: "unknown_profile",
+      message: `Unknown agent profile: ${msg.profileId}`,
+    });
+    return;
+  }
   try {
     const cwd = expandPath(msg.cwd);
 

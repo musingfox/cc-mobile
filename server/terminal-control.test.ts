@@ -8,10 +8,14 @@
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { mkdirSync, realpathSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentProfile, AgentProfileSource } from "./agents/profiles";
+import {
+  type AgentProfile,
+  type AgentProfileSource,
+  createAgentProfileSource,
+} from "./agents/profiles";
 import type { CreateSessionInput } from "./terminal-backend";
 import {
   handleTerminalCreate,
@@ -145,9 +149,7 @@ describe("handleTerminalCreate — profile resolution", () => {
       { backend, allowedRoots: null, send },
     );
 
-    expect(createSessionCalls).toEqual([
-      { claudeUuid: "u1", cwd: "/tmp", agentKind: "omp" },
-    ]);
+    expect(createSessionCalls).toEqual([{ claudeUuid: "u1", cwd: "/tmp", agentKind: "omp" }]);
     expect(Object.hasOwn(createSessionCalls[0]!, "profileArgs")).toBe(false);
   });
 
@@ -161,9 +163,7 @@ describe("handleTerminalCreate — profile resolution", () => {
         backend,
         allowedRoots: null,
         send,
-        agentProfiles: profileSource([
-          { id: "p-omp", label: "omp ask", kind: "omp", args: [] },
-        ]),
+        agentProfiles: profileSource([{ id: "p-omp", label: "omp ask", kind: "omp", args: [] }]),
       },
     );
 
@@ -183,9 +183,7 @@ describe("handleTerminalCreate — selector validation", () => {
         backend,
         allowedRoots: null,
         send,
-        agentProfiles: profileSource([
-          { id: "p-omp", label: "omp ask", kind: "omp", args: [] },
-        ]),
+        agentProfiles: profileSource([{ id: "p-omp", label: "omp ask", kind: "omp", args: [] }]),
       },
     );
 
@@ -196,6 +194,51 @@ describe("handleTerminalCreate — selector validation", () => {
         message: "agentKind and profileId are mutually exclusive",
       },
     ]);
+    expect(createSessionCalls).toHaveLength(0);
+  });
+});
+
+describe("handleTerminalCreate — unknown profiles", () => {
+  it("refuses an unknown profile before session creation", async () => {
+    const { backend, createSessionCalls } = makeFakeBackend();
+    const { send, sent } = makeSendSpy();
+
+    await handleTerminalCreate(
+      { claudeUuid: "u1", cwd: "/tmp", profileId: "nope" },
+      { backend, allowedRoots: null, send, agentProfiles: profileSource([]) },
+    );
+
+    expect(sent[0]?.code).toBe("unknown_profile");
+    expect(createSessionCalls).toHaveLength(0);
+  });
+
+  it("refuses a profile dropped because its binary is absent from PATH", async () => {
+    const directory = mkdtempSync(join(testRoot, "profiles-"));
+    const path = join(directory, "profiles.json");
+    writeFileSync(path, JSON.stringify([{ id: "p-omp", label: "omp ask", kind: "omp", args: [] }]));
+
+    // The empty PATH is held only across the synchronous load — list() is all
+    // readFileSync/Bun.which — so no other test's async work can observe it.
+    const originalPath = process.env.PATH;
+    let loaded: AgentProfile[];
+    try {
+      process.env.PATH = "";
+      loaded = createAgentProfileSource({ path }).list();
+    } finally {
+      process.env.PATH = originalPath;
+      rmSync(directory, { recursive: true, force: true });
+    }
+    expect(loaded).toEqual([]);
+
+    const { backend, createSessionCalls } = makeFakeBackend();
+    const { send, sent } = makeSendSpy();
+
+    await handleTerminalCreate(
+      { claudeUuid: "u1", cwd: "/tmp", profileId: "p-omp" },
+      { backend, allowedRoots: null, send, agentProfiles: profileSource(loaded) },
+    );
+
+    expect(sent[0]?.code).toBe("unknown_profile");
     expect(createSessionCalls).toHaveLength(0);
   });
 });
