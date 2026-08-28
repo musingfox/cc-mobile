@@ -1151,6 +1151,29 @@ class WsService {
   }
 
   /**
+   * Starts a live session from one of the server's launch profiles. Same
+   * optimistic opening as `createTerminalSession` — the chat is navigable
+   * immediately — but the only selector on the wire is the profile's id.
+   *
+   * Deliberately a separate method rather than a third argument: the server
+   * refuses a `terminal_create` carrying both `agentKind` and `profileId` as
+   * `invalid_message`, and a call site that cannot express the ambiguity
+   * cannot produce it. The argv the profile expands to stays on the server and
+   * never travels here.
+   * Returns the generated claudeUuid, or null when the socket is down.
+   */
+  createTerminalSessionFromProfile(cwd: string, profileId: string): string | null {
+    if (!this.ws) return null;
+
+    const claudeUuid = randomUuid();
+    useAppStore.getState().addSession(claudeUuid, cwd, { ready: false });
+    this.pendingTerminalCreates.add(claudeUuid);
+    this.sendMessage({ type: "terminal_create", claudeUuid, cwd, profileId });
+
+    return claudeUuid;
+  }
+
+  /**
    * Asks a session for one page of its own transcript: the newest page when
    * `before` is absent, the page immediately older than that cursor otherwise.
    *

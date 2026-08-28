@@ -82,6 +82,47 @@ describe("wsService terminal session create", () => {
     expect(useAppStore.getState().availableAgents).toEqual(["claude", "omp"]);
   });
 
+  test("a profile launch sends its id alone — no agentKind, no args", () => {
+    const claudeUuid = wsService.createTerminalSessionFromProfile("/a", "p1");
+
+    expect(claudeUuid).not.toBeNull();
+    expect(fake.send).toHaveBeenCalledTimes(1);
+    const payload = JSON.parse(fake.send.mock.calls[0][0] as string);
+    // Deep-equal, so a stray agentKind or args key fails here: the server
+    // refuses a message carrying both selectors as invalid_message.
+    expect(payload).toEqual({
+      type: "terminal_create",
+      claudeUuid,
+      cwd: "/a",
+      profileId: "p1",
+    });
+
+    const session = useAppStore.getState().sessions.get(claudeUuid as string);
+    expect(session).toBeDefined();
+    expect(session?.cwd).toBe("/a");
+    expect(session?.terminal?.ready).toBe(false);
+  });
+
+  test("a profile launch is a no-op when the socket is down", () => {
+    getInternal().ws = null;
+
+    expect(wsService.createTerminalSessionFromProfile("/a", "p1")).toBeNull();
+    expect(fake.send).toHaveBeenCalledTimes(0);
+    expect(useAppStore.getState().sessions.size).toBe(0);
+  });
+
+  test("an unknown profile refusal surfaces as the global error", () => {
+    toastService.error = mock((_msg: string): string | number => 0) as typeof toastService.error;
+
+    getInternal().handleMessage({
+      type: "error",
+      code: "unknown_profile",
+      message: "No such launch profile: p1",
+    });
+
+    expect(useAppStore.getState().globalError).toBe("No such launch profile: p1");
+  });
+
   test("server_config's agentProfiles reaches the store, and a partial config leaves it alone", () => {
     getInternal().handleMessage({
       type: "server_config",
