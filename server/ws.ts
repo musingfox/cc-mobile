@@ -205,6 +205,7 @@ export function createWsPlugin(
         await handleTerminalCreate(message, {
           backend,
           allowedRoots: serverConfig.allowedRoots,
+          agentProfiles,
           // The success ack is buffered so a client that blinked during the
           // create — readiness gating makes that a multi-second window — still
           // receives it on reconnect via replay. Errors stay bare: they carry

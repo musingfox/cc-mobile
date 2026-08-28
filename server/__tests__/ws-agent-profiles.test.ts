@@ -55,3 +55,36 @@ describe("AgentProfileWireExposure", () => {
     expect(config.agentProfiles).toEqual([]);
   });
 });
+
+describe("ConflictingSelectorRefused", () => {
+  test("websocket rejects agentKind plus profileId with one error frame", async () => {
+    let createSessionCalls = 0;
+    harness = await startWsHarness(
+      {
+        createSession: async () => {
+          createSessionCalls += 1;
+          return { name: "cc-u1", paneRef: "7" };
+        },
+      },
+      testServerConfig,
+      {
+        agentProfiles: profileSource([
+          { id: "p-omp", label: "omp ask", kind: "omp", args: [] },
+        ]),
+      },
+    );
+
+    harness.send({
+      type: "terminal_create",
+      claudeUuid: "u1",
+      cwd: "/tmp",
+      agentKind: "omp",
+      profileId: "p-omp",
+    });
+    const frame = await harness.waitFor((message) => message.type === "error");
+
+    expect(frame.code).toBe("invalid_message");
+    expect(harness.received).toEqual([frame]);
+    expect(createSessionCalls).toBe(0);
+  });
+});

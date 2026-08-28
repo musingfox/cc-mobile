@@ -12,6 +12,7 @@
  */
 
 import type { LaunchableAgentKind } from "./agents/kinds";
+import type { AgentProfileSource } from "./agents/profiles";
 import { expandPath, validateAllowedPath, validateCwd } from "./path-utils";
 
 /** The slice of the terminal backend these handlers need. */
@@ -33,6 +34,7 @@ export interface TerminalControlDeps {
   backend: TerminalControlBackend;
   allowedRoots: string[] | null;
   send: (msg: Record<string, unknown>) => void;
+  agentProfiles?: AgentProfileSource;
 }
 
 /**
@@ -42,10 +44,23 @@ export interface TerminalControlDeps {
  * path_not_allowed / terminal_error.
  */
 export async function handleTerminalCreate(
-  msg: { claudeUuid: string; cwd: string; agentKind?: LaunchableAgentKind },
+  msg: {
+    claudeUuid: string;
+    cwd: string;
+    agentKind?: LaunchableAgentKind;
+    profileId?: string;
+  },
   deps: TerminalControlDeps,
 ): Promise<void> {
   const { backend, allowedRoots, send } = deps;
+  if (msg.agentKind && msg.profileId) {
+    send({
+      type: "error",
+      code: "invalid_message",
+      message: "agentKind and profileId are mutually exclusive",
+    });
+    return;
+  }
   try {
     const cwd = expandPath(msg.cwd);
 

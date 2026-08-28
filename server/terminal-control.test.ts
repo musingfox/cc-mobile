@@ -11,6 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { AgentProfile, AgentProfileSource } from "./agents/profiles";
 import {
   handleTerminalCreate,
   handleTerminalTeardown,
@@ -34,7 +35,7 @@ afterAll(() => {
 });
 
 function makeFakeBackend(overrides: Partial<TerminalControlBackend> = {}) {
-  const createSessionCalls: Array<{ claudeUuid: string; cwd: string }> = [];
+  const createSessionCalls: Parameters<TerminalControlBackend["createSession"]>[0][] = [];
   const teardownCalls: string[] = [];
 
   const backend: TerminalControlBackend = {
@@ -55,6 +56,10 @@ function makeFakeBackend(overrides: Partial<TerminalControlBackend> = {}) {
 function makeSendSpy() {
   const sent: Record<string, unknown>[] = [];
   return { send: (msg: Record<string, unknown>) => sent.push(msg), sent };
+}
+
+function profileSource(profiles: AgentProfile[]): AgentProfileSource {
+  return { list: () => profiles };
 }
 
 // ── handleTerminalCreate ─────────────────────────────────────────────────────────
@@ -94,6 +99,34 @@ describe("handleTerminalCreate — happy path", () => {
 
     expect(createSessionCalls[0]?.cwd).not.toBe("~");
     expect(createSessionCalls[0]?.cwd.startsWith("/")).toBe(true);
+  });
+});
+
+describe("handleTerminalCreate — selector validation", () => {
+  it("rejects a request carrying both agentKind and profileId before creation", async () => {
+    const { backend, createSessionCalls } = makeFakeBackend();
+    const { send, sent } = makeSendSpy();
+
+    await handleTerminalCreate(
+      { claudeUuid: "u1", cwd: "/tmp", agentKind: "omp", profileId: "p-omp" },
+      {
+        backend,
+        allowedRoots: null,
+        send,
+        agentProfiles: profileSource([
+          { id: "p-omp", label: "omp ask", kind: "omp", args: [] },
+        ]),
+      },
+    );
+
+    expect(sent).toEqual([
+      {
+        type: "error",
+        code: "invalid_message",
+        message: "agentKind and profileId are mutually exclusive",
+      },
+    ]);
+    expect(createSessionCalls).toHaveLength(0);
   });
 });
 
