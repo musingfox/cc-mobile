@@ -13,15 +13,12 @@
 
 import type { LaunchableAgentKind } from "./agents/kinds";
 import type { AgentProfileSource } from "./agents/profiles";
+import type { CreateSessionInput } from "./terminal-backend";
 import { expandPath, validateAllowedPath, validateCwd } from "./path-utils";
 
 /** The slice of the terminal backend these handlers need. */
 export interface TerminalControlBackend {
-  createSession(params: {
-    claudeUuid: string;
-    cwd: string;
-    agentKind?: LaunchableAgentKind;
-  }): Promise<{ name: string; paneRef: string }>;
+  createSession(params: CreateSessionInput): Promise<{ name: string; paneRef: string }>;
   /**
    * Idempotent: an unknown session resolves to `{killed:false}` rather than
    * throwing. A pane cc-mobile did not launch answers `{killed:false,
@@ -61,6 +58,9 @@ export async function handleTerminalCreate(
     });
     return;
   }
+  const profile = msg.profileId
+    ? deps.agentProfiles?.list().find(({ id }) => id === msg.profileId)
+    : undefined;
   try {
     const cwd = expandPath(msg.cwd);
 
@@ -82,7 +82,11 @@ export async function handleTerminalCreate(
     const info = await backend.createSession({
       claudeUuid: msg.claudeUuid,
       cwd,
-      agentKind: msg.agentKind,
+      ...(profile
+        ? { agentKind: profile.kind, profileArgs: profile.args }
+        : msg.agentKind
+          ? { agentKind: msg.agentKind }
+          : {}),
     });
     send({
       type: "terminal_created",

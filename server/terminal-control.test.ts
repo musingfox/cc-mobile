@@ -12,6 +12,7 @@ import { mkdirSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentProfile, AgentProfileSource } from "./agents/profiles";
+import type { CreateSessionInput } from "./terminal-backend";
 import {
   handleTerminalCreate,
   handleTerminalTeardown,
@@ -35,7 +36,7 @@ afterAll(() => {
 });
 
 function makeFakeBackend(overrides: Partial<TerminalControlBackend> = {}) {
-  const createSessionCalls: Parameters<TerminalControlBackend["createSession"]>[0][] = [];
+  const createSessionCalls: CreateSessionInput[] = [];
   const teardownCalls: string[] = [];
 
   const backend: TerminalControlBackend = {
@@ -99,6 +100,75 @@ describe("handleTerminalCreate — happy path", () => {
 
     expect(createSessionCalls[0]?.cwd).not.toBe("~");
     expect(createSessionCalls[0]?.cwd.startsWith("/")).toBe(true);
+  });
+});
+
+describe("handleTerminalCreate — profile resolution", () => {
+  it("resolves a known profile to its kind and argv", async () => {
+    const { backend, createSessionCalls } = makeFakeBackend();
+    const { send, sent } = makeSendSpy();
+
+    await handleTerminalCreate(
+      { claudeUuid: "u1", cwd: "/tmp", profileId: "p-omp" },
+      {
+        backend,
+        allowedRoots: null,
+        send,
+        agentProfiles: profileSource([
+          {
+            id: "p-omp",
+            label: "omp ask",
+            kind: "omp",
+            args: ["--approval-mode", "always-ask"],
+          },
+        ]),
+      },
+    );
+
+    expect(createSessionCalls).toEqual([
+      {
+        claudeUuid: "u1",
+        cwd: "/tmp",
+        agentKind: "omp",
+        profileArgs: ["--approval-mode", "always-ask"],
+      },
+    ]);
+    expect(sent[0]?.type).toBe("terminal_created");
+  });
+
+  it("keeps cached agentKind launches free of a profileArgs key", async () => {
+    const { backend, createSessionCalls } = makeFakeBackend();
+    const { send } = makeSendSpy();
+
+    await handleTerminalCreate(
+      { claudeUuid: "u1", cwd: "/tmp", agentKind: "omp" },
+      { backend, allowedRoots: null, send },
+    );
+
+    expect(createSessionCalls).toEqual([
+      { claudeUuid: "u1", cwd: "/tmp", agentKind: "omp" },
+    ]);
+    expect(Object.hasOwn(createSessionCalls[0]!, "profileArgs")).toBe(false);
+  });
+
+  it("refuses an invalid cwd before launching a known profile", async () => {
+    const { backend, createSessionCalls } = makeFakeBackend();
+    const { send, sent } = makeSendSpy();
+
+    await handleTerminalCreate(
+      { claudeUuid: "u1", cwd: "/definitely/not/here", profileId: "p-omp" },
+      {
+        backend,
+        allowedRoots: null,
+        send,
+        agentProfiles: profileSource([
+          { id: "p-omp", label: "omp ask", kind: "omp", args: [] },
+        ]),
+      },
+    );
+
+    expect(sent[0]?.code).toBe("invalid_cwd");
+    expect(createSessionCalls).toHaveLength(0);
   });
 });
 
