@@ -117,6 +117,63 @@ describe("HerdrCreateSession", () => {
     });
   });
 
+  test("passes omp profile argv through verbatim", async () => {
+    const fake = makeFakeClient();
+    const registry = makeRegistry(fake);
+
+    await registry.createSession({
+      claudeUuid: UUID,
+      cwd: "/tmp",
+      agentKind: "omp",
+      profileArgs: ["--config", "/x.yml"],
+    });
+
+    expect(fake.calls[1]?.params).toEqual({
+      name: "ccm-3f2a9b01",
+      kind: "omp",
+      pane_id: "p1",
+      args: ["--config", "/x.yml"],
+    });
+  });
+
+  test("appends claude profile argv after the session id", async () => {
+    const fake = makeFakeClient();
+    const registry = makeRegistry(fake);
+
+    await registry.createSession({
+      claudeUuid: UUID,
+      cwd: "/tmp",
+      agentKind: "claude",
+      profileArgs: ["--foo"],
+    });
+
+    expect(fake.calls[1]?.params).toEqual({
+      name: "ccm-3f2a9b01",
+      kind: "claude",
+      pane_id: "p1",
+      args: ["--session-id", UUID, "--foo"],
+    });
+  });
+
+  test("does not filter operator-supplied profile argv", async () => {
+    const fake = makeFakeClient();
+    const registry = makeRegistry(fake);
+
+    await registry.createSession({
+      claudeUuid: UUID,
+      cwd: "/tmp",
+      agentKind: "omp",
+      profileArgs: ["--approval-mode", "always-ask"],
+    });
+
+    expect(fake.calls[1]?.params).toEqual({
+      name: "ccm-3f2a9b01",
+      kind: "omp",
+      pane_id: "p1",
+      args: ["--approval-mode", "always-ask"],
+    });
+  });
+
   test("an absent agentKind still launches claude", async () => {
     const fake = makeFakeClient();
     const registry = makeRegistry(fake);
@@ -128,9 +185,9 @@ describe("HerdrCreateSession", () => {
     expect((fake.calls[1]?.params as { args: string[] }).args).toEqual(["--session-id", UUID]);
   });
 
-  test("no launch carries a gating flag, whatever the kind", async () => {
-    // The posture of a session the user will share with their own terminal is
-    // the agent's own setting to hold, not cc-mobile's to impose.
+  test("registry-generated argv carries no gating flag, whatever the kind", async () => {
+    // cc-mobile's own argv does not impose a safety posture. Operator-supplied
+    // profile argv is passed through verbatim and covered separately above.
     for (const agentKind of ["claude", "omp"] as const) {
       const fake = makeFakeClient();
       const registry = makeRegistry(fake);
