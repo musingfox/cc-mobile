@@ -19,7 +19,7 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Elysia } from "elysia";
-import { createAgentProfileSource, type AgentProfileSource } from "./agents/profiles";
+import { type AgentProfileSource, createAgentProfileSource } from "./agents/profiles";
 import { createAuditLog } from "./audit/audit-log";
 import type { ServerConfig } from "./config";
 import { EventBuffer } from "./event-buffer";

@@ -33,7 +33,7 @@ describe("AgentProfileWireExposure", () => {
     const profiles = config.agentProfiles as Record<string, unknown>[];
 
     expect(profiles).toEqual([{ id: "p1", label: "omp · codex", kind: "omp" }]);
-    expect(Object.keys(profiles[0]!).sort()).toEqual(["id", "kind", "label"]);
+    expect(Object.keys(profiles[0] ?? {}).sort()).toEqual(["id", "kind", "label"]);
     expect(ServerMessage.safeParse(frame).success).toBe(true);
   });
 
@@ -68,9 +68,7 @@ describe("ConflictingSelectorRefused", () => {
       },
       testServerConfig,
       {
-        agentProfiles: profileSource([
-          { id: "p-omp", label: "omp ask", kind: "omp", args: [] },
-        ]),
+        agentProfiles: profileSource([{ id: "p-omp", label: "omp ask", kind: "omp", args: [] }]),
       },
     );
 

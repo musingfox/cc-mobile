@@ -8,11 +8,11 @@
  * involved; the port is local and released at the end of each test.
  */
 
-import { emptyAgentProfileSource, type AgentProfileSource } from "../agents/profiles";
+import { type AgentProfileSource, emptyAgentProfileSource } from "../agents/profiles";
+import type { AuditLog } from "../audit/audit-log";
 import type { ServerConfig } from "../config";
 import { EventBuffer } from "../event-buffer";
 import type { SessionManager } from "../session-manager";
-import type { AuditLog } from "../audit/audit-log";
 import { createWsPlugin, type WsBackend } from "../ws";
 
 export const testServerConfig: ServerConfig = {
@@ -71,9 +71,7 @@ export async function startWsHarness(
     .listen(0);
 
   const port = (app.server as { port: number }).port;
-  const query = overrides.deviceName
-    ? `?device=${encodeURIComponent(overrides.deviceName)}`
-    : "";
+  const query = overrides.deviceName ? `?device=${encodeURIComponent(overrides.deviceName)}` : "";
   const url = `ws://127.0.0.1:${port}${serverConfig.basePath}/ws${query}`;
   // happy-dom's client accepts browser protocols only, not Bun's header option.
   const socket = new WebSocket(url);

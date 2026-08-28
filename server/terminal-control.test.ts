@@ -150,7 +150,7 @@ describe("handleTerminalCreate — profile resolution", () => {
     );
 
     expect(createSessionCalls).toEqual([{ claudeUuid: "u1", cwd: "/tmp", agentKind: "omp" }]);
-    expect(Object.hasOwn(createSessionCalls[0]!, "profileArgs")).toBe(false);
+    expect(Object.hasOwn(createSessionCalls[0] ?? {}, "profileArgs")).toBe(false);
   });
 
   it("refuses an invalid cwd before launching a known profile", async () => {
