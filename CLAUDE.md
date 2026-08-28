@@ -207,9 +207,10 @@ for omp; the client answers with `optionId` either way.
 
 `gated` is read in each kind's own vocabulary, and the defaults point opposite
 ways: claude with no flag asks, omp with no flag does not (verified live —
-a default omp writes files without asking). cc-mobile launches omp with no
-approval flag by choice, so the prompts #33 handles are the ones on panes the
-user started themselves with `--approval-mode always-ask` / `write`.
+a default omp writes files without asking). cc-mobile's own argv adds no
+approval flag by choice, so the prompts #33 handles come from panes started
+with one elsewhere: the user's own terminal with `--approval-mode always-ask` /
+`write`, or an operator-declared profile that names the same flag.
 
 Refused by the Zod gate: `set_permission_mode`, `set_model`, `set_effort`,
 `set_env_vars` (the agent-settings controls, removed once it was settled that an
@@ -273,7 +274,18 @@ that can refuse a keystroke is a worse failure than a missing line.
 
 ## Security Constraints
 
-- cc-mobile sets no agent settings: no `--permission-mode` on launch, no CLI flag, and `set_permission_mode` / `set_model` / `set_effort` / `set_env_vars` are refused by the Zod gate. Each agent runs at its own configured posture (ADR-003 superseded; ADR-015 §2026-08-06). `sessions[].gated` still discloses an ungated pane by reading its argv.
+- cc-mobile generates no agent settings of its own: the argv it builds carries no
+  `--permission-mode`, no `--approval-mode`, no `--auto-approve`, and
+  `set_permission_mode` / `set_model` / `set_effort` / `set_env_vars` are refused by the Zod
+  gate — an agent's posture is the agent's own setting, not a phone's to decide (ADR-003
+  superseded; ADR-015 §2026-08-06). What an **operator-declared profile** carries is a separate
+  question: since 2026-08-28 a profile written on the server may supply any argv, gating flags
+  included, and it reaches `agent.start` unfiltered. That is a ruling, not an oversight — the
+  operator writing that file is the same person who could write a shell function and run it in
+  their own terminal, so filtering it would only pretend to a safety the machine's owner never
+  lost. The phone never names argv: it sends a profile id, and `agentProfiles` on the wire
+  carries no `args`. `sessions[].gated` still discloses an ungated pane by reading the live
+  process argv, so however a pane was started, its card says which it is.
 - `CC_MOBILE_ALLOWED_ROOTS` env var restricts allowed working directories
 - Tailscale network membership is the auth by default. `CC_MOBILE_TRUSTED_USER` narrows it to
   one identity: a single root gate (`server/request-gate.ts`) compares the `Tailscale-User-Login`

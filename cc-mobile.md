@@ -462,7 +462,7 @@ cloudflared tunnel --url http://localhost:3001
 ## Security Considerations
 
 1. **No auth on Tailscale** — acceptable because Tailscale is a private mesh network. Only your devices can connect.
-2. **cc-mobile sets no agent settings** — it passes no permission or approval flag when launching, so each agent gates exactly as its own configuration says. For claude with no flag that is still "ask on every tool use". ([ADR-003](docs/adr/003-permission-mode-default.md) superseded; ADR-015 §2026-08-06)
+2. **cc-mobile generates no agent settings** — the argv it builds itself carries no permission or approval flag, so an agent it launches gates exactly as its own configuration says; for claude with no flag that is still "ask on every tool use". ([ADR-003](docs/adr/003-permission-mode-default.md) superseded; ADR-015 §2026-08-06) An **operator-declared profile** is the exception, by ruling of 2026-08-28: argv the operator writes into the server's profile file is forwarded unfiltered, gating flags included, because that operator could equally have written a shell alias and run it themselves. The phone still never names argv — it sends a profile id, and the profile list on the wire omits `args`.
 3. **The session list discloses an ungated pane** — a `no permission gate` badge means that agent's argv says it will not stop to ask. Reading that flag is not setting it, and the badge never blocks driving the pane (Decision H4).
 4. **Session persistence** — SDK sessions are resumed via `resume: sessionId` option in each `query()` call.
 5. **WebSocket reconnect** — client auto-reconnects with exponential backoff (1s → 30s max).
