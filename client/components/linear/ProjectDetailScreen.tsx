@@ -51,6 +51,7 @@ export default function ProjectDetailScreen({ cwd, onNavigate, onBack }: Props) 
   const activeSessionId = useAppStore((s) => s.activeSessionId);
   const setActiveSession = useAppStore((s) => s.setActiveSession);
   const availableAgents = useAppStore((s) => s.availableAgents);
+  const agentProfiles = useAppStore((s) => s.agentProfiles);
 
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -104,6 +105,14 @@ export default function ProjectDetailScreen({ cwd, onNavigate, onBack }: Props) 
 
   const handleNewSession = (agentKind?: string) => {
     wsService.createTerminalSession(cwd, agentKind);
+    onNavigate("chat");
+  };
+
+  // A profile is answered with its id alone. Deliberately not routed through
+  // `handleNewSession`: the server refuses a create carrying both a kind and a
+  // profile, and a call site with no way to name a kind cannot produce that.
+  const handleNewSessionFromProfile = (profileId: string) => {
+    wsService.createTerminalSessionFromProfile(cwd, profileId);
     onNavigate("chat");
   };
 
@@ -233,6 +242,21 @@ export default function ProjectDetailScreen({ cwd, onNavigate, onBack }: Props) 
             <span>New session in this project</span>
           </button>
         )}
+        {/* Declared launch profiles, appended rather than substituted: the kind
+            buttons above are unchanged and this list is empty when the server
+            declares no profile. The label is the server's own wording and the
+            id is the only thing the tap sends. */}
+        {agentProfiles.map((profile) => (
+          <button
+            key={profile.id}
+            type="button"
+            className="lin-projects-cta"
+            onClick={() => handleNewSessionFromProfile(profile.id)}
+          >
+            <Icon name="plus" size={13} color={T.fg2} />
+            <span>{profile.label}</span>
+          </button>
+        ))}
       </footer>
     </div>
   );

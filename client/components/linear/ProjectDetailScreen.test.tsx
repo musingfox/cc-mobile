@@ -309,6 +309,110 @@ describe("ProjectDetailScreen new-session footer", () => {
 });
 
 /**
+ * Launch profiles in the footer. A profile is a named argv the server keeps to
+ * itself; the phone only ever knows its `id` and its `label`. The buttons are
+ * appended to the kind buttons rather than replacing them, and with no profile
+ * declared the footer is exactly the one pinned above.
+ */
+describe("ProjectDetailScreen launch-profile footer buttons", () => {
+  const created: Array<[string, string | undefined]> = [];
+  const fromProfile: Array<[string, string]> = [];
+  const originalCreate = wsService.createTerminalSession;
+  const originalFromProfile = wsService.createTerminalSessionFromProfile;
+
+  beforeEach(() => {
+    localStorage.clear();
+    created.length = 0;
+    fromProfile.length = 0;
+    wsService.createTerminalSession = ((cwd: string, agentKind?: string) => {
+      created.push([cwd, agentKind]);
+      return "u-new";
+    }) as typeof wsService.createTerminalSession;
+    wsService.createTerminalSessionFromProfile = ((cwd: string, profileId: string) => {
+      fromProfile.push([cwd, profileId]);
+      return "u-new";
+    }) as typeof wsService.createTerminalSessionFromProfile;
+    useAppStore.setState({
+      sessions: new Map(),
+      activeSessionId: null,
+      connectionState: "connected",
+      availableAgents: [],
+      agentProfiles: [],
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    localStorage.clear();
+    wsService.createTerminalSession = originalCreate;
+    wsService.createTerminalSessionFromProfile = originalFromProfile;
+    useAppStore.setState({ availableAgents: [], agentProfiles: [] });
+  });
+
+  function ctas(container: HTMLElement): HTMLButtonElement[] {
+    return Array.from(container.querySelectorAll(".lin-projects-cta"));
+  }
+
+  test("no declared profile leaves the single-kind footer exactly as it was", () => {
+    useAppStore.setState({ availableAgents: ["claude"], agentProfiles: [] });
+
+    const buttons = ctas(renderScreen("/a").container);
+    expect(buttons.length).toBe(1);
+    expect(buttons[0]?.textContent).toContain("New session in this project");
+  });
+
+  test("no declared profile leaves the multi-kind footer exactly as it was", () => {
+    useAppStore.setState({ availableAgents: ["claude", "omp"], agentProfiles: [] });
+
+    expect(ctas(renderScreen("/a").container).map((b) => b.textContent)).toEqual([
+      "New claude session",
+      "New omp session",
+    ]);
+  });
+
+  test("before server_config arrives the footer is still the single button", () => {
+    useAppStore.setState({ availableAgents: [], agentProfiles: [] });
+
+    expect(ctas(renderScreen("/a").container).length).toBe(1);
+  });
+
+  test("a declared profile is appended after the kind buttons, under its own label", () => {
+    useAppStore.setState({
+      availableAgents: ["claude", "omp"],
+      agentProfiles: [{ id: "p1", label: "omp · codex", kind: "omp" }],
+    });
+
+    const buttons = ctas(renderScreen("/a").container);
+    expect(buttons.length).toBe(3);
+    expect(buttons[2]?.textContent).toContain("omp · codex");
+  });
+
+  test("tapping a profile names only its id, never a kind", () => {
+    useAppStore.setState({
+      availableAgents: ["claude", "omp"],
+      agentProfiles: [{ id: "p1", label: "omp · codex", kind: "omp" }],
+    });
+
+    ctas(renderScreen("/a").container)[2]?.click();
+
+    expect(fromProfile).toEqual([["/a", "p1"]]);
+    expect(created).toEqual([]);
+  });
+
+  test("a profile joins the collapsed single-kind footer rather than replacing it", () => {
+    useAppStore.setState({
+      availableAgents: ["claude"],
+      agentProfiles: [{ id: "p1", label: "omp · codex", kind: "omp" }],
+    });
+
+    const buttons = ctas(renderScreen("/a").container);
+    expect(buttons.length).toBe(2);
+    expect(buttons[0]?.textContent).toContain("New session in this project");
+    expect(buttons[1]?.textContent).toContain("omp · codex");
+  });
+});
+
+/**
  * Closing a session. The control was dropped in the Linear redesign (c28f88b)
  * and `wsService.closeSession` sat with no caller from then on; this is that
  * caller. Closing kills the agent in the pane, so the two things worth pinning
