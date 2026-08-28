@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { Elysia, t } from "elysia";
 import { availableAgentKinds } from "./agents/kinds";
+import type { AgentProfileSource } from "./agents/profiles";
 import type { AuditLog, AuditRecordInput } from "./audit/audit-log";
 import { captureClientIdentity } from "./audit/client-identity";
 import type { ServerConfig } from "./config";
@@ -108,6 +109,7 @@ export interface WsCollaborators {
   eventBuffer: EventBuffer;
   clientSink: ClientSink;
   auditLog?: AuditLog;
+  agentProfiles: AgentProfileSource;
 }
 
 export function createWsPlugin(
@@ -115,7 +117,7 @@ export function createWsPlugin(
   serverConfig: ServerConfig,
   collaborators: WsCollaborators,
 ) {
-  const { backend, eventBuffer, clientSink, auditLog } = collaborators;
+  const { backend, eventBuffer, clientSink, auditLog, agentProfiles } = collaborators;
   const wsPath = buildUrl(serverConfig.basePath, "/ws");
   async function audit(record: AuditRecordInput): Promise<void> {
     try {
@@ -351,6 +353,9 @@ export function createWsPlugin(
                 // while the server runs should show up on the next reload, not
                 // require a restart (#31).
                 availableAgents: availableAgentKinds(),
+                agentProfiles: agentProfiles
+                  .list()
+                  .map(({ id, label, kind }) => ({ id, label, kind })),
               },
             });
             break;

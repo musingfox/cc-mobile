@@ -77,6 +77,7 @@ describe("ServerConfigStillAnswered", () => {
     const config = reply.config as Record<string, unknown>;
 
     expect(Object.keys(config).sort()).toEqual([
+      "agentProfiles",
       "allowedRoots",
       // Which kinds this machine can launch (#31) — the phone's agent choice
       // comes from here and nowhere else.

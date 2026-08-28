@@ -8,6 +8,7 @@
  * involved; the port is local and released at the end of each test.
  */
 
+import { emptyAgentProfileSource, type AgentProfileSource } from "../agents/profiles";
 import type { ServerConfig } from "../config";
 import { EventBuffer } from "../event-buffer";
 import type { SessionManager } from "../session-manager";
@@ -43,6 +44,7 @@ export interface WsHarnessOverrides {
   /** A real SessionManager, for the cases that assert on server-held state. */
   sessionManager?: SessionManager;
   auditLog?: AuditLog;
+  agentProfiles?: AgentProfileSource;
   /** Bun-only client headers; unsupported runtimes may omit them. */
   headers?: Record<string, string>;
   deviceName?: string;
@@ -63,6 +65,7 @@ export async function startWsHarness(
         eventBuffer,
         clientSink: { current: null },
         auditLog: overrides.auditLog,
+        agentProfiles: overrides.agentProfiles ?? emptyAgentProfileSource(),
       }),
     )
     .listen(0);

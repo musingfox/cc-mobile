@@ -272,6 +272,12 @@ const CapabilitiesListMessage = z.object({
   agents: z.array(AgentInfoSchema),
 });
 
+const AgentProfileSummarySchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  kind: z.enum(LAUNCHABLE_AGENT_KINDS),
+});
+
 const ServerConfigMessage = z.object({
   type: z.literal("server_config"),
   // Only what the server knows and the client cannot. The agent-setting fields
@@ -283,6 +289,7 @@ const ServerConfigMessage = z.object({
     // reply to `get_server_config`; the four `set_*` echoes carry a partial
     // config and the client merges field by field, so it is not dropped there.
     availableAgents: z.array(z.enum(LAUNCHABLE_AGENT_KINDS)).optional(),
+    agentProfiles: z.array(AgentProfileSummarySchema).optional(),
   }),
 });
 
