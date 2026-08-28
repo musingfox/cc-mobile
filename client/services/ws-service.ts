@@ -4,6 +4,7 @@ import {
   type ActiveAgent,
   type ActiveTool,
   type AgentInfo,
+  type AgentProfile,
   type CommandInfo,
   type Message,
   type TranscriptCursor,
@@ -1085,6 +1086,7 @@ class WsService {
           allowedRoots?: string[] | null;
           homeDirectory?: string;
           availableAgents?: string[];
+          agentProfiles?: unknown[];
         };
         if (config?.allowedRoots !== undefined || config?.homeDirectory) {
           store.setServerPaths({
@@ -1094,6 +1096,21 @@ class WsService {
         }
         if (Array.isArray(config?.availableAgents)) {
           store.setAvailableAgents(config.availableAgents.filter((k) => typeof k === "string"));
+        }
+        // Absent list = "this frame says nothing about profiles", which must
+        // leave the remembered ones alone; an entry missing any of the three
+        // fields is dropped rather than rendered as a button with no label.
+        if (Array.isArray(config?.agentProfiles)) {
+          store.setAgentProfiles(
+            config.agentProfiles.filter((p): p is AgentProfile => {
+              const entry = p as Partial<AgentProfile> | null;
+              return (
+                typeof entry?.id === "string" &&
+                typeof entry?.label === "string" &&
+                typeof entry?.kind === "string"
+              );
+            }),
+          );
         }
         break;
       }
@@ -1129,6 +1146,29 @@ class WsService {
         ? { type: "terminal_create", claudeUuid, cwd, agentKind }
         : { type: "terminal_create", claudeUuid, cwd },
     );
+
+    return claudeUuid;
+  }
+
+  /**
+   * Starts a live session from one of the server's launch profiles. Same
+   * optimistic opening as `createTerminalSession` — the chat is navigable
+   * immediately — but the only selector on the wire is the profile's id.
+   *
+   * Deliberately a separate method rather than a third argument: the server
+   * refuses a `terminal_create` carrying both `agentKind` and `profileId` as
+   * `invalid_message`, and a call site that cannot express the ambiguity
+   * cannot produce it. The argv the profile expands to stays on the server and
+   * never travels here.
+   * Returns the generated claudeUuid, or null when the socket is down.
+   */
+  createTerminalSessionFromProfile(cwd: string, profileId: string): string | null {
+    if (!this.ws) return null;
+
+    const claudeUuid = randomUuid();
+    useAppStore.getState().addSession(claudeUuid, cwd, { ready: false });
+    this.pendingTerminalCreates.add(claudeUuid);
+    this.sendMessage({ type: "terminal_create", claudeUuid, cwd, profileId });
 
     return claudeUuid;
   }

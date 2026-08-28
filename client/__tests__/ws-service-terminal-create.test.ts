@@ -43,7 +43,7 @@ describe("wsService terminal session create", () => {
     toastService.error = originalToastError;
     // The store is a module singleton shared with every other test file — a
     // leftover agent list changes what ProjectDetailScreen renders over there.
-    useAppStore.setState({ availableAgents: [] });
+    useAppStore.setState({ availableAgents: [], agentProfiles: [], globalError: null });
   });
 
   test("createTerminalSession emits one terminal_create and adds a not-ready session", () => {
@@ -80,6 +80,75 @@ describe("wsService terminal session create", () => {
     // footer's agent choice for the rest of the connection.
     getInternal().handleMessage({ type: "server_config", config: { model: "opus" } });
     expect(useAppStore.getState().availableAgents).toEqual(["claude", "omp"]);
+  });
+
+  test("a profile launch sends its id alone — no agentKind, no args", () => {
+    const claudeUuid = wsService.createTerminalSessionFromProfile("/a", "p1");
+
+    expect(claudeUuid).not.toBeNull();
+    expect(fake.send).toHaveBeenCalledTimes(1);
+    const payload = JSON.parse(fake.send.mock.calls[0][0] as string);
+    // Deep-equal, so a stray agentKind or args key fails here: the server
+    // refuses a message carrying both selectors as invalid_message.
+    expect(payload).toEqual({
+      type: "terminal_create",
+      claudeUuid,
+      cwd: "/a",
+      profileId: "p1",
+    });
+
+    const session = useAppStore.getState().sessions.get(claudeUuid as string);
+    expect(session).toBeDefined();
+    expect(session?.cwd).toBe("/a");
+    expect(session?.terminal?.ready).toBe(false);
+  });
+
+  test("a profile launch is a no-op when the socket is down", () => {
+    getInternal().ws = null;
+
+    expect(wsService.createTerminalSessionFromProfile("/a", "p1")).toBeNull();
+    expect(fake.send).toHaveBeenCalledTimes(0);
+    expect(useAppStore.getState().sessions.size).toBe(0);
+  });
+
+  test("an unknown profile refusal surfaces as the global error", () => {
+    toastService.error = mock((_msg: string): string | number => 0) as typeof toastService.error;
+
+    getInternal().handleMessage({
+      type: "error",
+      code: "unknown_profile",
+      message: "No such launch profile: p1",
+    });
+
+    expect(useAppStore.getState().globalError).toBe("No such launch profile: p1");
+  });
+
+  test("server_config's agentProfiles reaches the store, and a partial config leaves it alone", () => {
+    getInternal().handleMessage({
+      type: "server_config",
+      config: { agentProfiles: [{ id: "p1", label: "omp · codex", kind: "omp" }] },
+    });
+    expect(useAppStore.getState().agentProfiles).toEqual([
+      { id: "p1", label: "omp · codex", kind: "omp" },
+    ]);
+
+    // A config frame that says nothing about profiles must not empty the list —
+    // same rule as availableAgents.
+    getInternal().handleMessage({
+      type: "server_config",
+      config: { availableAgents: ["claude"] },
+    });
+    expect(useAppStore.getState().agentProfiles).toEqual([
+      { id: "p1", label: "omp · codex", kind: "omp" },
+    ]);
+  });
+
+  test("a malformed profile entry is dropped and the well-formed ones are kept", () => {
+    getInternal().handleMessage({
+      type: "server_config",
+      config: { agentProfiles: [{ id: 1 }, { id: "p2", label: "P2", kind: "omp" }] },
+    });
+    expect(useAppStore.getState().agentProfiles).toEqual([{ id: "p2", label: "P2", kind: "omp" }]);
   });
 
   test("terminal_created flips the session to ready", () => {

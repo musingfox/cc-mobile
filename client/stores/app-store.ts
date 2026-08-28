@@ -266,6 +266,19 @@ export type ServerPaths = {
   homeDirectory: string;
 };
 
+/**
+ * One launch profile the server offered, as it travels on the wire. There is no
+ * `args` field and there must never be one: which argv a profile expands to is
+ * the server's own business, and the phone only ever names the profile by `id`.
+ * `kind` stays a plain string for the same reason `availableAgents` does — the
+ * launchable-kind enum lives on the server.
+ */
+export type AgentProfile = {
+  id: string;
+  label: string;
+  kind: string;
+};
+
 export type ScreenName = "sessions" | "agents" | "chat" | "commands" | "settings";
 
 interface AppState {
@@ -391,6 +404,14 @@ interface AppState {
    */
   availableAgents: string[];
   setAvailableAgents: (kinds: string[]) => void;
+
+  /**
+   * Launch profiles this server offers, from server_config. Empty until the
+   * server answers, and a config frame that carries no profile list leaves the
+   * remembered one alone.
+   */
+  agentProfiles: AgentProfile[];
+  setAgentProfiles: (profiles: AgentProfile[]) => void;
 
   // Ember UI screen state
   activeScreen: ScreenName;
@@ -782,6 +803,9 @@ export const useAppStore = create<AppState>((set) => ({
 
   availableAgents: [],
   setAvailableAgents: (availableAgents) => set({ availableAgents }),
+
+  agentProfiles: [],
+  setAgentProfiles: (agentProfiles) => set({ agentProfiles }),
 
   activeScreen: "chat",
   setActiveScreen: (activeScreen) => set({ activeScreen }),
