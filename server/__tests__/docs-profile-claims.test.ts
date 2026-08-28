@@ -1,5 +1,6 @@
 /**
- * docs-profile-claims.test.ts — SecurityClaimDocCorrection.
+ * docs-profile-claims.test.ts — SecurityClaimDocCorrection and
+ * ProfileProtocolDocumented.
  *
  * The project docs make a security claim about what cc-mobile can launch, and
  * that claim is read as a guarantee. Launch profiles (2026-08-28) made the old
@@ -10,6 +11,11 @@
  *
  * The retired sentence is assembled from fragments so this file does not
  * trip its own assertion.
+ *
+ * The second pair guards discoverability rather than truth: a wire field a
+ * client must send (`profileId`) and one the server sends back
+ * (`agentProfiles`) have to be findable in the protocol docs, or the only
+ * description of the contract is the schema.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -45,5 +51,21 @@ describe("SecurityClaimDocCorrection", () => {
 
     expect(argvParagraph).toBeDefined();
     expect(argvParagraph).toContain("launch profile");
+  });
+});
+
+describe("ProfileProtocolDocumented", () => {
+  test("CLAUDE.md's protocol section names both profile fields", () => {
+    const claudeMd = readDoc("CLAUDE.md");
+
+    expect(claudeMd).toContain("profileId");
+    expect(claudeMd).toContain("agentProfiles");
+  });
+
+  test("the cc-mobile.md spec names both profile fields", () => {
+    const spec = readDoc("cc-mobile.md");
+
+    expect(spec).toContain("profileId");
+    expect(spec).toContain("agentProfiles");
   });
 });

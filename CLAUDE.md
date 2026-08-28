@@ -103,12 +103,27 @@ start (`server/agents/kinds.ts`; absent → `claude`, which is what every bundle
 cached before #31 sends). Unlike `sessions[].agent` — herdr's inbound label, a
 free string — this one is a closed enum: it becomes the `kind` herdr execs, so an
 unlisted value is refused with `invalid_message` before a workspace exists. Each
-kind carries its own argv (`registry.ts`'s `argvFor`), and neither kind gets a
-gating flag: an agent's permission posture is its own setting, which cc-mobile
-stopped deciding (ADR-003 superseded). claude keeps `--session-id` — transcript
-naming, not a setting — and omp is handed its transcript path by herdr instead.
+kind carries its own argv (`registry.ts`'s `argvFor`), and the argv the registry
+generates carries no gating flag for either kind: an agent's permission posture
+is its own setting, which cc-mobile stopped deciding (ADR-003 superseded). claude
+keeps `--session-id` — transcript naming, not a setting — and omp is handed its
+transcript path by herdr instead.
 `server_config.availableAgents` names the kinds whose binary is on `PATH`, and
 is sent only in the `get_server_config` reply.
+
+`terminal_create` also carries an optional `profileId` — one **launch profile**
+the operator declared on the server (`~/.claude-mobile/agent-profiles.json`, or
+`CC_MOBILE_AGENT_PROFILES`), which fixes both the kind and extra argv appended
+after `argvFor`'s. The id is all the phone ever sends: argv is never on the wire
+in either direction, so a client cannot name what gets exec'd — it can only
+choose among what the machine's owner already wrote down.
+`server_config.agentProfiles` is that menu, `[{id,label,kind}]` and **never
+`args`**, sent like `availableAgents` only in the `get_server_config` reply. A
+`profileId` no profile answers to is refused with `unknown_profile` from the
+handler, and `agentKind` and `profileId` together with `invalid_message` — two
+selectors are a client bug, not a merge — both before `workspace.create`, so a
+refused launch leaves nothing behind. A message with neither is what every
+bundle cached before profiles sends, and still starts claude.
 
 Server→Client: `terminal_created`, `terminal_teardown_result`, `terminal_sessions`, `stream_chunk`, `stream_end`, `session_state`, `permission_request`, `capabilities_list`, `server_config`, `directory_listing`, `event`, `replay_complete`, `error`, `transcript_page`
 
