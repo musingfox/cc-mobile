@@ -15,6 +15,7 @@ import {
   type AgentProfile,
   type AgentProfileSource,
   createAgentProfileSource,
+  emptyAgentProfileSource,
 } from "./agents/profiles";
 import type { CreateSessionInput } from "./terminal-backend";
 import {
@@ -76,7 +77,7 @@ describe("handleTerminalCreate — happy path", () => {
 
     await handleTerminalCreate(
       { claudeUuid: "u1", cwd: testRoot },
-      { backend, allowedRoots: null, send },
+      { backend, allowedRoots: null, send, agentProfiles: emptyAgentProfileSource() },
     );
 
     expect(createSessionCalls).toEqual([{ claudeUuid: "u1", cwd: testRoot }]);
@@ -99,7 +100,7 @@ describe("handleTerminalCreate — happy path", () => {
 
     await handleTerminalCreate(
       { claudeUuid: "u1", cwd: "~" },
-      { backend, allowedRoots: null, send },
+      { backend, allowedRoots: null, send, agentProfiles: emptyAgentProfileSource() },
     );
 
     expect(createSessionCalls[0]?.cwd).not.toBe("~");
@@ -146,7 +147,7 @@ describe("handleTerminalCreate — profile resolution", () => {
 
     await handleTerminalCreate(
       { claudeUuid: "u1", cwd: "/tmp", agentKind: "omp" },
-      { backend, allowedRoots: null, send },
+      { backend, allowedRoots: null, send, agentProfiles: emptyAgentProfileSource() },
     );
 
     expect(createSessionCalls).toEqual([{ claudeUuid: "u1", cwd: "/tmp", agentKind: "omp" }]);
@@ -241,6 +242,68 @@ describe("handleTerminalCreate — unknown profiles", () => {
     expect(sent[0]?.code).toBe("unknown_profile");
     expect(createSessionCalls).toHaveLength(0);
   });
+
+  // The two below pin the *order* of the refusals, not just that one happens.
+  // A request can be wrong about its path and its profile at once, and the
+  // profile check used to run first, so the caller heard `unknown_profile`
+  // about a cwd that does not exist. The path codes came first before profiles
+  // existed and still do. Every other case in this file has exactly one thing
+  // wrong with it, which is how the regression stayed invisible.
+
+  it("reports the invalid cwd, not the unknown profile, when both are wrong", async () => {
+    const { backend, createSessionCalls } = makeFakeBackend();
+    const { send, sent } = makeSendSpy();
+
+    await handleTerminalCreate(
+      { claudeUuid: "u1", cwd: "/definitely/not/here", profileId: "nope" },
+      { backend, allowedRoots: null, send, agentProfiles: profileSource([]) },
+    );
+
+    expect(sent[0]?.code).toBe("invalid_cwd");
+    expect(createSessionCalls).toHaveLength(0);
+  });
+
+  it("reports the disallowed path, not the unknown profile, when both are wrong", async () => {
+    const { backend, createSessionCalls } = makeFakeBackend();
+    const { send, sent } = makeSendSpy();
+
+    await handleTerminalCreate(
+      { claudeUuid: "u1", cwd: testRoot, profileId: "nope" },
+      {
+        backend,
+        allowedRoots: ["/somewhere/else"],
+        send,
+        agentProfiles: profileSource([]),
+      },
+    );
+
+    expect(sent[0]?.code).toBe("path_not_allowed");
+    expect(createSessionCalls).toHaveLength(0);
+  });
+
+  it("maps a throwing profile source to terminal_error instead of escaping", async () => {
+    const { backend, createSessionCalls } = makeFakeBackend();
+    const { send, sent } = makeSendSpy();
+
+    await handleTerminalCreate(
+      { claudeUuid: "u1", cwd: testRoot, profileId: "p-omp" },
+      {
+        backend,
+        allowedRoots: null,
+        send,
+        agentProfiles: {
+          list: () => {
+            throw new Error("profile file exploded");
+          },
+        },
+      },
+    );
+
+    expect(sent).toEqual([
+      { type: "error", code: "terminal_error", message: "profile file exploded" },
+    ]);
+    expect(createSessionCalls).toHaveLength(0);
+  });
 });
 
 describe("handleTerminalCreate — error mapping", () => {
@@ -250,7 +313,7 @@ describe("handleTerminalCreate — error mapping", () => {
 
     await handleTerminalCreate(
       { claudeUuid: "u1", cwd: "/nonexistent-cc-mobile-xyz" },
-      { backend, allowedRoots: null, send },
+      { backend, allowedRoots: null, send, agentProfiles: emptyAgentProfileSource() },
     );
 
     expect(sent).toEqual([
@@ -269,7 +332,12 @@ describe("handleTerminalCreate — error mapping", () => {
 
     await handleTerminalCreate(
       { claudeUuid: "u1", cwd: testRoot },
-      { backend, allowedRoots: ["/somewhere/else"], send },
+      {
+        backend,
+        allowedRoots: ["/somewhere/else"],
+        send,
+        agentProfiles: emptyAgentProfileSource(),
+      },
     );
 
     expect(sent).toEqual([
@@ -292,7 +360,7 @@ describe("handleTerminalCreate — error mapping", () => {
 
     await handleTerminalCreate(
       { claudeUuid: "u1", cwd: testRoot },
-      { backend, allowedRoots: null, send },
+      { backend, allowedRoots: null, send, agentProfiles: emptyAgentProfileSource() },
     );
 
     expect(sent).toEqual([{ type: "error", code: "terminal_error", message: "boom" }]);

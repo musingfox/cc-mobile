@@ -31,7 +31,13 @@ export interface TerminalControlDeps {
   backend: TerminalControlBackend;
   allowedRoots: string[] | null;
   send: (msg: Record<string, unknown>) => void;
-  agentProfiles?: AgentProfileSource;
+  /**
+   * Required rather than optional: with `agentProfiles?` a `deps` that simply
+   * forgot to wire a source answered every profile launch `unknown_profile`,
+   * which is fail-safe but silent. Required makes the omission a compile error.
+   * Call sites with no profiles pass `emptyAgentProfileSource()`.
+   */
+  agentProfiles: AgentProfileSource;
 }
 
 /**
@@ -58,17 +64,6 @@ export async function handleTerminalCreate(
     });
     return;
   }
-  const profile = msg.profileId
-    ? deps.agentProfiles?.list().find(({ id }) => id === msg.profileId)
-    : undefined;
-  if (msg.profileId && !profile) {
-    send({
-      type: "error",
-      code: "unknown_profile",
-      message: `Unknown agent profile: ${msg.profileId}`,
-    });
-    return;
-  }
   try {
     const cwd = expandPath(msg.cwd);
 
@@ -83,6 +78,25 @@ export async function handleTerminalCreate(
         type: "error",
         code: "path_not_allowed",
         message: "Project path is not in the allowed roots",
+      });
+      return;
+    }
+
+    // Profile resolution sits *after* the path checks: a request that is wrong
+    // about both its cwd and its profile hears about the cwd first, so the path
+    // codes keep the order they had before profiles existed. It also sits
+    // inside the `try`, so a source that throws becomes `terminal_error` rather
+    // than escaping into the ws message callback. The conflicting-selector
+    // check above stays where it is — that one is contracted to precede the
+    // path checks.
+    const profile = msg.profileId
+      ? deps.agentProfiles.list().find(({ id }) => id === msg.profileId)
+      : undefined;
+    if (msg.profileId && !profile) {
+      send({
+        type: "error",
+        code: "unknown_profile",
+        message: `Unknown agent profile: ${msg.profileId}`,
       });
       return;
     }
