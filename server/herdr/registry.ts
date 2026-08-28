@@ -67,6 +67,8 @@ export interface CreateSessionInput {
   cwd: string;
   /** Which agent to launch; absent means claude (#31). */
   agentKind?: LaunchableAgentKind;
+  /** Operator-configured argv appended after cc-mobile's required flags. */
+  profileArgs?: string[];
 }
 
 export interface HerdrCreateSessionResult {
@@ -129,9 +131,13 @@ export function createHerdrRegistry(options: HerdrRegistryOptions) {
    * by herdr instead. Live probe 2026-08-06: `agent.start {kind:"omp",
    * args:[]}` acks with `argv:["omp"]`.
    */
-  function argvFor(kind: LaunchableAgentKind, claudeUuid: string): string[] {
-    if (kind !== "claude") return [];
-    return ["--session-id", claudeUuid];
+  function argvFor(
+    kind: LaunchableAgentKind,
+    claudeUuid: string,
+    profileArgs: string[] = [],
+  ): string[] {
+    if (kind !== "claude") return profileArgs;
+    return ["--session-id", claudeUuid, ...profileArgs];
   }
 
   async function createSession(input: CreateSessionInput): Promise<HerdrCreateSessionResult> {
@@ -163,7 +169,7 @@ export function createHerdrRegistry(options: HerdrRegistryOptions) {
           name: agentName,
           kind: agentKind,
           pane_id: paneId,
-          args: argvFor(agentKind, claudeUuid),
+          args: argvFor(agentKind, claudeUuid, input.profileArgs),
         },
         AgentStartedResultSchema,
       );

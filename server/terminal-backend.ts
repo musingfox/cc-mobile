@@ -22,6 +22,8 @@ export interface CreateSessionInput {
   cwd: string;
   /** Which agent to launch; absent means claude (#31). */
   agentKind?: LaunchableAgentKind;
+  /** Operator-configured argv from a server-owned launch profile. */
+  profileArgs?: string[];
 }
 
 export interface TeardownResult {

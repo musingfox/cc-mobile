@@ -16,6 +16,7 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
+import { emptyAgentProfileSource } from "../agents/profiles";
 import { EventBuffer } from "../event-buffer";
 import { createWsPlugin, type WsBackend } from "../ws";
 import { testServerConfig } from "./ws-harness";
@@ -69,6 +70,7 @@ async function startServer(backend: Partial<WsBackend>) {
         backend: backend as WsBackend,
         eventBuffer: new EventBuffer(500),
         clientSink: { current: null },
+        agentProfiles: emptyAgentProfileSource(),
       }),
     )
     .listen(0);

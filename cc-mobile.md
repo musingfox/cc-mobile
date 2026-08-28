@@ -68,7 +68,8 @@ All messages are Zod-validated (see [ADR-001](docs/adr/001-zod-runtime-validatio
 ### Client → Server
 
 ```typescript
-{ type: "terminal_create", claudeUuid: string, cwd: string, agentKind?: "claude" | "omp" }
+{ type: "terminal_create", claudeUuid: string, cwd: string,
+  agentKind?: "claude" | "omp", profileId?: string }  // agentKind and profileId are mutually exclusive
 { type: "terminal_send", claudeUuid: string, content: string }
 { type: "terminal_teardown", claudeUuid: string }
 { type: "list_terminal_sessions" }
@@ -112,7 +113,9 @@ a page reload.
 { type: "session_state", sessionId: string, state: "idle" | "running" | "requires_action" }
 { type: "error", code: string, message: string, sessionId?: string } // agent_blocked_notice: fenced blocked-screen words; agent_attention_notice: claude trust dialog while herdr says idle — read-only, never sends a key
 { type: "server_config", config: { allowedRoots?: string[] | null, homeDirectory?: string,
-                                  availableAgents?: ("claude"|"omp")[] } }
+                                  availableAgents?: ("claude"|"omp")[],
+                                  agentProfiles?: { id: string, label: string,
+                                                    kind: "claude"|"omp" }[] } }  // no args, ever
 { type: "transcript_page", sessionId: string, epoch: string,
   records: Record<string, unknown>[],
   nextBefore: { epoch: string, seq: number, recordId: string } | null }
@@ -154,6 +157,25 @@ that set them.
 `LAUNCHABLE_AGENT_KINDS` entry whose binary is on `PATH`. A kind missing from it
 is missing from the phone's new-session choice, which is the whole point: naming
 an unavailable kind would start a pane that dies immediately.
+
+`agentProfiles` is the second way to start a pane: a **launch profile** the
+operator declared on the server — a JSON array at
+`~/.claude-mobile/agent-profiles.json` (or wherever `CC_MOBILE_AGENT_PROFILES`
+points), each entry `{id, label, kind, args}`, with malformed entries, duplicate
+ids and kinds whose binary is not on `PATH` skipped rather than failing the
+list. What reaches the phone is `{id, label, kind}` only: `args` never leaves the
+server, in either direction, so the client picks a profile by `profileId` and
+never names what is exec'd. Like `availableAgents` it rides only the
+`get_server_config` reply.
+
+`terminal_create` therefore takes at most one selector. `profileId` with no
+matching profile is refused `{code:"unknown_profile"}`; `agentKind` and
+`profileId` together are refused `{code:"invalid_message"}`, because two
+selectors are a client bug and merging them would let the phone re-aim an
+operator's argv at another kind. Both refusals happen in the handler, before
+`workspace.create` — the first side effect — so a rejected launch leaves no
+workspace behind. Neither field present still starts claude, which is what every
+bundle cached before profiles sends.
 
 Note the asymmetry with `sessions[].agent`, which stays a free string: that one
 is **inbound** — herdr's own label, whose vocabulary grows between versions, so
@@ -462,7 +484,7 @@ cloudflared tunnel --url http://localhost:3001
 ## Security Considerations
 
 1. **No auth on Tailscale** — acceptable because Tailscale is a private mesh network. Only your devices can connect.
-2. **cc-mobile sets no agent settings** — it passes no permission or approval flag when launching, so each agent gates exactly as its own configuration says. For claude with no flag that is still "ask on every tool use". ([ADR-003](docs/adr/003-permission-mode-default.md) superseded; ADR-015 §2026-08-06)
+2. **cc-mobile generates no agent settings** — the argv it builds itself carries no permission or approval flag, so an agent it launches gates exactly as its own configuration says; for claude with no flag that is still "ask on every tool use". ([ADR-003](docs/adr/003-permission-mode-default.md) superseded; ADR-015 §2026-08-06) An **operator-declared profile** is the exception, by ruling of 2026-08-28: argv the operator writes into the server's profile file is forwarded unfiltered, gating flags included, because that operator could equally have written a shell alias and run it themselves. The phone still never names argv — it sends a profile id, and the profile list on the wire omits `args`.
 3. **The session list discloses an ungated pane** — a `no permission gate` badge means that agent's argv says it will not stop to ask. Reading that flag is not setting it, and the badge never blocks driving the pane (Decision H4).
 4. **Session persistence** — SDK sessions are resumed via `resume: sessionId` option in each `query()` call.
 5. **WebSocket reconnect** — client auto-reconnects with exponential backoff (1s → 30s max).

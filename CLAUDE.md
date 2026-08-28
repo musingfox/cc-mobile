@@ -103,12 +103,27 @@ start (`server/agents/kinds.ts`; absent → `claude`, which is what every bundle
 cached before #31 sends). Unlike `sessions[].agent` — herdr's inbound label, a
 free string — this one is a closed enum: it becomes the `kind` herdr execs, so an
 unlisted value is refused with `invalid_message` before a workspace exists. Each
-kind carries its own argv (`registry.ts`'s `argvFor`), and neither kind gets a
-gating flag: an agent's permission posture is its own setting, which cc-mobile
-stopped deciding (ADR-003 superseded). claude keeps `--session-id` — transcript
-naming, not a setting — and omp is handed its transcript path by herdr instead.
+kind carries its own argv (`registry.ts`'s `argvFor`), and the argv the registry
+generates carries no gating flag for either kind: an agent's permission posture
+is its own setting, which cc-mobile stopped deciding (ADR-003 superseded). claude
+keeps `--session-id` — transcript naming, not a setting — and omp is handed its
+transcript path by herdr instead.
 `server_config.availableAgents` names the kinds whose binary is on `PATH`, and
 is sent only in the `get_server_config` reply.
+
+`terminal_create` also carries an optional `profileId` — one **launch profile**
+the operator declared on the server (`~/.claude-mobile/agent-profiles.json`, or
+`CC_MOBILE_AGENT_PROFILES`), which fixes both the kind and extra argv appended
+after `argvFor`'s. The id is all the phone ever sends: argv is never on the wire
+in either direction, so a client cannot name what gets exec'd — it can only
+choose among what the machine's owner already wrote down.
+`server_config.agentProfiles` is that menu, `[{id,label,kind}]` and **never
+`args`**, sent like `availableAgents` only in the `get_server_config` reply. A
+`profileId` no profile answers to is refused with `unknown_profile` from the
+handler, and `agentKind` and `profileId` together with `invalid_message` — two
+selectors are a client bug, not a merge — both before `workspace.create`, so a
+refused launch leaves nothing behind. A message with neither is what every
+bundle cached before profiles sends, and still starts claude.
 
 Server→Client: `terminal_created`, `terminal_teardown_result`, `terminal_sessions`, `stream_chunk`, `stream_end`, `session_state`, `permission_request`, `capabilities_list`, `server_config`, `directory_listing`, `event`, `replay_complete`, `error`, `transcript_page`
 
@@ -207,9 +222,10 @@ for omp; the client answers with `optionId` either way.
 
 `gated` is read in each kind's own vocabulary, and the defaults point opposite
 ways: claude with no flag asks, omp with no flag does not (verified live —
-a default omp writes files without asking). cc-mobile launches omp with no
-approval flag by choice, so the prompts #33 handles are the ones on panes the
-user started themselves with `--approval-mode always-ask` / `write`.
+a default omp writes files without asking). cc-mobile's own argv adds no
+approval flag by choice, so the prompts #33 handles come from panes started
+with one elsewhere: the user's own terminal with `--approval-mode always-ask` /
+`write`, or an operator-declared profile that names the same flag.
 
 Refused by the Zod gate: `set_permission_mode`, `set_model`, `set_effort`,
 `set_env_vars` (the agent-settings controls, removed once it was settled that an
@@ -273,7 +289,18 @@ that can refuse a keystroke is a worse failure than a missing line.
 
 ## Security Constraints
 
-- cc-mobile sets no agent settings: no `--permission-mode` on launch, no CLI flag, and `set_permission_mode` / `set_model` / `set_effort` / `set_env_vars` are refused by the Zod gate. Each agent runs at its own configured posture (ADR-003 superseded; ADR-015 §2026-08-06). `sessions[].gated` still discloses an ungated pane by reading its argv.
+- cc-mobile generates no agent settings of its own: the argv it builds carries no
+  `--permission-mode`, no `--approval-mode`, no `--auto-approve`, and
+  `set_permission_mode` / `set_model` / `set_effort` / `set_env_vars` are refused by the Zod
+  gate — an agent's posture is the agent's own setting, not a phone's to decide (ADR-003
+  superseded; ADR-015 §2026-08-06). What an **operator-declared profile** carries is a separate
+  question: since 2026-08-28 a profile written on the server may supply any argv, gating flags
+  included, and it reaches `agent.start` unfiltered. That is a ruling, not an oversight — the
+  operator writing that file is the same person who could write a shell function and run it in
+  their own terminal, so filtering it would only pretend to a safety the machine's owner never
+  lost. The phone never names argv: it sends a profile id, and `agentProfiles` on the wire
+  carries no `args`. `sessions[].gated` still discloses an ungated pane by reading the live
+  process argv, so however a pane was started, its card says which it is.
 - `CC_MOBILE_ALLOWED_ROOTS` env var restricts allowed working directories
 - Tailscale network membership is the auth by default. `CC_MOBILE_TRUSTED_USER` narrows it to
   one identity: a single root gate (`server/request-gate.ts`) compares the `Tailscale-User-Login`

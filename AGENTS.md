@@ -85,7 +85,11 @@ Server→Client: `terminal_created`, `terminal_teardown_result`, `terminal_sessi
 (`server/agents/kinds.ts`), unlike the free-string `sessions[].agent`, because
 this one is what herdr execs. Absent → claude. Per-kind argv lives in
 `registry.ts`'s `argvFor`; `server_config.availableAgents` lists the kinds whose
-binary is on `PATH`.
+binary is on `PATH`. `argvFor` generates no gating flag for any kind, but it is
+no longer the whole argv: a launch profile the operator declares on the server
+(`server/agents/profiles.ts`) appends its own args after it, unfiltered, and the
+client picks one by id (`terminal_create.profileId`) because argv is not the
+phone's to name.
 
 `transcript_page_request` / `transcript_page` are the history pull: one page (50
 records, a number the wire never carries) of a **live** session's own transcript,
@@ -144,7 +148,12 @@ Schemas defined in `server/protocol.ts`. Full spec in `cc-mobile.md`.
 
 ## Security Constraints
 
-- cc-mobile sets no agent settings — no launch flag, no CLI flag, and the four `set_*` messages are refused by the gate (ADR-003 superseded). `gated` discloses, it does not control.
+- cc-mobile generates no agent settings — its own launch argv carries no gating flag and the four
+  `set_*` messages are refused by the gate (ADR-003 superseded), because an agent's posture is its
+  own. An operator-declared profile on the server may carry any argv, gating flags included, and it
+  is passed through unfiltered (2026-08-28 ruling): that is the machine's owner configuring their
+  own machine, which they could equally do from their shell. `gated` reads the live argv and
+  discloses either way; it does not control.
 - `CC_MOBILE_ALLOWED_ROOTS` env var restricts allowed working directories
 - Tailscale network membership is the auth by default; `CC_MOBILE_TRUSTED_USER` narrows it to one
   identity. The root gate (`server/request-gate.ts`) compares `Tailscale-User-Login` against it

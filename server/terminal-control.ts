@@ -12,15 +12,13 @@
  */
 
 import type { LaunchableAgentKind } from "./agents/kinds";
+import type { AgentProfileSource } from "./agents/profiles";
 import { expandPath, validateAllowedPath, validateCwd } from "./path-utils";
+import type { CreateSessionInput } from "./terminal-backend";
 
 /** The slice of the terminal backend these handlers need. */
 export interface TerminalControlBackend {
-  createSession(params: {
-    claudeUuid: string;
-    cwd: string;
-    agentKind?: LaunchableAgentKind;
-  }): Promise<{ name: string; paneRef: string }>;
+  createSession(params: CreateSessionInput): Promise<{ name: string; paneRef: string }>;
   /**
    * Idempotent: an unknown session resolves to `{killed:false}` rather than
    * throwing. A pane cc-mobile did not launch answers `{killed:false,
@@ -33,6 +31,7 @@ export interface TerminalControlDeps {
   backend: TerminalControlBackend;
   allowedRoots: string[] | null;
   send: (msg: Record<string, unknown>) => void;
+  agentProfiles?: AgentProfileSource;
 }
 
 /**
@@ -42,10 +41,34 @@ export interface TerminalControlDeps {
  * path_not_allowed / terminal_error.
  */
 export async function handleTerminalCreate(
-  msg: { claudeUuid: string; cwd: string; agentKind?: LaunchableAgentKind },
+  msg: {
+    claudeUuid: string;
+    cwd: string;
+    agentKind?: LaunchableAgentKind;
+    profileId?: string;
+  },
   deps: TerminalControlDeps,
 ): Promise<void> {
   const { backend, allowedRoots, send } = deps;
+  if (msg.agentKind && msg.profileId) {
+    send({
+      type: "error",
+      code: "invalid_message",
+      message: "agentKind and profileId are mutually exclusive",
+    });
+    return;
+  }
+  const profile = msg.profileId
+    ? deps.agentProfiles?.list().find(({ id }) => id === msg.profileId)
+    : undefined;
+  if (msg.profileId && !profile) {
+    send({
+      type: "error",
+      code: "unknown_profile",
+      message: `Unknown agent profile: ${msg.profileId}`,
+    });
+    return;
+  }
   try {
     const cwd = expandPath(msg.cwd);
 
@@ -67,7 +90,11 @@ export async function handleTerminalCreate(
     const info = await backend.createSession({
       claudeUuid: msg.claudeUuid,
       cwd,
-      agentKind: msg.agentKind,
+      ...(profile
+        ? { agentKind: profile.kind, profileArgs: profile.args }
+        : msg.agentKind
+          ? { agentKind: msg.agentKind }
+          : {}),
     });
     send({
       type: "terminal_created",

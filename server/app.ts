@@ -19,6 +19,7 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Elysia } from "elysia";
+import { createAgentProfileSource, type AgentProfileSource } from "./agents/profiles";
 import { createAuditLog } from "./audit/audit-log";
 import type { ServerConfig } from "./config";
 import { EventBuffer } from "./event-buffer";
@@ -106,6 +107,7 @@ export interface AppTestDeps {
    * `CC_MOBILE_TRUSTED_USER` would 403 every later `createApp` test.
    */
   gateEnv?: Record<string, string | undefined>;
+  agentProfiles?: AgentProfileSource;
 }
 
 /** Builds the whole server. The returned app has not been listened on. */
@@ -195,7 +197,13 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
   })
     .onRequest(({ request }) => evaluateRequestGate(request, deps.gateEnv ?? process.env))
     .use(
-      createWsPlugin(sessionManager, serverConfig, { backend, eventBuffer, clientSink, auditLog }),
+      createWsPlugin(sessionManager, serverConfig, {
+        backend,
+        eventBuffer,
+        clientSink,
+        auditLog,
+        agentProfiles: deps.agentProfiles ?? createAgentProfileSource(),
+      }),
     )
     .use(createUploadPlugin(serverConfig))
     .use(createUploadImagePlugin(serverConfig))
