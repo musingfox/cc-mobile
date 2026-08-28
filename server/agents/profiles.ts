@@ -19,9 +19,13 @@ export interface AgentProfileSource {
   list(): AgentProfile[];
 }
 
+// `min(1)` on both strings is a drop rule, not cosmetics: a profile with an
+// empty id can never be named by `terminal_create`, and one with an empty
+// label draws a blank button. Either way it loads but cannot be launched, so
+// it leaves by the same safeParse path an unknown `kind` does.
 const AgentProfileSchema = z.object({
-  id: z.string(),
-  label: z.string(),
+  id: z.string().min(1),
+  label: z.string().min(1),
   kind: z.enum(LAUNCHABLE_AGENT_KINDS),
   args: z.array(z.string()).default([]),
 });

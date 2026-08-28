@@ -87,6 +87,23 @@ describe("AgentProfileFileLoad", () => {
     ]);
   });
 
+  test("an empty id or label is dropped without losing valid entries", () => {
+    // Both are unlaunchable rather than merely ugly: `profileId: ""` fails the
+    // wire schema, so nothing can ever ask for the first entry, and the second
+    // would render a button with no text on it.
+    const path = profileFile(
+      JSON.stringify([
+        { id: "", label: "No id", kind: "omp", args: [] },
+        { id: "no-label", label: "", kind: "omp", args: [] },
+        { id: "ok", label: "OK", kind: "omp", args: [] },
+      ]),
+    );
+
+    expect(createAgentProfileSource({ path }).list()).toEqual([
+      { id: "ok", label: "OK", kind: "omp", args: [] },
+    ]);
+  });
+
   test("a profile is dropped when its kind is unavailable", () => {
     process.env.PATH = pathWithOnly(["claude"]);
     const path = profileFile(JSON.stringify([{ id: "a", label: "A", kind: "omp" }]));
