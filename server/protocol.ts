@@ -107,6 +107,7 @@ const TerminalCreateMessage = z.object({
   claudeUuid: z.string().min(1),
   cwd: z.string().min(1),
   agentKind: z.enum(LAUNCHABLE_AGENT_KINDS).optional(),
+  profileId: z.string().min(1).optional(),
 });
 
 /**

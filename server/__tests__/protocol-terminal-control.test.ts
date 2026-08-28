@@ -85,6 +85,59 @@ describe("ClientMessage — terminal_create", () => {
     if (!result.success || result.data.type !== "terminal_create") return;
     expect(result.data.agentKind).toBeUndefined();
   });
+
+  it("accepts a non-empty profile id", () => {
+    const result = ClientMessage.safeParse({
+      type: "terminal_create",
+      claudeUuid: "u1",
+      cwd: "/tmp",
+      profileId: "p1",
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success || result.data.type !== "terminal_create") return;
+    expect(result.data.profileId).toBe("p1");
+  });
+
+  it("rejects an empty profile id", () => {
+    expect(
+      ClientMessage.safeParse({
+        type: "terminal_create",
+        claudeUuid: "u1",
+        cwd: "/tmp",
+        profileId: "",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("drops client-supplied argv and command fields", () => {
+    const result = ClientMessage.safeParse({
+      type: "terminal_create",
+      claudeUuid: "u1",
+      cwd: "/tmp",
+      profileId: "p1",
+      args: ["--auto-approve"],
+      command: "omp",
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success || result.data.type !== "terminal_create") return;
+    expect(result.data.profileId).toBe("p1");
+    expect(Object.hasOwn(result.data, "args")).toBe(false);
+    expect(Object.hasOwn(result.data, "command")).toBe(false);
+  });
+
+  it("keeps profile id optional for cached bundles", () => {
+    const result = ClientMessage.safeParse({
+      type: "terminal_create",
+      claudeUuid: "u1",
+      cwd: "/tmp",
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success || result.data.type !== "terminal_create") return;
+    expect(result.data.profileId).toBeUndefined();
+  });
 });
 
 describe("ClientMessage — terminal_teardown", () => {
