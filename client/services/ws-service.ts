@@ -4,6 +4,7 @@ import {
   type ActiveAgent,
   type ActiveTool,
   type AgentInfo,
+  type AgentProfile,
   type CommandInfo,
   type Message,
   type TranscriptCursor,
@@ -1085,6 +1086,7 @@ class WsService {
           allowedRoots?: string[] | null;
           homeDirectory?: string;
           availableAgents?: string[];
+          agentProfiles?: unknown[];
         };
         if (config?.allowedRoots !== undefined || config?.homeDirectory) {
           store.setServerPaths({
@@ -1094,6 +1096,21 @@ class WsService {
         }
         if (Array.isArray(config?.availableAgents)) {
           store.setAvailableAgents(config.availableAgents.filter((k) => typeof k === "string"));
+        }
+        // Absent list = "this frame says nothing about profiles", which must
+        // leave the remembered ones alone; an entry missing any of the three
+        // fields is dropped rather than rendered as a button with no label.
+        if (Array.isArray(config?.agentProfiles)) {
+          store.setAgentProfiles(
+            config.agentProfiles.filter((p): p is AgentProfile => {
+              const entry = p as Partial<AgentProfile> | null;
+              return (
+                typeof entry?.id === "string" &&
+                typeof entry?.label === "string" &&
+                typeof entry?.kind === "string"
+              );
+            }),
+          );
         }
         break;
       }

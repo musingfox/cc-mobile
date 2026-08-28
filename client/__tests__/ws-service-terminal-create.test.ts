@@ -43,7 +43,7 @@ describe("wsService terminal session create", () => {
     toastService.error = originalToastError;
     // The store is a module singleton shared with every other test file — a
     // leftover agent list changes what ProjectDetailScreen renders over there.
-    useAppStore.setState({ availableAgents: [] });
+    useAppStore.setState({ availableAgents: [], agentProfiles: [], globalError: null });
   });
 
   test("createTerminalSession emits one terminal_create and adds a not-ready session", () => {
@@ -80,6 +80,34 @@ describe("wsService terminal session create", () => {
     // footer's agent choice for the rest of the connection.
     getInternal().handleMessage({ type: "server_config", config: { model: "opus" } });
     expect(useAppStore.getState().availableAgents).toEqual(["claude", "omp"]);
+  });
+
+  test("server_config's agentProfiles reaches the store, and a partial config leaves it alone", () => {
+    getInternal().handleMessage({
+      type: "server_config",
+      config: { agentProfiles: [{ id: "p1", label: "omp · codex", kind: "omp" }] },
+    });
+    expect(useAppStore.getState().agentProfiles).toEqual([
+      { id: "p1", label: "omp · codex", kind: "omp" },
+    ]);
+
+    // A config frame that says nothing about profiles must not empty the list —
+    // same rule as availableAgents.
+    getInternal().handleMessage({
+      type: "server_config",
+      config: { availableAgents: ["claude"] },
+    });
+    expect(useAppStore.getState().agentProfiles).toEqual([
+      { id: "p1", label: "omp · codex", kind: "omp" },
+    ]);
+  });
+
+  test("a malformed profile entry is dropped and the well-formed ones are kept", () => {
+    getInternal().handleMessage({
+      type: "server_config",
+      config: { agentProfiles: [{ id: 1 }, { id: "p2", label: "P2", kind: "omp" }] },
+    });
+    expect(useAppStore.getState().agentProfiles).toEqual([{ id: "p2", label: "P2", kind: "omp" }]);
   });
 
   test("terminal_created flips the session to ready", () => {
