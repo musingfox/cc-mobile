@@ -85,14 +85,17 @@ it.skipIf(!existsSync(socketPath))(
       );
 
       // herdr needs a moment to detect the agent and read its session id out of
-      // the SessionStart hook its own integration installs.
+      // the SessionStart hook its own integration installs. Both halves are
+      // waited for: the session id alone leaves `readable` racing the kind,
+      // which is what decides whether a transcript reader exists at all, and
+      // the two do not land together.
       await waitUntil(
         async () => {
           const info = await client.agentGet(paneId).catch(() => null);
-          return typeof info?.agent_session?.value === "string";
+          return typeof info?.agent_session?.value === "string" && typeof info?.agent === "string";
         },
         READY_DEADLINE_MS,
-        "herdr detecting the foreign claude's session id",
+        "herdr detecting the foreign claude's kind and session id",
       );
 
       ws = await openSocket(port);
