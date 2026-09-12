@@ -237,7 +237,7 @@ agent's mode is its own), `list_sessions`, `resume_session`, `set_session_title`
 Schemas defined in `server/protocol.ts`. Full spec in `cc-mobile.md`.
 
 ## Background Push (web push for iOS PWA)
-- Only panes with origin "self" (cc-mobile launched) trigger `dispatch` to phones.
+- Scope is `phone-last` (`server/push/notifier.ts`, `phone-driven.ts`): a pane triggers `dispatch` when the phone is behind its current turn — cc-mobile injected the prompt. The tracker is in-memory, so after a restart no pane is in scope until the phone speaks again.
 - Every send attempt is logged to ~/.claude-mobile/push-attempts.jsonl with {ts,kind,host,status,reason} (PushAttemptLog).
 - Constant generic payload only; no session/cwd/tool in the push body (traverses APNs).
 - VAPID from CC_MOBILE_VAPID_* envs; positive TTL (0→1); 410/404 prunes subscription.
