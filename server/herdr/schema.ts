@@ -188,7 +188,12 @@ export const PongResultSchema = z
     type: z.literal("pong"),
     version: z.string(),
     protocol: z.number(),
-    capabilities: z.record(z.boolean()),
+    // Values are never read — only the protocol number gates compatibility —
+    // and the daemon's own shape is not uniform: 0.9.0 added the integer
+    // `endpoint_protocol_generation` beside the booleans, and the field is
+    // nullable and absent from `pong`'s required list. Pinning value types we
+    // never consume is what turned that addition into a boot failure.
+    capabilities: z.record(z.unknown()).nullish(),
   })
   .passthrough();
 export type PongResult = z.infer<typeof PongResultSchema>;

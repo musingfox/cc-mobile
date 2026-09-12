@@ -45,8 +45,21 @@ import {
  * anyway: herdr's own client does the same (src/cli/protocol_guard.rs), and a
  * floor check would trade one clear boot error for Zod failures scattered
  * across call sites.
+ *
+ * 20 -> 22 (v0.9.0) is the first bump that cost something. The same audit
+ * (`herdr api schema --json`, 2026-09-12) found every method cc-mobile speaks
+ * unchanged -- all 11 live methods, their required params, the ReadSource
+ * enum, the error envelope, and the `pane.updated` subscription (still
+ * `required: [type, pane]`, still the full PaneInfo). `workspace_created` and
+ * `agent_started` each gained a required field (`tab`, `argv`), both of which
+ * cc-mobile ignores. The one real drift is `pong.capabilities`: it became a
+ * mixed-value record (`endpoint_protocol_generation` is an integer) and left
+ * `pong`'s required list, which broke the schema that pinned it to booleans --
+ * see PongResultSchema. Because the pong is parsed before the number is
+ * compared, that drift surfaced as a ZodError at boot rather than the clean
+ * protocol error this comment promises.
  */
-export const SUPPORTED_PROTOCOL = 20;
+export const SUPPORTED_PROTOCOL = 22;
 
 /** Default daemon-side wait budget when the caller passes no timeout_ms. */
 const DEFAULT_AGENT_WAIT_TIMEOUT_MS = 60_000;

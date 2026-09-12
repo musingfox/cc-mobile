@@ -2,7 +2,7 @@
 //
 // Provenance: shapes captured from a LIVE herdr daemon (0.7.5, protocol 17) via
 // read-only probe scripts (see docs referenced by issue #20). PONG_LINE was
-// recaptured at 0.8.2 / protocol 20; the rest still carry their 0.7.5 capture,
+// recaptured at 0.9.0 / protocol 22; the rest still carry their 0.7.5 capture,
 // which stays valid because every method and result shape cc-mobile uses is
 // byte-identical between herdr v0.7.5 and v0.8.0 (both bumps in between touched
 // only the bincode terminal-attach wire — see SUPPORTED_PROTOCOL in client.ts).
@@ -15,9 +15,15 @@
 // Every constant is one complete response line WITHOUT the trailing "\n"
 // (the daemon terminates each response with a single newline).
 
-/** Live: ping -> pong (version 0.8.2, protocol 20). */
+/**
+ * Live: ping -> pong (version 0.9.0, protocol 22).
+ *
+ * Recaptured verbatim from the running daemon, mixed-value `capabilities`
+ * included: `endpoint_protocol_generation` is an integer among the booleans,
+ * and that is exactly what the previous all-boolean capture could not catch.
+ */
 export const PONG_LINE =
-  '{"id":"fx","result":{"type":"pong","version":"0.8.2","protocol":20,"capabilities":{"live_handoff":true,"detached_server_daemon":true}}}';
+  '{"id":"fx","result":{"type":"pong","version":"0.9.0","protocol":22,"capabilities":{"live_handoff":true,"detached_server_daemon":true,"endpoint_protocol_generation":1,"surface_interest":true,"health_check":true}}}';
 
 /** Derived from PONG_LINE: protocol left at 18 (incompatible daemon). */
 export const PONG_PROTOCOL_18_LINE =
