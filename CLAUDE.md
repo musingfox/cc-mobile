@@ -86,6 +86,7 @@ All recorded in `docs/adr/`. Key decisions:
 - **Herdr terminal layer** (ADR-015): herdr socket is the only trunk; C-hybrid concepts carried; the SDK query() path was removed in #25 (see ADR-011's "#25 後現況" section).
 - **herdr-native model** (ADR-015 §2026-08-02, #29): the self-built hook pipeline is gone. Replies are read from claude's transcript file and permissions from the pane's own screen, so a session the user started in their own terminal behaves exactly like one cc-mobile launched.
 - **Permission flow** (ADR-015 §2026-08-02): herdr reports `blocked` → the server parses the prompt off `pane.read --source detection` → the phone shows the terminal's own options → `pane.send_keys` presses the chosen key. Unanswered after 90s → `esc`, but only on panes cc-mobile launched, and only if a fresh `agent_status` + prompt-fingerprint re-read still match.
+- **Push reads the raw status** (ADR-017): the `blocked` push no longer waits for a permission card, so screens #33 leaves uncarded still buzz the phone. The card rules themselves are unchanged — only what triggers a notification.
 - **Zod validation** (ADR-001): Runtime validation on WS messages, single source of truth for types.
 - **Zustand + WsService** (ADR-008): Per-session state isolation via Zustand store + WebSocket singleton service.
 
