@@ -272,11 +272,18 @@ describe("AgentStatusPushHook", () => {
     });
     h.events.observe({ pane_id: "p1", agent_status: "working" });
     h.events.observe({ pane_id: "p1", agent_status: "done", state_change_seq: 2 });
-    expect(calls).toEqual([["p1", "working"], ["p1", "done"]]);
+    expect(calls).toEqual([
+      ["p1", "working"],
+      ["p1", "done"],
+    ]);
   });
 
   test("reports a rejecting hook without preventing the state sink", async () => {
-    const h = harness({ onAgentStatus: async () => { throw new Error("push failed"); } });
+    const h = harness({
+      onAgentStatus: async () => {
+        throw new Error("push failed");
+      },
+    });
     h.events.observe({ pane_id: "p1", agent_status: "working" });
     await Promise.resolve();
     expect(h.errors[0]?.message).toBe("push failed");
@@ -306,7 +313,9 @@ describe("AgentStatusHookOrdering", () => {
 });
 
 describe("BlockedEmittedOncePerEpisode", () => {
-  test("polling the same blocked pane announces it once", () => {
+  test("polling an unanswered prompt announces it once", () => {
+    // herdr's counter moves only on a state change, so a prompt nobody has
+    // answered is re-sampled with the counter standing still.
     const calls: string[] = [];
     const h = harness({
       onAgentStatus: (_paneId, status) => {
@@ -315,9 +324,25 @@ describe("BlockedEmittedOncePerEpisode", () => {
     });
     h.events.observe({ pane_id: "p1", agent_status: "working" });
     h.events.observe({ pane_id: "p1", agent_status: "blocked", state_change_seq: 2 });
-    h.events.observe({ pane_id: "p1", agent_status: "blocked", state_change_seq: 3 });
-    h.events.observe({ pane_id: "p1", agent_status: "blocked", state_change_seq: 4 });
+    h.events.observe({ pane_id: "p1", agent_status: "blocked", state_change_seq: 2 });
+    h.events.observe({ pane_id: "p1", agent_status: "blocked", state_change_seq: 2 });
     expect(calls.filter((status) => status === "blocked")).toHaveLength(1);
+  });
+
+  test("a second question asked inside one poll gap announces again", () => {
+    // Answered at the desk, worked, asked again — all between two samples. Both
+    // samples read `blocked`, but the counter moved, which is the only proof
+    // available that this is a different question.
+    const calls: string[] = [];
+    const h = harness({
+      onAgentStatus: (_paneId, status) => {
+        calls.push(status);
+      },
+    });
+    h.events.observe({ pane_id: "p1", agent_status: "working" });
+    h.events.observe({ pane_id: "p1", agent_status: "blocked", state_change_seq: 2 });
+    h.events.observe({ pane_id: "p1", agent_status: "blocked", state_change_seq: 8 });
+    expect(calls.filter((status) => status === "blocked")).toHaveLength(2);
   });
 
   test("a new episode announces itself after the pane leaves blocked", () => {

@@ -274,12 +274,15 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
     if (!status) return;
     const previous = state.status;
     const wasSettled = previous !== undefined && SETTLED_STATUSES.has(previous);
-    const statusChanged = status !== previous;
-
     // Polling a blocked pane repeatedly is one permission episode, not repeated
     // buzzes, so an episode announces itself once. The flag clears the moment
-    // the pane is anything else, which is what ends the episode.
-    const blockedAlreadyAnnounced = status === "blocked" && state.blockedNotified === true;
+    // the pane is anything else, which is what ends the episode — and an
+    // advanced counter ends it too: `state_change_seq` moves only on a state
+    // change (verified live: it holds still for as long as a pane sits in one
+    // status), so blocked on both sides of a moved counter means the pane left
+    // and came back, and the second question deserves its own buzz.
+    const blockedAlreadyAnnounced =
+      status === "blocked" && state.blockedNotified === true && !seqAdvanced;
     if (status !== "blocked") state.blockedNotified = false;
 
     // Raw status reports, for collaborators that need the daemon's own words
