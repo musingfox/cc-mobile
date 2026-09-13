@@ -56,7 +56,6 @@ describe("PushNotifierWiring", () => {
       onTurnSettled: (id: string) => {
         calls.push(id);
       },
-      onPermissionPrompt: async () => {},
     };
     const backend = createHerdrBackend({ client: client as any, push });
     backend.registerClient("%1", () => {});
@@ -83,9 +82,10 @@ describe("PushNotifierWiring", () => {
     expect(app).toBeTruthy();
   });
 
-  test("T5: a parsed permission prompt reaches the push collaborator", async () => {
-    // `onPermissionPrompt` was declared in three files and passed by nobody:
-    // a prompt raised while the phone slept pushed nothing at all.
+  test("T5: a blocked pane reaches the push collaborator even when its screen cannot be parsed", async () => {
+    // Push no longer waits for a card. This screen raises none (#33 leaves an
+    // unparseable omp screen uncarded), and it still has to reach push: the
+    // pane wants the human either way.
     const prompts: string[] = [];
     let emit: ((e: { event: string; data: unknown }) => void) | undefined;
     const backend = createHerdrBackend({
@@ -103,8 +103,8 @@ describe("PushNotifierWiring", () => {
         },
       } as any,
       push: {
-        onPermissionPrompt: (paneId) => {
-          prompts.push(paneId);
+        onAgentStatus: (paneId, status) => {
+          if (status === "blocked") prompts.push(paneId);
         },
       },
     });
@@ -117,7 +117,7 @@ describe("PushNotifierWiring", () => {
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
     // The pane id alone: the scope gate reads who spoke into it last, which is
-    // a question the prompt's own emit knows nothing about.
+    // a question the status carries nothing about.
     expect(prompts).toEqual(["%1"]);
     // Closes the status poll this backend armed; a test process is shared.
     await backend.teardownAll();

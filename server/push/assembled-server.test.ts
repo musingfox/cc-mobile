@@ -129,11 +129,23 @@ describe("the assembled server can actually transmit a push", () => {
     const logPath = join(tmp, "attempts.jsonl");
     const backendRef: { current: AppBackend | null } = { current: null };
 
+    // The 45 s merge window, driven rather than waited out. Everything below
+    // the notifier stays real; only the passage of time is injected.
+    let fire: (() => void) | undefined;
     const app = createApp(parseServerConfig([]), {
       pushStore: createSubscriptionStore({ path: join(tmp, "subs.json") }),
       pushAttemptLogPath: logPath,
       herdrClient: client as never,
       backendRef,
+      pushTimers: {
+        setTimeoutFn: (fn) => {
+          fire = fn;
+          return 1 as unknown as ReturnType<typeof setTimeout>;
+        },
+        clearTimeoutFn: () => {
+          fire = undefined;
+        },
+      },
       // The transport boundary, and nothing above it.
       pushSend: async (sub, payload, opts) => {
         sends.push({ sub, payload, opts });
@@ -160,10 +172,16 @@ describe("the assembled server can actually transmit a push", () => {
       event: "pane_updated",
       data: { pane: { pane_id: PANE, agent_status: "working" } },
     });
+    // `done` is end-of-turn: idle and not yet seen. `idle` alone never pushes.
     emitter.emit?.({
       event: "pane_updated",
-      data: { pane: { pane_id: PANE, agent_status: "idle" } },
+      data: { pane: { pane_id: PANE, agent_status: "done" } },
     });
+
+    // Nothing goes out while the window is open.
+    await until(() => fire !== undefined, "the merge window to be armed");
+    expect(sends).toHaveLength(0);
+    fire?.();
 
     await until(() => sends.length > 0, "the push to reach the transport");
 

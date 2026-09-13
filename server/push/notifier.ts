@@ -1,92 +1,97 @@
-/**
- * notifier.ts — the scope gate between a trigger and a send.
- *
- * Both triggers pass through here so the rule is written once.
- *
- * `phone-last` (the default) notifies about a pane whose most recent input came
- * from the phone: the work you asked for while away is the work worth a buzz,
- * and a pane you are typing into at the desk is not. `all` notifies about every
- * pane on the machine.
- *
- * This replaces the original rule, which notified only about panes cc-mobile
- * itself launched. That one was silent in practice — a machine's panes are
- * mostly started in a terminal, and driving one from the phone did not make it
- * eligible — and it contradicted the #29/#30 direction that a terminal-started
- * session is not a second-class one.
- */
+/** Push timing and scope gate. */
 
 import type { PhoneDrivenTracker } from "./phone-driven";
 import type { PushSubscription, VapidConfig } from "./sender";
 
-/** Which panes may buzz a phone. Set by `CC_MOBILE_PUSH_SCOPE`. */
 export type PushScope = "phone-last" | "all";
+export const TURN_PUSH_WINDOW_MS = 45_000;
+type TimerHandle = unknown;
+export interface NotifierTimers {
+  setTimeoutFn?: (fn: () => void, ms: number) => TimerHandle;
+  clearTimeoutFn?: (handle: TimerHandle) => void;
+}
 
-export interface NotifierOptions {
+export interface NotifierOptions extends NotifierTimers {
   scope?: PushScope;
   phoneDriven?: PhoneDrivenTracker;
-  dispatch: (
-    kind: "turn" | "permission",
-    subs: PushSubscription[],
-    vapid?: VapidConfig,
-  ) => Promise<{ attempted: number }>;
+  dispatch: (kind: "turn" | "permission", subs: PushSubscription[], vapid?: VapidConfig) => Promise<{ attempted: number }>;
   getSubscriptions: () => PushSubscription[];
   getVapid?: () => VapidConfig | null;
   warn?: (message: string) => void;
+  setTimeoutFn?: (fn: () => void, ms: number) => TimerHandle;
+  clearTimeoutFn?: (handle: TimerHandle) => void;
 }
 
 export function createPushNotifier(opts: NotifierOptions) {
-  const scope: PushScope = opts.scope ?? "phone-last";
-  const phoneDriven = opts.phoneDriven;
-  const dispatch = opts.dispatch;
-  const getSubs = opts.getSubscriptions;
-  // Defaults to "push is not configured". A placeholder key pair here would
-  // sail past the sender's guard and produce sends that can never arrive.
+  const scope = opts.scope ?? "phone-last";
   const getVapid = opts.getVapid ?? (() => null);
-  const warn = opts.warn ?? ((message: string) => console.warn(`[push] ${message}`));
+  const warn = opts.warn ?? ((message) => console.warn(`[push] ${message}`));
+  const setTimeoutFn = opts.setTimeoutFn ?? ((fn, ms) => setTimeout(fn, ms));
+  const clearTimeoutFn = opts.clearTimeoutFn ?? ((handle) => clearTimeout(handle as ReturnType<typeof setTimeout>));
   let warnedNoTracker = false;
+  const pending = new Map<string, { timer: TimerHandle }>();
 
-  /**
-   * Whether this pane is in scope. `all` asks nothing; `phone-last` asks the
-   * tracker, and with no tracker wired it fails closed and says so once — a
-   * silent "no" here is the one outcome that looks exactly like a working
-   * install that simply has nothing to report.
-   */
   function inScope(paneId: string): boolean {
     if (scope === "all") return true;
-    if (!phoneDriven) {
+    if (!opts.phoneDriven) {
       if (!warnedNoTracker) {
         warnedNoTracker = true;
-        warn(
-          "push scope is phone-last but no send tracker is wired — nothing will be sent. This is a wiring bug, not a quiet machine.",
-        );
+        warn("push scope is phone-last but no send tracker is wired — nothing will be sent. This is a wiring bug, not a quiet machine.");
       }
       return false;
     }
-    return phoneDriven.isPhoneDriven(paneId);
+    return opts.phoneDriven.isPhoneDriven(paneId);
   }
 
   async function send(kind: "turn" | "permission", subs: PushSubscription[]) {
-    await dispatch(kind, subs, getVapid() ?? undefined);
+    await opts.dispatch(kind, subs, getVapid() ?? undefined);
   }
 
-  async function onTurnSettled(paneId: string) {
-    // Subscriber check first: a machine nobody has subscribed from does no
-    // scope work at all, on every settled turn of every pane.
-    const subs = getSubs();
+  function drop(paneId: string): void {
+    const entry = pending.get(paneId);
+    if (!entry) return;
+    clearTimeoutFn(entry.timer);
+    pending.delete(paneId);
+  }
+
+  function flush(): void {
+    // One pane's deadline flushes the machine-wide batch. Clear every other
+    // timer before dispatch so it cannot trail behind as another vibration.
+    if (pending.size === 0) return;
+    for (const entry of pending.values()) clearTimeoutFn(entry.timer);
+    pending.clear();
+    const subs = opts.getSubscriptions();
     if (subs.length === 0) return;
-    if (!inScope(paneId)) return;
-    await send("turn", subs);
+    void send("turn", subs).catch((error: unknown) =>
+      warn(`turn push failed: ${error instanceof Error ? error.message : String(error)}`),
+    );
   }
 
-  async function onPermissionPrompt(paneId: string) {
-    const subs = getSubs();
-    if (subs.length === 0) return;
-    // Same verdict as the turn it belongs to: a prompt is raised *inside* the
-    // turn, so a permission question that came out of something asked from the
-    // phone is asked of the phone.
-    if (!inScope(paneId)) return;
-    await send("permission", subs);
+  async function onAgentStatus(paneId: string, status: string): Promise<void> {
+    if (status === "done") {
+      const subs = opts.getSubscriptions();
+      // Capture scope at turn end, rather than when the delayed callback runs.
+      if (subs.length === 0 || !inScope(paneId)) return;
+      drop(paneId);
+      const timer = setTimeoutFn(flush, TURN_PUSH_WINDOW_MS);
+      pending.set(paneId, { timer });
+      return;
+    }
+    if (status === "idle") return;
+    drop(paneId);
+    if (status !== "blocked") return;
+    const subs = opts.getSubscriptions();
+    if (subs.length === 0 || !inScope(paneId)) return;
+    try {
+      await send("permission", subs);
+    } catch (error) {
+      warn(`permission push failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
-  return { onTurnSettled, onPermissionPrompt };
+  function forget(paneId: string): void {
+    drop(paneId);
+  }
+
+  return { onAgentStatus, forget };
 }

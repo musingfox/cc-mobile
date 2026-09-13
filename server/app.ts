@@ -26,7 +26,7 @@ import { EventBuffer } from "./event-buffer";
 import { createHerdrBackend } from "./herdr/backend";
 import { stripBasePath } from "./path-utils";
 import { createAttemptLog } from "./push/attempt-log";
-import { createPushNotifier } from "./push/notifier";
+import { createPushNotifier, type NotifierTimers } from "./push/notifier";
 import { createPhoneDrivenTracker, type PhoneDrivenTracker } from "./push/phone-driven";
 import { createPushPlugin } from "./push/plugin";
 import { createPushSender, type PushTransport } from "./push/sender";
@@ -99,6 +99,8 @@ export interface AppTestDeps {
    * "the phone sent this" without going through a real pane.
    */
   phoneDriven?: PhoneDrivenTracker;
+  /** Injectable timer pair for deferred turn pushes. */
+  pushTimers?: Pick<NotifierTimers, "setTimeoutFn" | "clearTimeoutFn">;
   /**
    * The environment the root request gate reads (`CC_MOBILE_TRUSTED_USER`,
    * `CC_MOBILE_ALLOWED_ORIGINS`). Production passes nothing and the gate falls
@@ -145,6 +147,7 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
     getVapid: () => loadVapidKeys(),
     scope: serverConfig.pushScope,
     phoneDriven,
+    ...deps.pushTimers,
   });
 
   // herdr is the only default backend (ADR-015 / plan D1). Its transport
@@ -158,13 +161,12 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
       push: {
         onPromptSent: (paneId) => phoneDriven.markSent(paneId),
         onTurnStart: (paneId) => phoneDriven.onTurnStart(paneId),
-        onTurnSettled: async (paneId) => {
-          // Read the verdict before spending the token: `onTurnSettled` on the
-          // tracker clears it, and the notifier is what reads it.
-          await notifier.onTurnSettled(paneId);
-          phoneDriven.onTurnSettled(paneId);
+        onTurnSettled: (paneId) => phoneDriven.onTurnSettled(paneId),
+        onAgentStatus: (paneId, status) => notifier.onAgentStatus(paneId, status),
+        forget: (paneId) => {
+          notifier.forget(paneId);
+          phoneDriven.forget(paneId);
         },
-        onPermissionPrompt: (paneId) => notifier.onPermissionPrompt(paneId),
         subscriberCount: () => pushStore.count(),
       },
       onKeysSent: (paneId, source, outcome) =>

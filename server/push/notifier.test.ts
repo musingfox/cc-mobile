@@ -1,137 +1,38 @@
-/**
- * The scope gate. Rewritten when the rule changed from "panes cc-mobile
- * launched" to "panes the phone spoke into last" — the old rule was silent on
- * a real machine, where panes are mostly started in a terminal.
- */
-
 import { describe, expect, test } from "bun:test";
-import { createPushNotifier, type PushScope } from "./notifier";
-import { createPhoneDrivenTracker, type PhoneDrivenTracker } from "./phone-driven";
+import { createPushNotifier, TURN_PUSH_WINDOW_MS } from "./notifier";
+import { createPhoneDrivenTracker } from "./phone-driven";
 
 const SUB = { endpoint: "https://web.push.apple.com/x", keys: {} } as never;
-
-function build(
-  opts: { scope?: PushScope; phoneDriven?: PhoneDrivenTracker; subs?: unknown[] } = {},
-) {
-  const kinds: string[] = [];
-  const notifier = createPushNotifier({
-    ...(opts.scope ? { scope: opts.scope } : {}),
-    ...(opts.phoneDriven ? { phoneDriven: opts.phoneDriven } : {}),
-    dispatch: async (kind) => {
-      kinds.push(kind);
-      return { attempted: 1 };
-    },
-    getSubscriptions: () => (opts.subs ?? [SUB]) as never[],
-    warn: () => {},
+function build(driven = true, subs = [SUB]) {
+  let now = 0; let next = 0;
+  const timers = new Map<number, { at: number; fn: () => void }>();
+  const kinds: string[] = []; const warnings: string[] = [];
+  const tracker = createPhoneDrivenTracker(); if (driven) tracker.markSent("p1");
+  const notifier = createPushNotifier({ phoneDriven: tracker, getSubscriptions: () => subs as never[],
+    dispatch: async (kind) => { kinds.push(kind); return { attempted: 1 }; }, warn: (m) => warnings.push(m),
+    setTimeoutFn: (fn, ms) => { const id = ++next; timers.set(id, { at: now + ms, fn }); return id; },
+    clearTimeoutFn: (id) => { timers.delete(id as number); },
   });
-  return { notifier, kinds };
+  const advance = async (ms: number) => { now += ms; for (const [id, timer] of [...timers]) if (timer.at <= now) { timers.delete(id); timer.fn(); } await Promise.resolve(); };
+  return { notifier, kinds, warnings, tracker, advance };
 }
 
-describe("push scope: phone-last", () => {
-  test("a turn the phone asked for is announced", async () => {
-    const phoneDriven = createPhoneDrivenTracker();
-    phoneDriven.markSent("p1");
-    phoneDriven.onTurnStart("p1");
-
-    const { notifier, kinds } = build({ phoneDriven });
-    await notifier.onTurnSettled("p1");
-
-    expect(kinds).toEqual(["turn"]);
+describe("status-driven push timing", () => {
+  test("blocked dispatches immediately only when in scope", async () => {
+    const h = build(); await h.notifier.onAgentStatus("p1", "blocked"); expect(h.kinds).toEqual(["permission"]);
+    const quiet = build(false); await quiet.notifier.onAgentStatus("p1", "blocked"); expect(quiet.kinds).toEqual([]);
   });
-
-  test("a turn typed at the terminal is not", async () => {
-    const phoneDriven = createPhoneDrivenTracker();
-    phoneDriven.onTurnStart("p1"); // no send from here preceded it
-
-    const { notifier, kinds } = build({ phoneDriven });
-    await notifier.onTurnSettled("p1");
-
-    expect(kinds).toEqual([]);
+  test("done waits 45 seconds and captures the scope verdict", async () => {
+    const h = build(); await h.notifier.onAgentStatus("p1", "done"); h.tracker.forget("p1");
+    await h.advance(TURN_PUSH_WINDOW_MS - 1); expect(h.kinds).toEqual([]); await h.advance(1); expect(h.kinds).toEqual(["turn"]);
   });
-
-  test("a permission prompt inherits the turn's verdict", async () => {
-    // The prompt is raised inside the turn, so a question that came out of
-    // something asked from the phone is asked of the phone.
-    const phoneDriven = createPhoneDrivenTracker();
-    phoneDriven.markSent("p1");
-    phoneDriven.onTurnStart("p1");
-
-    const { notifier, kinds } = build({ phoneDriven });
-    await notifier.onPermissionPrompt("p1");
-
-    expect(kinds).toEqual(["permission"]);
+  test("new work drops a pending completion", async () => {
+    const h = build(); await h.notifier.onAgentStatus("p1", "done"); await h.advance(10_000); await h.notifier.onAgentStatus("p1", "working"); await h.advance(120_000); expect(h.kinds).toEqual([]);
   });
-
-  test("a permission prompt on a terminal-driven pane stays quiet", async () => {
-    const phoneDriven = createPhoneDrivenTracker();
-    phoneDriven.onTurnStart("p1");
-
-    const { notifier, kinds } = build({ phoneDriven });
-    await notifier.onPermissionPrompt("p1");
-
-    expect(kinds).toEqual([]);
+  test("the first expiry merges all pending panes", async () => {
+    const h = build(); h.tracker.markSent("p2"); h.tracker.markSent("p3");
+    await h.notifier.onAgentStatus("p1", "done"); await h.advance(20_000); await h.notifier.onAgentStatus("p2", "done"); await h.advance(20_000); await h.notifier.onAgentStatus("p3", "done"); await h.advance(6_000);
+    expect(h.kinds).toEqual(["turn"]); await h.advance(200_000); expect(h.kinds).toEqual(["turn"]);
   });
-
-  test("panes are judged one at a time", async () => {
-    const phoneDriven = createPhoneDrivenTracker();
-    phoneDriven.markSent("p1");
-    phoneDriven.onTurnStart("p1");
-    phoneDriven.onTurnStart("p2");
-
-    const { notifier, kinds } = build({ phoneDriven });
-    await notifier.onTurnSettled("p1");
-    await notifier.onTurnSettled("p2");
-
-    expect(kinds).toEqual(["turn"]);
-  });
-
-  test("with no tracker wired nothing is sent, and it says so", async () => {
-    // The failure this catches is the one that looks like success: a scope
-    // gate that answers "no" forever is indistinguishable from a quiet machine.
-    const warnings: string[] = [];
-    const notifier = createPushNotifier({
-      dispatch: async () => ({ attempted: 1 }),
-      getSubscriptions: () => [SUB] as never[],
-      warn: (m) => warnings.push(m),
-    });
-
-    await notifier.onTurnSettled("p1");
-    await notifier.onTurnSettled("p1");
-
-    expect(warnings.length).toBe(1); // once per process, not once per turn
-    expect(warnings[0]).toContain("wiring bug");
-  });
-});
-
-describe("push scope: all", () => {
-  test("a pane the phone never touched is announced", async () => {
-    const { notifier, kinds } = build({ scope: "all", phoneDriven: createPhoneDrivenTracker() });
-
-    await notifier.onTurnSettled("p1");
-
-    expect(kinds).toEqual(["turn"]);
-  });
-
-  test("no tracker is needed at all", async () => {
-    const { notifier, kinds } = build({ scope: "all" });
-
-    await notifier.onTurnSettled("p1");
-
-    expect(kinds).toEqual(["turn"]);
-  });
-});
-
-describe("push scope: subscribers", () => {
-  test("no subscribers means no scope work and no send", async () => {
-    // Checked before the scope rule on purpose: a machine nobody subscribed
-    // from must do nothing at all on every settled turn of every pane.
-    const phoneDriven = createPhoneDrivenTracker();
-    phoneDriven.markSent("p1");
-    phoneDriven.onTurnStart("p1");
-
-    const { notifier, kinds } = build({ phoneDriven, subs: [] });
-    await notifier.onTurnSettled("p1");
-
-    expect(kinds).toEqual([]);
-  });
+  test("forget cancels an armed pane", async () => { const h = build(); await h.notifier.onAgentStatus("p1", "done"); h.notifier.forget("p1"); await h.advance(50_000); expect(h.kinds).toEqual([]); });
 });
