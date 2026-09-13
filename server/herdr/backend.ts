@@ -311,7 +311,10 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
       ? { onTurnSettled: (sessionId: string) => options.push?.onTurnSettled?.(sessionId) }
       : {}),
     ...(options.push?.onAgentStatus
-      ? { onAgentStatus: (sessionId: string, status: string) => options.push?.onAgentStatus?.(sessionId, status) }
+      ? {
+          onAgentStatus: (sessionId: string, status: string) =>
+            options.push?.onAgentStatus?.(sessionId, status),
+        }
       : {}),
     // Separate from the settle wiring: the scope tracker needs turn *starts*
     // even on a machine where nothing has subscribed, because the verdict it

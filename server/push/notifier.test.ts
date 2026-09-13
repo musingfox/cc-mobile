@@ -12,7 +12,12 @@ import { createPhoneDrivenTracker } from "./phone-driven";
 const SUB = { endpoint: "https://web.push.apple.com/x", keys: {} } as never;
 
 function build(
-  options: { driven?: boolean; subs?: unknown[]; scope?: "phone-last" | "all"; tracker?: boolean } = {},
+  options: {
+    driven?: boolean;
+    subs?: unknown[];
+    scope?: "phone-last" | "all";
+    tracker?: boolean;
+  } = {},
 ) {
   const { driven = true, subs = [SUB], scope, tracker: withTracker = true } = options;
 
@@ -248,6 +253,8 @@ describe("push scope", () => {
     await h.notifier.onAgentStatus("p1", "done");
     await h.advance(TURN_PUSH_WINDOW_MS * 4);
     expect(h.kinds).toEqual([]);
-    expect(h.warnings.filter((message) => message.includes("no send tracker is wired"))).toHaveLength(1);
+    expect(
+      h.warnings.filter((message) => message.includes("no send tracker is wired")),
+    ).toHaveLength(1);
   });
 });
