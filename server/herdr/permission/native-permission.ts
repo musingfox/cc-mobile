@@ -54,12 +54,6 @@ export interface NativePermissionOptions {
   now?: () => number;
   warn?: (message: string) => void;
   /**
-   * Announce a permission prompt for push (background notification) even when
-   * no phone/sink is attached. Called for every emitted request (self-filter
-   * is elsewhere). Must be called regardless of getSink result.
-   */
-  onPermissionPrompt?: (sessionId: string, origin: "self" | "foreign") => Promise<void> | void;
-  /**
    * An omp blocked screen that is not a permission prompt: hand the raw text
    * to the announcement path instead of raising an unanswerable card.
    */
@@ -125,7 +119,6 @@ export function createNativePermission(options: NativePermissionOptions) {
   const now = options.now ?? (() => Date.now());
   const warn =
     options.warn ?? ((message: string) => console.warn(`[herdr] permission: ${message}`));
-  const onPermissionPrompt = options.onPermissionPrompt ?? (() => {});
   const onUnparsedBlockedScreen = options.onUnparsedBlockedScreen ?? (() => {});
   const onKeysSent = options.onKeysSent ?? (() => {});
 
@@ -215,21 +208,6 @@ export function createNativePermission(options: NativePermissionOptions) {
       },
       options: entry.options,
     });
-
-    // PushPermissionTrigger: announce every parsed (incl. unparseable fallback)
-    // permission prompt, whether or not phone attached (getSink may be undef).
-    // Call for any origin here; self-filter is in caller. After sink, before arm.
-    // The collaborator is contained both ways: a synchronous throw is caught
-    // here, and a rejected promise is caught off the same call rather than
-    // escaping as an unhandled rejection. Either way the pending entry is
-    // registered and the deny timer is armed.
-    try {
-      Promise.resolve(onPermissionPrompt(sessionId, origin)).catch((error: unknown) => {
-        warn(`onPermissionPrompt rejected for ${sessionId}: ${describe(error)}`);
-      });
-    } catch (error) {
-      warn(`onPermissionPrompt threw for ${sessionId}: ${describe(error)}`);
-    }
 
     armDeny(entry);
     return entry;
