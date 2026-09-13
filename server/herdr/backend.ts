@@ -70,8 +70,10 @@ export interface HerdrBackendOptions {
     onTurnStart?(paneId: string): void;
     /** A turn just settled on this pane. Announced with no sink lookup. */
     onTurnSettled?(paneId: string): Promise<void> | void;
-    /** A permission prompt was just parsed on this pane. */
-    onPermissionPrompt?(paneId: string): Promise<void> | void;
+    /** Every raw agent status observation for this pane. */
+    onAgentStatus?(paneId: string, status: string): Promise<void> | void;
+    /** A pane is gone; discard any deferred push. */
+    forget?(paneId: string): void;
     /** How many phones are registered for push right now. */
     subscriberCount?(): number;
   };
@@ -284,9 +286,6 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
       );
       return match?.origin ?? "foreign";
     },
-    // Announced for every emitted request, sink or no sink — a prompt that
-    // appears while the phone is asleep is exactly the case push exists for.
-    onPermissionPrompt: (sessionId) => options.push?.onPermissionPrompt?.(sessionId),
     onKeysSent: options.onKeysSent,
   });
 
@@ -310,6 +309,9 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
     // instead of becoming an unhandled rejection.
     ...(options.push?.onTurnSettled
       ? { onTurnSettled: (sessionId: string) => options.push?.onTurnSettled?.(sessionId) }
+      : {}),
+    ...(options.push?.onAgentStatus
+      ? { onAgentStatus: (sessionId: string, status: string) => options.push?.onAgentStatus?.(sessionId, status) }
       : {}),
     // Separate from the settle wiring: the scope tracker needs turn *starts*
     // even on a machine where nothing has subscribed, because the verdict it
@@ -389,6 +391,7 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
     delivery.forget(sessionId);
     permission.forget(sessionId);
     notice.forget(sessionId);
+    options.push?.forget?.(sessionId);
   }
 
   return {

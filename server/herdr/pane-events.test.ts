@@ -27,6 +27,7 @@ function harness(
     hasClients?: () => boolean;
     hasPushSubscribers?: () => boolean;
     onTurnSettled?: (sessionId: string) => void | Promise<void>;
+    onAgentStatus?: (sessionId: string, status: string) => void | Promise<void>;
   } = {},
 ) {
   const sent: Record<string, Record<string, unknown>[]> = {};
@@ -83,6 +84,7 @@ function harness(
     ...(overrides.hasClients ? { hasClients: overrides.hasClients } : {}),
     ...(overrides.hasPushSubscribers ? { hasPushSubscribers: overrides.hasPushSubscribers } : {}),
     ...(overrides.onTurnSettled ? { onTurnSettled: overrides.onTurnSettled } : {}),
+    ...(overrides.onAgentStatus ? { onAgentStatus: overrides.onAgentStatus } : {}),
     setIntervalFn: (fn: () => void) => {
       const id = nextTimer++;
       ticks.set(id, fn);
@@ -258,6 +260,28 @@ describe("PaneEventStatusForwarding", () => {
  * so `pane.updated` reports a status only by accident (a title change carrying
  * the pane record). These are the cases where the stream says nothing.
  */
+describe("AgentStatusPushHook", () => {
+  test("forwards raw statuses, including counter-proved done repeats", () => {
+    const calls: string[][] = [];
+    const h = harness({
+      onAgentStatus: (paneId, status) => {
+        calls.push([paneId, status]);
+      },
+    });
+    h.events.observe({ pane_id: "p1", agent_status: "working" });
+    h.events.observe({ pane_id: "p1", agent_status: "done", state_change_seq: 2 });
+    expect(calls).toEqual([["p1", "working"], ["p1", "done"]]);
+  });
+
+  test("reports a rejecting hook without preventing the state sink", async () => {
+    const h = harness({ onAgentStatus: async () => { throw new Error("push failed"); } });
+    h.events.observe({ pane_id: "p1", agent_status: "working" });
+    await Promise.resolve();
+    expect(h.errors[0]?.message).toBe("push failed");
+    expect(h.sent.p1).toEqual([{ type: "session_state", sessionId: "p1", state: "running" }]);
+  });
+});
+
 describe("PaneEventStatusPoll", () => {
   test("delivers a turn that settles with no event on the stream at all", async () => {
     let status = "working";

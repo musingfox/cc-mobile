@@ -123,8 +123,10 @@ export interface HerdrPaneEventsOptions {
    * typed at the terminal, so it must fire for both.
    */
   onTurnStart?: (sessionId: string) => void;
-  /** Separate settle announcement for push path (fires even with no sink). */
+  /** Separate settle announcement for the phone-driven tracker. */
   onTurnSettled?: (sessionId: string) => Promise<void> | void;
+  /** Every raw daemon status observation, including counter-proved repeats. */
+  onAgentStatus?: (sessionId: string, status: string) => Promise<void> | void;
   onError?: (error: Error) => void;
 }
 
@@ -138,6 +140,8 @@ interface PaneState {
   seq?: number;
   /** Last agent kind this pane reported; see `observe`. */
   kind?: string;
+  /** A blocked episode has already reached the push hook. */
+  blockedNotified?: boolean;
 }
 
 /** Pane fields, wherever this event kind happens to put them. */
@@ -181,6 +185,7 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
   const hasPushSubscribers = options.hasPushSubscribers ?? (() => false);
   const onTurnStart = options.onTurnStart;
   const onTurnSettled = options.onTurnSettled;
+  const onAgentStatus = options.onAgentStatus;
   const setIntervalFn =
     options.setIntervalFn ??
     ((fn: () => void, ms: number) => {
@@ -269,6 +274,17 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
     if (!status) return;
     const previous = state.status;
     const wasSettled = previous !== undefined && SETTLED_STATUSES.has(previous);
+    const statusChanged = status !== previous;
+
+    // This is deliberately wider than turn delivery: push must see raw daemon
+    // status reports, including an event-carried idle→done and a new counter
+    // that proves a same-status turn. A blocked pane is the exception: polling
+    // it repeatedly is one permission episode, not repeated buzzes.
+    if ((statusChanged || seqAdvanced) && (status !== "blocked" || !state.blockedNotified)) {
+      if (status === "blocked") state.blockedNotified = true;
+      run(onAgentStatus?.(sessionId, status));
+    }
+    if (status !== "blocked") state.blockedNotified = false;
 
     if (status === previous) {
       // Nothing to re-announce: the status the phone holds is already right, and
@@ -304,18 +320,21 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
     // undefined then, and the fresh cursor sits at end of file, so it costs
     // nothing when there is no turn).
     //
-    // `done` -> `idle` is the one settled pair that is NOT an arrival: it is a
-    // turn already delivered on `done`, decaying. Draining the file there hands
-    // the phone back the prompt it just typed and closes a turn that has not
-    // started — visible as a spinner that stops the instant you hit send. Every
-    // other settled-to-settled move (`idle` -> `done`, `done` -> `done`) only
-    // happens because a turn ran in between, and is only believed when the
-    // counter agrees.
-    const decayingAfterDelivery = previous === "done" && status === "idle";
-    const settledPairRanATurn = wasSettled && seqAdvanced && !decayingAfterDelivery;
+    // `done` -> `idle` is the one settled pair that is NOT an arrival: it means
+    // the completion was seen, typically after a focus-driven refresh. cc-mobile
+    // never focuses a pane (`registry.ts` launches with `focus:false`), so this
+    // must not drain the prompt the phone just typed or close a turn that has
+    // not started. Other settled pairs are believed only when the counter agrees.
+    const seenAfterDelivery = previous === "done" && status === "idle";
+    const settledPairRanATurn = wasSettled && seqAdvanced && !seenAfterDelivery;
     if (SETTLED_STATUSES.has(status) && (!wasSettled || settledPairRanATurn)) {
       run(transcript?.deliverTurn(sessionId));
       run(onTurnSettled?.(sessionId));
+      // An event has no counter. It already emitted this arrival, so discard
+      // the snapshot counter it was compared against; the next snapshot must
+      // not emit the same turn again. Do this only here: clearing it on every
+      // event-path status would erase a real turn after idle→done.
+      if (seq === undefined) state.seq = undefined;
     }
   }
 
