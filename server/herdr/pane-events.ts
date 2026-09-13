@@ -276,24 +276,39 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
     const wasSettled = previous !== undefined && SETTLED_STATUSES.has(previous);
     const statusChanged = status !== previous;
 
-    // This is deliberately wider than turn delivery: push must see raw daemon
-    // status reports, including an event-carried idle→done and a new counter
-    // that proves a same-status turn. A blocked pane is the exception: polling
-    // it repeatedly is one permission episode, not repeated buzzes.
-    if ((statusChanged || seqAdvanced) && (status !== "blocked" || !state.blockedNotified)) {
-      if (status === "blocked") state.blockedNotified = true;
-      run(onAgentStatus?.(sessionId, status));
-    }
+    // Polling a blocked pane repeatedly is one permission episode, not repeated
+    // buzzes, so an episode announces itself once. The flag clears the moment
+    // the pane is anything else, which is what ends the episode.
+    const blockedAlreadyAnnounced = status === "blocked" && state.blockedNotified === true;
     if (status !== "blocked") state.blockedNotified = false;
+
+    // Raw status reports, for collaborators that need the daemon's own words
+    // rather than the turn abstraction. Deliberately wider than turn delivery:
+    // an event-carried idle→done and a new counter proving a same-status turn
+    // both reach it. Always announced *after* `onTurnStart`, never before — a
+    // collaborator that reads who drove this pane must not read a verdict the
+    // turn beginning has not corrected yet, or a question typed at the keyboard
+    // is credited to the last phone that spoke.
+    const announcedPane = sessionId;
+    const announcedStatus = status;
+    function announceStatus(): void {
+      if (blockedAlreadyAnnounced) return;
+      if (announcedStatus === "blocked") state.blockedNotified = true;
+      run(onAgentStatus?.(announcedPane, announcedStatus));
+    }
 
     if (status === previous) {
       // Nothing to re-announce: the status the phone holds is already right, and
       // repeating it would double every event the stream and the poll both see.
       // A settled status that is *not* the same one it was at the last sample
       // still means a whole turn ran in the gap, so it is read out.
-      if (seqAdvanced && SETTLED_STATUSES.has(status)) {
-        run(transcript?.deliverTurn(sessionId));
-        run(onTurnSettled?.(sessionId));
+      if (seqAdvanced) {
+        if (SETTLED_STATUSES.has(status)) {
+          run(transcript?.deliverTurn(sessionId));
+          run(onTurnSettled?.(sessionId));
+        }
+        // No turn began here, so no verdict is pending correction.
+        announceStatus();
       }
       return;
     }
@@ -303,6 +318,8 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
     // else acts on the change, so the scope verdict is already right by the
     // time a prompt or a settle on this same pane is announced.
     if (wasSettled && !SETTLED_STATUSES.has(status)) onTurnStart?.(sessionId);
+
+    announceStatus();
 
     // An unrecognised status is no claim at all — a daemon that invents one must
     // not be able to make the UI assert something wrong.

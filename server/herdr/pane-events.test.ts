@@ -27,6 +27,7 @@ function harness(
     hasClients?: () => boolean;
     hasPushSubscribers?: () => boolean;
     onTurnSettled?: (sessionId: string) => void | Promise<void>;
+    onTurnStart?: (sessionId: string) => void;
     onAgentStatus?: (sessionId: string, status: string) => void | Promise<void>;
   } = {},
 ) {
@@ -84,6 +85,7 @@ function harness(
     ...(overrides.hasClients ? { hasClients: overrides.hasClients } : {}),
     ...(overrides.hasPushSubscribers ? { hasPushSubscribers: overrides.hasPushSubscribers } : {}),
     ...(overrides.onTurnSettled ? { onTurnSettled: overrides.onTurnSettled } : {}),
+    ...(overrides.onTurnStart ? { onTurnStart: overrides.onTurnStart } : {}),
     ...(overrides.onAgentStatus ? { onAgentStatus: overrides.onAgentStatus } : {}),
     setIntervalFn: (fn: () => void) => {
       const id = nextTimer++;
@@ -279,6 +281,83 @@ describe("AgentStatusPushHook", () => {
     await Promise.resolve();
     expect(h.errors[0]?.message).toBe("push failed");
     expect(h.sent.p1).toEqual([{ type: "session_state", sessionId: "p1", state: "running" }]);
+  });
+});
+
+describe("AgentStatusHookOrdering", () => {
+  test("a turn beginning is reported before the status that began it", () => {
+    // The push side reads who drove this pane the moment it is told the status.
+    // Told first, it would read a verdict `onTurnStart` has not corrected yet,
+    // and credit a question typed at the keyboard to the last phone that spoke.
+    const order: string[] = [];
+    const h = harness({
+      onTurnStart: (paneId) => order.push(`start:${paneId}`),
+      onAgentStatus: (paneId, status) => {
+        order.push(`status:${paneId}:${status}`);
+      },
+    });
+    h.events.observe({ pane_id: "p1", agent_status: "idle" });
+    order.length = 0;
+    // Straight from settled to blocked in one observation: the poll is the real
+    // status carrier, so any prompt raised inside one poll gap arrives this way.
+    h.events.observe({ pane_id: "p1", agent_status: "blocked" });
+    expect(order).toEqual(["start:p1", "status:p1:blocked"]);
+  });
+});
+
+describe("BlockedEmittedOncePerEpisode", () => {
+  test("polling the same blocked pane announces it once", () => {
+    const calls: string[] = [];
+    const h = harness({
+      onAgentStatus: (_paneId, status) => {
+        calls.push(status);
+      },
+    });
+    h.events.observe({ pane_id: "p1", agent_status: "working" });
+    h.events.observe({ pane_id: "p1", agent_status: "blocked", state_change_seq: 2 });
+    h.events.observe({ pane_id: "p1", agent_status: "blocked", state_change_seq: 3 });
+    h.events.observe({ pane_id: "p1", agent_status: "blocked", state_change_seq: 4 });
+    expect(calls.filter((status) => status === "blocked")).toHaveLength(1);
+  });
+
+  test("a new episode announces itself after the pane leaves blocked", () => {
+    const calls: string[] = [];
+    const h = harness({
+      onAgentStatus: (_paneId, status) => {
+        calls.push(status);
+      },
+    });
+    h.events.observe({ pane_id: "p1", agent_status: "blocked" });
+    h.events.observe({ pane_id: "p1", agent_status: "working" });
+    h.events.observe({ pane_id: "p1", agent_status: "blocked" });
+    expect(calls.filter((status) => status === "blocked")).toHaveLength(2);
+  });
+});
+
+describe("OneTurnOneDispatch", () => {
+  test("a turn both the stream and the next poll see settles once", () => {
+    const h = harness({ hasPushSubscribers: () => true });
+    // The poll established the counter; the pane is mid-turn.
+    h.events.observe({ pane_id: "p1", agent_status: "working", state_change_seq: 5 });
+    h.transcriptCalls.length = 0;
+    // The stream reports the arrival. Events carry no counter.
+    h.events.observe({ pane_id: "p1", agent_status: "done" });
+    // The next poll sees the same status with the counter moved on.
+    h.events.observe({ pane_id: "p1", agent_status: "done", state_change_seq: 6 });
+    expect(h.transcriptCalls.filter((call) => call === "deliver:p1")).toHaveLength(1);
+  });
+
+  test("an event-carried done after idle still settles exactly once", () => {
+    // The regression guard for the narrow clear: `{idle, seq}` plus an event
+    // `done` does not emit the arrival, so the delivery comes from the NEXT
+    // poll. Clearing the counter on every event-path status would make this
+    // turn deliver never, and no other test would notice.
+    const h = harness({ hasPushSubscribers: () => true });
+    h.events.observe({ pane_id: "p1", agent_status: "idle", state_change_seq: 5 });
+    h.transcriptCalls.length = 0;
+    h.events.observe({ pane_id: "p1", agent_status: "done" });
+    h.events.observe({ pane_id: "p1", agent_status: "done", state_change_seq: 6 });
+    expect(h.transcriptCalls.filter((call) => call === "deliver:p1")).toHaveLength(1);
   });
 });
 
