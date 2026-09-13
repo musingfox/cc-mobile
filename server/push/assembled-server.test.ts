@@ -19,6 +19,7 @@ import type { AppBackend } from "../app";
 import { createApp } from "../app";
 import { parseServerConfig } from "../config";
 import type { PushRequestOptions, PushSubscription } from "./sender";
+import { createPhoneDrivenTracker } from "./phone-driven";
 import { createSubscriptionStore } from "./subscription-store";
 
 const SELF_LABEL = "ccm-3f2a9b01-1111-4222-8333-444455556666";
@@ -293,6 +294,7 @@ describe("the assembled server can actually transmit a push", () => {
     delete process.env.CC_MOBILE_VAPID_PUBLIC_KEY;
     delete process.env.CC_MOBILE_VAPID_PRIVATE_KEY;
     let sent = 0;
+    let fire: (() => void) | undefined;
     const { client, emitter } = fakeHerdr();
     const logPath = join(tmp, "attempts.jsonl");
     const backendRef: { current: AppBackend | null } = { current: null };
@@ -302,6 +304,15 @@ describe("the assembled server can actually transmit a push", () => {
       pushAttemptLogPath: logPath,
       herdrClient: client as never,
       backendRef,
+      pushTimers: {
+        setTimeoutFn: (fn) => {
+          fire = fn;
+          return 1 as unknown as ReturnType<typeof setTimeout>;
+        },
+        clearTimeoutFn: () => {
+          fire = undefined;
+        },
+      },
       pushSend: async () => {
         sent++;
         return { statusCode: 201 };
@@ -310,14 +321,22 @@ describe("the assembled server can actually transmit a push", () => {
 
     await post(app, { endpoint: APPLE_ENDPOINT, keys: { p256dh: "BN", auth: "k1" } });
     await backendRef.current?.listSessionDescriptors?.();
+    // Drive the pane from the phone, or the scope gate is what stops the send
+    // and this test proves nothing about VAPID.
+    await backendRef.current?.send({ claudeUuid: PANE, content: "do the thing" });
     emitter.emit?.({
       event: "pane_updated",
       data: { pane: { pane_id: PANE, agent_status: "working" } },
     });
+    // `done`, not `idle`: `idle` can never push, so driving it would make this
+    // pass for a reason that has nothing to do with what the test is named for.
     emitter.emit?.({
       event: "pane_updated",
-      data: { pane: { pane_id: PANE, agent_status: "idle" } },
+      data: { pane: { pane_id: PANE, agent_status: "done" } },
     });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(fire).not.toBeUndefined();
+    fire?.();
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(sent).toBe(0);
@@ -347,8 +366,63 @@ describe("the assembled server can actually transmit a push", () => {
     expect(store.count()).toBe(0);
   });
 
+  test("tearing a pane down drops both its queued notification and its scope row", async () => {
+    // Two rows survive every closed session otherwise, and a reused pane id
+    // would inherit a verdict earned by whoever held that id before it.
+    const forgotten: string[] = [];
+    const tracker = createPhoneDrivenTracker();
+    const realForget = tracker.forget.bind(tracker);
+    tracker.forget = (paneId: string) => {
+      forgotten.push(paneId);
+      realForget(paneId);
+    };
+    let fire: (() => void) | undefined;
+    const { client, emitter } = fakeHerdr();
+    const backendRef: { current: AppBackend | null } = { current: null };
+
+    const app = createApp(parseServerConfig([]), {
+      pushStore: createSubscriptionStore({ path: join(tmp, "subs.json") }),
+      pushAttemptLogPath: join(tmp, "attempts.jsonl"),
+      herdrClient: client as never,
+      backendRef,
+      phoneDriven: tracker,
+      pushTimers: {
+        setTimeoutFn: (fn) => {
+          fire = fn;
+          return 1 as unknown as ReturnType<typeof setTimeout>;
+        },
+        clearTimeoutFn: () => {
+          fire = undefined;
+        },
+      },
+      pushSend: async () => ({ statusCode: 201 }),
+    });
+
+    await post(app, { endpoint: APPLE_ENDPOINT, keys: { p256dh: "BN", auth: "k1" } });
+    await backendRef.current?.listSessionDescriptors?.();
+    await backendRef.current?.send({ claudeUuid: PANE, content: "do the thing" });
+    emitter.emit?.({
+      event: "pane_updated",
+      data: { pane: { pane_id: PANE, agent_status: "working" } },
+    });
+    emitter.emit?.({
+      event: "pane_updated",
+      data: { pane: { pane_id: PANE, agent_status: "done" } },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(fire).not.toBeUndefined();
+
+    await backendRef.current?.teardown?.(PANE);
+
+    expect(forgotten).toContain(PANE);
+    expect(fire).toBeUndefined();
+    expect(tracker.isPhoneDriven(PANE)).toBe(false);
+    await backendRef.current?.teardownAll?.();
+  });
+
   test("a pane the user started in their own terminal never buzzes the phone", async () => {
     let sent = 0;
+    let fire: (() => void) | undefined;
     const { client, emitter } = fakeHerdr();
     // Same daemon, one difference: the workspace is not cc-mobile's.
     client.sessionSnapshot = async () => ({
@@ -365,6 +439,15 @@ describe("the assembled server can actually transmit a push", () => {
       pushAttemptLogPath: join(tmp, "attempts.jsonl"),
       herdrClient: client as never,
       backendRef,
+      pushTimers: {
+        setTimeoutFn: (fn) => {
+          fire = fn;
+          return 1 as unknown as ReturnType<typeof setTimeout>;
+        },
+        clearTimeoutFn: () => {
+          fire = undefined;
+        },
+      },
       pushSend: async () => {
         sent++;
         return { statusCode: 201 };
@@ -377,10 +460,14 @@ describe("the assembled server can actually transmit a push", () => {
       event: "pane_updated",
       data: { pane: { pane_id: PANE, agent_status: "working" } },
     });
+    // `done`, not `idle`: `idle` can never push, so driving it would make this
+    // pass for a reason that has nothing to do with what the test is named for.
     emitter.emit?.({
       event: "pane_updated",
-      data: { pane: { pane_id: PANE, agent_status: "idle" } },
+      data: { pane: { pane_id: PANE, agent_status: "done" } },
     });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    fire?.();
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(sent).toBe(0);
