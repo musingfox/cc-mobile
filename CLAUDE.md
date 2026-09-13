@@ -197,7 +197,9 @@ produced it; `claudeUuids` mirrors `sessions[].sessionId` (an outdated name kept
 for cached bundles — it holds pane ids of every kind now) and `states` is
 pane-keyed.
 
-Since #33 two kinds enter the permission flow: claude and omp. A pane whose kind
+Since #33 two kinds enter the permission **card** flow: claude and omp. (Push is
+no longer one of its consumers — it reads the raw `agent_status`, so a `blocked`
+screen that raises no card still buzzes the phone; see **Background Push**.) A pane whose kind
 is known to be anything else does not — `blocked` there is not turned into a
 `permission_request`, because on a screen no parser understands even the
 Cancel-only fallback would send `esc` as a guess about what that key does. A
@@ -238,6 +240,20 @@ Schemas defined in `server/protocol.ts`. Full spec in `cc-mobile.md`.
 
 ## Background Push (web push for iOS PWA)
 - Scope is `phone-last` (`server/push/notifier.ts`, `phone-driven.ts`): a pane triggers `dispatch` when the phone is behind its current turn — cc-mobile injected the prompt. The tracker is in-memory, so after a restart no pane is in scope until the phone speaks again.
+- Timing reads herdr's `agent_status`, not a trigger of cc-mobile's own. `blocked`
+  sends at once, once per blocked episode (the pane is polled; an episode is one
+  question, not one per sample). A literal `done` — herdr's "idle and not yet
+  seen" — opens a 45-second window per pane instead of sending, and the first
+  window to expire flushes every pane pending at that moment as **one**
+  notification. `idle` neither notifies nor cancels: a `done` that gets marked
+  seen decays to `idle`, and that is the same turn. Every other status
+  (`working`, `unknown`, anything unrecognised) **cancels** a pane's pending
+  notification rather than merely being silent — the next `done` opens a fresh
+  window. The scope verdict is taken when `done` arrives, never when the timer
+  fires, so the window moves *when* a phone is buzzed and never *which* phone.
+- Because `done` means "not yet seen" and focus marks a pane seen, a pane the
+  herdr TUI is displaying never reports `done` and its finished turns are
+  silent. That is the accepted cost of reading herdr's own word for end-of-turn.
 - Every send attempt is logged to ~/.claude-mobile/push-attempts.jsonl with {ts,kind,host,status,reason} (PushAttemptLog).
 - Constant generic payload only; no session/cwd/tool in the push body (traverses APNs).
 - VAPID from CC_MOBILE_VAPID_* envs; positive TTL (0→1); 410/404 prunes subscription.
