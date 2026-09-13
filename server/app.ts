@@ -100,7 +100,7 @@ export interface AppTestDeps {
    */
   phoneDriven?: PhoneDrivenTracker;
   /** Injectable timer pair for deferred turn pushes. */
-  pushTimers?: Pick<NotifierTimers, "setTimeoutFn" | "clearTimeoutFn">;
+  pushTimers?: NotifierTimers;
   /**
    * The environment the root request gate reads (`CC_MOBILE_TRUSTED_USER`,
    * `CC_MOBILE_ALLOWED_ORIGINS`). Production passes nothing and the gate falls
