@@ -20,13 +20,37 @@
  * `ws.send`.
  */
 
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { SessionManager } from "../session-manager";
 import { startWsHarness, testServerConfig, type WsHarness } from "./ws-harness";
 
 let harness: WsHarness | null = null;
 
+const REAL_PATH = process.env.PATH;
+
+/** A PATH holding executables named exactly `names`, and nothing else. */
+function pathWithOnly(names: string[]): string {
+  const dir = mkdtempSync(join(tmpdir(), "ccm-surviving-"));
+  for (const name of names) {
+    writeFileSync(join(dir, name), "#!/bin/sh\n", { mode: 0o755 });
+  }
+  return dir;
+}
+
+// `availableAgents` is read off PATH at reply time (`ws.ts:356`), so the reply
+// depends on the machine unless the test says what is installed. It used to
+// depend on the developer's own PATH, which held `claude` and made the
+// assertion below look universal; CI has none, so it failed there on every
+// push from 2026-08-06 to 2026-09-15 while staying green on every dev machine.
+beforeEach(() => {
+  process.env.PATH = pathWithOnly(["claude"]);
+});
+
 afterEach(async () => {
+  process.env.PATH = REAL_PATH;
   await harness?.close();
   harness = null;
 });
@@ -84,8 +108,9 @@ describe("ServerConfigStillAnswered", () => {
       "availableAgents",
       "homeDirectory",
     ]);
-    // claude is what cc-mobile itself runs on, so it is always present here.
-    expect(config.availableAgents).toContain("claude");
+    // Reported because this test's PATH holds it — not because the server
+    // assumes its own machine can run claude.
+    expect(config.availableAgents).toEqual(["claude"]);
     // An agent's own settings are its own: the server neither sets nor reports
     // them here any more.
     for (const gone of ["permissionMode", "model", "effort"]) {
