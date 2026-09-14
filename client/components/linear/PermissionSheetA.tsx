@@ -38,7 +38,15 @@ export default function PermissionSheetA({ pending, onApprove, onDeny, onChoose 
   const [chosen, setChosen] = useState<string | null>(null);
   const touchStartX = useRef<number | null>(null);
 
+  // A question has no deadline and no swipe: the 60s counter and the swipe hint
+  // would promise a deadline and a gesture the screen does not have, and a right
+  // swipe would pick the first option on the user's behalf. Refusing the gesture
+  // at its start leaves the move and end handlers inert, so the card never even
+  // offers the drag as visual feedback.
+  const isQuestion = pending?.promptKind === "question";
+
   const handleTouchStart = (e: React.TouchEvent) => {
+    if (isQuestion) return;
     touchStartX.current = e.touches[0].clientX;
   };
 
@@ -78,9 +86,6 @@ export default function PermissionSheetA({ pending, onApprove, onDeny, onChoose 
 
   if (!pending) return null;
   const description = pending.tool.parameters.description;
-  // A question has no deadline and no swipe: drawing the 60s counter or the
-  // swipe hint there would promise the user something the screen cannot do.
-  const isQuestion = pending.promptKind === "question";
   // Never an empty sheet: an unparseable screen still gets a way out.
   const options = pending.options?.length ? pending.options : CANCEL_ONLY;
 

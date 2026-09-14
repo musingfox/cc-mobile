@@ -269,3 +269,50 @@ describe("QuestionCardPresentation", () => {
     expect(buttons(container).map((b) => b.textContent)).toEqual(["Cancel"]);
   });
 });
+
+/**
+ * QuestionCardIgnoresSwipe — approve and deny are permission verbs. On a
+ * question a right swipe used to send the first option, answering for the
+ * user; the gesture is inert there, down to the drag feedback.
+ */
+describe("QuestionCardIgnoresSwipe", () => {
+  afterEach(() => cleanup());
+
+  function sheetOf(pendingCard: PendingPermission, counts: { approved: number; denied: number }) {
+    const { container } = render(
+      <PermissionSheetA
+        pending={pendingCard}
+        onApprove={() => counts.approved++}
+        onDeny={() => counts.denied++}
+      />,
+    );
+    return container.querySelector(".lin-permission") as HTMLElement;
+  }
+
+  test("T1: swiping right on a question approves nothing", () => {
+    const counts = { approved: 0, denied: 0 };
+    swipe(sheetOf(question, counts), 50, 150);
+    expect(counts.approved).toBe(0);
+  });
+
+  test("T2: swiping left on a question denies nothing", () => {
+    const counts = { approved: 0, denied: 0 };
+    swipe(sheetOf(question, counts), 200, 100);
+    expect(counts.denied).toBe(0);
+  });
+
+  test("T3: dragging a question promises no movement", () => {
+    const counts = { approved: 0, denied: 0 };
+    const sheet = sheetOf(question, counts);
+    fireEvent.touchStart(sheet, { touches: [{ clientX: 100 }] });
+    fireEvent.touchMove(sheet, { touches: [{ clientX: 160 }] });
+    expect(sheet.style.transform).toBe("");
+    fireEvent.touchEnd(sheet);
+  });
+
+  test("T4: a permission card still approves on a right swipe", () => {
+    const counts = { approved: 0, denied: 0 };
+    swipe(sheetOf(pending, counts), 50, 150);
+    expect(counts.approved).toBe(1);
+  });
+});
