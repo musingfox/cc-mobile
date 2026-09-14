@@ -14,6 +14,8 @@ import { parseBlockedPrompt } from "./prompt-parse";
 
 const FIXTURES = join(import.meta.dir, "fixtures");
 const singleSelect = readFileSync(join(FIXTURES, "claude-ask-user-question.txt"), "utf8");
+const multiSelect = readFileSync(join(FIXTURES, "claude-ask-multiselect.txt"), "utf8");
+const stepper = readFileSync(join(FIXTURES, "claude-ask-stepper.txt"), "utf8");
 
 describe("ClaudeQuestionParse", () => {
   test("offers exactly the two real answers, not the free-text or chat rows", () => {
@@ -52,5 +54,43 @@ describe("ClaudeQuestionParse", () => {
     lines.splice(boxTop, 1);
 
     expect(parseBlockedPrompt({ text: lines.join("\n") })).toBeNull();
+  });
+});
+
+/**
+ * The two screens whose answer is a sequence rather than a keystroke. Both are
+ * verbatim captures, and both must reach the phone as the raw screen plus a
+ * Cancel — a card of digits would toggle a checkbox or walk to the wrong
+ * question instead of answering.
+ */
+describe("ClaudeQuestionVariantRefusal", () => {
+  test("a multiSelect question is not turned into tappable options", () => {
+    expect(parseBlockedPrompt({ text: multiSelect })).toBeNull();
+  });
+
+  test("a multi-question stepper is refused even though its options look single-select", () => {
+    // Its option rows are drawn identically to the single-select fixture's, so
+    // the checkbox shape alone would let this one through: the header chip's
+    // "✔ Submit" is what says the answer is not one digit.
+    expect(stepper).toContain("✔ Submit");
+    expect(parseBlockedPrompt({ text: stepper })).toBeNull();
+  });
+
+  test("the checkbox shape refuses a multiSelect whose header gave nothing away", () => {
+    const headerless = multiSelect.replace("←  ", "").replace("  ✔ Submit  →", "");
+
+    expect(headerless).not.toContain("Submit  →");
+    expect(parseBlockedPrompt({ text: headerless })).toBeNull();
+  });
+
+  test("a question with nothing but the free-text row parses as nothing", () => {
+    const noAnswers = singleSelect
+      .replace("❯ 1. A\n", "")
+      .replace("     選擇 A\n", "")
+      .replace("  2. B\n", "")
+      .replace("     選擇 B\n", "");
+
+    expect(noAnswers).not.toContain("選擇 A");
+    expect(parseBlockedPrompt({ text: noAnswers })).toBeNull();
   });
 });
