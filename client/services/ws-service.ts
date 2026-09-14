@@ -1,4 +1,4 @@
-import type { ContentBlock } from "../../server/protocol";
+import type { ContentBlock, PromptKind } from "../../server/protocol";
 import { debugLog } from "../components/DebugOverlay";
 import {
   type ActiveAgent,
@@ -314,7 +314,12 @@ export function pendingFromPermissionRequest(msg: Record<string, unknown>): Pend
   // synthesised here. An empty list means the screen was unreadable and the
   // sheet offers Cancel only.
   const options = Array.isArray(msg.options) ? (msg.options as PermissionOption[]) : [];
-  const kind = msg.promptKind;
+  // Narrowed against the two literals rather than against `PromptKindSchema`
+  // itself: importing the schema as a value pulls zod into the phone's bundle
+  // (measured: +60 KB, and `ZodError` appears in the built assets where it is
+  // absent today). The type still comes from the schema, so a third value here
+  // would not compile.
+  const kind = msg.promptKind as PromptKind | undefined;
   return {
     requestId: msg.requestId as string,
     tool: msg.tool as {

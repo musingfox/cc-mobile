@@ -83,6 +83,30 @@ describe("ClaudeQuestionVariantRefusal", () => {
     expect(parseBlockedPrompt({ text: headerless })).toBeNull();
   });
 
+  test("a lower-case Submit in the chip row still refuses the screen", () => {
+    // The guard decides whether a digit is an answer or a step in a sequence.
+    // Casing is claude's to change, so it must not be what the refusal hangs on.
+    // Built from the single-select capture so the arrow glyphs cannot carry the
+    // refusal on their own — the word is the only thing left to catch it.
+    const lowered = singleSelect.replace(" ☐ A 或 B", " ☐ A 或 B  ✔ submit");
+
+    expect(lowered).toContain("✔ submit");
+    expect(lowered).not.toContain("←");
+    expect(parseBlockedPrompt({ text: lowered })).toBeNull();
+  });
+
+  test("an alternate cursor glyph still yields both answers, not half the card", () => {
+    // A caret this line-matcher does not know demotes its option into the
+    // question text and offers the rest — a half card is worse than no card.
+    const altCursor = singleSelect.replace("❯ 1. A", "› 1. A");
+
+    expect(altCursor).toContain("› 1. A");
+    expect(parseBlockedPrompt({ text: altCursor })?.options).toEqual([
+      { id: "1", label: "A", keystroke: "1" },
+      { id: "2", label: "B", keystroke: "2" },
+    ]);
+  });
+
   test("a question with nothing but the free-text row parses as nothing", () => {
     const noAnswers = singleSelect
       .replace("❯ 1. A\n", "")

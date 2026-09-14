@@ -288,3 +288,48 @@ Decision M1（不重塑內容）不受影響：歷史信封裡的 record body �
 因此：**升級本機 agent 工具（herdr / omp / claude）後跑一次 `bun run test:herdr`**。同一天（2026-08-24）herdr 協定號從 19 跳到 20 也咬了一次，但那個是開機就 throw、聲音很大；畫面文字是靜默的，兩種警覺不能互相取代。
 
 畫面解析這類程式碼天生會腐爛。`omp-prompt.ts` 的 `ponytail:` 註記標了這個天花板，兩種形狀（扁平 17.2.9、方框 17.4.1）現在都釘在 `omp-prompt.test.ts` 與 `native-permission.test.ts`——不是為了支援舊版，是為了讓下一次改版失敗在 `bun test`，而不是在生產環境。
+
+## 2026-09-14 增修：claude 的問題畫面進卡片流程，並成為 90 秒 `esc` 的第三個例外
+
+§2026-08-02 把 90 秒無人看管 deny 收窄成兩個條件：只對 cc-mobile 自建的 pane，且送鍵前重讀
+`agent_status` 並重新解析螢幕比對 fingerprint，兩者皆符才送。這一段加**第三個**條件。
+
+### 決定
+
+claude 的 AskUserQuestion 單題單選畫面（`server/herdr/permission/claude-question.ts`）解析成權限卡
+同一套形狀的可點選項，答案走既有的 `pane.send_keys`。解析結果帶 `promptKind`，值為
+`"permission"` 或 `"question"`；**`promptKind === "question"` 的提示不上膛 90 秒 `esc`**。
+
+豁免只給**已解析**的問題。被排除的變體（multiSelect、多題 stepper）解析成 `null`，行為與此決策
+之前完全一樣：發 Cancel-only 卡片、照樣上膛。權限提示的倒數一個字沒動。
+
+連帶：遷移窗口的 `{allow: true}` 在問題提示上被拒絕（走 `permission_option_unknown`，不送任何鍵）。
+`chosenIndex` 把 `allow:true` 映到 `options[0]`，那個映射對權限提示是「同意一次」的保守解讀，
+對問題畫面卻是**替使用者選了第一個答案**。`{allow: false}` → `esc` 不受影響。
+
+### 理由
+
+`esc` 對這兩種畫面的意義不同。權限提示上它是「這次不准」，是一個有意義的保守預設；問題畫面上
+它取消的是問題本身（實測：回到 composer 並印 `⎿ Interrupted · What should Claude do instead?`），
+讓 agent 在沒有使用者選擇的情況下自己走下去。逾時按 `esc` 因此是在猜一個不存在的安全預設。
+#24 存在的理由——自建 pane 上沒人回答的畫面不該永久占住 turn——在這裡不適用：一道問題本來就
+只有人能回答，而它不會像權限提示那樣擋住一個已經在跑的工具。
+
+### 排除多步畫面不是保守，是唯一安全解
+
+多題 stepper 答完第一題後，畫面確實推進到第二題，但 herdr 的 `agent_status` 維持 `blocked`、
+`state_change_seq` 不動（實測 2026-09-14，claude v2.1.270，連續六次取樣）。`pane-events.ts` 在
+狀態沒變時早退、不重讀螢幕，所以第二題永遠不會發出新卡片——放行 stepper 等於手機答完第一題後
+永久沉默。**同一個 blocked episode 內的畫面變化，cc-mobile 一律看不到**，這是這一層的結構限制，
+不是這次的實作取捨。
+
+### 判別式的選擇，以及不能用的那個
+
+錨點是畫面最後一個選項 `Chat about this`，不是頁尾。頁尾看起來更穩，但 `fixtures/trust-dialog.txt`
+本身就是 `Enter to confirm · Esc to cancel` 且帶編號選項——以頁尾為錨會讓首次啟動的工作區信任
+對話被解析成可按的選項，而那個畫面按數字會直接退出 claude。錨點在畫面**底部**，真正的選項在它
+之上、隔著一條中段橫線，所以區塊界定是往上走的，與權限提示往下掃的形狀相反。
+
+這條同樣會腐爛，理由與 §2026-08-25 記的一樣：三個逐字畫面實錄釘在
+`server/herdr/permission/fixtures/claude-ask-{user-question,multiselect,stepper}.txt`，不是為了支援
+舊版，是為了讓下一次 claude 改版失敗在 `bun test`。

@@ -107,7 +107,9 @@ export default function PermissionSheetA({ pending, onApprove, onDeny, onChoose 
     >
       <div className="lin-permission-row">
         <Icon name="shield" size={14} color={T.accentWarn} />
-        <span className="lin-permission-label">{isQuestion ? "Question" : "Permission Required"}</span>
+        <span className="lin-permission-label">
+          {isQuestion ? "Question" : "Permission Required"}
+        </span>
         {!isQuestion && <span className="lin-permission-timer">{secondsLeft}s</span>}
       </div>
       <div className="lin-permission-tool">{pending.tool.name}</div>

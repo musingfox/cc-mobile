@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ContentBlock } from "../../server/protocol";
+import type { ContentBlock, PromptKind } from "../../server/protocol";
 import {
   clearSessionState,
   getAllSessionIds,
@@ -56,8 +56,7 @@ export type PermissionOption = {
   keystroke?: string;
 };
 
-/** What the terminal is waiting for: a tool gate, or an answer only the user has. */
-export type PromptKind = "permission" | "question";
+export type { PromptKind };
 
 export type PendingPermission = {
   requestId: string;

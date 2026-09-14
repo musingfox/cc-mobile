@@ -59,8 +59,8 @@ const ANCHOR_LABEL = /^Chat about this\.?$/;
 /** A bare horizontal rule, the same shape the permission box uses. */
 const RULE = /^\s*─{20,}\s*$/;
 
-/** `❯ 1. A` / `  2. B` — the cursor caret is optional. */
-const OPTION_LINE = /^\s*(?:[❯>]\s*)?(\d+)\.\s+(\S.*?)\s*$/;
+/** `❯ 1. A` / `  2. B` — the cursor caret is optional; claude has printed `›` too. */
+const OPTION_LINE = /^\s*(?:[❯›>]\s*)?(\d+)\.\s+(\S.*?)\s*$/;
 
 /** The escape hatch into a free-text field; a digit cannot answer it. */
 const FREE_TEXT_LABEL = /^Type something\.?$/i;
@@ -75,7 +75,7 @@ const CHIP_GLYPH = /^[☐☑☒✔✓]\s*/;
  * What a header chip row says when the answer is a sequence, not a keystroke:
  * `←  ☐ 第一題  ☐ 第二題  ✔ Submit  →`.
  */
-const SEQUENCED_HEADER = /Submit|←|→/;
+const SEQUENCED_HEADER = /submit|←|→/i;
 
 /** How far above the anchor the box may start before this stops looking. */
 const MAX_LOOKBACK = 40;

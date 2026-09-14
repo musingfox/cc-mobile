@@ -229,6 +229,10 @@ const PermissionOptionSchema = z.object({
  * offers — 2 or 3, wording varies — and is optional only because the legacy hook
  * relay, alive until the pipeline is deleted, has none to report.
  */
+/** What the terminal is waiting for: a tool gate, or an answer only the user has. */
+export const PromptKindSchema = z.enum(["permission", "question"]);
+export type PromptKind = z.infer<typeof PromptKindSchema>;
+
 const PermissionRequestMessage = z.object({
   type: z.literal("permission_request"),
   sessionId: z.string(),
@@ -245,7 +249,7 @@ const PermissionRequestMessage = z.object({
    * at all rather than guessing, and a bundle cached before this field existed
    * ignores it.
    */
-  promptKind: z.enum(["permission", "question"]).optional(),
+  promptKind: PromptKindSchema.optional(),
 });
 
 const ErrorMessage = z.object({
