@@ -238,6 +238,14 @@ const PermissionRequestMessage = z.object({
     parameters: z.record(z.unknown()),
   }),
   options: z.array(PermissionOptionSchema).optional(),
+  /**
+   * Whether the terminal is asking permission for a tool call or asking the
+   * user a question it cannot answer itself (claude's AskUserQuestion). Sent
+   * only when the screen parsed: a Cancel-only fallback carries no `promptKind`
+   * at all rather than guessing, and a bundle cached before this field existed
+   * ignores it.
+   */
+  promptKind: z.enum(["permission", "question"]).optional(),
 });
 
 const ErrorMessage = z.object({

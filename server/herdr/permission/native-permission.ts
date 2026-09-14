@@ -214,6 +214,9 @@ export function createNativePermission(options: NativePermissionOptions) {
           : { text: rawTail(sample.text) },
       },
       options: entry.options,
+      // Only when a parse claimed it. An unreadable screen says nothing about
+      // which of the two it is, and a wrong claim is worse than no claim.
+      ...(parsed ? { promptKind: parsed.promptKind } : {}),
     });
 
     armDeny(entry);

@@ -85,7 +85,7 @@ All recorded in `docs/adr/`. Key decisions:
 
 - **Herdr terminal layer** (ADR-015): herdr socket is the only trunk; C-hybrid concepts carried; the SDK query() path was removed in #25 (see ADR-011's "#25 後現況" section).
 - **herdr-native model** (ADR-015 §2026-08-02, #29): the self-built hook pipeline is gone. Replies are read from claude's transcript file and permissions from the pane's own screen, so a session the user started in their own terminal behaves exactly like one cc-mobile launched.
-- **Permission flow** (ADR-015 §2026-08-02): herdr reports `blocked` → the server parses the prompt off `pane.read --source detection` → the phone shows the terminal's own options → `pane.send_keys` presses the chosen key. Unanswered after 90s → `esc`, but only on panes cc-mobile launched, and only if a fresh `agent_status` + prompt-fingerprint re-read still match.
+- **Permission flow** (ADR-015 §2026-08-02): herdr reports `blocked` → the server parses the prompt off `pane.read --source detection` → the phone shows the terminal's own options → `pane.send_keys` presses the chosen key. Unanswered after 90s → `esc`, but only on panes cc-mobile launched, and only if a fresh `agent_status` + prompt-fingerprint re-read still match. A prompt that parsed as a **question** (`promptKind === "question"`) is exempt from that countdown and waits indefinitely: `esc` at claude's AskUserQuestion screen cancels the question, and a question has no safe default to decay to. The exemption needs a successful parse — a screen nobody could read keeps the countdown it has today.
 - **Push reads the raw status** (ADR-017): the `blocked` push no longer waits for a permission card, so screens #33 leaves uncarded still buzz the phone. The card rules themselves are unchanged — only what triggers a notification.
 - **Zod validation** (ADR-001): Runtime validation on WS messages, single source of truth for types.
 - **Zustand + WsService** (ADR-008): Per-session state isolation via Zustand store + WebSocket singleton service.
@@ -97,7 +97,17 @@ Client→Server: `terminal_create`, `terminal_send`, `terminal_teardown`, `list_
 `permission` carries `optionId` — the id of one of the options the server parsed
 off the terminal's screen. The pre-#29 `allow` boolean is still accepted for one
 migration window (`false` → Esc, `true` → the terminal's first option) so a
-cached PWA bundle can still answer.
+cached PWA bundle can still answer. On a **question** prompt `true` is refused
+with `permission_option_unknown` and sends no key at all: the first option there
+is just the first answer, not a "Yes", so mapping onto it would have cc-mobile
+choosing for the user. `false` → Esc is unchanged either way.
+
+`permission_request` carries an optional `promptKind` — `"permission"` (a tool
+call waiting on a gate) or `"question"` (claude's AskUserQuestion screen, which
+only the user can answer). It is sent **only when the screen parsed**: the
+Cancel-only fallback omits the key rather than claim a kind it could not read,
+and a bundle cached before the field ignores it. A `"question"` is also the one
+prompt exempt from the 90-second `esc`.
 
 Since #31 `terminal_create` carries an optional `agentKind` naming which agent to
 start (`server/agents/kinds.ts`; absent → `claude`, which is what every bundle

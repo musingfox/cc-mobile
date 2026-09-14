@@ -98,7 +98,8 @@ a page reload.
 { type: "stream_chunk", sessionId: string, chunk: Record<string, unknown> }
 { type: "stream_end", sessionId: string }
 { type: "permission_request", sessionId: string, requestId: string,
-  tool: { name: string, parameters: Record<string, unknown> } }
+  tool: { name: string, parameters: Record<string, unknown> },
+  promptKind?: "permission" | "question" }
 { type: "capabilities", sessionId: string, commands: string[], agents: string[], model: string }
 { type: "terminal_created", claudeUuid: string, terminalName: string, paneRef: string }
 { type: "terminal_teardown_result", claudeUuid: string, killed: boolean }
@@ -120,6 +121,15 @@ a page reload.
   records: Record<string, unknown>[],
   nextBefore: { epoch: string, seq: number, recordId: string } | null }
 ```
+
+`permission_request.promptKind` says which of two things the terminal is waiting
+for: `"permission"` — a tool call needs a gate opened — or `"question"`, claude's
+AskUserQuestion screen, which only the user can answer. It is present only when
+the screen parsed: a Cancel-only fallback omits the key rather than claim a kind
+it could not read, and a bundle cached before the field ignores it. The kind also
+decides the unattended countdown: a permission prompt nobody answers is still
+`esc`'d after 90 s on a pane cc-mobile launched, while a `"question"` waits —
+`esc` there cancels the question instead of declining a tool.
 
 `transcript_page_request` / `transcript_page` are the history pull: the phone
 asks a live session for one page of its own backlog and gets it outside the live

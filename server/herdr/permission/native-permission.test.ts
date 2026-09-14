@@ -713,3 +713,33 @@ describe("LegacyAllowRefusedOnQuestion", () => {
     expect(h.keys).toEqual([{ pane: PANE, keys: ["1"] }]);
   });
 });
+
+/**
+ * The frame says which of the two it is, so the phone does not have to guess
+ * from the wording — and says nothing when the screen did not parse.
+ */
+describe("PromptKindOnWire", () => {
+  async function requestFor(text: string): Promise<Record<string, unknown>> {
+    const h = harness();
+    h.screen.text = text;
+    await h.permission.onStatus(PANE, "blocked", "claude");
+    const request = h.sent.find((msg) => msg.type === "permission_request");
+    if (!request) throw new Error("no permission_request was sent");
+    return request;
+  }
+
+  test("T1: a question screen's frame says question", async () => {
+    expect((await requestFor(QUESTION)).promptKind).toBe("question");
+  });
+
+  test("T2: a tool permission prompt's frame says permission", async () => {
+    expect((await requestFor(BASH_PROMPT)).promptKind).toBe("permission");
+  });
+
+  test("T3: an unparsed screen's frame omits the key entirely", async () => {
+    const request = await requestFor(UNPARSEABLE);
+
+    expect(request).not.toHaveProperty("promptKind");
+    expect(request.options).toEqual([{ id: "cancel", label: "Cancel", keystroke: "esc" }]);
+  });
+});

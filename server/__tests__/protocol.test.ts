@@ -173,6 +173,20 @@ describe("ServerMessage schema", () => {
     });
     expect(result.success).toBe(true);
   });
+  test("permission_request carries an optional promptKind of two known values", () => {
+    const frame = {
+      type: "permission_request",
+      sessionId: "s1",
+      requestId: "r1",
+      tool: { name: "AskUserQuestion", parameters: { text: "A or B?" } },
+    };
+
+    expect(ServerMessage.safeParse({ ...frame, promptKind: "question" }).success).toBe(true);
+    // A frame without it is what an unparsed screen sends, and what every
+    // bundle cached before questions existed expects to receive.
+    expect(ServerMessage.safeParse(frame).success).toBe(true);
+    expect(ServerMessage.safeParse({ ...frame, promptKind: "nope" }).success).toBe(false);
+  });
   test("error valid", () => {
     const result = ServerMessage.safeParse({
       type: "error",
