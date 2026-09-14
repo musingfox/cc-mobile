@@ -674,3 +674,42 @@ describe("QuestionAnswerKeySend", () => {
     expect((h.sent[0] as { code: string }).code).toBe("permission_prompt_stale");
   });
 });
+
+/**
+ * A bundle cached before questions existed answers with `{allow}`. On a
+ * permission prompt that still means what it meant; on a question there is no
+ * option that means "yes", so the migration window closes rather than picking
+ * the first answer on the user's behalf.
+ */
+describe("LegacyAllowRefusedOnQuestion", () => {
+  test("T1: the legacy allow form answers nothing on a question", async () => {
+    const h = harness();
+    h.screen.text = QUESTION;
+    await h.permission.onStatus(PANE, "blocked", "claude");
+    h.sent.length = 0;
+
+    await h.permission.resolve("r1", { allow: true });
+
+    expect(h.keys).toEqual([]);
+    expect((h.sent[0] as { code: string }).code).toBe("permission_option_unknown");
+  });
+
+  test("T2: the legacy deny form still presses esc on a question", async () => {
+    const h = harness();
+    h.screen.text = QUESTION;
+    await h.permission.onStatus(PANE, "blocked", "claude");
+
+    await h.permission.resolve("r1", { allow: false });
+
+    expect(h.keys).toEqual([{ pane: PANE, keys: ["esc"] }]);
+  });
+
+  test("T3: the legacy allow form still takes the first option on a permission prompt", async () => {
+    const h = harness();
+    await h.permission.onStatus(PANE, "blocked", "claude");
+
+    await h.permission.resolve("r1", { allow: true });
+
+    expect(h.keys).toEqual([{ pane: PANE, keys: ["1"] }]);
+  });
+});

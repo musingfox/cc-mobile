@@ -402,7 +402,13 @@ export function createNativePermission(options: NativePermissionOptions) {
     // old client's "allow for this session" approves once rather than granting
     // a standing permission nobody re-confirmed. A denial is `esc` and needs no
     // option at all.
-    if (answer.allow === true) return entry.options.length > 0 ? 0 : undefined;
+    // ...on a permission prompt only. There the first option is a "Yes" whose
+    // meaning an approval carries; on a question it is just the first answer,
+    // and pressing it would be cc-mobile choosing for the user because their
+    // bundle predates questions existing.
+    if (answer.allow === true && entry.promptKind !== "question") {
+      return entry.options.length > 0 ? 0 : undefined;
+    }
     return undefined;
   }
 
