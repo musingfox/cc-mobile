@@ -123,6 +123,14 @@ describe("OmpPromptParse — reached through the shared entry point", () => {
     expect(parsed?.toolLabel).toBe("bash");
   });
 
+  test("omp's own prompt is a permission request, in the same vocabulary", () => {
+    const parsed = parseBlockedPrompt({
+      text: readFileSync(join(FIXTURES, "omp-allow-tool-prompt.txt"), "utf8"),
+    });
+
+    expect(parsed?.promptKind).toBe("permission");
+  });
+
   test("a claude prompt still parses as claude", () => {
     const claudePrompt = [
       "────────────────────────────────────────────",

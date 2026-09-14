@@ -190,6 +190,7 @@ export function parseOmpPrompt(input: { text: string }): ParsedPrompt | null {
 
   return {
     dialect: "omp",
+    promptKind: "permission",
     toolLabel,
     argumentText,
     options,

@@ -22,6 +22,8 @@ describe("BlockedPromptParse", () => {
     const parsed = parseBlockedPrompt({ text: bashPrompt });
 
     expect(parsed).not.toBeNull();
+    // A tool gate, not a question: what the caller keys its timeout policy on.
+    expect(parsed?.promptKind).toBe("permission");
     expect(parsed?.toolLabel).toBe("Bash command");
     expect(parsed?.argumentText).toBe("touch /private/tmp/cf-0802-JmBO/probe/cwd/canary2.txt");
     expect(parsed?.description).toBe("Create empty canary2.txt file");
