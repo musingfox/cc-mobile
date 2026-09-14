@@ -299,6 +299,23 @@ function epochOfChunk(chunk: Record<string, unknown>): string | null {
   return typeof chunk.epoch === "string" && chunk.epoch !== "" ? chunk.epoch : null;
 }
 
+/**
+ * How a resolved prompt is written into the session's history.
+ *
+ * A question has no approve/deny axis — "B" is neither — so only an explicit
+ * Cancel reads as a refusal there and every other choice is the answer given.
+ * A permission prompt keeps the label test it has always used.
+ */
+export function permissionResolution(
+  pending: { promptKind?: PromptKind; options?: PermissionOption[] },
+  optionId: string,
+): "approved" | "denied" | "answered" {
+  const cancelled = optionId === "cancel";
+  if (pending.promptKind === "question") return cancelled ? "denied" : "answered";
+  const option = pending.options?.find((entry) => entry.id === optionId);
+  return cancelled || /^no\b/i.test(option?.label ?? "") ? "denied" : "approved";
+}
+
 export { extractTextFromChunk } from "./transcript-projection";
 
 /**
@@ -942,11 +959,21 @@ class WsService {
           // Background notification when page is hidden
           const settingsStore = useSettingsStore.getState();
           const toolName = (msg.tool as { name: string }).name;
+          // A question is not a permission request, and on a question the
+          // `tool.name` slot holds the question's own header — so saying
+          // "permission" here would be wrong twice over.
+          const isQuestion = msg.promptKind === "question";
           if (document.hidden) {
-            toastService.info(`Permission requested: ${toolName}`);
+            toastService.info(
+              isQuestion ? `Needs your answer: ${toolName}` : `Permission requested: ${toolName}`,
+            );
             if (settingsStore.notificationsEnabled) {
               const cwd = store.sessions.get(sessionId)?.cwd;
-              notificationService.showPermissionNotification(toolName, sessionId, cwd);
+              if (isQuestion) {
+                notificationService.showQuestionNotification(toolName, sessionId, cwd);
+              } else {
+                notificationService.showPermissionNotification(toolName, sessionId, cwd);
+              }
             }
           }
         }
@@ -1376,9 +1403,10 @@ class WsService {
       optionId,
     });
 
-    const option = session.pendingPermission.options?.find((entry) => entry.id === optionId);
-    const denied = optionId === "cancel" || /^no\b/i.test(option?.label ?? "");
-    this.recordPermissionAction(sessionId, denied ? "denied" : "approved");
+    this.recordPermissionAction(
+      sessionId,
+      permissionResolution(session.pendingPermission, optionId),
+    );
     useAppStore.getState().setPermission(sessionId, null);
   }
 

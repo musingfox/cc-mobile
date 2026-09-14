@@ -65,6 +65,17 @@ class NotificationService {
     await this.show("CCMobile", body, tag);
   }
 
+  async showQuestionNotification(header: string, sessionId?: string, cwd?: string): Promise<void> {
+    // Same tag as a permission: one pending prompt per session either way, so a
+    // question replaces a permission notification rather than stacking on it.
+    const tag = sessionId ? `cc-mobile-permission-${sessionId}` : "cc-mobile-permission";
+    const project = cwd ? cwd.split("/").pop() || cwd : null;
+    const body = project
+      ? `${project}: needs your answer — ${header}`
+      : `Needs your answer — ${header}`;
+    await this.show("CCMobile", body, tag);
+  }
+
   async showResponseComplete(sessionId?: string, cwd?: string): Promise<void> {
     const tag = sessionId ? `cc-mobile-done-${sessionId}` : "cc-mobile-done";
     const project = cwd ? cwd.split("/").pop() || cwd : null;

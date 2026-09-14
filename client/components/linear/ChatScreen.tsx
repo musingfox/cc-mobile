@@ -297,7 +297,9 @@ export default function ChatScreen({ onNavigate }: Props) {
       : [];
 
   const thinkingKind: ThinkingCardKind | null = pendingPermission
-    ? "waiting-permission"
+    ? pendingPermission.promptKind === "question"
+      ? "waiting-answer"
+      : "waiting-permission"
     : isStreaming
       ? "thinking"
       : null;
@@ -517,20 +519,24 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
-type ThinkingCardKind = "thinking" | "waiting-permission";
+type ThinkingCardKind = "thinking" | "waiting-permission" | "waiting-answer";
 
 const THINKING_LABELS: Record<ThinkingCardKind, string> = {
   thinking: "Thinking",
   "waiting-permission": "Waiting for permission",
+  "waiting-answer": "Waiting for your answer",
 };
 
 const THINKING_MODIFIERS: Record<ThinkingCardKind, string> = {
   thinking: "",
   "waiting-permission": "lin-thinking--waiting",
+  // Same treatment: both are the terminal waiting on this phone.
+  "waiting-answer": "lin-thinking--waiting",
 };
 
 export function ThinkingCard({ kind = "thinking" }: { kind?: ThinkingCardKind }) {
-  const safeKind: ThinkingCardKind = kind === "waiting-permission" ? kind : "thinking";
+  const safeKind: ThinkingCardKind =
+    kind === "waiting-permission" || kind === "waiting-answer" ? kind : "thinking";
   const modifier = THINKING_MODIFIERS[safeKind];
   const classes = modifier ? `lin-thinking ${modifier}` : "lin-thinking";
 

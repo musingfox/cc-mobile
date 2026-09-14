@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { pendingFromPermissionRequest } from "../services/ws-service";
+import { pendingFromPermissionRequest, permissionResolution } from "../services/ws-service";
 
 /**
  * The kind the server read off the screen has to survive the frame being
@@ -42,5 +42,32 @@ describe("QuestionKindReachesTheCard", () => {
 
     expect(pending.promptKind).toBeUndefined();
     expect(pending.options).toEqual([]);
+  });
+});
+
+/**
+ * History wording: a question's answer is not an approval. `recordPermissionAction`
+ * already accepted "answered"; nothing used to reach it.
+ */
+describe("permissionResolution", () => {
+  const options = [
+    { id: "1", label: "A" },
+    { id: "2", label: "No thanks" },
+  ];
+
+  test("a question's chosen answer is recorded as answered, whatever it says", () => {
+    expect(permissionResolution({ promptKind: "question", options }, "1")).toBe("answered");
+    // "No thanks" is an answer on a question, not a refusal.
+    expect(permissionResolution({ promptKind: "question", options }, "2")).toBe("answered");
+  });
+
+  test("cancelling a question is still a refusal", () => {
+    expect(permissionResolution({ promptKind: "question", options }, "cancel")).toBe("denied");
+  });
+
+  test("a permission prompt keeps the label test it has always used", () => {
+    expect(permissionResolution({ promptKind: "permission", options }, "1")).toBe("approved");
+    expect(permissionResolution({ promptKind: "permission", options }, "2")).toBe("denied");
+    expect(permissionResolution({ options }, "cancel")).toBe("denied");
   });
 });

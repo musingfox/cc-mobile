@@ -24,6 +24,16 @@ describe("ThinkingCard", () => {
     expect(getByText("Waiting for permission")).not.toBeNull();
   });
 
+  test("renders waiting-answer variant with the same waiting treatment", () => {
+    // A question is the terminal waiting on this phone too, so it keeps the
+    // modifier; only the words change, because nobody is granting permission.
+    const { container, getByText } = render(<ThinkingCard kind="waiting-answer" />);
+    const card = container.querySelector(".lin-thinking");
+
+    expect(card?.classList.contains("lin-thinking--waiting")).toBe(true);
+    expect(getByText("Waiting for your answer")).not.toBeNull();
+  });
+
   test("defaults to thinking variant", () => {
     const { getByText } = render(<ThinkingCard />);
     expect(getByText("Thinking")).not.toBeNull();
