@@ -24,6 +24,11 @@ const OMP_ALLOW_TOOL = readFileSync(join(FIXTURES, "omp-allow-tool-prompt.txt"),
 const OMP_BORDERED = readFileSync(join(FIXTURES, "omp-bordered-prompt.txt"), "utf8");
 const OMP_NO_API_KEY = readFileSync(join(FIXTURES, "omp-no-api-key.txt"), "utf8");
 
+/** claude's AskUserQuestion screen: a question, not a permission gate. */
+const QUESTION = readFileSync(join(FIXTURES, "claude-ask-user-question.txt"), "utf8");
+/** The variant whose answer is a sequence, so it parses as nothing at all. */
+const MULTISELECT = readFileSync(join(FIXTURES, "claude-ask-multiselect.txt"), "utf8");
+
 const PANE = "w3V:p1";
 
 interface Harness {
@@ -590,5 +595,45 @@ describe("UnparsedBlockedScreenHandoff", () => {
     await expect(h.permission.onStatus(PANE, "blocked", "omp")).resolves.toBeUndefined();
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("boom");
+  });
+});
+
+/**
+ * The 90-second unattended deny answers a question nobody asked the user: `esc`
+ * at an AskUserQuestion screen cancels the question itself. So a parsed question
+ * waits, and everything else on the same pane still decays exactly as before.
+ */
+describe("QuestionExemptFromAutoDeny", () => {
+  test("T1: an unanswered question on a self pane is still pending after 90s", async () => {
+    const clock = makeFakeClock();
+    const h = harness({ origin: "self", clock });
+    h.screen.text = QUESTION;
+
+    await h.permission.onStatus(PANE, "blocked", "claude");
+    await clock.advance(UNATTENDED_DENY_MS);
+
+    expect(h.keys).toEqual([]);
+    expect(h.permission.pendingFor(PANE)).toBeDefined();
+  });
+
+  test("T2: a permission prompt on a self pane still auto-denies after 90s", async () => {
+    const clock = makeFakeClock();
+    const h = harness({ origin: "self", clock });
+
+    await h.permission.onStatus(PANE, "blocked", "claude");
+    await clock.advance(UNATTENDED_DENY_MS);
+
+    expect(h.keys).toEqual([{ pane: PANE, keys: ["esc"] }]);
+  });
+
+  test("T3: a multi-select screen nobody parsed keeps its countdown", async () => {
+    const clock = makeFakeClock();
+    const h = harness({ origin: "self", clock });
+    h.screen.text = MULTISELECT;
+
+    await h.permission.onStatus(PANE, "blocked", "claude");
+    await clock.advance(UNATTENDED_DENY_MS);
+
+    expect(h.keys).toEqual([{ pane: PANE, keys: ["esc"] }]);
   });
 });

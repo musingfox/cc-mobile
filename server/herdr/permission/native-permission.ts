@@ -20,6 +20,7 @@ import { ompAnswerKeys } from "./omp-prompt";
 import {
   type ParsedPrompt,
   type PromptDialect,
+  type PromptKind,
   type PromptOption,
   parseBlockedPrompt,
 } from "./prompt-parse";
@@ -93,6 +94,12 @@ export interface PendingNativePermission {
    * where the only offered action is Cancel and `esc` is the only key sent.
    */
   dialect?: PromptDialect;
+  /**
+   * Whether the terminal is asking permission or asking the user a question.
+   * Absent for the same reason `dialect` is: an unparsed screen is not claimed
+   * to be either, and keeps the unattended deny it has today.
+   */
+  promptKind?: PromptKind;
   /** The pane revision the prompt was read at; a staleness cursor for diagnostics. */
   paneRevision: number;
   origin: "self" | "foreign";
@@ -181,7 +188,7 @@ export function createNativePermission(options: NativePermissionOptions) {
       requestId,
       sessionId,
       fingerprint: parsed?.fingerprint ?? UNPARSED_FINGERPRINT,
-      ...(parsed ? { dialect: parsed.dialect } : {}),
+      ...(parsed ? { dialect: parsed.dialect, promptKind: parsed.promptKind } : {}),
       paneRevision: sample.revision,
       origin,
       options: parsed ? parsed.options : CANCEL_ONLY_OPTIONS,
@@ -222,9 +229,17 @@ export function createNativePermission(options: NativePermissionOptions) {
    * cc-mobile answering for them (Decision H2). Where cc-mobile IS the only
    * operator, an unanswered prompt holding a turn forever is the failure #24
    * exists to prevent.
+   *
+   * A question is exempt whatever the origin. `esc` denies a tool call the agent
+   * can carry on without; at an AskUserQuestion screen it cancels the question
+   * the user was asked, and there is no safe default answer to decay to. The
+   * exemption is claimed only for a screen that parsed as one: an unreadable
+   * screen keeps today's countdown, because the argument for exempting it would
+   * be a guess about what it says.
    */
   function armDeny(entry: PendingNativePermission): void {
     if (entry.origin !== "self" || paused) return;
+    if (entry.promptKind === "question") return;
     const remaining = timeoutMs - entry.elapsedMs;
     entry.armedAt = now();
     entry.timerId = setTimeoutFn(
