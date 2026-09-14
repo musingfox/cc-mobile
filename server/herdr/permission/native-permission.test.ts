@@ -637,3 +637,40 @@ describe("QuestionExemptFromAutoDeny", () => {
     expect(h.keys).toEqual([{ pane: PANE, keys: ["esc"] }]);
   });
 });
+
+/**
+ * The answer to a question is the digit it prints, pressed in the pane — the
+ * same send path a permission answer takes, guarded the same way. The guard
+ * matters more here: the human at the terminal may have answered and been asked
+ * the next question already.
+ */
+describe("QuestionAnswerKeySend", () => {
+  /** The next question, drawn where the first one was. */
+  const OTHER_QUESTION = QUESTION.replaceAll("A 或 B", "C 或 D");
+
+  let h: Harness;
+
+  beforeEach(async () => {
+    h = harness();
+    h.screen.text = QUESTION;
+    await h.permission.onStatus(PANE, "blocked", "claude");
+    h.sent.length = 0;
+  });
+
+  test("T1: choosing the second answer presses that digit and clears the prompt", async () => {
+    const handled = await h.permission.resolve("r1", { optionId: "2" });
+
+    expect(handled).toBe(true);
+    expect(h.keys).toEqual([{ pane: PANE, keys: ["2"] }]);
+    expect(h.permission.pendingFor(PANE)).toBeUndefined();
+  });
+
+  test("T2: an answer arriving after the terminal moved on sends nothing", async () => {
+    h.screen.text = OTHER_QUESTION;
+
+    await h.permission.resolve("r1", { optionId: "1" });
+
+    expect(h.keys).toEqual([]);
+    expect((h.sent[0] as { code: string }).code).toBe("permission_prompt_stale");
+  });
+});
