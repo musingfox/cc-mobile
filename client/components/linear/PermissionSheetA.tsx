@@ -78,6 +78,9 @@ export default function PermissionSheetA({ pending, onApprove, onDeny, onChoose 
 
   if (!pending) return null;
   const description = pending.tool.parameters.description;
+  // A question has no deadline and no swipe: drawing the 60s counter or the
+  // swipe hint there would promise the user something the screen cannot do.
+  const isQuestion = pending.promptKind === "question";
   // Never an empty sheet: an unparseable screen still gets a way out.
   const options = pending.options?.length ? pending.options : CANCEL_ONLY;
 
@@ -99,18 +102,20 @@ export default function PermissionSheetA({ pending, onApprove, onDeny, onChoose 
     >
       <div className="lin-permission-row">
         <Icon name="shield" size={14} color={T.accentWarn} />
-        <span className="lin-permission-label">Permission Required</span>
-        <span className="lin-permission-timer">{secondsLeft}s</span>
+        <span className="lin-permission-label">{isQuestion ? "Question" : "Permission Required"}</span>
+        {!isQuestion && <span className="lin-permission-timer">{secondsLeft}s</span>}
       </div>
       <div className="lin-permission-tool">{pending.tool.name}</div>
       <div className="lin-permission-target">{targetOf(pending)}</div>
       {typeof description === "string" && description.length > 0 && (
         <div className="lin-permission-description">{description}</div>
       )}
-      <div className="lin-permission-hint">
-        <Icon name="swipe" size={11} color={T.fg3} />
-        <span>swipe right to approve, left to deny</span>
-      </div>
+      {!isQuestion && (
+        <div className="lin-permission-hint">
+          <Icon name="swipe" size={11} color={T.fg3} />
+          <span>swipe right to approve, left to deny</span>
+        </div>
+      )}
       <div className="lin-permission-actions">
         {options.map((option) => (
           <button

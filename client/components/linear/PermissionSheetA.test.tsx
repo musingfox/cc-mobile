@@ -26,6 +26,16 @@ function swipe(el: Element, fromX: number, toX: number) {
   fireEvent.touchEnd(el);
 }
 
+const question: PendingPermission = {
+  requestId: "req-q",
+  tool: { name: "A 或 B", parameters: { text: "這次要選 A 還是 B？" } },
+  promptKind: "question",
+  options: [
+    { id: "1", label: "A" },
+    { id: "2", label: "B" },
+  ],
+};
+
 describe("PermissionSheetA — swipe gestures", () => {
   afterEach(() => cleanup());
 
@@ -189,5 +199,73 @@ describe("PermissionSheetServerOptions", () => {
 
     fireEvent.click(actions[0]);
     expect(chosen).toEqual(["cancel"]);
+  });
+});
+
+/**
+ * QuestionCardPresentation — the same sheet, worn as a question. The 60s
+ * counter and the swipe hint are both claims about a permission prompt; on a
+ * question they would describe a deadline and a gesture that do not exist.
+ */
+describe("QuestionCardPresentation", () => {
+  afterEach(() => cleanup());
+
+  function buttons(container: HTMLElement): HTMLButtonElement[] {
+    return Array.from(
+      container.querySelectorAll(".lin-permission-actions button"),
+    ) as HTMLButtonElement[];
+  }
+
+  test("T1: a question is labelled a question, with no timer and no swipe hint", () => {
+    const { container } = render(
+      <PermissionSheetA pending={question} onApprove={() => {}} onDeny={() => {}} />,
+    );
+
+    expect(container.querySelector(".lin-permission-label")?.textContent).toBe("Question");
+    expect(container.querySelector(".lin-permission-timer")).toBeNull();
+    expect(container.querySelector(".lin-permission-hint")).toBeNull();
+    expect(buttons(container).map((b) => b.textContent)).toEqual(["A", "B"]);
+  });
+
+  test("T2: tapping an answer sends its id and locks the card", () => {
+    const chosen: string[] = [];
+    const { container } = render(
+      <PermissionSheetA
+        pending={question}
+        onApprove={() => {}}
+        onDeny={() => {}}
+        onChoose={(id) => chosen.push(id)}
+      />,
+    );
+
+    fireEvent.click(buttons(container)[1]);
+
+    expect(chosen).toEqual(["2"]);
+    expect(buttons(container).every((b) => b.disabled)).toBe(true);
+  });
+
+  test("T3: a permission card is untouched — label, timer and hint all stand", () => {
+    const { container } = render(
+      <PermissionSheetA pending={pending} onApprove={() => {}} onDeny={() => {}} />,
+    );
+
+    expect(container.querySelector(".lin-permission-label")?.textContent).toBe(
+      "Permission Required",
+    );
+    expect(container.querySelector(".lin-permission-timer")).not.toBeNull();
+    expect(container.querySelector(".lin-permission-hint")).not.toBeNull();
+  });
+
+  test("T4: a question with no readable options still offers a way out", () => {
+    const { container } = render(
+      <PermissionSheetA
+        pending={{ ...question, options: [] }}
+        onApprove={() => {}}
+        onDeny={() => {}}
+        onChoose={() => {}}
+      />,
+    );
+
+    expect(buttons(container).map((b) => b.textContent)).toEqual(["Cancel"]);
   });
 });
