@@ -7,6 +7,8 @@ import {
   type AgentProfile,
   type CommandInfo,
   type Message,
+  type PendingPermission,
+  type PermissionOption,
   type TranscriptCursor,
   useAppStore,
 } from "../stores/app-store";
@@ -298,6 +300,31 @@ function epochOfChunk(chunk: Record<string, unknown>): string | null {
 }
 
 export { extractTextFromChunk } from "./transcript-projection";
+
+/**
+ * The card's own view of a `permission_request` frame.
+ *
+ * `promptKind` rides along only when the server claimed one of its two known
+ * values: a frame without the key is an unparsed screen, which is an ordinary
+ * state and not an error, and an unrecognised value is treated the same way
+ * rather than passed through to the card.
+ */
+export function pendingFromPermissionRequest(msg: Record<string, unknown>): PendingPermission {
+  // The options are the terminal's own, parsed off its screen — never
+  // synthesised here. An empty list means the screen was unreadable and the
+  // sheet offers Cancel only.
+  const options = Array.isArray(msg.options) ? (msg.options as PermissionOption[]) : [];
+  const kind = msg.promptKind;
+  return {
+    requestId: msg.requestId as string,
+    tool: msg.tool as {
+      name: string;
+      parameters: Record<string, unknown>;
+    },
+    options,
+    ...(kind === "permission" || kind === "question" ? { promptKind: kind } : {}),
+  };
+}
 
 export function getTerminalReasonMessage(reason: TerminalReason | undefined): string | null {
   if (!reason || reason === "completed") return null;
@@ -906,20 +933,7 @@ class WsService {
 
       case "permission_request":
         if (sessionId) {
-          // The options are the terminal's own, parsed off its screen — never
-          // synthesised here. An empty list means the screen was unreadable and
-          // the sheet offers Cancel only.
-          const options = Array.isArray(msg.options)
-            ? (msg.options as { id: string; label: string; keystroke: string }[])
-            : [];
-          store.setPermission(sessionId, {
-            requestId: msg.requestId as string,
-            tool: msg.tool as {
-              name: string;
-              parameters: Record<string, unknown>;
-            },
-            options,
-          });
+          store.setPermission(sessionId, pendingFromPermissionRequest(msg));
           // Background notification when page is hidden
           const settingsStore = useSettingsStore.getState();
           const toolName = (msg.tool as { name: string }).name;

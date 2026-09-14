@@ -56,6 +56,9 @@ export type PermissionOption = {
   keystroke?: string;
 };
 
+/** What the terminal is waiting for: a tool gate, or an answer only the user has. */
+export type PromptKind = "permission" | "question";
+
 export type PendingPermission = {
   requestId: string;
   tool: {
@@ -70,6 +73,12 @@ export type PendingPermission = {
   };
   /** Empty (or absent) means the screen could not be parsed: offer Cancel only. */
   options?: PermissionOption[];
+  /**
+   * Which of the two the terminal is waiting for, when the server could read it
+   * off the screen. Absent whenever the screen did not parse — no kind is the
+   * honest answer there, not `"permission"`.
+   */
+  promptKind?: PromptKind;
 };
 
 /**
