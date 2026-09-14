@@ -140,13 +140,48 @@ describe("ClaudeQuestionVariantRefusal", () => {
 
   test("question wording that opens with a number does not become an answer", () => {
     // `1. 還是 2.？` matches the option shape, and taking it would shift every
-    // real answer's digit away from the one printed beside it.
+    // real answer's digit away from the one printed beside it. It sits at a
+    // different column from the list, which is what keeps it out.
     // replaceAll: the capture prints the question twice, and only the copy
     // inside the box is in the parsed region.
     const numbered = singleSelect.replaceAll("這次要選 A 還是 B？", "1. 還是 2.？");
+    const parsed = parseBlockedPrompt({ text: numbered });
 
     expect(numbered).toContain("1. 還是 2.？");
-    expect(parseBlockedPrompt({ text: numbered })).toBeNull();
+    expect(parsed?.options).toEqual([
+      { id: "1", label: "A", keystroke: "1" },
+      { id: "2", label: "B", keystroke: "2" },
+    ]);
+    expect(parsed?.argumentText).toBe("1. 還是 2.？");
+  });
+
+  test("an answer's blurb that opens with a number is not read as an answer", () => {
+    // Blurbs are the model's own prose, so a leading "1. " is reachable — and
+    // refusing the screen over it would leave a real question Cancel-only and
+    // still armed for the 90-second esc.
+    const numberedBlurb = singleSelect.replace("     選擇 A", "     1. 先跑測試");
+
+    expect(numberedBlurb).toContain("     1. 先跑測試");
+    expect(parseBlockedPrompt({ text: numberedBlurb })?.options).toEqual([
+      { id: "1", label: "A", keystroke: "1" },
+      { id: "2", label: "B", keystroke: "2" },
+    ]);
+  });
+
+  test("a clipped box top whose first line looks like a chip is still refused", () => {
+    // CHIP_ROW alone cannot catch this one: the line above the clipped box
+    // opens with the same glyph. The answer numbers restarting is what does.
+    const lines = singleSelect.split("\n");
+    const firstRule = lines.findIndex((line) => /^\s*─{20,}\s*$/.test(line));
+    const clipped = [
+      "──────────────────────────────────────────",
+      " ☐ Something else",
+      "  1. alpha",
+      "  2. beta",
+      ...lines.slice(firstRule + 1),
+    ].join("\n");
+
+    expect(parseBlockedPrompt({ text: clipped })).toBeNull();
   });
 
   test("a question with nothing but the free-text row parses as nothing", () => {

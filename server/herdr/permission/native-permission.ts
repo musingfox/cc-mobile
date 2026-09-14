@@ -409,6 +409,11 @@ export function createNativePermission(options: NativePermissionOptions) {
     // meaning an approval carries; on a question it is just the first answer,
     // and pressing it would be cc-mobile choosing for the user because their
     // bundle predates questions existing.
+    //
+    // This closes one of two doors. A bundle cached after #29 swipes by sending
+    // an `optionId`, which is byte-identical to a deliberate tap, so that path
+    // still presses the first answer and nothing here can tell the two apart.
+    // It heals on reload, when the card stops accepting the gesture at all.
     if (answer.allow === true && entry.promptKind !== "question") {
       return entry.options.length > 0 ? 0 : undefined;
     }

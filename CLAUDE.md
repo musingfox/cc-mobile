@@ -100,7 +100,10 @@ migration window (`false` → Esc, `true` → the terminal's first option) so a
 cached PWA bundle can still answer. On a **question** prompt `true` is refused
 with `permission_option_unknown` and sends no key at all: the first option there
 is just the first answer, not a "Yes", so mapping onto it would have cc-mobile
-choosing for the user. `false` → Esc is unchanged either way.
+choosing for the user. `false` → Esc is unchanged either way. This covers only
+the `allow` form: a bundle cached after #29 but before question cards swipes by
+sending an `optionId`, indistinguishable on the wire from a tap, so that one
+still answers with the first option until the phone reloads.
 
 `permission_request` carries an optional `promptKind` — `"permission"` (a tool
 call waiting on a gate) or `"question"` (claude's AskUserQuestion screen, which

@@ -146,12 +146,11 @@ export function parseClaudeQuestion(input: { text: string }): ParsedPrompt | nul
   }
   if (boxTop === -1) return null;
 
-  const region = lines
-    .slice(boxTop + 1, midRule)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
+  // Kept untrimmed: the column an answer's number sits at is the only thing
+  // separating the list from an option's own blurb, and trimming erases it.
+  const region = lines.slice(boxTop + 1, midRule).filter((line) => line.trim().length > 0);
 
-  const chip = region[0];
+  const chip = region[0]?.trim();
   if (!chip) return null;
   // The chip row is checked alone rather than the whole region: a multiSelect
   // option list carries its own "Submit" continuation line, and letting that
@@ -160,21 +159,49 @@ export function parseClaudeQuestion(input: { text: string }): ParsedPrompt | nul
   if (SEQUENCED_SUBMIT.test(chip)) return null;
   const toolLabel = chip.replace(CHIP_GLYPH, "").trim();
 
+  // The answers line up; prose does not. Every captured screen puts each
+  // answer's number at the same column whether or not that answer carries the
+  // cursor, while a blurb sits further right and the question sits further
+  // left — so the column the most numbered lines agree on is the answer list,
+  // and a numbered line anywhere else is wording that merely looks like one.
+  const body = region.slice(1);
+  const numbered = body
+    .map((line) => ({ line, match: OPTION_LINE.exec(line) }))
+    .filter((entry): entry is { line: string; match: RegExpExecArray } => entry.match !== null)
+    .map((entry) => ({
+      ...entry,
+      column: entry.match.index + entry.match[0].indexOf(entry.match[1] ?? ""),
+    }));
+
+  const byColumn = new Map<number, number>();
+  for (const entry of numbered) byColumn.set(entry.column, (byColumn.get(entry.column) ?? 0) + 1);
+  let listColumn: number | null = null;
+  let bestCount = 0;
+  for (const [column, count] of byColumn) {
+    // A tie goes to the leftmost column: an answer list is never indented past
+    // its own blurbs, so the shallower run is the list.
+    if (count > bestCount || (count === bestCount && listColumn !== null && column < listColumn)) {
+      listColumn = column;
+      bestCount = count;
+    }
+  }
+
   const questionLines: string[] = [];
   const options: PromptOption[] = [];
   // claude numbers its answers 1, 2, 3… with no gaps, so the next number is
-  // always known. Anything else means this region is not one answer list —
-  // question wording that opens with `7.`, or output above a clipped box top
-  // carrying a markdown numbered list — and a half-read list is the one outcome
-  // worth refusing outright: its digits would be pressed against a live screen
-  // that never offered them.
+  // always known. A gap means this column is not one answer list — question
+  // wording that opens with `7.`, or output above a clipped box top carrying a
+  // markdown numbered list — and a half-read list is the one outcome worth
+  // refusing outright: its digits would be pressed against a live screen that
+  // never offered them.
   let expected = 1;
-  for (const line of region.slice(1)) {
+  for (const line of body) {
     const match = OPTION_LINE.exec(line);
-    if (!match) {
-      // Before the first option this is the question; after it, an option's own
+    const column = match ? match.index + match[0].indexOf(match[1] ?? "") : null;
+    if (!match || column !== listColumn) {
+      // Before the first answer this is the question; after it, an answer's own
       // one-line blurb, which the phone renders from the label instead.
-      if (options.length === 0) questionLines.push(line);
+      if (options.length === 0) questionLines.push(line.trim());
       continue;
     }
     const [, id, label] = match;
