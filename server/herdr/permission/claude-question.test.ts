@@ -107,6 +107,48 @@ describe("ClaudeQuestionVariantRefusal", () => {
     ]);
   });
 
+  test("a title carrying the word or an arrow is still a question, not a sequence", () => {
+    // The chip row's text after the glyph is the model's own wording. Refusing
+    // on it would not merely hide the card: an unparsed screen is Cancel-only
+    // AND still armed, so the 90-second esc would cancel a real question.
+    for (const title of ["Submit PR?", "v1 → v2"]) {
+      const titled = singleSelect.replace(" ☐ A 或 B", ` ☐ ${title}`);
+
+      expect(parseBlockedPrompt({ text: titled })?.options).toEqual([
+        { id: "1", label: "A", keystroke: "1" },
+        { id: "2", label: "B", keystroke: "2" },
+      ]);
+    }
+  });
+
+  test("output above a clipped box top is not mistaken for the question box", () => {
+    // A short pane can push the real box top out of the capture. If an older
+    // rule sits within the lookback, the region fills with ordinary output —
+    // and claude's own markdown lists read as options to any digit matcher.
+    const lines = singleSelect.split("\n");
+    const firstRule = lines.findIndex((line) => /^\s*─{20,}\s*$/.test(line));
+    const clipped = [
+      "──────────────────────────────────────────",
+      "⏺ Update(README.md)",
+      "  1. alpha",
+      "  2. beta",
+      ...lines.slice(firstRule + 1),
+    ].join("\n");
+
+    expect(parseBlockedPrompt({ text: clipped })).toBeNull();
+  });
+
+  test("question wording that opens with a number does not become an answer", () => {
+    // `1. 還是 2.？` matches the option shape, and taking it would shift every
+    // real answer's digit away from the one printed beside it.
+    // replaceAll: the capture prints the question twice, and only the copy
+    // inside the box is in the parsed region.
+    const numbered = singleSelect.replaceAll("這次要選 A 還是 B？", "1. 還是 2.？");
+
+    expect(numbered).toContain("1. 還是 2.？");
+    expect(parseBlockedPrompt({ text: numbered })).toBeNull();
+  });
+
   test("a question with nothing but the free-text row parses as nothing", () => {
     const noAnswers = singleSelect
       .replace("❯ 1. A\n", "")

@@ -72,10 +72,20 @@ const CHECKBOX_LABEL = /^\[[\sxX✔✓]?\]/;
 const CHIP_GLYPH = /^[☐☑☒✔✓]\s*/;
 
 /**
- * What a header chip row says when the answer is a sequence, not a keystroke:
- * `←  ☐ 第一題  ☐ 第二題  ✔ Submit  →`.
+ * The chip row of a screen a digit can answer: claude's own progress glyph,
+ * first thing on the line. A sequenced screen puts its travel arrows there
+ * instead (`←  ☐ 第一題  ☐ 第二題  ✔ Submit  →`), and a region whose top rule
+ * was clipped away starts with ordinary output — both fail this.
+ *
+ * Positive, because the negative form cannot be written safely: the rest of the
+ * row is the model's own wording, so refusing on the word "submit" or on an
+ * arrow anywhere in it also refuses "Submit PR?" and "v1 → v2" — real questions
+ * that would then be Cancel-only AND still armed for the 90 s `esc`.
  */
-const SEQUENCED_HEADER = /submit|←|→/i;
+const CHIP_ROW = /^[☐☑☒]/;
+
+/** The submit affordance of a sequenced screen; no title writes a tick before it. */
+const SEQUENCED_SUBMIT = /[✔✓]\s*submit/i;
 
 /** How far above the anchor the box may start before this stops looking. */
 const MAX_LOOKBACK = 40;
@@ -146,11 +156,19 @@ export function parseClaudeQuestion(input: { text: string }): ParsedPrompt | nul
   // The chip row is checked alone rather than the whole region: a multiSelect
   // option list carries its own "Submit" continuation line, and letting that
   // fire this guard would leave the checkbox defence untested.
-  if (SEQUENCED_HEADER.test(chip)) return null;
+  if (!CHIP_ROW.test(chip)) return null;
+  if (SEQUENCED_SUBMIT.test(chip)) return null;
   const toolLabel = chip.replace(CHIP_GLYPH, "").trim();
 
   const questionLines: string[] = [];
   const options: PromptOption[] = [];
+  // claude numbers its answers 1, 2, 3… with no gaps, so the next number is
+  // always known. Anything else means this region is not one answer list —
+  // question wording that opens with `7.`, or output above a clipped box top
+  // carrying a markdown numbered list — and a half-read list is the one outcome
+  // worth refusing outright: its digits would be pressed against a live screen
+  // that never offered them.
+  let expected = 1;
   for (const line of region.slice(1)) {
     const match = OPTION_LINE.exec(line);
     if (!match) {
@@ -161,6 +179,8 @@ export function parseClaudeQuestion(input: { text: string }): ParsedPrompt | nul
     }
     const [, id, label] = match;
     if (!id || !label) continue;
+    if (id !== String(expected)) return null;
+    expected += 1;
     if (CHECKBOX_LABEL.test(label)) return null;
     if (FREE_TEXT_LABEL.test(label)) continue;
     options.push({ id, label, keystroke: id });
