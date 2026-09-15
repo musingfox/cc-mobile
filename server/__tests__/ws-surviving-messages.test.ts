@@ -21,7 +21,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionManager } from "../session-manager";
@@ -29,28 +29,7 @@ import { startWsHarness, testServerConfig, type WsHarness } from "./ws-harness";
 
 let harness: WsHarness | null = null;
 
-const REAL_PATH = process.env.PATH;
-
-/** A PATH holding executables named exactly `names`, and nothing else. */
-function pathWithOnly(names: string[]): string {
-  const dir = mkdtempSync(join(tmpdir(), "ccm-surviving-"));
-  for (const name of names) {
-    writeFileSync(join(dir, name), "#!/bin/sh\n", { mode: 0o755 });
-  }
-  return dir;
-}
-
-// `availableAgents` is read off PATH at reply time (`ws.ts:356`), so the reply
-// depends on the machine unless the test says what is installed. It used to
-// depend on the developer's own PATH, which held `claude` and made the
-// assertion below look universal; CI has none, so it failed there on every
-// push from 2026-08-06 to 2026-09-15 while staying green on every dev machine.
-beforeEach(() => {
-  process.env.PATH = pathWithOnly(["claude"]);
-});
-
 afterEach(async () => {
-  process.env.PATH = REAL_PATH;
   await harness?.close();
   harness = null;
 });
@@ -93,6 +72,27 @@ describe("WsRoutingWithoutPermissionHandler", () => {
 });
 
 describe("ServerConfigStillAnswered", () => {
+  // `availableAgents` is read off PATH when the reply is built (`ws.ts:356`),
+  // so the reply depends on the machine unless the test says what is
+  // installed. It used to depend on the developer's own PATH, which held
+  // `claude` and made the assertion below look universal; the CI runner has
+  // none, so it failed there on every push from 2026-08-06 while staying
+  // green on every dev machine. Same pattern as kinds.test.ts.
+  const REAL_PATH = process.env.PATH;
+  let binDir: string | null = null;
+
+  beforeEach(() => {
+    binDir = mkdtempSync(join(tmpdir(), "ccm-surviving-"));
+    writeFileSync(join(binDir, "claude"), "#!/bin/sh\n", { mode: 0o755 });
+    process.env.PATH = binDir;
+  });
+
+  afterEach(() => {
+    process.env.PATH = REAL_PATH;
+    if (binDir) rmSync(binDir, { recursive: true, force: true });
+    binDir = null;
+  });
+
   test("get_server_config carries only what the server alone knows", async () => {
     const h = await start();
 
