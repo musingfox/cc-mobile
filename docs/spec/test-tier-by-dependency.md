@@ -37,14 +37,20 @@ asserted.
 A mis-tiered test fails silently in the only sense that matters: it passes on
 an idle machine and fails as a flake on a busy one, so the tier error is read
 as test noise and the test is re-run rather than moved. Worse, a test that
-writes outside its sandbox can change what a live server serves —
-`client/__tests__/pwa.test.ts`'s TC13 spawns `bun run build` and rewrites
-`dist/client`, which is `server/app.ts:44`'s `DIST_DIR` and what pm2's
-`cc-mobile-prod` is serving; each rebuild re-stamps `sw.js`'s `CACHE_NAME`, so
-running the commit gate makes the phone's PWA purge its cache. No assertion in
-that file mentions any of it.
+writes outside its sandbox can change what a live server serves — TC13 spawns
+`bun run build` and rewrites `dist/client`, which is `server/app.ts:44`'s
+`DIST_DIR` and what pm2's `cc-mobile-prod` is serving; each rebuild re-stamps
+`sw.js`'s `CACHE_NAME`, so every commit made the phone's PWA purge its cache.
+No assertion in that test mentions any of it. It now lives in
+`client/integration/pwa-build.test.ts`, out of the gate.
 
-`verify` stays null until the tiering lands: the guard check would be red on
-day one, because TC13 is in the unit tier today and is the reason this entry
-exists. A check that is red on arrival would be a wrong check, not wrong code.
-When TC13 moves and the guard test exists, this becomes `test:` pointing at it.
+`verify` stays null because a check today could cover only two of the three
+clauses. Spawn is greppable and green now that TC13 has moved. The port clause
+is greppable only as a non-zero literal argument to `.listen(` or `Bun.serve(`
+— every bind in the collected tests is `.listen(0)`, so grepping the bare call
+would be red on day one. The write clause has no robust static form and is red
+regardless: every test exercising `createUploadPlugin` writes into
+`~/.cache/cc-mobile/uploads`, because `server/upload-manager.ts:7` hardcodes
+`homedir()` with no injectable root. A check asserting two clauses while the
+spec claims three is a false receipt, so this becomes `test:` when the write
+clause has both a sandbox seam and a check that does not need one.
