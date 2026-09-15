@@ -1,6 +1,6 @@
 ---
 id: test-tier-by-dependency
-status: proposed
+status: accepted
 scope:
   - "client/**/*.test.ts"
   - "client/**/*.test.tsx"
