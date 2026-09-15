@@ -33,3 +33,4 @@ blob-report/
 .playwright-mcp/
 .obsidian.yaml
 .spiral/
+.cf-recovered/
