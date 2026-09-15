@@ -1,5 +1,9 @@
 [test]
 # server/integration holds the herdr live e2e suites: they need a running herdr
 # daemon and the `claude` binary, so they run only via `bun run test:herdr`.
+# client/integration holds the PWA build check, which spawns `bun run build`
+# and rewrites the `dist/client` a live server is serving; it runs only via
+# `bun run test:build`. Both are out of the commit gate by
+# docs/spec/test-tier-by-dependency.md.
 preload = ["./happy-dom.ts"]
-pathIgnorePatterns = ["server/integration/**"]
+pathIgnorePatterns = ["server/integration/**", "client/integration/**"]

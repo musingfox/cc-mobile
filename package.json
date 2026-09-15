@@ -15,6 +15,7 @@
     "lint": "bunx biome check .",
     "lint:fix": "bunx biome check --write .",
     "test": "bun test",
+    "test:build": "bun --config=/dev/null test ./client/integration/pwa-build.test.ts",
     "test:herdr": "for f in live foreign transcript swap restart permission agent-kind agent-profile omp-readback omp-permission; do bun --config=/dev/null test --timeout=400000 ./server/integration/herdr-$f.e2e.test.ts || exit 1; done",
     "postinstall": "git config core.hooksPath .githooks 2>/dev/null; true"
   },

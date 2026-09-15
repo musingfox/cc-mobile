@@ -147,28 +147,6 @@ describe("SW Notification Click", () => {
   });
 });
 
-describe("Build Integration", () => {
-  test("TC13: Build succeeds with PWA files", async () => {
-    // Run build
-    const buildProcess = Bun.spawn(["bun", "run", "build"], {
-      cwd: join(CLIENT_ROOT, ".."),
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-
-    const exitCode = await buildProcess.exited;
-    expect(exitCode).toBe(0);
-
-    // Check that PWA files are copied to dist
-    const distClientDir = join(CLIENT_ROOT, "..", "dist", "client");
-    const distManifest = join(distClientDir, "manifest.json");
-    const distSw = join(distClientDir, "sw.js");
-
-    expect(existsSync(distManifest)).toBe(true);
-    expect(existsSync(distSw)).toBe(true);
-  }, 60_000);
-});
-
 describe("Dynamic Theme Color", () => {
   test("TC14: App.tsx contains theme-color meta tag update logic", () => {
     const appPath = join(CLIENT_ROOT, "App.tsx");
