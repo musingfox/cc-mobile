@@ -334,10 +334,12 @@ Schemas defined in `server/protocol.ts`. Full spec in `cc-mobile.md`.
 - An installed iOS app is rarely closed and a waiting worker never takes over
   on its own, so the app pulls updates in itself (`client/services/sw-update.ts`):
   an update check whenever it returns to the foreground, and activation plus a
-  reload right after a screen change while the composer is empty — the draft
-  lives only in memory (`draft-persistence.ts` is not wired). Never on `hidden`:
-  the iOS photo picker and camera hide the page, and a reload there loses the
-  picked file.
+  reload right after a screen change while the composer is empty. The draft
+  survives that reload — each session's is saved as it is typed
+  (`draft-persistence.ts`, `ccm:draft:<sessionId>`) — so the empty-composer
+  rule only keeps a reload from closing the keyboard on someone mid-message.
+  Never on `hidden`: the iOS photo picker and camera hide the page, and a reload
+  there loses the picked file.
 - Each screen is a browser-history entry (`client/components/linear/screen-history.ts`)
   so Android back and the iOS edge swipe walk the in-app screens. The URL never
   changes; every entry's state carries the screen stack, so a reload — the

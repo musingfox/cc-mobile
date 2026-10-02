@@ -3,6 +3,10 @@ function getDraftKey(sessionId: string): string {
 }
 
 export function saveDraft(sessionId: string, draft: string): void {
+  if (draft === "") {
+    clearDraft(sessionId);
+    return;
+  }
   try {
     localStorage.setItem(getDraftKey(sessionId), draft);
   } catch (error) {

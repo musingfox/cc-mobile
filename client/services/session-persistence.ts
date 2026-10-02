@@ -1,4 +1,5 @@
 import type { ResolvedAction, SessionState } from "../stores/app-store";
+import { clearDraft } from "./draft-persistence";
 
 // localStorage keys
 const SESSION_KEY_PREFIX = "ccm:session:";
@@ -150,10 +151,11 @@ export function clearSessionState(sessionId: string): void {
     const filtered = currentIds.filter((id) => id !== sessionId);
     localStorage.setItem(SESSION_IDS_KEY, JSON.stringify(filtered));
 
-    // Forget the replay cursor too. This is the choke point every removal
-    // passes through, so pruning here is what stops reconnects from carrying
-    // cursors for sessions that no longer exist.
+    // Forget the replay cursor and the unsent draft too. This is the choke
+    // point every removal passes through, so pruning here is what stops
+    // reconnects from carrying cursors for sessions that no longer exist.
     clearLastEventId(sessionId);
+    clearDraft(sessionId);
   } catch (error) {
     console.error("[session-persistence] Failed to clear session:", error);
   }

@@ -6,8 +6,10 @@
  * once no page uses the old one, so a deploy never reached the phone. The app
  * asks for an update check whenever it returns to the foreground, and
  * activates a waiting worker itself at a safe moment: right after a screen
- * change, with an empty composer, because activation is followed by a reload
- * and the draft lives only in memory. Not on `hidden`: on iOS the photo picker
+ * change, with an empty composer. The draft survives the reload that follows
+ * activation (it is saved per session as it is typed), but `controllerchange`
+ * can land after the user has started typing, and a reload then would close
+ * the keyboard on them mid-message. Not on `hidden`: on iOS the photo picker
  * and the camera hide the page, and a reload there loses the picked file.
  */
 

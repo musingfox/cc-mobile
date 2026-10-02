@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { PromptKind } from "../../server/protocol";
+import { loadDraft, saveDraft } from "../services/draft-persistence";
 import {
   clearSessionState,
   getAllSessionIds,
@@ -286,7 +287,11 @@ interface AppState {
   globalError: string | null;
   setGlobalError: (error: string | null) => void;
 
-  // Input draft (shared so QuickActions can fill it)
+  /**
+   * The active session's composer text, shared so QuickActions can fill it.
+   * Each change is saved under that session at once rather than debounced:
+   * iOS evicts a backgrounded PWA without a moment to flush.
+   */
   inputDraft: string;
   setInputDraft: (draft: string) => void;
 
@@ -385,6 +390,7 @@ export const useAppStore = create<AppState>((set) => ({
       return {
         sessions: next,
         activeSessionId: sessionId,
+        inputDraft: "",
       };
     }),
 
@@ -400,6 +406,8 @@ export const useAppStore = create<AppState>((set) => ({
         toId,
         existing ? { ...existing, cwd: existing.cwd || session.cwd } : { ...session, id: toId },
       );
+      const draft = loadDraft(fromId);
+      if (draft) saveDraft(toId, draft);
       clearSessionState(fromId);
       return {
         sessions: next,
@@ -453,7 +461,8 @@ export const useAppStore = create<AppState>((set) => ({
     });
   },
 
-  setActiveSession: (sessionId) => set({ activeSessionId: sessionId }),
+  setActiveSession: (sessionId) =>
+    set({ activeSessionId: sessionId, inputDraft: loadDraft(sessionId) }),
 
   addMessage: (sessionId, message) =>
     set((state) => ({
@@ -507,7 +516,11 @@ export const useAppStore = create<AppState>((set) => ({
   setGlobalError: (globalError) => set({ globalError }),
 
   inputDraft: "",
-  setInputDraft: (inputDraft) => set({ inputDraft }),
+  setInputDraft: (inputDraft) => {
+    const { activeSessionId } = useAppStore.getState();
+    if (activeSessionId) saveDraft(activeSessionId, inputDraft);
+    set({ inputDraft });
+  },
 
   addResolvedAction: (sessionId, action) =>
     set((state) => ({
@@ -582,6 +595,7 @@ export const useAppStore = create<AppState>((set) => ({
     set({
       sessions: restoredSessions,
       activeSessionId: validActiveSessionId,
+      inputDraft: validActiveSessionId ? loadDraft(validActiveSessionId) : "",
     });
   },
 
