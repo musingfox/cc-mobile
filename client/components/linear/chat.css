@@ -49,7 +49,12 @@
   flex-shrink: 0;
 }
 
+/* The path starts from zero width and takes only what the title leaves, so
+   it is the first to give way: the title truncates only once it alone no
+   longer fits. Both used to shrink in proportion, "resume" down to "res…". */
 .lin-chat-title {
+  flex: 0 1 auto;
+  min-width: 0;
   font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.1px;
@@ -59,6 +64,7 @@
 }
 
 .lin-chat-path {
+  flex: 1 1 0;
   font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px;
   color: #6a6a6a;
