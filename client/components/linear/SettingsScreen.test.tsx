@@ -7,7 +7,7 @@ import SettingsScreen from "./SettingsScreen";
  * The settings screen after cc-mobile stopped deciding an agent's settings.
  *
  * What is left divides cleanly: client-side preferences it genuinely owns
- * (notifications, haptics, default folder) and read-backs of what the agent
+ * (notifications, haptics, device name) and read-backs of what the agent
  * reports. Nothing here sets anything on the agent, so the assertions below are
  * mostly about what is NOT offered.
  */
@@ -44,9 +44,12 @@ describe("SettingsScreen", () => {
     expect(queryByText("Account")).toBeNull();
   });
 
-  test("T3: Default folder remains", () => {
-    const { getByText } = render(<SettingsScreen onNavigate={() => {}} />);
-    expect(getByText("Default folder")).not.toBeNull();
+  // Nothing set defaultCwd and nothing but this row read it, so the row could
+  // only ever say "—". It shows no stored value, even one left by an old client.
+  test("T3: offers no Default folder row", () => {
+    const { queryByText } = render(<SettingsScreen onNavigate={() => {}} />);
+    expect(queryByText("Default folder")).toBeNull();
+    expect(queryByText("/tmp/project")).toBeNull();
   });
 
   test("T4: Haptics remains", () => {
@@ -65,6 +68,6 @@ describe("SettingsScreen", () => {
 
     expect(getByText("Notifications")).not.toBeNull();
     expect(getByText("Haptics")).not.toBeNull();
-    expect(getByText("/tmp/project")).not.toBeNull();
+    expect(getByText("Device name")).not.toBeNull();
   });
 });

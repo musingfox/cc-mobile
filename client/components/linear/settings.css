@@ -108,10 +108,6 @@
   max-width: 50%;
 }
 
-.lin-settings-row-value.is-mono {
-  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
 .lin-settings-input {
   flex: 0 1 50%;
   min-width: 0;
