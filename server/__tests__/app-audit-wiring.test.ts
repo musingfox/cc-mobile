@@ -48,18 +48,16 @@ async function connect(port: number) {
   return socket;
 }
 
-function yieldToEventLoop(): Promise<void> {
-  const { promise, resolve } = Promise.withResolvers<void>();
-  setImmediate(resolve);
-  return promise;
-}
-
-async function until(condition: () => boolean, label: string) {
-  for (let i = 0; i < 200; i++) {
+// A deadline, not a count of event-loop turns: under CPU starvation 200 turns
+// burn out before the audit line lands, so a count measures load, not time.
+async function until(condition: () => boolean, label: string, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
     if (condition()) return;
-    await yieldToEventLoop();
+    await Bun.sleep(5);
   }
-  throw new Error(`timed out waiting for ${label}`);
+  if (condition()) return;
+  throw new Error(`timed out after ${timeoutMs}ms waiting for ${label}`);
 }
 
 function records(path: string): Array<Record<string, unknown>> {
