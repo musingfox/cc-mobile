@@ -1132,6 +1132,7 @@ class WsService {
           allowedRoots?: string[] | null;
           homeDirectory?: string;
           availableAgents?: string[];
+          agentIntegrations?: Record<string, unknown> | null;
           agentProfiles?: unknown[];
         };
         if (config?.allowedRoots !== undefined || config?.homeDirectory) {
@@ -1142,6 +1143,19 @@ class WsService {
         }
         if (Array.isArray(config?.availableAgents)) {
           store.setAvailableAgents(config.availableAgents.filter((k) => typeof k === "string"));
+        }
+        // `null` is an answer — the server could not ask herdr — while an
+        // absent key says nothing and leaves the remembered states alone.
+        if (config?.agentIntegrations === null) {
+          store.setAgentIntegrations(null);
+        } else if (typeof config?.agentIntegrations === "object") {
+          store.setAgentIntegrations(
+            Object.fromEntries(
+              Object.entries(config.agentIntegrations).filter(
+                (entry): entry is [string, string] => typeof entry[1] === "string",
+              ),
+            ),
+          );
         }
         // Absent list = "this frame says nothing about profiles", which must
         // leave the remembered ones alone; an entry missing any of the three

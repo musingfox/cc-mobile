@@ -51,6 +51,7 @@ export default function ProjectDetailScreen({ cwd, onNavigate, onBack }: Props) 
   const activeSessionId = useAppStore((s) => s.activeSessionId);
   const setActiveSession = useAppStore((s) => s.setActiveSession);
   const availableAgents = useAppStore((s) => s.availableAgents);
+  const agentIntegrations = useAppStore((s) => s.agentIntegrations);
   const agentProfiles = useAppStore((s) => s.agentProfiles);
 
   const [menuOpen, setMenuOpen] = useState(false);
@@ -224,6 +225,22 @@ export default function ProjectDetailScreen({ cwd, onNavigate, onBack }: Props) 
           make. With a single kind (or before server_config arrives) this is
           byte-for-byte the button that was always here. */}
       <footer className="lin-projects-footer">
+        {/* Above the buttons rather than on one of them: with a single kind the
+            button names no kind, and a profile of an outdated kind is just as
+            affected, so the note has to hold whichever buttons are shown. */}
+        {agentIntegrations === null && (
+          <div className="lin-projects-agent-note">
+            Couldn't check herdr's agent integrations; agents are listed from PATH only.
+          </div>
+        )}
+        {availableAgents
+          .filter((kind) => agentIntegrations?.[kind] === "outdated")
+          .map((kind) => (
+            <div key={kind} className="lin-projects-agent-note is-warn">
+              {kind}'s herdr integration is out of date. Run{" "}
+              <code>herdr integration install {kind}</code> on the host.
+            </div>
+          ))}
         {availableAgents.length > 1 ? (
           availableAgents.map((kind) => (
             <button

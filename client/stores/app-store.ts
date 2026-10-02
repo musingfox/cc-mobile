@@ -414,6 +414,14 @@ interface AppState {
   setAvailableAgents: (kinds: string[]) => void;
 
   /**
+   * herdr's integration state ("current" | "outdated") for each kind in
+   * `availableAgents`. `null` means the server could not ask herdr, so that
+   * list is PATH-only; empty until the server answers.
+   */
+  agentIntegrations: Record<string, string> | null;
+  setAgentIntegrations: (states: Record<string, string> | null) => void;
+
+  /**
    * Launch profiles this server offers, from server_config. Empty until the
    * server answers, and a config frame that carries no profile list leaves the
    * remembered one alone.
@@ -811,6 +819,9 @@ export const useAppStore = create<AppState>((set) => ({
 
   availableAgents: [],
   setAvailableAgents: (availableAgents) => set({ availableAgents }),
+
+  agentIntegrations: {},
+  setAgentIntegrations: (agentIntegrations) => set({ agentIntegrations }),
 
   agentProfiles: [],
   setAgentProfiles: (agentProfiles) => set({ agentProfiles }),

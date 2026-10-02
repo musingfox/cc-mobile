@@ -413,6 +413,87 @@ describe("ProjectDetailScreen launch-profile footer buttons", () => {
 });
 
 /**
+ * herdr integration notes in the new-session footer (ADR-015 §2026-10-03). An
+ * outdated integration still launches, so the kind stays offered and the
+ * footer says what is wrong and the command that fixes it.
+ */
+describe("ProjectDetailScreen agent integration notes", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    useAppStore.setState({
+      sessions: new Map(),
+      activeSessionId: null,
+      connectionState: "connected",
+      availableAgents: [],
+      agentIntegrations: {},
+      agentProfiles: [],
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    localStorage.clear();
+    useAppStore.setState({ availableAgents: [], agentIntegrations: {}, agentProfiles: [] });
+  });
+
+  function notes(container: HTMLElement): string[] {
+    return Array.from(container.querySelectorAll(".lin-projects-agent-note")).map(
+      (n) => n.textContent ?? "",
+    );
+  }
+
+  test("an outdated kind is still offered and the footer names it and its fix", () => {
+    useAppStore.setState({
+      availableAgents: ["claude", "omp"],
+      agentIntegrations: { claude: "current", omp: "outdated" },
+    });
+
+    const { container } = renderScreen("/a");
+
+    expect(
+      Array.from(container.querySelectorAll(".lin-projects-cta")).map((b) => b.textContent),
+    ).toEqual(["New claude session", "New omp session"]);
+    const shown = notes(container);
+    expect(shown.length).toBe(1);
+    expect(shown[0]).toContain("out of date");
+    expect(shown[0]).toContain("herdr integration install omp");
+  });
+
+  test("a single outdated kind is flagged even though its button names no kind", () => {
+    useAppStore.setState({
+      availableAgents: ["claude"],
+      agentIntegrations: { claude: "outdated" },
+    });
+
+    const shown = notes(renderScreen("/a").container);
+
+    expect(shown.length).toBe(1);
+    expect(shown[0]).toContain("herdr integration install claude");
+  });
+
+  test("current integrations, or none reported yet, add no note", () => {
+    useAppStore.setState({
+      availableAgents: ["claude", "omp"],
+      agentIntegrations: { claude: "current", omp: "current" },
+    });
+    expect(notes(renderScreen("/a").container)).toEqual([]);
+    cleanup();
+
+    useAppStore.setState({ availableAgents: [], agentIntegrations: {} });
+    expect(notes(renderScreen("/a").container)).toEqual([]);
+  });
+
+  test("a server that could not ask herdr says the list is PATH-only", () => {
+    useAppStore.setState({ availableAgents: ["claude", "omp"], agentIntegrations: null });
+
+    const shown = notes(renderScreen("/a").container);
+
+    expect(shown.length).toBe(1);
+    expect(shown[0]).toContain("PATH only");
+  });
+});
+
+/**
  * Closing a session. The control was dropped in the Linear redesign (c28f88b)
  * and `wsService.closeSession` sat with no caller from then on; this is that
  * caller. Closing kills the agent in the pane, so the two things worth pinning

@@ -43,7 +43,12 @@ describe("wsService terminal session create", () => {
     toastService.error = originalToastError;
     // The store is a module singleton shared with every other test file — a
     // leftover agent list changes what ProjectDetailScreen renders over there.
-    useAppStore.setState({ availableAgents: [], agentProfiles: [], globalError: null });
+    useAppStore.setState({
+      availableAgents: [],
+      agentIntegrations: {},
+      agentProfiles: [],
+      globalError: null,
+    });
   });
 
   test("createTerminalSession emits one terminal_create and adds a not-ready session", () => {
@@ -80,6 +85,34 @@ describe("wsService terminal session create", () => {
     // footer's agent choice for the rest of the connection.
     getInternal().handleMessage({ type: "server_config", config: { model: "opus" } });
     expect(useAppStore.getState().availableAgents).toEqual(["claude", "omp"]);
+  });
+
+  test("server_config's agentIntegrations reaches the store; null is an answer, absent is not", () => {
+    getInternal().handleMessage({
+      type: "server_config",
+      config: {
+        availableAgents: ["claude", "omp"],
+        agentIntegrations: { claude: "current", omp: "outdated" },
+      },
+    });
+    expect(useAppStore.getState().agentIntegrations).toEqual({
+      claude: "current",
+      omp: "outdated",
+    });
+
+    getInternal().handleMessage({ type: "server_config", config: { model: "opus" } });
+    expect(useAppStore.getState().agentIntegrations).toEqual({
+      claude: "current",
+      omp: "outdated",
+    });
+
+    // The server could not ask herdr: the list is PATH-only, and the phone must
+    // stop showing states it no longer has.
+    getInternal().handleMessage({
+      type: "server_config",
+      config: { availableAgents: ["claude", "omp"], agentIntegrations: null },
+    });
+    expect(useAppStore.getState().agentIntegrations).toBeNull();
   });
 
   test("a profile launch sends its id alone — no agentKind, no args", () => {
