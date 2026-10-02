@@ -262,18 +262,6 @@
   color: #a0a0a0;
 }
 
-/* Streaming caret ------------------------------------------ */
-
-.lin-caret {
-  display: inline-block;
-  width: 7px;
-  height: 15px;
-  background: #c2b89a;
-  margin-left: 2px;
-  vertical-align: text-bottom;
-  animation: ccd-caret 1s infinite;
-}
-
 /* Thinking card -------------------------------------------- */
 
 .lin-thinking {
@@ -336,14 +324,6 @@
   );
   background-size: 200% 100%;
   animation: ccd-shimmer 1.8s infinite;
-}
-
-.lin-thinking--streaming .lin-thinking-label {
-  color: #e6dfc8;
-}
-
-.lin-thinking--streaming .lin-shimmer-bar {
-  animation-duration: 1.2s;
 }
 
 .lin-thinking--waiting {
