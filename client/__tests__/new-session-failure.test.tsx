@@ -83,6 +83,9 @@ describe("a refused New session", () => {
     expect(container.querySelector(".lin-chat")).toBeNull();
     expect(container.querySelector(".lin-input-bar")).toBeNull();
     expect(toastService.error).toHaveBeenCalledTimes(1);
+    expect(toastService.error).toHaveBeenCalledWith(
+      "Couldn't start the session: the new terminal wasn't ready yet. Try again.",
+    );
   });
 
   test("a session that ends while it is open does not hand the chat to another one", async () => {

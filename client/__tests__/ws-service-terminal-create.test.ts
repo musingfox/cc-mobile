@@ -197,17 +197,23 @@ describe("wsService terminal session create", () => {
     expect(useAppStore.getState().sessions.get(claudeUuid)?.terminal?.ready).toBe(true);
   });
 
-  test("create error removes the pending session and toasts the server message", () => {
+  test("create error removes the pending session and toasts a sentence, not herdr's code", () => {
     const errorToast = mock((_msg: string): string | number => 0);
     toastService.error = errorToast as typeof toastService.error;
 
     const claudeUuid = wsService.createTerminalSession("/tmp") as string;
 
-    getInternal().handleMessage({ type: "error", code: "terminal_error", message: "boom" });
+    getInternal().handleMessage({
+      type: "error",
+      code: "terminal_error",
+      message: "agent_pane_busy: agent target pane wJ4:p1 is not an available shell",
+    });
 
     expect(useAppStore.getState().sessions.has(claudeUuid)).toBe(false);
     expect(errorToast).toHaveBeenCalledTimes(1);
-    expect(errorToast).toHaveBeenCalledWith("boom");
+    expect(errorToast).toHaveBeenCalledWith(
+      "Couldn't start the session: the new terminal wasn't ready yet. Try again.",
+    );
   });
 
   test("an unrelated global error leaves the pending session alone", () => {

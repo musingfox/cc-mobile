@@ -15,6 +15,7 @@ import { randomUuid } from "../utils/uuid";
 import { hapticService } from "./haptic";
 import { notificationService } from "./notification";
 import { saveProject } from "./projects";
+import { describeServerError } from "./server-error-text";
 import { toastService } from "./toast-service";
 import { messagesFromProjectedChunk } from "./transcript-projection";
 
@@ -625,7 +626,8 @@ class WsService {
           msg.code === "invalid_cwd" ||
           msg.code === "path_not_allowed" ||
           msg.code === "terminal_error";
-        if (!sessionId && createFailed && this.pendingTerminalCreates.size > 0) {
+        const creating = !sessionId && createFailed && this.pendingTerminalCreates.size > 0;
+        if (creating) {
           for (const uuid of this.pendingTerminalCreates) {
             store.removeSession(uuid);
           }
@@ -678,8 +680,14 @@ class WsService {
           });
           store.setStreaming(sessionId, false);
         } else {
-          store.setGlobalError(msg.message as string);
-          toastService.error(msg.message as string);
+          console.warn(`[ws-service] ${msg.code}: ${msg.message}`);
+          const text = describeServerError(
+            String(msg.code ?? ""),
+            String(msg.message ?? ""),
+            creating,
+          );
+          store.setGlobalError(text);
+          toastService.error(text);
         }
         break;
       }
