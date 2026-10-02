@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import AppShell from "../components/linear/AppShell";
 import { readStack } from "../components/linear/screen-history";
+import { swUpdater } from "../services/sw-update";
 import { useAppStore } from "../stores/app-store";
 
 function screens() {
@@ -55,6 +56,21 @@ describe("AppShell browser history", () => {
     await waitFor(() => expect(title(container)).toBe("Projects"));
     expect(screens()).toEqual(["projects"]);
     expect(window.history.length).toBe(before + 1);
+  });
+
+  test("every screen change, pushed or popped, is offered to the service-worker updater", async () => {
+    const safeMoment = spyOn(swUpdater, "atSafeMoment");
+    try {
+      const { container, getByLabelText } = render(<AppShell />);
+      expect(safeMoment).not.toHaveBeenCalled();
+      fireEvent.click(getByLabelText("Add project"));
+      expect(safeMoment).toHaveBeenCalledTimes(1);
+      act(() => window.history.back());
+      await waitFor(() => expect(title(container)).toBe("Projects"));
+      expect(safeMoment).toHaveBeenCalledTimes(2);
+    } finally {
+      safeMoment.mockRestore();
+    }
   });
 });
 

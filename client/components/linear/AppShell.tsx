@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { swUpdater } from "../../services/sw-update";
 import { useAppStore } from "../../stores/app-store";
 import AddProjectScreen from "./AddProjectScreen";
 import ChatScreen from "./ChatScreen";
@@ -36,7 +37,10 @@ export default function AppShell() {
       window.history.replaceState({ screens: stack.slice(0, 1) }, "");
       if (stack.length > 1) window.history.pushState({ screens: stack }, "");
     }
-    const onPop = (event: PopStateEvent) => setEntry(readStack(event.state)?.at(-1) ?? ROOT);
+    const onPop = (event: PopStateEvent) => {
+      setEntry(readStack(event.state)?.at(-1) ?? ROOT);
+      swUpdater.atSafeMoment();
+    };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
@@ -50,6 +54,7 @@ export default function AppShell() {
     if (step.kind === "push") window.history.pushState({ screens: step.stack }, "");
     else window.history.replaceState({ screens: step.stack }, "");
     setEntry(step.stack[step.stack.length - 1]);
+    swUpdater.atSafeMoment();
   };
 
   const navigate = (next: LinearScreen) => go({ screen: next, cwd: selectedProjectCwd });

@@ -4,6 +4,7 @@ import App from "./App";
 import { primePublicKey, resyncPushSubscription } from "./services/push-service";
 import { loadSettings } from "./services/settings";
 import { swRegistrationManager } from "./services/sw-registration";
+import { swUpdater } from "./services/sw-update";
 import "./styles.css";
 import "./design/animations.css";
 
@@ -40,16 +41,5 @@ window.addEventListener("load", async () => {
     resyncPushSubscription({ enabled: true }).catch(() => {});
   }
 
-  if (registration) {
-    registration.addEventListener("updatefound", () => {
-      const newWorker = registration.installing;
-      if (!newWorker) return;
-
-      newWorker.addEventListener("statechange", () => {
-        if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
-          console.log("[sw-update] New version available");
-        }
-      });
-    });
-  }
+  if (registration) swUpdater.track(registration);
 });
