@@ -114,8 +114,8 @@ describe("OptimisticEchoSupersede", () => {
 
 // Review advisory #3: a prompt typed at the terminal reaches the phone as a
 // `user` record. Whether the agent is working is session_state's to say, and a
-// chunk-driven `true` that lands after an authoritative idle would never be
-// cleared, so a user record must not touch the flag at all.
+// chunk-driven `true` that lands after an authoritative idle would contradict
+// it, so a user record must not touch the flag at all.
 describe("TerminalPromptLeavesStreamingAlone", () => {
   let prev: any;
   beforeEach(() => {

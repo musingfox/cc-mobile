@@ -503,11 +503,10 @@ class WsService {
         if (projected.length === 0) break;
 
         // No setStreaming for either record (review advisory #3): whether the
-        // agent is working is session_state's to say. A chunk-driven `true`
-        // that lands after an authoritative idle is never cleared, because
-        // stream_end leaves the flag alone once session_state has spoken — and
-        // the server sends idle before its settle read delivers the turn's
-        // last records, so that order is every ordinary turn.
+        // agent is working is session_state's to say. The server sends idle
+        // before its settle read delivers the turn's last records, so a
+        // chunk-driven `true` would contradict an idle the phone already holds
+        // on every ordinary turn.
         if (chunk.type === "assistant") {
           store.applyTranscriptMessages(sessionId, {
             epoch: epochOfChunk(chunk),
@@ -550,33 +549,25 @@ class WsService {
 
       case "stream_end":
         if (sessionId) {
-          const session = store.sessions.get(sessionId);
+          const agentState = store.sessions.get(sessionId)?.agentState;
 
-          // If we received authoritative state during this turn, trust it
-          // and skip the legacy stream_end setStreaming(false)
-          if (session?.receivedAuthoritativeState) {
-            // Reset flag for next turn, but don't touch streaming state
-            store.setReceivedAuthoritativeState(sessionId, false);
-            hapticService.complete();
-            // Notify when response completes while app is in background
-            if (document.hidden) {
-              const settingsStore = useSettingsStore.getState();
-              if (settingsStore.notificationsEnabled) {
-                const cwd = store.sessions.get(sessionId)?.cwd;
-                notificationService.showResponseComplete(sessionId, cwd);
-              }
-            }
-          } else {
-            // Backward compat: no session_state_changed received, use legacy behavior
+          // The settle is what ends terminalSend's optimistic `true`: a quick
+          // turn can read idle on both of herdr's samples, and then no
+          // session_state ever answers the send. Only a turn herdr still calls
+          // in progress keeps the flag, because this end marker is then a late
+          // one from the turn before; requires_action is that turn blocked,
+          // not over.
+          if (agentState !== "running" && agentState !== "requires_action") {
             store.setStreaming(sessionId, false);
-            hapticService.complete();
-            // Notify when response completes while app is in background
-            if (document.hidden) {
-              const settingsStore = useSettingsStore.getState();
-              if (settingsStore.notificationsEnabled) {
-                const cwd = store.sessions.get(sessionId)?.cwd;
-                notificationService.showResponseComplete(sessionId, cwd);
-              }
+          }
+          store.setReceivedAuthoritativeState(sessionId, false);
+          hapticService.complete();
+          // Notify when response completes while app is in background
+          if (document.hidden) {
+            const settingsStore = useSettingsStore.getState();
+            if (settingsStore.notificationsEnabled) {
+              const cwd = store.sessions.get(sessionId)?.cwd;
+              notificationService.showResponseComplete(sessionId, cwd);
             }
           }
         }
