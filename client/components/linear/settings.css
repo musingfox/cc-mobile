@@ -131,6 +131,13 @@
   border-color: rgba(255, 255, 255, 0.2);
 }
 
+/* iOS Safari zooms the page into any field under 16px when it takes focus. */
+@media (pointer: coarse) {
+  .lin-settings-input {
+    font-size: 16px;
+  }
+}
+
 /* Radio ---------------------------------------------------- */
 
 .lin-radio {
