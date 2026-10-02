@@ -345,13 +345,17 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
     announceStatus();
 
     // An unrecognised status is no claim at all — a daemon that invents one must
-    // not be able to make the UI assert something wrong. Except right after
-    // `blocked`: the phone is holding a `requires_action` this server sent, and
-    // a card whose prompt the permission side has just dropped. Saying nothing
-    // leaves both up, and a tap on that card presses nothing while the phone
-    // records it as answered. `idle` is the only state that takes them back.
+    // not be able to make the UI assert something wrong. Except right after a
+    // status this server announced as ongoing. After `blocked` the phone holds a
+    // `requires_action` and a card whose prompt the permission side has just
+    // dropped: saying nothing leaves both up, and a tap on that card presses
+    // nothing while the phone records it as answered. After `working` the phone
+    // holds `running`, which alone drives its spinner and Stop button, so an
+    // agent that exits mid-turn would leave them up for good. `idle` is the only
+    // state that takes either back.
     const clientState =
-      STATE_BY_AGENT_STATUS[status] ?? (previous === "blocked" ? "idle" : undefined);
+      STATE_BY_AGENT_STATUS[status] ??
+      (previous === "blocked" || previous === "working" ? "idle" : undefined);
     if (clientState) {
       getSink(sessionId)?.({ type: "session_state", sessionId, state: clientState });
     }

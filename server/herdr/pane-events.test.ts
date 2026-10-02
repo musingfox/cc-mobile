@@ -202,6 +202,26 @@ describe("PaneEventStatusForwarding", () => {
     ]);
   });
 
+  test("a pane leaving a turn for a status the UI has no word for ends the turn on the phone", async () => {
+    const h = harness();
+    await h.events.start();
+
+    h.emit({
+      event: "pane_updated",
+      data: { pane: { pane_id: "w3V:p1", agent_status: "working" } },
+    });
+    h.emit({
+      event: "pane_updated",
+      data: { pane: { pane_id: "w3V:p1", agent_status: "unknown" } },
+    });
+
+    // session_state alone drives the phone's spinner and Stop button.
+    expect(h.sent["w3V:p1"]).toEqual([
+      { type: "session_state", sessionId: "w3V:p1", state: "running" },
+      { type: "session_state", sessionId: "w3V:p1", state: "idle" },
+    ]);
+  });
+
   test("says nothing at all about a status it does not recognise", async () => {
     const h = harness();
     await h.events.start();
