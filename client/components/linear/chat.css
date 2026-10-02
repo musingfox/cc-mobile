@@ -215,6 +215,14 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+/* A title never shows on a touch screen, so the best-effort note is drawn from it. */
+.lin-md a.md-link--loopback::after {
+  content: attr(title);
+  display: inline-block;
+  margin-left: 6px;
+  color: #6a6a6a;
+  font-size: 11px;
+}
 .lin-md ul,
 .lin-md ol {
   padding-left: 1.4em;

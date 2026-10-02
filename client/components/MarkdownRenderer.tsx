@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { highlight, warmup } from "../services/highlighter";
 import { useSettingsStore } from "../stores/settings-store";
+import { LOOPBACK_LINK_NOTE, rewriteLoopbackHref } from "../utils/loopback-url";
 import MermaidBlock from "./MermaidBlock";
 
 // Pre-warm shiki on module load
@@ -104,11 +105,13 @@ function renderMarkdownToDOM(
       container.appendChild(target);
     }
     target.innerHTML = html;
+    rewriteLoopbackLinks(target);
   } else {
     // Final render: use morphdom to preserve enhanced elements (shiki, mermaid)
     const next = document.createElement("div");
     next.className = "md-content";
     next.innerHTML = html;
+    rewriteLoopbackLinks(next);
 
     if (container.firstElementChild) {
       morphdom(container.firstElementChild, next, {
@@ -124,6 +127,16 @@ function renderMarkdownToDOM(
 
     enhanceCodeBlocks(container, theme);
     renderMermaidBlocks(container);
+  }
+}
+
+function rewriteLoopbackLinks(root: HTMLElement): void {
+  for (const a of Array.from(root.querySelectorAll("a[href]"))) {
+    const href = rewriteLoopbackHref(a.getAttribute("href") ?? "", window.location.hostname);
+    if (href === null) continue;
+    a.setAttribute("href", href);
+    a.setAttribute("title", LOOPBACK_LINK_NOTE);
+    a.classList.add("md-link--loopback");
   }
 }
 
