@@ -88,6 +88,15 @@ describe("HTML Meta Tags", () => {
 
     expect(htmlContent).toContain('rel="apple-touch-icon"');
   });
+
+  // A stylesheet in <head> holds first paint until it arrives; one from another
+  // origin held it for as long as that origin took, and is unreachable offline.
+  test("TC20: index.html links nothing from another origin", () => {
+    const html = readFileSync(join(CLIENT_ROOT, "index.html"), "utf-8");
+    const links = html.match(/<link\b[^>]*>/g) ?? [];
+    const external = links.filter((l) => /href="(https?:)?\/\//.test(l));
+    expect(external).toEqual([]);
+  });
 });
 
 describe("Service Worker", () => {
