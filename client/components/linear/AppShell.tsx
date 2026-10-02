@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAppStore } from "../../stores/app-store";
 import AddProjectScreen from "./AddProjectScreen";
 import ChatScreen from "./ChatScreen";
 import ProjectDetailScreen from "./ProjectDetailScreen";
 import ProjectsScreen from "./ProjectsScreen";
 import SettingsScreen from "./SettingsScreen";
+import { planNavigation, ROOT, readStack, type ScreenEntry, seedStack } from "./screen-history";
 import "./shell.css";
 
 export type LinearScreen = "projects" | "projectDetail" | "addProject" | "chat" | "settings";
@@ -19,21 +20,41 @@ function ConnectionBanner({ state }: { state: string }) {
 export default function AppShell() {
   const connectionState = useAppStore((s) => s.connectionState);
   const activeSessionId = useAppStore((s) => s.activeSessionId);
-  // Default: if we already have an active session, jump into Chat; else Projects home.
-  const [screen, setScreen] = useState<LinearScreen>(activeSessionId ? "chat" : "projects");
-  const [selectedProjectCwd, setSelectedProjectCwd] = useState<string | null>(null);
+  // A reload resumes the screen its history entry names; otherwise, with an
+  // active session, jump into Chat; else Projects home.
+  const [entry, setEntry] = useState<ScreenEntry>(
+    () =>
+      readStack(window.history.state)?.at(-1) ??
+      (activeSessionId ? { screen: "chat", cwd: null } : ROOT),
+  );
+  const { screen, cwd: selectedProjectCwd } = entry;
+  const initialEntry = useRef(entry);
 
-  const navigate = (next: LinearScreen) => setScreen(next);
+  useEffect(() => {
+    if (!readStack(window.history.state)) {
+      const stack = seedStack(initialEntry.current);
+      window.history.replaceState({ screens: stack.slice(0, 1) }, "");
+      if (stack.length > 1) window.history.pushState({ screens: stack }, "");
+    }
+    const onPop = (event: PopStateEvent) => setEntry(readStack(event.state)?.at(-1) ?? ROOT);
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
-  const openProject = (cwd: string) => {
-    setSelectedProjectCwd(cwd);
-    setScreen("projectDetail");
+  const go = (target: ScreenEntry) => {
+    const step = planNavigation(readStack(window.history.state) ?? [entry], target);
+    if (step.kind === "go") {
+      window.history.go(step.delta);
+      return;
+    }
+    if (step.kind === "push") window.history.pushState({ screens: step.stack }, "");
+    else window.history.replaceState({ screens: step.stack }, "");
+    setEntry(step.stack[step.stack.length - 1]);
   };
 
-  const handleProjectSaved = (cwd: string) => {
-    setSelectedProjectCwd(cwd);
-    setScreen("projectDetail");
-  };
+  const navigate = (next: LinearScreen) => go({ screen: next, cwd: selectedProjectCwd });
+
+  const openProject = (cwd: string) => go({ screen: "projectDetail", cwd });
 
   return (
     <div className="lin-shell">
@@ -43,25 +64,18 @@ export default function AppShell() {
           <ProjectsScreen
             onNavigate={navigate}
             onOpenProject={openProject}
-            onAddProject={() => setScreen("addProject")}
+            onAddProject={() => navigate("addProject")}
           />
         )}
         {screen === "projectDetail" && selectedProjectCwd && (
           <ProjectDetailScreen
             cwd={selectedProjectCwd}
             onNavigate={navigate}
-            onBack={() => setScreen("projects")}
-          />
-        )}
-        {screen === "projectDetail" && !selectedProjectCwd && (
-          <ProjectsScreen
-            onNavigate={navigate}
-            onOpenProject={openProject}
-            onAddProject={() => setScreen("addProject")}
+            onBack={() => navigate("projects")}
           />
         )}
         {screen === "addProject" && (
-          <AddProjectScreen onSaved={handleProjectSaved} onCancel={() => setScreen("projects")} />
+          <AddProjectScreen onSaved={openProject} onCancel={() => navigate("projects")} />
         )}
         {screen === "chat" && <ChatScreen onNavigate={navigate} />}
         {screen === "settings" && <SettingsScreen onNavigate={navigate} />}
