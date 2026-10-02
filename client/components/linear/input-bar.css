@@ -137,8 +137,12 @@
   max-height: 160px;
 }
 
+/* One line: the placeholder names the project, and a long name would
+   otherwise wrap and grow the empty composer by a line. */
 .lin-composer-input::placeholder {
   color: #6a6a6a;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 /* iOS Safari zooms the page into any field under 16px when it takes focus. */
