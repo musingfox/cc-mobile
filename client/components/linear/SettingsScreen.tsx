@@ -211,7 +211,7 @@ export default function SettingsScreen({ onNavigate }: Props) {
                 <div className="lin-settings-row-desc">Identifies this device in the audit log</div>
               </div>
               <input
-                className="lin-settings-row-value"
+                className="lin-settings-input"
                 value={deviceName}
                 maxLength={200}
                 onChange={(event) => setDeviceName(event.target.value)}

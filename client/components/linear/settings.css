@@ -112,6 +112,25 @@
   font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+.lin-settings-input {
+  flex: 0 1 50%;
+  min-width: 0;
+  min-height: 36px;
+  background: #0e0e10;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 7px;
+  color: #ececec;
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  padding: 6px 10px;
+  outline: none;
+  transition: border-color 120ms ease;
+}
+
+.lin-settings-input:focus {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
 /* Radio ---------------------------------------------------- */
 
 .lin-radio {
