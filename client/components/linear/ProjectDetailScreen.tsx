@@ -73,7 +73,11 @@ export default function ProjectDetailScreen({ cwd, onNavigate, onBack }: Props) 
         // With no title from herdr the pane id is what is actually known, and
         // it is the same id herdr shows, so it cross-references.
         title: s.descriptor?.title ?? id,
-        age: id === activeSessionId ? "current" : "open",
+        // Under a title the id moves to the meta line rather than away, so
+        // the row can still be matched to its pane. "open" said nothing.
+        age: [s.descriptor?.title ? id : null, id === activeSessionId ? "current" : null]
+          .filter(Boolean)
+          .join(" · "),
         live: s.agentState === "running",
         foreign,
         ungated: s.descriptor?.gated === false,
@@ -198,7 +202,7 @@ export default function ProjectDetailScreen({ cwd, onNavigate, onBack }: Props) 
                   <div className="lin-session-title">{r.title}</div>
                   <div className="lin-session-meta">
                     <span className="lin-session-meta-left">
-                      <span>{r.age}</span>
+                      {r.age && <span>{r.age}</span>}
                       {r.foreign && <span className="lin-session-badge">terminal</span>}
                       {/* Disclosure, never a lock: the session stays drivable
                           and only the badge says so (Decision H4). */}

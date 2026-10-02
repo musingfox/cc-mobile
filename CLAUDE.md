@@ -220,7 +220,10 @@ Since #29 the session key on the wire is herdr's `pane_id`, not a claude uuid: i
 exists for every pane and survives a `/clear`. `terminal_sessions` carries
 `sessions[]` — one descriptor per **agent** running **anywhere on the machine**,
 including ones the user started in their own terminal — with
-`{sessionId, agent?, agentSessionValue, cwd, origin, drivable, readable, unreadableReason?, gated, state?}`.
+`{sessionId, agent?, title?, agentSessionValue, cwd, origin, drivable, readable, unreadableReason?, gated, state?}`.
+`title` is the pane's own title (herdr's `terminal_title_stripped`), absent when
+herdr reports none; the session row is named by it, keeping the pane id as
+secondary text, and falls back to the pane id alone.
 
 Since #30 the listing is no longer filtered to claude: every entry herdr's
 `agent.list` returns is listed, and `agent` names the kind it detected

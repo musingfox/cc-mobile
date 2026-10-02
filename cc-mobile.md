@@ -105,7 +105,8 @@ a page reload.
 { type: "terminal_created", claudeUuid: string, terminalName: string, paneRef: string }
 { type: "terminal_teardown_result", claudeUuid: string, killed: boolean }
 { type: "terminal_sessions",
-  sessions: { sessionId: string, agent?: string, agentSessionValue: string | null,
+  sessions: { sessionId: string, agent?: string, title?: string,
+              agentSessionValue: string | null,
               cwd: string, origin: "self" | "foreign", drivable: boolean,
               readable: boolean, unreadableReason?: "pending" | "unsupported",
               gated: boolean,

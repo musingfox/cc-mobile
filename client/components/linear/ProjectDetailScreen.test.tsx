@@ -672,4 +672,32 @@ describe("ProjectDetailScreen session row title", () => {
     expect(shown.length).toBe(2);
     expect(new Set(shown).size).toBe(2);
   });
+
+  test("the title herdr reports reaches the row from the wire", () => {
+    // The server has sent `title` since it learned to; the client dropped it
+    // while building the card, so every row read `wHS:p1` (audit 2026-10-03).
+    (
+      wsService as unknown as { handleMessage: (msg: Record<string, unknown>) => void }
+    ).handleMessage({
+      type: "terminal_sessions",
+      sessions: [
+        {
+          sessionId: "wHS:p1",
+          title: "履歷完整性與吸引力評估",
+          cwd: "/a",
+          origin: "foreign",
+          drivable: true,
+          readable: true,
+          gated: true,
+        },
+      ],
+    });
+
+    const { container } = renderScreen("/a");
+
+    expect(titles(container)).toEqual(["履歷完整性與吸引力評估"]);
+    // The id stays on the row, as secondary text, so it can still be matched
+    // to the pane herdr shows.
+    expect(container.querySelector(".lin-session-meta")?.textContent).toContain("wHS:p1");
+  });
 });

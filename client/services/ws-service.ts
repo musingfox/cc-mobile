@@ -430,6 +430,7 @@ class WsService {
               : {}),
             gated: entry.gated !== false,
             agent: typeof entry.agent === "string" ? entry.agent : undefined,
+            ...(typeof entry.title === "string" && entry.title ? { title: entry.title } : {}),
           });
           this.pendingTerminalCreates.delete(sessionId);
           // First paint comes from the descriptor's own state: the status
