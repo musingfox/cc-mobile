@@ -189,6 +189,23 @@ describe("NativePermissionRequestEmit", () => {
     expect(h.permission.pendingCount()).toBe(0);
   });
 
+  test("only the prompt a pane is waiting on now is current", async () => {
+    const h = harness();
+
+    await h.permission.onStatus(PANE, "blocked");
+    h.screen.text = OTHER_PROMPT;
+    await h.permission.onStatus(PANE, "blocked");
+
+    // r1 still maps to its pane — that is what `sessionOfRequest` answers —
+    // but it is not the question on screen any more.
+    expect(h.permission.sessionOfRequest("r1")).toBe(PANE);
+    expect(h.permission.isCurrent("r1")).toBe(false);
+    expect(h.permission.isCurrent("r2")).toBe(true);
+
+    await h.permission.onStatus(PANE, "working");
+    expect(h.permission.isCurrent("r2")).toBe(false);
+  });
+
   test("leaving blocked drops the pending record without any keystroke", async () => {
     const h = harness();
 

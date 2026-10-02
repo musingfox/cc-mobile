@@ -209,3 +209,75 @@ describe("PermissionSurvivesReconnect", () => {
     }
   }, 15_000);
 });
+
+/**
+ * A reconnect replays the session's buffer from the phone's cursor. A prompt
+ * in it that was answered during the gap came back as a card for a question
+ * nobody was asking any more (audit 2026-10-03 #3).
+ */
+describe("ResolvedPromptNotReplayed", () => {
+  async function replayAfter(settle: (herdr: ReturnType<typeof fakeHerdr>) => void) {
+    const herdr = fakeHerdr();
+    const backendRef: { current: AppBackend | null } = { current: null };
+    const app = createApp(testServerConfig, {
+      herdrClient: herdr.client as never,
+      backendRef,
+      gateEnv: {},
+      agentProfiles: emptyAgentProfileSource(),
+      ...tmpPaths(),
+    });
+    app.listen(0);
+    const server = app.server;
+    if (!server || server.port === undefined) throw new Error("app failed to listen");
+
+    try {
+      const first = await connect(server.port);
+      first.send({ type: "list_terminal_sessions" });
+      await first.waitFor((frame) => frame.type === "terminal_sessions");
+
+      herdr.status.value = "blocked";
+      herdr.emitter.emit?.({
+        event: "pane_updated",
+        data: { pane: { pane_id: PANE, agent: "claude", agent_status: "blocked" } },
+      });
+      await first.waitFor(isPermissionRequest);
+      settle(herdr);
+      await first.close();
+
+      const second = await connect(server.port);
+      second.send({
+        type: "reconnect",
+        lastEventId: null,
+        lastEventIds: { [PANE]: 0 },
+        sessionIds: [PANE],
+      });
+      await second.waitFor((frame) => frame.type === "replay_complete");
+      const replayed = second.received.filter((frame) => frame.type === "event");
+      await second.close();
+      return replayed;
+    } finally {
+      await backendRef.current?.teardownAll();
+      server.stop(true);
+    }
+  }
+
+  test("a prompt answered during the gap is not replayed", async () => {
+    const replayed = await replayAfter((herdr) => {
+      herdr.status.value = "idle";
+      herdr.emitter.emit?.({
+        event: "pane_updated",
+        data: { pane: { pane_id: PANE, agent: "claude", agent_status: "idle" } },
+      });
+    });
+
+    expect(replayed.some(isPermissionRequest)).toBe(false);
+    // The rest of the buffer still goes: only the settled prompt is held back.
+    expect(replayed.map((frame) => (frame.payload as Frame).type)).toContain("session_state");
+  }, 15_000);
+
+  test("a prompt still waiting is replayed", async () => {
+    const replayed = await replayAfter(() => {});
+
+    expect(replayed.filter(isPermissionRequest)).toHaveLength(1);
+  }, 15_000);
+});

@@ -550,6 +550,16 @@ export function createNativePermission(options: NativePermissionOptions) {
     return bySessionOfRequest.get(requestId);
   }
 
+  /**
+   * Whether this request is the prompt its pane is waiting on now. Narrower
+   * than `sessionOfRequest`, which still maps an id superseded by a newer
+   * prompt on the same pane.
+   */
+  function isCurrent(requestId: string): boolean {
+    const sessionId = bySessionOfRequest.get(requestId);
+    return sessionId !== undefined && pending.get(sessionId)?.requestId === requestId;
+  }
+
   function pendingFor(sessionId: string): PendingNativePermission | undefined {
     return pending.get(sessionId);
   }
@@ -565,6 +575,7 @@ export function createNativePermission(options: NativePermissionOptions) {
     resume,
     forget,
     sessionOfRequest,
+    isCurrent,
     pendingFor,
     pendingCount,
   };

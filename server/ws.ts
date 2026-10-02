@@ -71,6 +71,11 @@ export interface WsBackend extends TerminalControlBackend {
   ): Promise<boolean>;
   paneIdForRequest?(requestId: string): string | undefined;
   /**
+   * Whether a request is still the prompt its pane is waiting on. Optional:
+   * without it a reconnect replays every buffered prompt, as it always did.
+   */
+  isPermissionCurrent?(requestId: string): boolean;
+  /**
    * One page of a session's own transcript backlog, older than `before`.
    * Resolves `null` when there is no transcript to read at all, which the
    * transport turns into `transcript_unavailable` rather than an empty page.
@@ -172,6 +177,14 @@ export function createWsPlugin(
       remoteAddress: ws.remoteAddress,
       deviceName: deviceQueryOf(ws),
     });
+  }
+
+  function isSettledPrompt(message: Record<string, unknown>): boolean {
+    return (
+      message?.type === "permission_request" &&
+      backend.isPermissionCurrent !== undefined &&
+      !backend.isPermissionCurrent(String(message.requestId))
+    );
   }
 
   // Helper to send buffered messages
@@ -458,7 +471,11 @@ export function createWsPlugin(
               const perSession = lastEventIds?.[sessionId];
               const hasBaseline = perSession !== undefined || lastEventId !== null;
               const baseline = perSession ?? lastEventId ?? -1;
-              const events = eventBuffer.replay(sessionId, baseline);
+              // A prompt answered or superseded during the gap is not replayed:
+              // it would come back as a card for a question nobody is asking.
+              const events = eventBuffer
+                .replay(sessionId, baseline)
+                .filter((evt) => !isSettledPrompt(evt.message));
               const gapDetected = hasBaseline && eventBuffer.hasGap(sessionId, baseline);
 
               for (const evt of events) {
