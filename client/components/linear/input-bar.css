@@ -141,10 +141,12 @@
   color: #6a6a6a;
 }
 
+/* 36px buttons 8px apart put their centres 44px apart, so each one's 44px
+   hit area (shell.css) is its own rather than shared with a neighbour. */
 .lin-composer-actions {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 8px;
 }
 
 .lin-icon-btn {

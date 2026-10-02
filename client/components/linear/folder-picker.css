@@ -32,6 +32,9 @@
   font-size: 11px;
   border-radius: 6px;
   padding: 6px 8px;
+  /* Widened rather than given an overflowing hit area: `.lin-folder` clips with
+     overflow: hidden, and "/" sits on its left edge. */
+  min-width: 44px;
   cursor: pointer;
 }
 

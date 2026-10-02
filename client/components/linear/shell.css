@@ -57,6 +57,30 @@
   outline-offset: 1px;
 }
 
+/* Controls the design draws smaller than a fingertip keep their drawn size;
+   a transparent box centred on each takes the tap out to 44px, outside layout. */
+.lin-icon-btn,
+.lin-sessions-icon-btn,
+.lin-send-btn,
+.lin-msg-copy,
+.lin-toggle {
+  position: relative;
+}
+
+.lin-icon-btn::before,
+.lin-sessions-icon-btn::before,
+.lin-send-btn::before,
+.lin-msg-copy::before,
+.lin-toggle::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, 44px);
+  height: max(100%, 44px);
+  transform: translate(-50%, -50%);
+}
+
 /* Hide scrollbar but keep scrollable */
 .lin-scroll {
   overflow-y: auto;
