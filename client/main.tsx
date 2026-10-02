@@ -1,3 +1,6 @@
+// First, so the components' own stylesheets (imported through App) come after
+// it and win specificity ties — chat.css's `.lin-md` overrides exist for that.
+import "./styles.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
@@ -5,7 +8,6 @@ import { primePublicKey, resyncPushSubscription } from "./services/push-service"
 import { loadSettings } from "./services/settings";
 import { swRegistrationManager } from "./services/sw-registration";
 import { swUpdater } from "./services/sw-update";
-import "./styles.css";
 import "./design/animations.css";
 
 // Linear Variant A fonts
