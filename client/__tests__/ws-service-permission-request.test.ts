@@ -87,6 +87,9 @@ describe("AutoDenyDeadline", () => {
     }> = [];
     const realWebSocket = globalThis.WebSocket;
     globalThis.WebSocket = class {
+      static CONNECTING = 0;
+      static OPEN = 1;
+      readyState = 0;
       onopen?: () => void;
       onmessage?: (event: { data: string }) => void;
       onclose?: () => void;
@@ -98,6 +101,7 @@ describe("AutoDenyDeadline", () => {
     } as unknown as typeof WebSocket;
     const internal = wsService as unknown as {
       ws: WebSocket | null;
+      socket: WebSocket | null;
       disconnectBannerTimeout: number | null;
     };
     const prevWs = internal.ws;
@@ -128,6 +132,7 @@ describe("AutoDenyDeadline", () => {
       if (internal.disconnectBannerTimeout !== null) clearTimeout(internal.disconnectBannerTimeout);
       internal.disconnectBannerTimeout = null;
       internal.ws = prevWs;
+      internal.socket = null;
       globalThis.WebSocket = realWebSocket;
     }
   });

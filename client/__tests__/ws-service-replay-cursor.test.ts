@@ -16,6 +16,7 @@ class FakeWebSocket {
 function getInternal() {
   return wsService as unknown as {
     ws: WebSocket | null;
+    socket: WebSocket | null;
     handleMessage: (msg: Record<string, unknown>) => void;
     pendingTerminalCreates: Set<string>;
     lastEventIds: Map<string, number>;
@@ -52,6 +53,9 @@ describe("SessionRemovalDropsReplayCursor", () => {
 
   afterEach(() => {
     getInternal().ws = prevWs;
+    // connect() is a no-op while its last socket is still opening; this stub
+    // never closes, so the next test's connect would otherwise open nothing.
+    getInternal().socket = null;
     getInternal().pendingTerminalCreates.clear();
     getInternal().lastEventIds.clear();
     toastService.info = originalToastInfo;

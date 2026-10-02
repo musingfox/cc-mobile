@@ -12,6 +12,7 @@ import { useAppStore } from "../stores/app-store";
 
 interface Internal {
   ws: WebSocket | null;
+  socket: WebSocket | null;
   reconnectTimeout: number | null;
   disconnectBannerTimeout: number | null;
 }
@@ -74,6 +75,9 @@ describe("wsService visibility reporting", () => {
 
   afterEach(() => {
     internal().ws = prevWs;
+    // connect() is a no-op while its last socket is still opening; this stub
+    // never closes, so the next test's connect would otherwise open nothing.
+    internal().socket = null;
     (globalThis as { WebSocket: unknown }).WebSocket = prevCtor;
     window.setInterval = prevSetInterval;
     window.clearInterval = prevClearInterval;

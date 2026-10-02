@@ -122,6 +122,8 @@ export const VISIBILITY_HEARTBEAT_MS = 10_000;
 
 class WsService {
   private ws: WebSocket | null = null;
+  /** The socket being opened or open; `ws` only becomes it once it opens. */
+  private socket: WebSocket | null = null;
   private capabilitiesTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
   private reconnectTimeout: number | null = null;
   private reconnectDelay = 1000;
@@ -186,7 +188,24 @@ class WsService {
     }
   }
 
+  /**
+   * Idempotent. The `online`, `pageshow` and visibility handlers and the
+   * backoff timer all land here, and each used to open a socket of its own:
+   * back online, one came from the handler and another from the timer.
+   */
   connect() {
+    const current = this.socket;
+    if (
+      current &&
+      (current.readyState === WebSocket.CONNECTING || current.readyState === WebSocket.OPEN)
+    ) {
+      return;
+    }
+    if (this.reconnectTimeout !== null) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+
     const store = useAppStore.getState();
     store.setConnectionState("connecting");
 
@@ -208,6 +227,7 @@ class WsService {
     const ws = new WebSocket(
       buildWsUrl(protocol, window.location.host, basePath, useSettingsStore.getState().deviceName),
     );
+    this.socket = ws;
 
     // Bound to this socket: a socket that is no longer current reports nothing,
     // so a slow close of an old one cannot speak over the new one.
@@ -323,9 +343,14 @@ class WsService {
       console.log("[ws-service] disconnected");
       if (visibilityHeartbeat !== null) window.clearInterval(visibilityHeartbeat);
       document.removeEventListener("visibilitychange", reportIfCurrent);
+      // A socket already replaced, closing late, speaks for nothing — but its
+      // own heartbeat and listener, above, still had to go with it.
+      if (this.socket !== ws) return;
+      this.socket = null;
       this.ws = null;
       this.dropDeadlines();
       // Delay showing disconnect banner — if reconnect is fast, user won't notice
+      if (this.disconnectBannerTimeout !== null) clearTimeout(this.disconnectBannerTimeout);
       this.disconnectBannerTimeout = window.setTimeout(() => {
         useAppStore.getState().setConnectionState("disconnected");
         this.disconnectBannerTimeout = null;
@@ -337,6 +362,7 @@ class WsService {
   private scheduleReconnect() {
     const delay = Math.min(this.reconnectDelay, 30000);
     this.reconnectTimeout = window.setTimeout(() => {
+      this.reconnectTimeout = null;
       this.reconnectDelay = Math.min(delay * 2, 30000);
       this.connect();
     }, delay);

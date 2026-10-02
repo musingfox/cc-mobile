@@ -287,6 +287,9 @@ describe("wsService onopen terminal session query", () => {
 
   afterEach(() => {
     getInternal().ws = prevWs;
+    // connect() is a no-op while its last socket is still opening; this stub
+    // never closes, so the next test's connect would otherwise open nothing.
+    (wsService as unknown as { socket: WebSocket | null }).socket = null;
     (globalThis as { WebSocket: unknown }).WebSocket = prevWebSocketCtor;
     // connect() moves connectionState to "connected"; restore the store default
     // so the connection banner tests stay independent of execution order.
