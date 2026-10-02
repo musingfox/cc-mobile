@@ -16,6 +16,7 @@ import {
   PATH_RETRY_BASE_MS,
   PATH_RETRY_MAX_MS,
 } from "./delivery";
+import { epochOf } from "./epoch";
 import type { TranscriptCursor } from "./reader";
 
 const PATH = "/home/u/.claude/projects/-p/a21273d4.jsonl";
@@ -808,5 +809,89 @@ describe("TranscriptPathRetryBackoff", () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+});
+
+// ClearRotationNotice — the server's half. The notice names the file the
+// session reads from after the rotation, and only a file the server found.
+describe("TranscriptRotationNotice", () => {
+  function rotatingDelivery(paths: { current: string | null }, sink?: ClientSink) {
+    const lookups: string[] = [];
+    const old = fakeFile([assistantText("old", "u0")]);
+    const fresh = fakeFile([]);
+    const delivery = createTranscriptDelivery({
+      resolvePath: async () => {
+        lookups.push(paths.current ?? "null");
+        return paths.current;
+      },
+      getSink: () => sink,
+      read: async (input) => (input.path === "/old.jsonl" ? old.read(input) : fresh.read(input)),
+      initCursor: async (input) => ({
+        byteOffset: input.path === "/old.jsonl" ? old.size : fresh.size,
+        lastUuid: null,
+      }),
+    });
+    return { delivery, lookups, fresh };
+  }
+
+  it("names the new file's epoch, sharing the re-attach's lookup rather than repeating it", async () => {
+    const spy = sinkSpy();
+    const paths = { current: "/old.jsonl" as string | null };
+    const { delivery, lookups } = rotatingDelivery(paths, spy.sink);
+    await delivery.attach("w3V:p1");
+
+    paths.current = "/new.jsonl";
+    const reset = delivery.resetCursor("w3V:p1");
+    await delivery.announceRotation("w3V:p1");
+    await reset;
+
+    expect(spy.messages).toEqual([
+      { type: "transcript_rotated", sessionId: "w3V:p1", epoch: epochOf("/new.jsonl") },
+    ]);
+    expect(lookups).toEqual(["/old.jsonl", "/new.jsonl"]);
+  });
+
+  it("announces the epoch the new file's chunks will carry, and leaves the cursor where resetCursor put it", async () => {
+    const spy = sinkSpy();
+    const paths = { current: "/old.jsonl" as string | null };
+    const { delivery, fresh } = rotatingDelivery(paths, spy.sink);
+    await delivery.attach("w3V:p1");
+
+    paths.current = "/new.jsonl";
+    const reset = delivery.resetCursor("w3V:p1");
+    await delivery.announceRotation("w3V:p1");
+    await reset;
+    expect(delivery.cursorFor("w3V:p1")?.byteOffset).toBe(fresh.size);
+
+    fresh.append(assistantText("after clear", "n1"));
+    await delivery.deliverTurn("w3V:p1");
+
+    const notice = spy.messages[0];
+    const chunk = spy.messages.find((m) => m.type === "stream_chunk")?.chunk as { epoch?: string };
+    expect(chunk.epoch).toBe(notice.epoch as string);
+  });
+
+  it("announces nothing when the new file cannot be located", async () => {
+    const spy = sinkSpy();
+    const paths = { current: "/old.jsonl" as string | null };
+    const { delivery } = rotatingDelivery(paths, spy.sink);
+    await delivery.attach("w3V:p1");
+
+    paths.current = null;
+    const reset = delivery.resetCursor("w3V:p1");
+    await delivery.announceRotation("w3V:p1");
+    await reset;
+
+    expect(spy.messages).toEqual([]);
+  });
+
+  it("does not throw for a session no client has bound", async () => {
+    const paths = { current: "/old.jsonl" as string | null };
+    const { delivery } = rotatingDelivery(paths);
+    await delivery.attach("w3V:p1");
+
+    paths.current = "/new.jsonl";
+    await delivery.resetCursor("w3V:p1");
+    await expect(delivery.announceRotation("w3V:p1")).resolves.toBeUndefined();
   });
 });

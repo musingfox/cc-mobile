@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { createApp } from "../app";
 import { parseServerConfig } from "../config";
 import { createSubscriptionStore } from "../push/subscription-store";
+import { epochOf } from "../transcript/epoch";
 import {
   createHerdrBackend,
   type HerdrBackendOptions,
@@ -1152,5 +1153,68 @@ describe("PaneCwdForPushCopy", () => {
       throw new Error("agent_not_found");
     });
     expect(await failing.paneCwd("w1:p1")).toBe(null);
+  });
+});
+
+// ── ClearRotationNotice (backend wiring) ─────────────────────────────────────
+
+describe("ClearRotationNotice wiring", () => {
+  test("a pane moving to a different transcript tells its bound sink which file it is now", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "ccm-rotate-"));
+    const before = join(dir, "before.jsonl");
+    const after = join(dir, "after.jsonl");
+    writeFileSync(before, "");
+    writeFileSync(after, "");
+    const pane = "w9:p1";
+    let current = before;
+    let emit: ((event: { event: string; data: unknown }) => void) | undefined;
+    const agentRow = () => ({
+      pane_id: pane,
+      workspace_id: "w9",
+      agent: "omp",
+      agent_status: "idle",
+      cwd: dir,
+      agent_session: { kind: "path", value: current },
+    });
+    const client = {
+      call: async (method: string) =>
+        method === "pane.process_info"
+          ? { type: "pane_process_info", process_info: { pane_id: pane, foreground_processes: [] } }
+          : { type: "ok" },
+      agentGet: async () => agentRow(),
+      agentList: async () => [agentRow()],
+      paneRead: async () => ({ text: "" }),
+      paneSendText: async () => {},
+      paneSendKeys: async () => {},
+      subscribeEvents: async (options: {
+        onEvent: (event: { event: string; data: unknown }) => void;
+      }) => {
+        emit = options.onEvent;
+        return { stop: () => {} };
+      },
+    } as unknown as NonNullable<HerdrBackendOptions["client"]>;
+
+    const backend = createHerdrBackend({ client });
+    const sent: Record<string, unknown>[] = [];
+    try {
+      backend.registerClient(pane, (msg) => sent.push(msg), {});
+      await backend.listSessionDescriptors();
+      emit?.({ event: "pane_updated", data: { pane: agentRow() } });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      current = after;
+      emit?.({ event: "pane_updated", data: { pane: agentRow() } });
+      const deadline = Date.now() + 2_000;
+      while (!sent.some((msg) => msg.type === "transcript_rotated") && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+
+      expect(sent.filter((msg) => msg.type === "transcript_rotated")).toEqual([
+        { type: "transcript_rotated", sessionId: pane, epoch: epochOf(after) },
+      ]);
+    } finally {
+      await backend.teardownAll();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

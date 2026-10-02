@@ -304,6 +304,20 @@ export function createTranscriptDelivery(options: TranscriptDeliveryOptions) {
     await ensureState(sessionId);
   }
 
+  /**
+   * Tells the phone which file the session reads from after a rotation. Called
+   * right after `resetCursor`, whose re-attach is still in flight, so this
+   * waits on that same build rather than resolving the path a second time.
+   *
+   * A path that did not resolve announces nothing: an epoch is only ever the
+   * name of a file the server found, never a guess (ADR-016 §2026-08-09).
+   */
+  async function announceRotation(sessionId: string): Promise<void> {
+    const state = await ensureState(sessionId);
+    if (!state.path) return;
+    getSink(sessionId)?.({ type: "transcript_rotated", sessionId, epoch: epochOf(state.path) });
+  }
+
   /** Session gone: drop its cursor and its timer. */
   function forget(sessionId: string): void {
     stopTail(sessionId);
@@ -319,7 +333,16 @@ export function createTranscriptDelivery(options: TranscriptDeliveryOptions) {
     return states.get(sessionId)?.cursor;
   }
 
-  return { attach, deliverTurn, onStatus, resetCursor, forget, stopAll, cursorFor };
+  return {
+    attach,
+    deliverTurn,
+    onStatus,
+    resetCursor,
+    announceRotation,
+    forget,
+    stopAll,
+    cursorFor,
+  };
 }
 
 export type TranscriptDelivery = ReturnType<typeof createTranscriptDelivery>;

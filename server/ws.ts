@@ -176,6 +176,10 @@ export function createWsPlugin(
 
   // Helper to send buffered messages
   function sendBuffered(ws: any, sessionId: string, message: Record<string, unknown>) {
+    // A rotation notice starts the session's conversation over: everything
+    // buffered before it belongs to the file the terminal just cleared, and a
+    // reconnect must not replay it. The notice itself becomes the first event.
+    if (message.type === "transcript_rotated") eventBuffer.clear(sessionId);
     // Append to the buffer FIRST so the event survives a dead/mid-close socket:
     // a reconnecting client recovers it via per-session replay even if the live
     // ws.send below fails.

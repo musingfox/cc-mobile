@@ -385,6 +385,7 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
     transcript: {
       attach: (sessionId) => delivery.attach(sessionId),
       resetCursor: (sessionId) => delivery.resetCursor(sessionId),
+      announceRotation: (sessionId) => delivery.announceRotation(sessionId),
       onStatus: (sessionId, status) => delivery.onStatus(sessionId, status),
       deliverTurn: (sessionId) => delivery.deliverTurn(sessionId),
     },

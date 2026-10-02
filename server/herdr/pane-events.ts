@@ -34,7 +34,8 @@
  *                    session settles.
  *   session change → the transcript cursor is dropped and re-taken at the new
  *                    file's end (`/clear` rotates the uuid and starts a new
- *                    file — research P6).
+ *                    file — research P6); a change between two non-null
+ *                    values also sends the phone `transcript_rotated`.
  */
 
 import { STATE_BY_AGENT_STATUS } from "./agent-state";
@@ -49,6 +50,11 @@ export interface PaneEventTranscript {
   attach(sessionId: string): Promise<void> | void;
   /** The conversation rotated: drop the cursor and re-take it. */
   resetCursor(sessionId: string): Promise<void> | void;
+  /**
+   * The rotation was from one conversation to another (both values non-null):
+   * tell the phone which file it is now. Called right after `resetCursor`.
+   */
+  announceRotation?(sessionId: string): Promise<void> | void;
   /** Arms or stops the mid-turn tail. */
   onStatus(sessionId: string, status: string): Promise<void> | void;
   /** The turn settled: deliver everything written since the last read. */
@@ -245,8 +251,15 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
         state.sessionValue = value;
         run(transcript?.attach(sessionId));
       } else if (state.sessionValue !== value) {
+        // Only a move between two real values is the terminal clearing its
+        // conversation. A null on either side is an agent exiting or starting:
+        // the cursor still resets, but the phone is told nothing — on exit
+        // there is no file to name, and on start the new file's first chunk
+        // carries its epoch anyway (ADR-016 §2026-10-03).
+        const rotated = state.sessionValue !== null && value !== null;
         state.sessionValue = value;
         run(transcript?.resetCursor(sessionId));
+        if (rotated) run(transcript?.announceRotation?.(sessionId));
       }
     }
 

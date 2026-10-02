@@ -53,6 +53,9 @@ function harness(
     resetCursor: (id) => {
       transcriptCalls.push(`reset:${id}`);
     },
+    announceRotation: (id) => {
+      transcriptCalls.push(`rotated:${id}`);
+    },
     onStatus: (id, status) => {
       transcriptCalls.push(`status:${id}:${status}`);
     },
@@ -886,6 +889,50 @@ describe("PaneEventIdentityChange", () => {
       "attach:w3V:p1",
     ]);
     expect(h.transcriptCalls.filter((call) => call.startsWith("reset"))).toEqual(["reset:w3V:p1"]);
+  });
+
+  // ClearRotationNotice — which identity changes the phone is told about.
+  async function identityCalls(values: (string | null)[]) {
+    const h = harness();
+    await h.events.start();
+    for (const value of values) {
+      h.emit({
+        event: "pane_updated",
+        data: {
+          pane: {
+            pane_id: "w3V:p1",
+            agent_status: "idle",
+            agent_session: value === null ? null : { kind: "id", value },
+          },
+        },
+      });
+    }
+    await flush();
+    return h.transcriptCalls.filter((call) => /^(attach|reset|rotated):/.test(call));
+  }
+
+  test("a move between two real conversations resets the cursor, then announces the rotation", async () => {
+    expect(await identityCalls([VALUE_A, VALUE_B])).toEqual([
+      "attach:w3V:p1",
+      "reset:w3V:p1",
+      "rotated:w3V:p1",
+    ]);
+  });
+
+  test("an agent exiting resets the cursor and announces nothing", async () => {
+    expect(await identityCalls([VALUE_A, null])).toEqual(["attach:w3V:p1", "reset:w3V:p1"]);
+  });
+
+  test("an agent starting where none ran resets the cursor and announces nothing", async () => {
+    expect(await identityCalls([null, VALUE_B])).toEqual(["attach:w3V:p1", "reset:w3V:p1"]);
+  });
+
+  test("an agent that exits and comes back as another conversation is never announced", async () => {
+    expect(await identityCalls([VALUE_A, null, VALUE_B])).toEqual([
+      "attach:w3V:p1",
+      "reset:w3V:p1",
+      "reset:w3V:p1",
+    ]);
   });
 
   test("leaves the cursor alone when the same session id is re-reported", async () => {

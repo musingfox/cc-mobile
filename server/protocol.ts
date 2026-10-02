@@ -440,6 +440,24 @@ const TranscriptPageMessage = z.object({
   nextBefore: TranscriptPageCursorSchema.nullable(),
 });
 
+/**
+ * The pane's conversation moved to a different transcript file — a terminal
+ * `/clear` — and `epoch` names the new one. It carries no records: it exists so
+ * a phone that is connected but idle applies the epoch rule now, instead of
+ * when the new file's first chunk happens to arrive.
+ *
+ * Sent through the session's buffered sink, unlike `transcript_page`: a phone
+ * that was away during the `/clear` has to hear it on reconnect, and the notice
+ * is also where the server trims that session's replay buffer, so it is the
+ * first event a reconnect replays. Sent only when the server resolved the new
+ * file — `epoch` is never empty and never a placeholder.
+ */
+const TranscriptRotatedMessage = z.object({
+  type: z.literal("transcript_rotated"),
+  sessionId: z.string(),
+  epoch: z.string().min(1),
+});
+
 export const ServerMessage = z.discriminatedUnion("type", [
   StreamChunkMessage,
   StreamEndMessage,
@@ -453,6 +471,7 @@ export const ServerMessage = z.discriminatedUnion("type", [
   SessionStateMessage,
   TerminalSessionsMessage,
   TranscriptPageMessage,
+  TranscriptRotatedMessage,
 ]);
 
 export type ServerMessage = z.infer<typeof ServerMessage>;

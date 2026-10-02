@@ -107,6 +107,14 @@ describe("CapabilitiesRequestAccepted over the socket", () => {
 });
 
 describe("ServerMessage schema", () => {
+  // ClearRotationNotice: the notice always names a file the server resolved.
+  test("transcript_rotated carries a non-empty epoch, and nothing else stands in for one", () => {
+    const notice = { type: "transcript_rotated", sessionId: "w3V:p1" };
+    expect(ServerMessage.safeParse({ ...notice, epoch: "0123456789abcdef" }).success).toBe(true);
+    expect(ServerMessage.safeParse({ ...notice, epoch: "" }).success).toBe(false);
+    expect(ServerMessage.safeParse({ ...notice, epoch: null }).success).toBe(false);
+    expect(ServerMessage.safeParse(notice).success).toBe(false);
+  });
   test("stream_chunk with SDK message structure", () => {
     const result = ServerMessage.safeParse({
       type: "stream_chunk",
