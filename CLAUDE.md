@@ -122,8 +122,16 @@ generates carries no gating flag for either kind: an agent's permission posture
 is its own setting, which cc-mobile stopped deciding (ADR-003 superseded). claude
 keeps `--session-id` — transcript naming, not a setting — and omp is handed its
 transcript path by herdr instead.
-`server_config.availableAgents` names the kinds whose binary is on `PATH`, and
-is sent only in the `get_server_config` reply.
+`server_config.availableAgents` names the kinds whose binary is on `PATH` **and**
+whose herdr integration is installed (`integration.list` state other than
+`not_installed`), and is sent only in the `get_server_config` reply. Beside it,
+`agentIntegrations` maps each listed kind to `"current"` or `"outdated"`: an
+outdated integration still launches, so the kind stays listed and the phone's
+new-session footer names it with `herdr integration install <kind>`. When
+`integration.list` fails the list falls back to `PATH` alone and
+`agentIntegrations` is `null` — the server logs that once per run of failures
+and the footer says the list is PATH-only. `null` is a value, not an absent key,
+because the client merges config field by field (ADR-015 §2026-10-03).
 
 `terminal_create` also carries an optional `profileId` — one **launch profile**
 the operator declared on the server (`~/.claude-mobile/agent-profiles.json`, or
@@ -132,7 +140,9 @@ after `argvFor`'s. The id is all the phone ever sends: argv is never on the wire
 in either direction, so a client cannot name what gets exec'd — it can only
 choose among what the machine's owner already wrote down.
 `server_config.agentProfiles` is that menu, `[{id,label,kind}]` and **never
-`args`**, sent like `availableAgents` only in the `get_server_config` reply. A
+`args`**, sent like `availableAgents` only in the `get_server_config` reply, and
+filtered to the kinds `availableAgents` lists — a profile is a kind plus argv,
+so an uninstalled integration fails it the same silent way. A
 `profileId` no profile answers to is refused with `unknown_profile` from the
 handler, and `agentKind` and `profileId` together with `invalid_message` — two
 selectors are a client bug, not a merge — both before `workspace.create`, so a

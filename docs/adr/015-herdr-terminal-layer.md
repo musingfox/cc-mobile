@@ -185,6 +185,8 @@ pane 的種類由事件層記住（最後一次回報的值，空字串不算回
 
 `server_config.availableAgents` 列出本機能啟動的種類，判準只有「執行檔在 PATH 上」。**沒有查 herdr 的 integration 狀態**：protocol 19 的方法清單只有 `integration.install`/`uninstall`，沒有 `status`，要查就得 shell out 到 herdr CLI，而 ADR-015 的立場是 socket 才是 trunk。裝整合仍是 CLAUDE.md 記載的一次性設定步驟。
 
+> **後續修正（2026-10-03，見文末「agent 可用性看 herdr 整合狀態」）**：herdr 0.9.0（protocol 22）起 socket 上有 `integration.list`，上段「沒有方法可查」已不成立。可用性現在是「PATH 上有執行檔」**且**「整合不是 `not_installed`」。
+
 ### #32 omp 讀回：key 的**種類**才是分歧點
 
 herdr 對 omp 直接給檔案路徑（`agent_session.kind === "path"`，只有 `pi` 和 `omp` 有），對 claude 給 id。所以 claude 的推導＋掃描對 omp 不只是多餘，而是**錯的**——它會拿 omp 的 key 去翻 `~/.claude/projects`。key 的 kind 因此要送到 reader（`SessionDescriptor.agentSessionKind`，server 端專用，`ws.ts` 按名投影所以不上 wire）。
@@ -338,3 +340,55 @@ claude 的 AskUserQuestion 單題單選畫面（`server/herdr/permission/claude-
 這條同樣會腐爛，理由與 §2026-08-25 記的一樣：三個逐字畫面實錄釘在
 `server/herdr/permission/fixtures/claude-ask-{user-question,multiselect,stepper}.txt`，不是為了支援
 舊版，是為了讓下一次 claude 改版失敗在 `bun test`。
+
+## 2026-10-03 增修：agent 可用性看 herdr 整合狀態，不只看 PATH
+
+§#31 的可用性只看 PATH，理由是 socket 上沒有方法可以問整合狀態。這個前提在 herdr 0.9.0
+（protocol 22）之後不成立：`integration.list` 回傳 herdr 認得的每個 target 各一筆
+`{target, label, command, available, state}`，`state` 是 `not_installed` / `current` / `outdated`
+（實測 herdr 0.9.3，2026-10-03，共 17 筆）。
+
+只看 PATH 的後果是票上記的那種故障：沒裝整合的 agent 照樣列在選單上，pane 照樣起得來，但
+herdr 永遠不回報它的 `agent_status`，於是權限提示看不到、回覆讀不回來，而且沒有任何徵兆。
+
+### 決定
+
+1. **可用 = PATH 上有執行檔，且該種類的整合狀態不是 `not_installed`。** PATH 那一半仍是
+   `Bun.which`，整合那一半是 `integration.list`。herdr 的 target 名稱就是種類名稱
+   （`claude`、`omp`，實測），用 live 實錄釘在 `server/herdr/wire-fixtures.ts`。
+2. **herdr 清單裡沒有的種類視同 `not_installed`。** 沒有整合，herdr 就永遠不會回報那個 pane
+   的狀態，和沒裝是同一個故障。
+3. **不讀 `available`。** 實測它是 herdr 對 `command` 做的 PATH 檢查（17 筆和 `command -v` 全數
+   一致），與 `Bun.which` 重複，而且看的是 daemon 的 PATH，不是 cc-mobile 的。schema 也只要求
+   cc-mobile 讀的 `target` 與 `state`。
+4. **`outdated` 算可用，但要標示。** 擋掉一個還能跑的 agent，比讓它降級運作更糟。wire 上是
+   `server_config.agentIntegrations`，把每個列出的種類對到 `"current"` 或 `"outdated"`，和
+   `availableAgents` 一樣只在 `get_server_config` 的回覆裡送。手機在新 session 按鈕的上方寫出
+   哪個種類的整合過期，以及修法 `herdr integration install <kind>`。提示放在按鈕上方，而不是
+   某一顆按鈕上：只有一個種類時按鈕不帶種類名稱，profile 也受同一個整合影響。
+5. **沒見過的 `state` 值算已安裝**，wire 上以 `current` 傳。契約字面是「不是 `not_installed`」。
+   schema 因此把 `state` 放寬成字串：清單涵蓋 herdr 認得的所有 target，某個 cc-mobile 不會啟動的
+   target 出現新值，不該讓 claude 與 omp 的答案一起作廢。
+6. **`integration.list` 失敗時退回只看 PATH，並且讓它看得見。** `agentIntegrations` 送 `null`；
+   伺服器每一段連續失敗只記一行 warn，恢復後重新計數；手機選單寫「只依 PATH 列出」。手機需要
+   知道，因為退路正好會把這張票要解決的靜默故障帶回來，只記在伺服器 log 等於又靜默一次。
+   `null` 是一個值而不是缺席的欄位：client 逐欄合併 config，缺欄位的意思是「這個 frame 沒提」，
+   會留下上一次的狀態。
+7. **profile 用同一個集合過濾。** `agentProfiles` 只列種類在 `availableAgents` 裡的 profile。
+   profile 就是種類加 argv，整合沒裝時它一樣起得來、一樣靜默；profile 來源載入時本來就濾掉
+   PATH 上沒有的種類（`server/agents/profiles.ts`），只濾一半等於留一道側門。
+
+### 退路實際的觸發範圍
+
+比「舊版 herdr」窄。`SUPPORTED_PROTOCOL` 在開機時嚴格比對 22，而 `integration.list` 在 0.9.0
+（也就是 protocol 22）就已存在，所以沒有這個方法的 daemon 根本過不了開機檢查。會走到退路的是
+transport 錯誤、逾時，以及 schema 漂移。這個呼叫的逾時設成 2 秒而不是 transport 預設的 10 秒，
+因為它卡在 `get_server_config` 的回覆裡，而那個回覆原本是立即的。
+
+### 不做的事
+
+- **建立時不重查整合。** `agentKind` 從來沒有可用性檢查，`profileId` 在建立時仍只看 PATH
+  （`profiles.ts` 的 `list()`）。選單是唯一的入口，用舊選單送來的請求最壞是起了一個靜默的
+  pane，和這個決定之前一樣。要在建立時擋下來，是另一個決定。
+- **不讀 herdr 寫在 `~/.local/state/herdr/` 的檔案。** 這是舊註解留下的退路建議；socket 上有了
+  方法，就沒有理由繞過 trunk。

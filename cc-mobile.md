@@ -115,6 +115,8 @@ a page reload.
 { type: "error", code: string, message: string, sessionId?: string } // agent_blocked_notice: fenced blocked-screen words; agent_attention_notice: claude trust dialog while herdr says idle — read-only, never sends a key
 { type: "server_config", config: { allowedRoots?: string[] | null, homeDirectory?: string,
                                   availableAgents?: ("claude"|"omp")[],
+                                  agentIntegrations?: Partial<Record<"claude"|"omp",
+                                                      "current"|"outdated">> | null,
                                   agentProfiles?: { id: string, label: string,
                                                     kind: "claude"|"omp" }[] } }  // no args, ever
 { type: "transcript_page", sessionId: string, epoch: string,
@@ -164,9 +166,21 @@ launch. The `permissionMode` / `model` / `effort` fields went with the messages
 that set them.
 
 `availableAgents` (#31) names the kinds this machine can launch — a
-`LAUNCHABLE_AGENT_KINDS` entry whose binary is on `PATH`. A kind missing from it
+`LAUNCHABLE_AGENT_KINDS` entry whose binary is on `PATH` and whose herdr
+integration herdr's `integration.list` does not report as `not_installed` (a
+kind herdr does not list at all counts as not installed). A kind missing from it
 is missing from the phone's new-session choice, which is the whole point: naming
-an unavailable kind would start a pane that dies immediately.
+an unavailable kind would start a pane that dies immediately, or one herdr never
+reports a status for, so it looks alive and never answers.
+
+`agentIntegrations` qualifies that list: each listed kind's integration state,
+`"current"` or `"outdated"`. An outdated integration still runs, so the kind is
+listed and the phone's new-session footer flags it with the fix,
+`herdr integration install <kind>`. `null` means `integration.list` failed and
+`availableAgents` is the `PATH` answer alone; the footer then says so, and the
+server logs it once per run of failures. It is always sent with
+`availableAgents` — the client merges config field by field, so "could not ask"
+has to be a value rather than a missing key.
 
 `agentProfiles` is the second way to start a pane: a **launch profile** the
 operator declared on the server — a JSON array at
@@ -176,7 +190,8 @@ ids and kinds whose binary is not on `PATH` skipped rather than failing the
 list. What reaches the phone is `{id, label, kind}` only: `args` never leaves the
 server, in either direction, so the client picks a profile by `profileId` and
 never names what is exec'd. Like `availableAgents` it rides only the
-`get_server_config` reply.
+`get_server_config` reply, and it lists only profiles whose kind
+`availableAgents` lists.
 
 `terminal_create` therefore takes at most one selector. `profileId` with no
 matching profile is refused `{code:"unknown_profile"}`; `agentKind` and
