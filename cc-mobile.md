@@ -311,18 +311,16 @@ cc-mobile/
 
 ## Key Implementation Details
 
-### 1. Session Manager — session map + settings state
+### 1. Session Manager — upload cleanup only
 
 The in-process `query()` turn driver was removed in #25 (ADR-015). Turns are
-driven by the herdr backend; `SessionManager` now holds only the session map —
-the settings state went with the messages that wrote it. That map has had no
-writer since #26 deleted the resume handler, so `interrupt` is a silent
-no-op.
+driven by the herdr backend, and the settings state went with the messages
+that wrote it. The session map went too: it had no writer after #26 deleted
+the resume handler, so `interrupt` only cleans up the session's uploads.
 
 ```typescript
 class SessionManager {
-  async createSession(sessionId, cwd, sdkSessionId?): Promise<void>;
-  destroySession(sessionId): void;  // drops the entry, cleans up uploads
+  destroySession(sessionId): void;  // cleans up uploads
 }
 ```
 

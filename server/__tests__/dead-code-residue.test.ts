@@ -22,6 +22,10 @@
  * `currentStreamMessageId` is allowed exactly once, in the loader that strips
  * it from blobs older bundles left in localStorage. The exception is named
  * here rather than hidden by splitting the identifier at its use site.
+ *
+ * OrphanResidueScan covers leftovers that had no user at all when they were
+ * deleted: a content-block builder nothing imported, the schemas only it
+ * spoke, and stylesheet rules no component names.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -298,5 +302,33 @@ describe("StreamEventPipelineResidueScan", () => {
     join("tests", `contracts${".test"}.ts`),
   ])("%s does not exist", (relative) => {
     expect(existsSync(join(repoRoot, relative))).toBe(false);
+  });
+});
+
+describe("OrphanResidueScan", () => {
+  test.each([
+    `content${"-"}block-builder`,
+    `build${"ContentBlocks"}`,
+    `Content${"Block"}`,
+    `Text${"Block"}Schema`,
+    `Image${"Block"}Schema`,
+  ])("no source file references %s", (pattern) => {
+    expect(hits(pattern)).toEqual([]);
+  });
+
+  test.each([
+    `permission${"-"}bar`,
+    `permission${"-"}tool-params`,
+    `preview${"-"}content`,
+    `preview${"-"}unavailable`,
+    `question${"-"}error`,
+  ])("no stylesheet defines %s", (pattern) => {
+    expect(stylesheets.filter((f) => f.text.includes(pattern)).map((f) => f.path)).toEqual([]);
+  });
+
+  test("client/utils/content-block-builder.ts does not exist", () => {
+    expect(existsSync(join(repoRoot, "client", "utils", `content${"-"}block-builder.ts`))).toBe(
+      false,
+    );
   });
 });

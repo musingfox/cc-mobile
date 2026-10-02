@@ -1515,49 +1515,6 @@ button {
   min-width: 44px;
 }
 
-/* Permission Bar */
-.permission-bar {
-  position: sticky;
-  bottom: 0;
-  background: var(--glass-bg-heavy);
-  backdrop-filter: blur(var(--glass-blur-heavy));
-  -webkit-backdrop-filter: blur(var(--glass-blur-heavy));
-  border-top: 2px solid var(--glass-border-bright);
-  box-shadow: var(--shadow-lg), var(--glow-cyan);
-  flex-shrink: 0;
-  z-index: 10;
-}
-
-.permission-tool-params {
-  font-size: 12px;
-  color: var(--text-secondary);
-  background: var(--bg-tertiary);
-  padding: 4px 8px;
-  border-radius: 6px;
-  overflow-x: auto;
-  white-space: nowrap;
-  max-width: 100%;
-}
-
-/* Preview Panel */
-.preview-content {
-  overflow-wrap: break-word;
-}
-
-.preview-unavailable {
-  color: var(--text-secondary);
-  font-style: italic;
-}
-
-.question-error {
-  padding: 12px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--accent-error);
-  border-radius: 8px;
-  color: var(--accent-error);
-  font-size: 14px;
-}
-
 /* Resolved Action Chips — inline history of past actions */
 .resolved-action-row {
   padding: 2px 16px;

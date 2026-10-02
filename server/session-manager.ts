@@ -1,9 +1,10 @@
 /**
- * session-manager.ts — the server's session registry and settings state.
+ * session-manager.ts — what `interrupt` still reaches on the server.
  *
  * Since #25 this owns no conversation driver. The SDK `query()` path it used to
- * run is gone; turns are driven by the terminal backend (herdr) instead, and
- * what remains here is the session map.
+ * run is gone; turns are driven by the terminal backend (herdr) instead. The
+ * session map went too: #26 deleted its last writer, so all that remains is the
+ * upload cleanup a closed session is owed.
  *
  * The settings state that used to live here — permission mode, model, effort,
  * env vars — is gone with the messages that set it. herdr received none of it,
@@ -13,32 +14,8 @@
 
 import { cleanupUploads } from "./upload-manager";
 
-interface SessionConfig {
-  cwd: string;
-  sdkSessionId: string | null;
-}
-
 export class SessionManager {
-  private sessions = new Map<string, SessionConfig>();
-
-  hasSession(sessionId: string): boolean {
-    return this.sessions.has(sessionId);
-  }
-
-  async createSession(sessionId: string, cwd: string, sdkSessionId?: string): Promise<void> {
-    if (this.sessions.has(sessionId)) {
-      throw new Error(`Session ${sessionId} already exists`);
-    }
-
-    this.sessions.set(sessionId, {
-      cwd,
-      sdkSessionId: sdkSessionId ?? null,
-    });
-  }
-
   destroySession(sessionId: string): void {
-    this.sessions.delete(sessionId);
-
     // Cleanup uploaded files for this session
     cleanupUploads(sessionId).catch((err) => {
       console.warn(`[session-manager] cleanup failed for session ${sessionId}:`, err);

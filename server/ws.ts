@@ -307,9 +307,10 @@ export function createWsPlugin(
             break;
           }
 
-          // Silent whatever it finds: the session map has had no writer since
-          // #26, so there is nothing for a frame to report, and an error here
-          // would put a bubble in the chat for a close the user asked for.
+          // Silent whatever it finds: there is no session map any more (#26
+          // deleted its last writer), so nothing for a frame to report, and an
+          // error here would put a bubble in the chat for a close the user
+          // asked for.
           case "interrupt": {
             sessionManager.destroySession(message.sessionId);
             break;
