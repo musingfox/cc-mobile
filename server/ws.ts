@@ -59,7 +59,8 @@ export interface WsBackend extends TerminalControlBackend {
   /**
    * Answers a screen-derived permission prompt by pressing a key in the pane,
    * after re-proving on live RPCs that the same prompt is still up. Resolves
-   * `false` for an id it never issued — a silent no-op, so a stale sheet cannot
+   * `false` for an id it does not currently hold — never issued, or superseded
+   * by a newer prompt on the same pane — a silent no-op, so a stale sheet cannot
    * raise an error at the user. Optional: only a backend that can read a
    * terminal has one.
    */

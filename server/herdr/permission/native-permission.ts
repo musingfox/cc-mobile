@@ -336,7 +336,10 @@ export function createNativePermission(options: NativePermissionOptions) {
     const sessionId = bySessionOfRequest.get(requestId);
     if (!sessionId) return false;
     const entry = pending.get(sessionId);
-    if (!entry) return false;
+    // A superseded id still maps to its pane, and the pane's current prompt
+    // passes the guard — so without this an answer to the old prompt would be
+    // pressed on its replacement, which the user never saw.
+    if (!entry || entry.requestId !== requestId) return false;
 
     // Checked before the guard read so an option this prompt does not offer is
     // refused without an RPC — the guard's job is freshness, not validation.

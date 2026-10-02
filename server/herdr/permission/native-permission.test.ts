@@ -256,6 +256,19 @@ describe("PermissionAnswerKeySend", () => {
     expect((h.sent[0] as { code: string }).code).toBe("permission_prompt_stale");
   });
 
+  test("an answer to a superseded request presses nothing on the prompt that replaced it", async () => {
+    // The guard compares the screen with the pane's current prompt, which is
+    // the replacement — so only the request id can tell this answer is stale.
+    h.screen.text = OTHER_PROMPT;
+    await h.permission.onStatus(PANE, "blocked");
+
+    const handled = await h.permission.resolve("r1", { optionId: "3" });
+
+    expect(handled).toBe(false);
+    expect(h.keys).toHaveLength(0);
+    expect(h.permission.pendingFor(PANE)?.requestId).toBe("r2");
+  });
+
   test("an option the prompt does not offer sends nothing and says so", async () => {
     await h.permission.resolve("r1", { optionId: "9" });
 

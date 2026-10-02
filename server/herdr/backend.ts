@@ -137,7 +137,8 @@ export interface HerdrTerminalBackend extends TerminalBackend {
   /**
    * Presses the chosen option's key in the pane, after re-proving on live RPCs
    * that the same prompt is still on screen. Resolves `false` — silently, with
-   * no keystroke — for a `requestId` this backend never issued.
+   * no keystroke — for a `requestId` this backend does not currently hold:
+   * never issued, or superseded by a newer prompt on the same pane.
    */
   resolvePermission(
     requestId: string,
