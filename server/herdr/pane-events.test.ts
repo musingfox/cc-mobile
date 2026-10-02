@@ -680,6 +680,80 @@ describe("PaneEventPollBackOff", () => {
 });
 
 /**
+ * FirstPollOnAttach: the poll is armed by the same call that lists sessions for
+ * a connecting phone, before that phone's sink is registered. A phone that
+ * attaches after the poll is armed gets its first look on the next tick, not
+ * when the discovery tier comes round; with nobody attached nothing changes.
+ */
+describe("FirstPollOnAttach", () => {
+  function counted() {
+    const calls = { count: 0 };
+    return {
+      calls,
+      // No claude anywhere: the tier a phone lands in is discovery (every 5).
+      snapshot: async () => {
+        calls.count += 1;
+        return { panes: [{ pane_id: "wS:p1", agent_status: "unknown" }], agents: [] };
+      },
+    };
+  }
+
+  test("a phone that attaches after the poll is armed is polled on the next tick", async () => {
+    let connected = false;
+    const { calls, snapshot } = counted();
+    const h = harness({ snapshot, hasClients: () => connected });
+    await h.events.start();
+
+    connected = true;
+    await h.tick();
+
+    expect(calls.count).toBe(1);
+  });
+
+  test("staying attached adds no polls beyond the tier", async () => {
+    let connected = false;
+    const { calls, snapshot } = counted();
+    const h = harness({ snapshot, hasClients: () => connected });
+    await h.events.start();
+
+    connected = true;
+    for (let i = 0; i < 5; i++) await h.tick();
+    expect(calls.count).toBe(1);
+
+    await h.tick();
+    expect(calls.count).toBe(2);
+  });
+
+  test("a phone that leaves and comes back is polled again on its return", async () => {
+    let connected = true;
+    const { calls, snapshot } = counted();
+    const h = harness({ snapshot, hasClients: () => connected });
+    await h.events.start();
+    await h.tick();
+    expect(calls.count).toBe(1);
+
+    connected = false;
+    await h.tick();
+    await h.tick();
+    connected = true;
+    await h.tick();
+
+    expect(calls.count).toBe(2);
+  });
+
+  test("with nobody attached, ticks keep the dormant rhythm", async () => {
+    const { calls, snapshot } = counted();
+    const h = harness({ snapshot, hasClients: () => false });
+    await h.events.start();
+
+    for (let i = 0; i < 29; i++) await h.tick();
+    expect(calls.count).toBe(0);
+    await h.tick();
+    expect(calls.count).toBe(1);
+  });
+});
+
+/**
  * PushSubscriberPollTier contract:
  * With no phone connected but a push registration on file, pane status is polled
  * every ~3 s instead of every 30 s.

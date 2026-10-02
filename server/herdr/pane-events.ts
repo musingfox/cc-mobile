@@ -224,6 +224,8 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
   let ticksWaited = 0;
   /** Something arrived on the stream: re-read the whole picture on the next tick. */
   let dueNext = false;
+  /** Whether the previous tick saw a phone connected; see `dueThisTick`. */
+  let clientsLastTick = false;
 
   function run(work: Promise<void> | void): void {
     void Promise.resolve(work).catch((error: unknown) => {
@@ -418,7 +420,15 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
    * at all (see `observe`).
    */
   function dueThisTick(): boolean {
-    const every = !hasClients()
+    const clients = hasClients();
+    // A phone that has just attached gets a look straight away. The poll is
+    // armed by the very call that lists sessions for it, before its sink is
+    // registered, so a rule read once at arm time saw no phone and left the
+    // first look to the discovery tier. An edge rather than a level: it fires
+    // once per arrival, and never while nobody is connected.
+    const attached = clients && !clientsLastTick;
+    clientsLastTick = clients;
+    const every = !clients
       ? hasPushSubscribers()
         ? PUSH_SUBSCRIBER_POLL_TICKS
         : DORMANT_POLL_TICKS
@@ -429,7 +439,7 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
     // A stream event only shortcuts a wait somebody is waiting on: with no
     // phone connected, a working claude retitles its pane every second and
     // would otherwise hold the poll at full speed for nobody.
-    const shortcut = dueNext && hasClients();
+    const shortcut = (dueNext && clients) || attached;
     if (ticksWaited < every && !shortcut) return false;
     ticksWaited = 0;
     dueNext = false;
@@ -477,10 +487,6 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
       // the stream never was, so a dead stream still leaves the phone with its
       // replies and its activity dots.
       if (snapshot && poll === undefined && !stopped) {
-        // Prime so that when clients present at arm we get the free first poll
-        // (old DORMANT trick); when !clients (push or dormant) we start from 0
-        // so the tier rhythm (3 or 30) governs including first poll time.
-        ticksWaited = hasClients() ? DORMANT_POLL_TICKS : 0;
         poll = setIntervalFn(() => {
           if (dueThisTick()) void pollOnce();
         }, pollIntervalMs);
