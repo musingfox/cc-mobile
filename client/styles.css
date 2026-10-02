@@ -244,6 +244,59 @@ body {
   --ember-hair-neutral: rgba(255, 255, 255, 0.06);
 }
 
+/* The theme App.tsx actually mounts. This file's legacy rules still style the
+   vaul sheets, markdown, shiki and attachment chips, and those sheets portal
+   into `.app`, outside `.lin-shell` — so without this block they resolve every
+   var() to nothing. Values are client/design/tokens.ts's palette. */
+.theme-linear {
+  --bg-primary: #0e0e10;
+  --bg-secondary: #17171a;
+  --bg-tertiary: #1f1f23;
+  --bg-highlight: var(--bg-tertiary);
+  --bg-accent: var(--bg-tertiary);
+  --bg-user-bubble: var(--bg-tertiary);
+  --bg-gradient: var(--bg-primary);
+  --bg-mesh: none;
+  --text-primary: #ececec;
+  --text-secondary: #a0a0a0;
+  --text-tertiary: #6a6a6a;
+  --accent-primary: #c2b89a;
+  --accent-cyan: var(--accent-primary);
+  --accent-electric: var(--accent-primary);
+  --accent-command: var(--accent-primary);
+  --accent-agent: var(--accent-primary);
+  --accent-success: #6ca36c;
+  --accent-warning: #c4a66a;
+  --accent-error: #d49898;
+  --border-color: rgba(255, 255, 255, 0.07);
+
+  --glass-bg: var(--bg-secondary);
+  --glass-bg-heavy: var(--bg-secondary);
+  --glass-border: var(--border-color);
+  --glass-border-bright: rgba(255, 255, 255, 0.12);
+  --glass-blur: 0px;
+  --glass-blur-heavy: 0px;
+
+  --gradient-primary: var(--accent-primary);
+  --gradient-accent: var(--accent-primary);
+  --gradient-cyan: var(--accent-primary);
+  --gradient-animated: var(--accent-primary);
+
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 -20px 40px rgba(0, 0, 0, 0.3);
+  /* Flat design has no glows, but these sit inside comma-separated box-shadow
+     lists, where `none` would invalidate the whole declaration. */
+  --glow-primary: 0 0 0 transparent;
+  --glow-accent: 0 0 0 transparent;
+  --glow-cyan: 0 0 0 transparent;
+  --glow-subtle: 0 0 0 transparent;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
+  --font-mono: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-sans);
+}
+
 .app {
   background: var(--bg-gradient, var(--bg-primary));
   color: var(--text-primary);
