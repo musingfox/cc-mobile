@@ -348,6 +348,21 @@ describe("BlockedEmittedOncePerEpisode", () => {
     expect(calls.filter((status) => status === "blocked")).toHaveLength(2);
   });
 
+  test("a second question inside one poll gap is read off the screen again", () => {
+    // Without the re-read the permission side keeps the first prompt: the phone
+    // shows a card that was already answered, and never the one now waiting.
+    const h = harness();
+    h.events.observe({ pane_id: "p1", agent: "claude", agent_status: "working" });
+    h.events.observe({ pane_id: "p1", agent_status: "blocked", state_change_seq: 2 });
+    h.events.observe({ pane_id: "p1", agent_status: "blocked", state_change_seq: 2 });
+    h.events.observe({ pane_id: "p1", agent_status: "blocked", state_change_seq: 8 });
+
+    expect(h.permissionCalls.filter((call) => call.status === "blocked")).toEqual([
+      { sessionId: "p1", status: "blocked", kind: "claude" },
+      { sessionId: "p1", status: "blocked", kind: "claude" },
+    ]);
+  });
+
   test("a new episode announces itself after the pane leaves blocked", () => {
     const calls: string[] = [];
     const h = harness({

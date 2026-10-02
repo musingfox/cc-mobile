@@ -327,6 +327,11 @@ export function createHerdrPaneEvents(options: HerdrPaneEventsOptions) {
         }
         // No turn began here, so no verdict is pending correction.
         announceStatus();
+        // Blocked on both sides of a moved counter is a prompt answered and a
+        // new one asked between two samples. Only the screen says which one is
+        // up now; left unread, the phone keeps the answered card and never
+        // sees the new one.
+        if (status === "blocked") run(permission?.onStatus(sessionId, status, state.kind));
       }
       return;
     }
