@@ -433,7 +433,7 @@ export default function ChatScreen({ onNavigate }: Props) {
                 )}
               </div>
               <div className="lin-msg-body lin-md">
-                <MarkdownRenderer content={m.content} isStreaming={false} />
+                <MarkdownRenderer content={m.content} />
               </div>
             </div>
           );

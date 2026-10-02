@@ -18,116 +18,47 @@ const marked = new Marked({
 
 type MarkdownRendererProps = {
   content: string;
-  isStreaming?: boolean;
 };
 
-// Minimum interval between renders during streaming (~30fps)
-const STREAM_RENDER_INTERVAL = 32;
-
-export default function MarkdownRenderer({ content, isStreaming }: MarkdownRendererProps) {
+export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const contentRef = useRef(content);
-  const lastRenderAt = useRef(0);
-  const trailingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const theme = useSettingsStore((s) => s.theme);
-
-  // Always keep contentRef up to date (read by trailing timer callback)
-  contentRef.current = content;
 
   useEffect(() => {
     if (!containerRef.current) return;
-
-    if (isStreaming) {
-      const now = performance.now();
-      const elapsed = now - lastRenderAt.current;
-
-      if (elapsed >= STREAM_RENDER_INTERVAL) {
-        // Leading edge: enough time passed, render immediately
-        renderMarkdownToDOM(containerRef.current, content, theme, true);
-        lastRenderAt.current = now;
-        // Clear any pending trailing render
-        if (trailingTimer.current) {
-          clearTimeout(trailingTimer.current);
-          trailingTimer.current = null;
-        }
-      } else {
-        // Trailing edge: schedule render for remaining interval
-        if (trailingTimer.current) clearTimeout(trailingTimer.current);
-        trailingTimer.current = setTimeout(() => {
-          trailingTimer.current = null;
-          lastRenderAt.current = performance.now();
-          if (containerRef.current) {
-            renderMarkdownToDOM(containerRef.current, contentRef.current, theme, true);
-          }
-        }, STREAM_RENDER_INTERVAL - elapsed);
-      }
-    } else {
-      // Not streaming: cancel pending timer and render immediately with full enhancements
-      if (trailingTimer.current) {
-        clearTimeout(trailingTimer.current);
-        trailingTimer.current = null;
-      }
-      renderMarkdownToDOM(containerRef.current, content, theme, false);
-      lastRenderAt.current = 0;
-    }
-  }, [content, theme, isStreaming]);
-
-  // Cleanup on unmount
-  useEffect(
-    () => () => {
-      if (trailingTimer.current) clearTimeout(trailingTimer.current);
-    },
-    [],
-  );
+    renderMarkdownToDOM(containerRef.current, content, theme);
+  }, [content, theme]);
 
   return <div ref={containerRef} className="md-renderer" />;
 }
 
-function renderMarkdownToDOM(
-  container: HTMLElement,
-  content: string,
-  theme: string,
-  skipEnhancements: boolean,
-) {
+function renderMarkdownToDOM(container: HTMLElement, content: string, theme: string) {
   const raw = marked.parse(content);
   if (typeof raw !== "string") return;
 
   // Sanitize HTML to prevent XSS before inserting into DOM
   const html = DOMPurify.sanitize(raw);
 
-  if (skipEnhancements) {
-    // Streaming fast path: set innerHTML directly, skip morphdom diffing.
-    // No enhanced elements (shiki/mermaid) to preserve during streaming.
-    let target = container.firstElementChild as HTMLElement | null;
-    if (!target) {
-      target = document.createElement("div");
-      target.className = "md-content";
-      container.appendChild(target);
-    }
-    target.innerHTML = html;
-    rewriteLoopbackLinks(target);
+  // Use morphdom to preserve enhanced elements (shiki, mermaid)
+  const next = document.createElement("div");
+  next.className = "md-content";
+  next.innerHTML = html;
+  rewriteLoopbackLinks(next);
+
+  if (container.firstElementChild) {
+    morphdom(container.firstElementChild, next, {
+      onBeforeElUpdated(fromEl, toEl) {
+        if (fromEl.classList.contains("shiki")) return false;
+        if (fromEl.isEqualNode(toEl)) return false;
+        return true;
+      },
+    });
   } else {
-    // Final render: use morphdom to preserve enhanced elements (shiki, mermaid)
-    const next = document.createElement("div");
-    next.className = "md-content";
-    next.innerHTML = html;
-    rewriteLoopbackLinks(next);
-
-    if (container.firstElementChild) {
-      morphdom(container.firstElementChild, next, {
-        onBeforeElUpdated(fromEl, toEl) {
-          if (fromEl.classList.contains("shiki")) return false;
-          if (fromEl.isEqualNode(toEl)) return false;
-          return true;
-        },
-      });
-    } else {
-      container.appendChild(next);
-    }
-
-    enhanceCodeBlocks(container, theme);
-    renderMermaidBlocks(container);
+    container.appendChild(next);
   }
+
+  enhanceCodeBlocks(container, theme);
+  renderMermaidBlocks(container);
 }
 
 function rewriteLoopbackLinks(root: HTMLElement): void {
