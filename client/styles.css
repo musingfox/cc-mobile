@@ -3254,6 +3254,7 @@ button {
   display: flex;
   flex-direction: column;
   outline: none;
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 .drawer-handle {
