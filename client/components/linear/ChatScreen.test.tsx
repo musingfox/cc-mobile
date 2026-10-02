@@ -92,23 +92,24 @@ describe("ChatScreen", () => {
       agents: [],
     });
 
-    const { getByLabelText, getByText, queryByText } = render(<ChatScreen onNavigate={() => {}} />);
+    const { getByLabelText, getByText } = render(<ChatScreen onNavigate={() => {}} />);
     fireEvent.click(getByLabelText("Insert slash command"));
+    const picker = getByText("Clear chat").closest("[role=dialog]");
+    expect(picker?.getAttribute("data-state")).toBe("open");
     fireEvent.click(getByText("clear"));
 
     await waitFor(() => {
       expect(useAppStore.getState().inputDraft).toContain("/clear");
     });
 
-    await waitFor(
-      () => {
-        expect(queryByText("Clear chat")).toBeNull();
-      },
-      // vaul's drawer close resolves only after its transition fallback
-      // (~5.1s under happy-dom), which overruns bun's 5s default timeout.
-      { timeout: 8000 },
-    );
-  }, 15000);
+    // Assert the close itself, not vaul's unmount: under happy-dom the unmount
+    // waits on a ~5.1s transition fallback, a wall-clock wait that flakes under load.
+    await waitFor(() => {
+      expect(picker?.isConnected === false || picker?.getAttribute("data-state") === "closed").toBe(
+        true,
+      );
+    });
+  });
 
   test("shows thinking card when streaming starts before streamed content exists", () => {
     const store = useAppStore.getState();
