@@ -76,6 +76,15 @@ class NotificationService {
     await this.show("CCMobile", body, tag);
   }
 
+  async showUnreadablePromptNotification(sessionId?: string, cwd?: string): Promise<void> {
+    // The card's own header and nothing else: an unparsed screen claims no
+    // kind, and its raw text does not belong on a lock screen.
+    const tag = sessionId ? `cc-mobile-permission-${sessionId}` : "cc-mobile-permission";
+    const project = cwd ? cwd.split("/").pop() || cwd : null;
+    const body = project ? `${project}: can't read this prompt` : "Can't read this prompt";
+    await this.show("CCMobile", body, tag);
+  }
+
   async showResponseComplete(sessionId?: string, cwd?: string): Promise<void> {
     const tag = sessionId ? `cc-mobile-done-${sessionId}` : "cc-mobile-done";
     const project = cwd ? cwd.split("/").pop() || cwd : null;

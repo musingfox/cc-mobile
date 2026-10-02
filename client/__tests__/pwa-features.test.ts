@@ -106,6 +106,26 @@ describe("NotificationService", () => {
     // Should not throw
     await notificationService.showPermissionNotification("Read");
   });
+
+  test("TC-N9: an unreadable prompt is announced in the card's words, not as a permission", async () => {
+    const mockShowNotification = mock(() => Promise.resolve());
+    (swRegistrationManager as any).registration = {
+      scope: "/test",
+      showNotification: mockShowNotification,
+    } as unknown as ServiceWorkerRegistration;
+    (globalThis as any).Notification = { permission: "granted" };
+
+    await notificationService.showUnreadablePromptNotification(
+      "sess-123",
+      "/Users/nick/workspace/cc-mobile",
+    );
+
+    expect(mockShowNotification).toHaveBeenCalledWith("CCMobile", {
+      body: "cc-mobile: can't read this prompt",
+      tag: "cc-mobile-permission-sess-123",
+      renotify: true,
+    });
+  });
 });
 
 // TC9-TC12: HapticService

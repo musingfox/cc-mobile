@@ -78,6 +78,15 @@ export type PendingPermission = {
 };
 
 /**
+ * The server could not parse the screen and offers only its synthetic Cancel
+ * (Esc). One test for the card and for every announcement of it, so a toast
+ * never names a kind the card refuses to claim.
+ */
+export function isUnreadablePrompt(pending: PendingPermission): boolean {
+  return !pending.options?.length || pending.options.every((option) => option.id === "cancel");
+}
+
+/**
  * What the server knows about a live session that the card must show honestly.
  *
  * `gated: false` means claude runs in that pane with no permission gate: it will

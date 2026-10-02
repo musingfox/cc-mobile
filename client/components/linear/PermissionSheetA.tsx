@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Icon } from "../../design/icons";
 import { tokens as T } from "../../design/tokens";
 import { hapticService } from "../../services/haptic";
-import type { PendingPermission } from "../../stores/app-store";
+import { isUnreadablePrompt, type PendingPermission } from "../../stores/app-store";
 
 const SWIPE_THRESHOLD_PX = 80;
 
@@ -54,9 +54,7 @@ export default function PermissionSheetA({ pending, onApprove, onDeny, onChoose 
   // The server could not parse the screen and offers only its synthetic
   // Cancel (Esc). It may be a question, so there is nothing to approve: a
   // right swipe here used to send Esc too, cancelling whatever was asked.
-  const unreadable =
-    pending !== null &&
-    (!pending.options?.length || pending.options.every((option) => option.id === "cancel"));
+  const unreadable = pending !== null && isUnreadablePrompt(pending);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (isQuestion || unreadable) return;

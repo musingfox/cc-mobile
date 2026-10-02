@@ -4,6 +4,7 @@ import {
   type AgentInfo,
   type AgentProfile,
   type CommandInfo,
+  isUnreadablePrompt,
   type Message,
   type PendingPermission,
   type PermissionOption,
@@ -583,7 +584,8 @@ class WsService {
 
       case "permission_request":
         if (sessionId) {
-          store.setPermission(sessionId, pendingFromPermissionRequest(msg));
+          const pending = pendingFromPermissionRequest(msg);
+          store.setPermission(sessionId, pending);
           // Background notification when page is hidden
           const settingsStore = useSettingsStore.getState();
           const toolName = (msg.tool as { name: string }).name;
@@ -591,14 +593,23 @@ class WsService {
           // `tool.name` slot holds the question's own header — so saying
           // "permission" here would be wrong twice over.
           const isQuestion = msg.promptKind === "question";
+          // Nor is a screen nobody could read: its `tool.name` is the server's
+          // placeholder, which the card does not show either.
+          const unreadable = isUnreadablePrompt(pending);
           if (document.hidden) {
             toastService.info(
-              isQuestion ? `Needs your answer: ${toolName}` : `Permission requested: ${toolName}`,
+              isQuestion
+                ? `Needs your answer: ${toolName}`
+                : unreadable
+                  ? "Can't read this prompt"
+                  : `Permission requested: ${toolName}`,
             );
             if (settingsStore.notificationsEnabled) {
               const cwd = store.sessions.get(sessionId)?.cwd;
               if (isQuestion) {
                 notificationService.showQuestionNotification(toolName, sessionId, cwd);
+              } else if (unreadable) {
+                notificationService.showUnreadablePromptNotification(sessionId, cwd);
               } else {
                 notificationService.showPermissionNotification(toolName, sessionId, cwd);
               }

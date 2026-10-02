@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { notificationService } from "../services/notification";
+import { toastService } from "../services/toast-service";
 import {
   pendingFromPermissionRequest,
   permissionResolution,
   wsService,
 } from "../services/ws-service";
 import { useAppStore } from "../stores/app-store";
+import { useSettingsStore } from "../stores/settings-store";
 
 /**
  * The kind the server read off the screen has to survive the frame being
@@ -214,5 +217,95 @@ describe("ApproveNeverCancels", () => {
     expect(sent.map((data) => JSON.parse(data))).toEqual([
       { type: "permission", requestId: "r2", optionId: "1" },
     ]);
+  });
+});
+
+/**
+ * With the page hidden, the prompt is announced by a toast and a local
+ * notification before anyone sees the card. They must say what the card says:
+ * an unreadable screen claims no kind, so neither may call it a permission.
+ */
+describe("HiddenPageCopyMatchesTheCard", () => {
+  const internal = wsService as unknown as {
+    handleMessage: (message: Record<string, unknown>) => void;
+  };
+  const originalInfo = toastService.info;
+  const originalPermission = notificationService.showPermissionNotification;
+  const originalQuestion = notificationService.showQuestionNotification;
+  const originalUnreadable = notificationService.showUnreadablePromptNotification;
+  const originalEnabled = useSettingsStore.getState().notificationsEnabled;
+  let toasts: string[];
+  let notified: unknown[][];
+  let priorHidden: boolean | undefined;
+
+  // lifecycle-manager.test leaves `hidden` behind as a non-configurable own
+  // property, which can be assigned but not redefined.
+  function setHidden(value: boolean | undefined) {
+    const own = Object.getOwnPropertyDescriptor(document, "hidden");
+    if (own && !own.configurable) (document as { hidden: boolean | undefined }).hidden = value;
+    else if (value === undefined) Reflect.deleteProperty(document, "hidden");
+    else Object.defineProperty(document, "hidden", { value, configurable: true });
+  }
+
+  beforeEach(() => {
+    priorHidden = Object.getOwnPropertyDescriptor(document, "hidden")?.value;
+    setHidden(true);
+    toasts = [];
+    notified = [];
+    toastService.info = ((text: string) => {
+      toasts.push(text);
+      return 0;
+    }) as typeof toastService.info;
+    notificationService.showPermissionNotification = (async (...args: unknown[]) => {
+      notified.push(["permission", ...args]);
+    }) as typeof notificationService.showPermissionNotification;
+    notificationService.showQuestionNotification = (async (...args: unknown[]) => {
+      notified.push(["question", ...args]);
+    }) as typeof notificationService.showQuestionNotification;
+    notificationService.showUnreadablePromptNotification = (async (...args: unknown[]) => {
+      notified.push(["unreadable", ...args]);
+    }) as typeof notificationService.showUnreadablePromptNotification;
+    useSettingsStore.setState({ notificationsEnabled: true });
+    useAppStore.setState({ sessions: new Map(), activeSessionId: null });
+    useAppStore.getState().addSession("p1", "/repo/proj", { ready: true });
+  });
+
+  afterEach(() => {
+    toastService.info = originalInfo;
+    notificationService.showPermissionNotification = originalPermission;
+    notificationService.showQuestionNotification = originalQuestion;
+    notificationService.showUnreadablePromptNotification = originalUnreadable;
+    useSettingsStore.setState({ notificationsEnabled: originalEnabled });
+    setHidden(priorHidden);
+  });
+
+  test("an unreadable screen is announced in the card's words, not as a permission", () => {
+    internal.handleMessage({
+      type: "permission_request",
+      sessionId: "p1",
+      requestId: "r1",
+      tool: { name: "Permission required", parameters: { text: "raw screen" } },
+      options: [{ id: "cancel", label: "Cancel", keystroke: "esc" }],
+    });
+
+    expect(toasts).toEqual(["Can't read this prompt"]);
+    expect(notified).toEqual([["unreadable", "p1", "/repo/proj"]]);
+  });
+
+  test("a parsed permission prompt is still announced as one", () => {
+    internal.handleMessage({
+      type: "permission_request",
+      sessionId: "p1",
+      requestId: "r2",
+      tool: { name: "Bash", parameters: { text: "touch x" } },
+      options: [
+        { id: "1", label: "Yes", keystroke: "1" },
+        { id: "2", label: "No", keystroke: "2" },
+      ],
+      promptKind: "permission",
+    });
+
+    expect(toasts).toEqual(["Permission requested: Bash"]);
+    expect(notified).toEqual([["permission", "Bash", "p1", "/repo/proj"]]);
   });
 });
