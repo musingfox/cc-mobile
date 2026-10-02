@@ -107,6 +107,14 @@ export function buildWsUrl(
   return `${protocol}//${host}${basePath}/ws${query}`;
 }
 
+/**
+ * How often a visible page repeats its `visibility` report. The server stops
+ * believing a `visible` after `FOREGROUND_FRESH_MS` (server/push/foreground.ts)
+ * because a locking phone may never send `hidden`; this stays well under that,
+ * so one lost repeat does not let a push through to a phone in a hand.
+ */
+export const VISIBILITY_HEARTBEAT_MS = 10_000;
+
 class WsService {
   private ws: WebSocket | null = null;
   private capabilitiesTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
@@ -137,6 +145,13 @@ class WsService {
     this.ws.send(JSON.stringify(msg));
   }
 
+  private reportVisibility() {
+    this.sendMessage({
+      type: "visibility",
+      state: document.visibilityState === "visible" ? "visible" : "hidden",
+    });
+  }
+
   connect() {
     const store = useAppStore.getState();
     store.setConnectionState("connecting");
@@ -159,6 +174,13 @@ class WsService {
     const ws = new WebSocket(
       buildWsUrl(protocol, window.location.host, basePath, useSettingsStore.getState().deviceName),
     );
+
+    // Bound to this socket: a socket that is no longer current reports nothing,
+    // so a slow close of an old one cannot speak over the new one.
+    const reportIfCurrent = () => {
+      if (this.ws === ws) this.reportVisibility();
+    };
+    let visibilityHeartbeat: number | null = null;
 
     ws.onopen = () => {
       console.log("[ws-service] connected");
@@ -202,6 +224,16 @@ class WsService {
         // No restored sessions - this is first load or clean state
         // Auto-create will happen via other mechanisms if needed
       }
+
+      reportIfCurrent();
+      document.addEventListener("visibilitychange", reportIfCurrent);
+      visibilityHeartbeat = window.setInterval(() => {
+        if (this.ws !== ws) {
+          if (visibilityHeartbeat !== null) window.clearInterval(visibilityHeartbeat);
+          return;
+        }
+        if (document.visibilityState === "visible") this.reportVisibility();
+      }, VISIBILITY_HEARTBEAT_MS);
     };
 
     ws.onmessage = (event) => {
@@ -254,6 +286,8 @@ class WsService {
 
     ws.onclose = () => {
       console.log("[ws-service] disconnected");
+      if (visibilityHeartbeat !== null) window.clearInterval(visibilityHeartbeat);
+      document.removeEventListener("visibilitychange", reportIfCurrent);
       this.ws = null;
       // Delay showing disconnect banner — if reconnect is fast, user won't notice
       this.disconnectBannerTimeout = window.setTimeout(() => {

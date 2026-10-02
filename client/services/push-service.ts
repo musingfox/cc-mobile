@@ -1,3 +1,4 @@
+import { useSettingsStore } from "../stores/settings-store";
 import { swRegistrationManager } from "./sw-registration";
 
 let cachedPublicKey: string | null = null;
@@ -73,10 +74,13 @@ export type PushSubscriptionJSON = {
  */
 export async function uploadSubscription(sub: PushSubscriptionJSON): Promise<void> {
   const basePath = typeof window !== "undefined" ? (window as any).__BASE_PATH__ || "" : "";
+  // The same name the WS URL carries (`buildWsUrl`): it is how the server ties
+  // this subscription to the socket that says whether this phone is looking.
+  const device = useSettingsStore.getState().deviceName.trim();
   const response = await fetch(`${basePath}/api/push/subscribe`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(sub),
+    body: JSON.stringify(device ? { ...sub, device } : sub),
   });
   if (!response.ok) {
     const text = await response.text().catch(() => "");

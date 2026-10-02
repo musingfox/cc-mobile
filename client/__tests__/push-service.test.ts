@@ -7,6 +7,7 @@ import {
   uploadSubscription,
 } from "../services/push-service";
 import { swRegistrationManager } from "../services/sw-registration";
+import { useSettingsStore } from "../stores/settings-store";
 
 /**
  * PushPublicKeyPrimedAtStartup contract tests.
@@ -118,6 +119,38 @@ describe("PushSubscriptionResync", () => {
     s.mockRestore();
   });
 
+  test("the re-upload on app open carries the device too, so it does not unlink the subscription", async () => {
+    (window as any).Notification = { permission: "granted" };
+    const existing = {
+      toJSON: () => ({
+        endpoint: "https://web.push.apple.com/ex",
+        keys: { p256dh: "p", auth: "a" },
+      }),
+    };
+    (swRegistrationManager as any).registration = {
+      pushManager: { getSubscription: () => Promise.resolve(existing), subscribe: mock() },
+    };
+    const previousName = useSettingsStore.getState().deviceName;
+    useSettingsStore.setState({ deviceName: "phone-a" });
+    let body: unknown = null;
+    globalThis.fetch = (async (_url: string, init: RequestInit) => {
+      body = JSON.parse(init.body as string);
+      return new Response("", { status: 201 });
+    }) as unknown as typeof fetch;
+
+    try {
+      expect(await resyncPushSubscription({ enabled: true })).toBe("uploaded");
+    } finally {
+      useSettingsStore.setState({ deviceName: previousName });
+    }
+
+    expect(body).toEqual({
+      endpoint: "https://web.push.apple.com/ex",
+      keys: { p256dh: "p", auth: "a" },
+      device: "phone-a",
+    });
+  });
+
   test('T2: given resync({enabled:true}) with permission "granted" and getSubscription() returning null -> expect subscribe called once then upload called once, result "uploaded"', async () => {
     (window as any).Notification = { permission: "granted" };
     // need key for subscribe path
@@ -204,17 +237,23 @@ describe("PushSubscriptionUpload", () => {
     globalThis.fetch = realFetch;
   });
 
-  test('T1: given uploadSubscription({endpoint:"https://web.push.apple.com/abc", keys:{p256dh:"BN",auth:"k1"}}) with window.__BASE_PATH__ unset and fetch stubbed to 201 -> expect fetch called with "/api/push/subscribe", method POST, content-type application/json, and that exact JSON body', async () => {
+  test('T1: given uploadSubscription({endpoint:"https://web.push.apple.com/abc", keys:{p256dh:"BN",auth:"k1"}}) with window.__BASE_PATH__ unset, device name "phone-a" and fetch stubbed to 201 -> expect fetch called with "/api/push/subscribe", method POST, content-type application/json, and that exact JSON body plus the device', async () => {
+    const previousName = useSettingsStore.getState().deviceName;
+    useSettingsStore.setState({ deviceName: "phone-a" });
     let captured: { url: string; init: RequestInit } | null = null;
     globalThis.fetch = (async (url: string, init: RequestInit) => {
       captured = { url, init };
       return new Response("", { status: 201 });
     }) as unknown as typeof fetch;
 
-    await uploadSubscription({
-      endpoint: "https://web.push.apple.com/abc",
-      keys: { p256dh: "BN", auth: "k1" },
-    });
+    try {
+      await uploadSubscription({
+        endpoint: "https://web.push.apple.com/abc",
+        keys: { p256dh: "BN", auth: "k1" },
+      });
+    } finally {
+      useSettingsStore.setState({ deviceName: previousName });
+    }
 
     expect(captured).not.toBeNull();
     expect((captured as any).url).toBe("/api/push/subscribe");
@@ -223,7 +262,26 @@ describe("PushSubscriptionUpload", () => {
     expect(JSON.parse((captured as any).init.body as string)).toEqual({
       endpoint: "https://web.push.apple.com/abc",
       keys: { p256dh: "BN", auth: "k1" },
+      device: "phone-a",
     });
+  });
+
+  test("a blank device name uploads no device, which the server sends to unconditionally", async () => {
+    const previousName = useSettingsStore.getState().deviceName;
+    useSettingsStore.setState({ deviceName: "   " });
+    let body: unknown = null;
+    globalThis.fetch = (async (_url: string, init: RequestInit) => {
+      body = JSON.parse(init.body as string);
+      return new Response("", { status: 201 });
+    }) as unknown as typeof fetch;
+
+    try {
+      await uploadSubscription({ endpoint: "e", keys: { p256dh: "p", auth: "a" } });
+    } finally {
+      useSettingsStore.setState({ deviceName: previousName });
+    }
+
+    expect(body).toEqual({ endpoint: "e", keys: { p256dh: "p", auth: "a" } });
   });
 
   test('T2: given the same call with window.__BASE_PATH__ = "/cc" -> expect fetch called with "/cc/api/push/subscribe"', async () => {
