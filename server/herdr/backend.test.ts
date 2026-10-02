@@ -354,6 +354,91 @@ describe("NonClaudePermissionSuppression", () => {
   });
 });
 
+// ── TranscriptPathRetryBackoff (backend wiring) ──────────────────────────────
+
+describe("TranscriptPathRetryBackoff wiring", () => {
+  test("a pane with no transcript reader stops costing a session listing per status change", async () => {
+    const pane = "w6C:p1";
+    let sessionValue = "codex-session-1";
+    let listings = 0;
+    let emit: ((event: { event: string; data: unknown }) => void) | undefined;
+    const agentInfo = () => ({
+      terminal_id: "t1",
+      agent_status: "idle",
+      workspace_id: "w6C",
+      tab_id: "w6C:t1",
+      pane_id: pane,
+      focused: false,
+      revision: 1,
+      agent: "codex",
+      cwd: "/repo",
+      agent_session: { kind: "id", value: sessionValue },
+    });
+    const client = {
+      call: async (method: string) =>
+        method === "pane.process_info"
+          ? { type: "pane_process_info", process_info: { pane_id: pane, foreground_processes: [] } }
+          : { type: "ok" },
+      // What resolving a transcript path costs: one full listing per lookup.
+      agentList: async () => {
+        listings++;
+        return [agentInfo()];
+      },
+      agentGet: async () => agentInfo(),
+      sessionSnapshot: async () => ({
+        version: "0.7.5",
+        protocol: 17,
+        workspaces: [],
+        panes: [],
+        agents: [],
+      }),
+      paneRead: async () => ({ text: "", revision: 1 }),
+      paneSendText: async () => {},
+      paneSendKeys: async () => {},
+      subscribeEvents: async (options: {
+        onEvent: (event: { event: string; data: unknown }) => void;
+      }) => {
+        emit = options.onEvent;
+        return { stop: () => {} };
+      },
+    } as unknown as NonNullable<HerdrBackendOptions["client"]>;
+    const backend = createHerdrBackend({ client });
+    await backend.listSessionDescriptors();
+
+    async function report(status: string) {
+      emit?.({
+        event: "pane_updated",
+        data: {
+          pane: {
+            pane_id: pane,
+            agent_status: status,
+            agent: "codex",
+            agent_session: { kind: "id", value: sessionValue },
+          },
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    const beforeTurns = listings;
+    for (let turn = 0; turn < 20; turn++) {
+      await report("working");
+      await report("idle");
+    }
+    // One lookup per arm and per settle would be 40. Real time runs here, so a
+    // slow machine crossing the first 1 s backoff may add one or two.
+    expect(listings - beforeTurns).toBeLessThanOrEqual(3);
+
+    // A new conversation in the pane is a fresh lookup straight away.
+    const beforeRotation = listings;
+    sessionValue = "codex-session-2";
+    await report("working");
+    expect(listings - beforeRotation).toBe(1);
+
+    await backend.teardownAll();
+  });
+});
+
 describe("HerdrStartupGate", () => {
   test("rejects when the daemon speaks a different protocol", async () => {
     const client = createHerdrClient({

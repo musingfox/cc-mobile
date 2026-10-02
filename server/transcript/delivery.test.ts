@@ -7,7 +7,15 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import { type ClientSink, createTranscriptDelivery } from "./delivery";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  type ClientSink,
+  createTranscriptDelivery,
+  PATH_RETRY_BASE_MS,
+  PATH_RETRY_MAX_MS,
+} from "./delivery";
 import type { TranscriptCursor } from "./reader";
 
 const PATH = "/home/u/.claude/projects/-p/a21273d4.jsonl";
@@ -625,5 +633,180 @@ describe("TranscriptChunkPositionStamp", () => {
 
     expect(spy.messages).toEqual([]);
     expect(spy.messages.some((m) => "epoch" in ((m.chunk as object) ?? {}))).toBe(false);
+  });
+});
+
+// A path that resolves to null used to be looked up again on every attach,
+// status change and settle — and in production one lookup is a full session
+// listing (2 + 2N RPCs). A pane that can never resolve (a kind with no reader)
+// paid that for its whole life. The retry is bounded, not cached forever: omp's
+// file and a late-detected kind both have to be found once they exist.
+describe("TranscriptPathRetryBackoff", () => {
+  function nullPathDelivery(answers: Array<string | null> = []) {
+    let now = 0;
+    let calls = 0;
+    const delivery = createTranscriptDelivery({
+      resolvePath: async () => {
+        calls++;
+        return answers.length > 0 ? (answers.shift() ?? null) : null;
+      },
+      getSink: () => undefined,
+      read: async ({ cursor }) => ({ records: [], offsets: [], cursor }),
+      initCursor: async () => ({ byteOffset: 0, lastUuid: null }),
+      stat: async () => null,
+      setIntervalFn: () => 0,
+      clearIntervalFn: () => {},
+      now: () => now,
+    });
+    return {
+      delivery,
+      get calls() {
+        return calls;
+      },
+      advance(ms: number) {
+        now += ms;
+      },
+    };
+  }
+
+  async function oneTurn(delivery: ReturnType<typeof createTranscriptDelivery>, id: string) {
+    await delivery.onStatus(id, "working");
+    await delivery.onStatus(id, "blocked");
+    await delivery.onStatus(id, "working");
+    await delivery.onStatus(id, "idle");
+    await delivery.deliverTurn(id);
+  }
+
+  it("looks a null path up once for a burst of status changes, not once per change", async () => {
+    const h = nullPathDelivery();
+
+    await h.delivery.attach("w6C:p1");
+    for (let turn = 0; turn < 50; turn++) await oneTurn(h.delivery, "w6C:p1");
+
+    expect(h.calls).toBe(1);
+  });
+
+  it("keeps retrying at a bounded rate, so the cost of an unresolvable pane is capped, not permanent", async () => {
+    const h = nullPathDelivery();
+    await h.delivery.attach("w6C:p1");
+
+    // Ten minutes of a turn every second.
+    for (let second = 0; second < 600; second++) {
+      h.advance(1_000);
+      await oneTurn(h.delivery, "w6C:p1");
+    }
+    const afterTenMinutes = h.calls;
+
+    // Before: three lookups per turn, 1 800 here. Bounded: the doubling phase
+    // plus one lookup per PATH_RETRY_MAX_MS.
+    const doublings = Math.ceil(Math.log2(PATH_RETRY_MAX_MS / PATH_RETRY_BASE_MS)) + 1;
+    expect(afterTenMinutes).toBeLessThanOrEqual(doublings + 600_000 / PATH_RETRY_MAX_MS);
+
+    // And never permanent: a turn after another full interval still asks again.
+    h.advance(PATH_RETRY_MAX_MS);
+    await oneTurn(h.delivery, "w6C:p1");
+    expect(h.calls).toBe(afterTenMinutes + 1);
+  });
+
+  it("finds a path that becomes resolvable later, once the backoff has passed", async () => {
+    const h = nullPathDelivery([null, PATH]);
+    await h.delivery.attach("w6C:p1");
+
+    await h.delivery.deliverTurn("w6C:p1");
+    expect(h.calls).toBe(1);
+
+    h.advance(PATH_RETRY_BASE_MS);
+    await h.delivery.deliverTurn("w6C:p1");
+    expect(h.calls).toBe(2);
+
+    // A resolved path is kept: no further lookups however many turns follow.
+    for (let turn = 0; turn < 10; turn++) await oneTurn(h.delivery, "w6C:p1");
+    expect(h.calls).toBe(2);
+  });
+
+  it("resolves afresh at once when the pane's agent_session changes, whatever the backoff", async () => {
+    const h = nullPathDelivery();
+    await h.delivery.attach("w6C:p1");
+    h.advance(PATH_RETRY_BASE_MS);
+    await h.delivery.deliverTurn("w6C:p1");
+    h.advance(2 * PATH_RETRY_BASE_MS);
+    await h.delivery.deliverTurn("w6C:p1");
+    expect(h.calls).toBe(3);
+
+    // pane-events calls resetCursor exactly when the agent_session value moves
+    // (a keyless claude getting its id is one such move).
+    await h.delivery.resetCursor("w6C:p1");
+    expect(h.calls).toBe(4);
+
+    // The fresh state starts its own backoff from the base, not from where the
+    // old one had grown to.
+    await h.delivery.deliverTurn("w6C:p1");
+    expect(h.calls).toBe(4);
+    h.advance(PATH_RETRY_BASE_MS);
+    await h.delivery.deliverTurn("w6C:p1");
+    expect(h.calls).toBe(5);
+  });
+
+  it("shares one lookup between callers racing past an expired backoff", async () => {
+    let now = 0;
+    let calls = 0;
+    const delivery = createTranscriptDelivery({
+      resolvePath: async () => {
+        calls++;
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return null;
+      },
+      getSink: () => undefined,
+      read: async ({ cursor }) => ({ records: [], offsets: [], cursor }),
+      initCursor: async () => ({ byteOffset: 0, lastUuid: null }),
+      now: () => now,
+    });
+    await delivery.attach("w6C:p1");
+    now += PATH_RETRY_BASE_MS;
+
+    await Promise.all([
+      delivery.deliverTurn("w6C:p1"),
+      delivery.attach("w6C:p1"),
+      delivery.deliverTurn("w6C:p1"),
+    ]);
+
+    expect(calls).toBe(2);
+  });
+
+  it("delivers omp's first turn from a file that did not exist when the pane was attached", async () => {
+    // omp's key is the path itself, reported at launch; the file is written
+    // only when the first turn starts (probe 2026-08-06). The path is therefore
+    // never null, and a missing file must not be mistaken for one.
+    const dir = await mkdtemp(join(tmpdir(), "delivery-omp-"));
+    try {
+      const path = join(dir, "omp-session.jsonl");
+      const spy = sinkSpy();
+      let calls = 0;
+      const delivery = createTranscriptDelivery({
+        resolvePath: async () => {
+          calls++;
+          return path;
+        },
+        getSink: () => spy.sink,
+      });
+
+      await delivery.attach("w7:p1");
+      await delivery.deliverTurn("w7:p1");
+      expect(spy.messages).toEqual([]);
+
+      const turn = {
+        type: "message",
+        id: "o1",
+        message: { role: "assistant", content: [{ type: "text", text: "first reply" }] },
+      };
+      await writeFile(path, `${JSON.stringify(turn)}\n`, "utf8");
+      await delivery.deliverTurn("w7:p1");
+
+      expect(spy.messages.map((m) => m.type)).toEqual(["stream_chunk", "stream_end"]);
+      expect((spy.messages[0]?.chunk as { recordId?: string }).recordId).toBe("o1");
+      expect(calls).toBe(1);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

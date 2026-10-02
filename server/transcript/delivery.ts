@@ -40,6 +40,18 @@ export type ClientSink = (msg: Record<string, unknown>) => void;
 
 export const DEFAULT_TAIL_INTERVAL_MS = 1_000;
 
+/**
+ * Backoff for a path that resolved to null. A lookup is a full session listing
+ * in production (2 + 2N RPCs), and a pane whose kind has no reader can never
+ * resolve, so retrying on every status change made it pay that for its whole
+ * life. The retry is capped, not stopped: herdr can report a kind after the
+ * first status, and that pane must still be found — within one
+ * `PATH_RETRY_MAX_MS` at worst. An `agent_session` change (`resetCursor`)
+ * starts over from nothing.
+ */
+export const PATH_RETRY_BASE_MS = 1_000;
+export const PATH_RETRY_MAX_MS = 60_000;
+
 /** Handle returned by the injected interval scheduler. */
 export type TimerHandle = unknown;
 
@@ -56,10 +68,17 @@ export interface TranscriptDeliveryOptions {
   tailIntervalMs?: number;
   setIntervalFn?: (fn: () => void, ms: number) => TimerHandle;
   clearIntervalFn?: (handle: TimerHandle) => void;
+  now?: () => number;
 }
 
 interface SessionState {
   path: string | null;
+  /** Null lookups in a row; the next one waits `PATH_RETRY_BASE_MS * 2^n`, capped. */
+  pathMisses: number;
+  /** A null path is not looked up again before this time. */
+  retryAt: number;
+  /** The retry in flight, shared by every caller that arrives during it. */
+  retrying?: Promise<SessionState>;
   cursor: TranscriptCursor;
   tail?: TimerHandle;
   /** Tail-only: true while a read is in flight, so a tick skips instead of piling up. */
@@ -85,6 +104,7 @@ export function createTranscriptDelivery(options: TranscriptDeliveryOptions) {
   const clearIntervalFn =
     options.clearIntervalFn ??
     ((handle: TimerHandle) => clearInterval(handle as ReturnType<typeof setInterval>));
+  const now = options.now ?? Date.now;
 
   const states = new Map<string, SessionState>();
   /** In-flight first builds, so concurrent callers share one state, not two. */
@@ -99,15 +119,25 @@ export function createTranscriptDelivery(options: TranscriptDeliveryOptions) {
    * here at the same moment for a pane neither has seen. Building two states
    * would leave one of them — and the tail timer it holds — unreachable, i.e. a
    * 1 s stat loop nothing can stop.
+   *
+   * A null path is retried under `PATH_RETRY_*`'s backoff, single-flight too.
    */
   function ensureState(sessionId: string): Promise<SessionState> {
     const existing = states.get(sessionId);
     if (existing) {
-      if (existing.path !== null) return Promise.resolve(existing);
-      return resolvePath(sessionId).then((path) => {
-        existing.path = path;
-        return existing;
-      });
+      if (existing.path !== null || now() < existing.retryAt) return Promise.resolve(existing);
+      if (existing.retrying) return existing.retrying;
+      const retry = resolvePath(sessionId)
+        .then((path) => {
+          existing.path = path;
+          if (path === null) notePathMiss(existing);
+          return existing;
+        })
+        .finally(() => {
+          existing.retrying = undefined;
+        });
+      existing.retrying = retry;
+      return retry;
     }
 
     const inFlight = building.get(sessionId);
@@ -118,11 +148,14 @@ export function createTranscriptDelivery(options: TranscriptDeliveryOptions) {
       const cursor = path ? await initCursor({ path }) : { byteOffset: 0, lastUuid: null };
       const state: SessionState = {
         path,
+        pathMisses: 0,
+        retryAt: 0,
         cursor,
         reading: false,
         turnOpen: false,
         queue: Promise.resolve(),
       };
+      if (path === null) notePathMiss(state);
       states.set(sessionId, state);
       return state;
     })().finally(() => {
@@ -131,6 +164,12 @@ export function createTranscriptDelivery(options: TranscriptDeliveryOptions) {
 
     building.set(sessionId, build);
     return build;
+  }
+
+  function notePathMiss(state: SessionState): void {
+    const delay = Math.min(PATH_RETRY_MAX_MS, PATH_RETRY_BASE_MS * 2 ** state.pathMisses);
+    state.pathMisses += 1;
+    state.retryAt = now() + delay;
   }
 
   /**
