@@ -30,7 +30,10 @@ import { ownRecordId, transcriptRecordToChunk } from "./records";
 
 /**
  * Records per page. Fixed on the server and absent from the wire: a client
- * cannot ask for a bigger frame than the server is willing to build.
+ * cannot ask for a bigger frame than the server is willing to build. A page
+ * runs past it only to reach a record it can name (see `nextBefore`), still
+ * inside one window — no claude or omp page needs to, since every record of
+ * theirs has an id.
  */
 export const TRANSCRIPT_PAGE_SIZE = 50;
 
@@ -55,11 +58,13 @@ export interface TranscriptPage {
    * Names the oldest record in this page, for the next request. `null` is a
    * statement about the file, not about this read: it means the window reached
    * byte 0 with nothing older left — the conversation starts here — and the
-   * phone retires its "load earlier" entrance on it. A read that simply could
-   * not name a record (hops spent, or a page of records with no id of their
-   * own) hands back the deepest cursor it can prove instead, down to the
-   * caller's own; only a file with no addressable record anywhere is left with
-   * `null` as the sole expressible answer.
+   * phone retires its "load earlier" entrance on it. A page of records with no
+   * id of their own names the nearest record before it instead, taking in
+   * whatever the mapper keeps between the two so the exclusive cursor steps
+   * over nothing. A read that still finds nothing to name (hops spent, or no
+   * named record older than the page in its window) hands back the deepest
+   * cursor it can prove, down to the caller's own; only a first page in that
+   * position is left with `null` as the sole expressible answer.
    */
   nextBefore: PageCursor | null;
 }
@@ -140,6 +145,33 @@ function oldestNamedCursor(
   return null;
 }
 
+/**
+ * The record before a batch that cannot name itself, and how far back the page
+ * must reach to keep it honest. The cursor is exclusive, so every record the
+ * mapper keeps between that record and the batch — and the record itself when
+ * the mapper keeps it — joins the page instead of being stepped over. `from` is
+ * the index into the window's items where the page then starts.
+ */
+function nameTheRecordBefore(
+  records: unknown[],
+  offsets: number[],
+  batchStart: number,
+  batchSeq: number,
+  epoch: string,
+): { from: number; cursor: PageCursor | null } {
+  let from = batchStart;
+  for (let index = records.length - 1; index >= 0; index--) {
+    const seq = offsets[index] ?? 0;
+    if (seq >= batchSeq) continue;
+    const record = records[index];
+    const chunk = transcriptRecordToChunk(record);
+    if (chunk) from -= 1;
+    const recordId = recordIdOf(record, chunk);
+    if (recordId !== undefined) return { from, cursor: { epoch, seq, recordId } };
+  }
+  return { from, cursor: null };
+}
+
 function itemsFromWindow(
   records: unknown[],
   offsets: number[],
@@ -204,7 +236,7 @@ export async function readTranscriptPage(input: ReadPageInput): Promise<Transcri
   }
 
   const start = Math.max(0, items.length - limit);
-  const take = items.slice(start);
+  let take = items.slice(start);
   const tookEvery = start === 0;
   const reachedHead = windowStart === 0 && tookEvery;
 
@@ -213,15 +245,26 @@ export async function readTranscriptPage(input: ReadPageInput): Promise<Transcri
     const anchor = take.find((item) => item.recordId !== undefined);
     if (anchor) {
       nextBefore = { epoch, seq: anchor.seq, recordId: anchor.recordId as string };
-    } else {
-      // Nothing in the page can name itself. A record older than the page is
-      // safe to point at only when the page took every item this window kept —
-      // then all that is skipped is mapper-null. Otherwise the caller's own
-      // cursor: the same page again, which costs a re-read but hides nothing.
-      const deeper = tookEvery
-        ? oldestNamedCursor(lastRecords, lastOffsets, take[0]?.seq ?? lastEnd, epoch)
-        : null;
+    } else if (tookEvery) {
+      // Nothing in the page can name itself, and everything older in this
+      // window is mapper-null, so any named record there is safe to point at.
+      // Failing that, the caller's own cursor: the same page again, which costs
+      // a re-read but hides nothing.
+      const deeper = oldestNamedCursor(lastRecords, lastOffsets, take[0]?.seq ?? lastEnd, epoch);
       nextBefore = deeper ?? honouredBefore;
+    } else {
+      const batchSeq = take[0]?.seq ?? lastEnd;
+      const before = nameTheRecordBefore(lastRecords, lastOffsets, start, batchSeq, epoch);
+      if (before.cursor) {
+        take = items.slice(before.from);
+        nextBefore = before.cursor;
+      } else if (windowStart === 0) {
+        // Nothing older can be named, but the head is in this window: the page
+        // runs to it, and `null` is then true.
+        take = items;
+      } else {
+        nextBefore = honouredBefore;
+      }
     }
   }
 

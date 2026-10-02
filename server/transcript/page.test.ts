@@ -428,3 +428,75 @@ describe("PageReadsOneWindow", () => {
     expect(res.nextBefore?.recordId).toBe("b1");
   });
 });
+
+// A batch whose records carry no id cannot be pointed at, and `null` there told
+// the phone the conversation starts at this page while the file went on above.
+// No kind on this machine writes such records today (claude and omp ids are
+// complete — ADR-016); a third kind's reader could.
+describe("PageNamesTheRecordBeforeAnUnnamedBatch", () => {
+  function said(text: string) {
+    return { type: "assistant", message: { role: "assistant", content: [{ type: "text", text }] } };
+  }
+  function named(id: string) {
+    return { ...said(id), uuid: id };
+  }
+  function textOf(record: Record<string, unknown>): string {
+    return (record.message as { content: { text: string }[] }).content[0]?.text ?? "";
+  }
+
+  /** Every page from the newest back to `nextBefore: null`, oldest first. */
+  async function walk(path: string, limit: number): Promise<string[]> {
+    const seen: string[] = [];
+    let before = null;
+    for (let page = 0; page < 20; page++) {
+      const res = await readTranscriptPage({ path, before, limit });
+      seen.unshift(...res.records.map(textOf));
+      if (res.nextBefore === null) return seen;
+      before = res.nextBefore;
+    }
+    throw new Error("never reached the head");
+  }
+
+  it("T1: names the nearest record before the batch and keeps what lies between, page after page", async () => {
+    const path = await writeLines("p.jsonl", [
+      named("n0"),
+      said("a0"),
+      said("a0'"),
+      named("n1"),
+      said("a1"),
+      said("a2"),
+      said("a3"),
+    ]);
+
+    const first = await readTranscriptPage({ path, before: null, limit: 2 });
+    expect(first.nextBefore?.recordId).toBe("n1");
+
+    expect(await walk(path, 2)).toEqual(["n0", "a0", "a0'", "n1", "a1", "a2", "a3"]);
+  });
+
+  it("T2: a named bookkeeping line right before the batch is the cursor, and adds nothing to the page", async () => {
+    const path = await writeLines("p.jsonl", [
+      named("n0"),
+      { type: "user", isMeta: true, uuid: "m1", message: { role: "user", content: "meta" } },
+      said("a1"),
+      said("a2"),
+      said("a3"),
+    ]);
+
+    const first = await readTranscriptPage({ path, before: null, limit: 3 });
+    expect(first.records.map(textOf)).toEqual(["a1", "a2", "a3"]);
+    expect(first.nextBefore?.recordId).toBe("m1");
+
+    expect(await walk(path, 3)).toEqual(["n0", "a1", "a2", "a3"]);
+  });
+
+  it("T3: with nothing named before the batch and the head in the window, the page runs to the head", async () => {
+    const path = await writeLines("p.jsonl", [said("a0"), said("a1"), said("a2"), said("a3")]);
+
+    const first = await readTranscriptPage({ path, before: null, limit: 3 });
+
+    // null is now true: nothing older is left out of this page.
+    expect(first.nextBefore).toBeNull();
+    expect(first.records.map(textOf)).toEqual(["a0", "a1", "a2", "a3"]);
+  });
+});
