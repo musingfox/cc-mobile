@@ -62,6 +62,19 @@ export default function AppShell() {
 
   const navigate = (next: LinearScreen) => go({ screen: next, cwd: selectedProjectCwd });
 
+  // The chat lost its session (a create the server refused, a pane that
+  // ended): go back to where the user chose it rather than sit on a chat with
+  // nothing behind it. Through `go`, so it is the same history step an in-app
+  // Back takes. Read through a ref: `go` is rebuilt every render, and firing
+  // again before the popstate lands would step back twice.
+  const goRef = useRef(go);
+  goRef.current = go;
+  useEffect(() => {
+    if (screen === "chat" && activeSessionId === null) {
+      goRef.current({ screen: "projectDetail", cwd: selectedProjectCwd });
+    }
+  }, [screen, activeSessionId, selectedProjectCwd]);
+
   const openProject = (cwd: string) => go({ screen: "projectDetail", cwd });
 
   return (

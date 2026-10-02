@@ -306,6 +306,20 @@ describe("ProjectDetailScreen new-session footer", () => {
 
     expect(created).toEqual([["/a", undefined]]);
   });
+
+  test("with the socket down nothing is created, so the chat is not opened", () => {
+    // Opening it anyway would show whichever session was active before — one
+    // the user did not pick here, with a live composer.
+    wsService.createTerminalSession = (() => null) as typeof wsService.createTerminalSession;
+    const navigated: string[] = [];
+    const { container } = render(
+      <ProjectDetailScreen cwd="/a" onNavigate={(s) => navigated.push(s)} onBack={() => {}} />,
+    );
+
+    ctas(container)[0]?.click();
+
+    expect(navigated).toEqual([]);
+  });
 });
 
 /**

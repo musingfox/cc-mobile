@@ -427,11 +427,12 @@ export const useAppStore = create<AppState>((set) => ({
     set((state) => {
       const next = new Map(state.sessions);
       next.delete(sessionId);
-      const ids = [...next.keys()];
+      // Never a survivor in its place: the next session in the Map is any live
+      // pane on the machine, and a composer silently pointed at it sends the
+      // user's next prompt to an agent they did not pick.
       return {
         sessions: next,
-        activeSessionId:
-          state.activeSessionId === sessionId ? (ids[0] ?? null) : state.activeSessionId,
+        activeSessionId: state.activeSessionId === sessionId ? null : state.activeSessionId,
       };
     });
   },

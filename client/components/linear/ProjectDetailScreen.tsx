@@ -104,17 +104,25 @@ export default function ProjectDetailScreen({ cwd, onNavigate, onBack }: Props) 
     return items;
   }, [sessions, cwd, activeSessionId, setActiveSession, onNavigate]);
 
-  const handleNewSession = (agentKind?: string) => {
-    wsService.createTerminalSession(cwd, agentKind);
+  // Only into a chat that is the one just created: with the socket down no
+  // session is made, and the chat would open on whatever was active before.
+  const openCreated = (sessionId: string | null) => {
+    if (sessionId === null) {
+      toastService.error("Not connected to the server — try again once it reconnects.");
+      return;
+    }
     onNavigate("chat");
+  };
+
+  const handleNewSession = (agentKind?: string) => {
+    openCreated(wsService.createTerminalSession(cwd, agentKind));
   };
 
   // A profile is answered with its id alone. Deliberately not routed through
   // `handleNewSession`: the server refuses a create carrying both a kind and a
   // profile, and a call site with no way to name a kind cannot produce that.
   const handleNewSessionFromProfile = (profileId: string) => {
-    wsService.createTerminalSessionFromProfile(cwd, profileId);
-    onNavigate("chat");
+    openCreated(wsService.createTerminalSessionFromProfile(cwd, profileId));
   };
 
   const handleRemove = () => {

@@ -212,14 +212,15 @@ describe("wsService terminal reattach reconcile", () => {
     expect(infoToast).not.toHaveBeenCalled();
   });
 
-  test("removing the active session falls back to a session that survived", () => {
+  test("removing the active session never hands the composer to a survivor", () => {
     useAppStore.getState().addSession("u1", "/tmp", { ready: false });
     useAppStore.getState().addSession("u2", "/tmp", { ready: true });
     expect(useAppStore.getState().activeSessionId).toBe("u2");
 
     getInternal().handleMessage(listing(["u1"]));
 
-    expect(useAppStore.getState().activeSessionId).toBe("u1");
+    expect(useAppStore.getState().sessions.has("u1")).toBe(true);
+    expect(useAppStore.getState().activeSessionId).toBeNull();
   });
 
   test("when nothing survives there is no active session left", () => {
