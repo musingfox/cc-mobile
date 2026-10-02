@@ -93,7 +93,11 @@ All recorded in `docs/adr/`. Key decisions:
 
 ### WebSocket Protocol
 
-Client→Server: `terminal_create`, `terminal_send`, `terminal_teardown`, `list_terminal_sessions`, `permission`, `interrupt`, `get_server_config`, `list_directories`, `reconnect`, `transcript_page_request`, `capabilities_request`
+Client→Server: `terminal_create`, `terminal_send`, `terminal_teardown`, `list_terminal_sessions`, `permission`, `interrupt`, `get_server_config`, `list_directories`, `reconnect`, `transcript_page_request`, `capabilities_request`, `visibility`
+
+`visibility` carries `{state: "visible" | "hidden"}` — the page's own
+`document.visibilityState` — and gets no reply. It exists only for push
+foreground suppression; see **Background Push**.
 
 `permission` carries `optionId` — the id of one of the options the server parsed
 off the terminal's screen. The pre-#29 `allow` boolean is still accepted for one
@@ -278,14 +282,41 @@ Schemas defined in `server/protocol.ts`. Full spec in `cc-mobile.md`.
   (`working`, `unknown`, anything unrecognised) **cancels** a pane's pending
   notification rather than merely being silent — the next `done` opens a fresh
   window. The scope verdict is taken when `done` arrives, never when the timer
-  fires, so the window moves *when* a phone is buzzed and never *which* phone.
+  fires, so the window never changes *which panes* are announced.
 - Because `done` means "not yet seen" and focus marks a pane seen, a pane the
   herdr TUI is displaying never reports `done` and its finished turns are
   silent. That is the accepted cost of reading herdr's own word for end-of-turn.
+- **Foreground suppression** (`server/push/foreground.ts`, ADR-017 §push-foreground-suppress):
+  a phone that is looking at cc-mobile is not buzzed. A device is foreground
+  when some live WS connection carrying its `?device=` last reported `visible`
+  less than 25 s ago (`FOREGROUND_FRESH_MS`); the client reports on connect, on
+  every `visibilitychange`, and every 10 s while visible. A subscription is
+  linked to a device by the `device` it was posted with. It is done on the
+  server because iOS revokes a subscription whose pushes show no notification,
+  so the service worker cannot swallow one.
+- The foreground verdict is read by the sender as each push is about to leave —
+  at window expiry for a turn, at once for `blocked` — never when `done`
+  arrives. It disagrees with the scope verdict on purpose: scope asks who asked
+  for the work, a fact about the past; foreground asks whether to interrupt
+  now, and a phone is picked up or put down inside the window.
+- It fails toward sending. No report, a report older than 25 s, a closed
+  socket, a device never heard of, and a subscription posted without `device`
+  (every bundle cached before this) all send — an extra buzz costs less than a
+  `blocked` nobody hears about.
+- A suppressed push is **dropped, not deferred**. If every device is
+  foreground when the window expires, that merged notification is not sent and
+  is never re-sent; a `blocked` suppressed the same way is not sent again when
+  the phone is put down, because one blocked episode sends once.
+- The device name is user-editable (Settings). Two devices given the same name
+  suppress each other's pushes; a rename leaves the subscription on the old
+  name until the next app open re-uploads it, and the mismatch sends.
 - Every send attempt is logged to ~/.claude-mobile/push-attempts.jsonl with {ts,kind,host,status,reason} (PushAttemptLog).
+  A push suppressed for a foreground device is one line per subscription with
+  `status: null`, `reason: "foreground"` and `skipped: true` — the field a sent
+  or failed line never carries, so a skip cannot be read as either.
 - Constant generic payload only; no session/cwd/tool in the push body (traverses APNs).
 - VAPID from CC_MOBILE_VAPID_* envs; positive TTL (0→1); 410/404 prunes subscription.
-- Subscribe at /api/push/subscribe (dedup by endpoint, allowlist apple, max 10); public key at /api/push/public-key (503 if unset).
+- Subscribe at /api/push/subscribe (dedup by endpoint, allowlist apple, max 10; optional `device` string, trimmed and capped at 200 exactly like `?device=`, blank → none); public key at /api/push/public-key (503 if unset).
 
 ## Write Audit
 
