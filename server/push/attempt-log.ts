@@ -30,6 +30,11 @@ export interface AttemptRecord {
   host: string;
   status: number | null;
   reason: string | null;
+  /**
+   * Present only on a push deliberately not sent. Without it a skip would
+   * read as `status: null` plus a reason, which is exactly a failed send.
+   */
+  skipped?: true;
 }
 
 export interface AttemptInput {
@@ -37,6 +42,7 @@ export interface AttemptInput {
   endpoint: string;
   status?: number | null;
   reason?: string | null;
+  skipped?: true;
 }
 
 export interface AttemptLog {
@@ -82,6 +88,7 @@ export function createAttemptLog(
         host,
         status: rec.status ?? null,
         reason: rec.reason ?? null,
+        ...(rec.skipped ? { skipped: true as const } : {}),
       } satisfies AttemptRecord)}\n`;
 
       appendFileSync(path, line);

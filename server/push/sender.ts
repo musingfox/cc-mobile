@@ -16,6 +16,7 @@ import { buildPayload } from "./payload";
 export interface PushSubscription {
   endpoint: string;
   keys: Record<string, string>;
+  device?: string;
 }
 
 export interface VapidConfig {
@@ -46,6 +47,12 @@ export interface PushSenderOptions {
   /** Seconds a push service may hold the message. Clamped to ≥ 1 at use. */
   ttl?: { permission: number; turn: number };
   warn?: (message: string) => void;
+  /**
+   * Asked per subscription as it is about to be sent, never earlier: for a
+   * turn that is the window's expiry, when whether the phone is in a hand is
+   * what decides the buzz.
+   */
+  isForeground?: (device: string) => boolean;
 }
 
 export interface PushSendResult {
@@ -100,6 +107,17 @@ export function createPushSender(opts: PushSenderOptions = {}) {
 
     let attempted = 0;
     for (const sub of subs) {
+      if (sub.device && opts.isForeground?.(sub.device)) {
+        // Not sent and not re-sent later: the person is looking at the app.
+        await log.append({
+          kind,
+          endpoint: sub.endpoint,
+          status: null,
+          reason: "foreground",
+          skipped: true,
+        });
+        continue;
+      }
       let status: number | null = null;
       let reason: string | null = null;
       try {

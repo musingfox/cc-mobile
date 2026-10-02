@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { WebSocket as WsClient } from "ws";
 import type { AppBackend } from "../app";
 import { createApp } from "../app";
 import { parseServerConfig } from "../config";
@@ -474,5 +475,190 @@ describe("the assembled server can actually transmit a push", () => {
     // Closes the 1 s status poll `listSessionDescriptors` armed; one test
     // process is shared by every file in the suite.
     await backendRef.current?.teardownAll?.();
+  });
+});
+
+/**
+ * Foreground suppression, driven the way a phone drives it: a real WebSocket
+ * carrying `?device=` and `visibility` frames into the listened app, and a
+ * subscription posted with the same device name. `ws`'s client rather than the
+ * global one, because happy-dom's announces `Origin: null`, which the root gate
+ * refuses.
+ */
+describe("a phone that is looking at the app is not buzzed", () => {
+  const DEVICE = "phone-a";
+
+  async function rig(subscription: Record<string, unknown>) {
+    const sends: string[] = [];
+    const { client, emitter } = fakeHerdr();
+    const logPath = join(tmp, "attempts.jsonl");
+    const backendRef: { current: AppBackend | null } = { current: null };
+    let fire: (() => void) | undefined;
+
+    const app = createApp(parseServerConfig([]), {
+      pushStore: createSubscriptionStore({ path: join(tmp, "subs.json") }),
+      pushAttemptLogPath: logPath,
+      herdrClient: client as never,
+      backendRef,
+      gateEnv: {},
+      pushTimers: {
+        setTimeoutFn: (fn) => {
+          fire = fn;
+          return 1 as unknown as ReturnType<typeof setTimeout>;
+        },
+        clearTimeoutFn: () => {
+          fire = undefined;
+        },
+      },
+      pushSend: async (_sub, payload) => {
+        sends.push(JSON.parse(payload).kind);
+        return { statusCode: 201 };
+      },
+    });
+    expect((await post(app, subscription)).status).toBe(201);
+
+    const server = app.listen(0).server as { port: number; stop(force?: boolean): void };
+    const socket = new WsClient(
+      `ws://127.0.0.1:${server.port}/ws?device=${encodeURIComponent(DEVICE)}`,
+    );
+    const frames: string[] = [];
+    socket.onmessage = (event) => frames.push(JSON.parse(String(event.data)).type);
+    await new Promise<void>((resolve, reject) => {
+      socket.onopen = () => resolve();
+      socket.onerror = () => reject(new Error("the phone could not connect"));
+    });
+
+    await backendRef.current?.listSessionDescriptors?.();
+    await backendRef.current?.send({ claudeUuid: PANE, content: "do the thing" });
+
+    const lines = () =>
+      existsSync(logPath)
+        ? readFileSync(logPath, "utf8")
+            .trim()
+            .split("\n")
+            .map((line) => JSON.parse(line))
+        : [];
+
+    return {
+      sends,
+      lines,
+      fire: () => fire?.(),
+      armed: () => fire !== undefined,
+      /** `visibility` has no reply; the next request's reply is its receipt. */
+      async report(state: "visible" | "hidden") {
+        const before = frames.filter((type) => type === "server_config").length;
+        socket.send(JSON.stringify({ type: "visibility", state }));
+        socket.send(JSON.stringify({ type: "get_server_config" }));
+        await until(
+          () => frames.filter((type) => type === "server_config").length > before,
+          "the visibility report to land",
+        );
+      },
+      status(agent_status: string) {
+        emitter.emit?.({
+          event: "pane_updated",
+          data: { pane: { pane_id: PANE, agent_status, agent: "claude" } },
+        });
+      },
+      async stop() {
+        socket.close();
+        await backendRef.current?.teardownAll?.();
+        server.stop(true);
+      },
+    };
+  }
+
+  const SUB = { endpoint: APPLE_ENDPOINT, keys: { p256dh: "BN", auth: "k1" } };
+
+  test("a turn whose phone is looking at expiry is skipped, logged as a skip, and never re-sent", async () => {
+    const h = await rig({ ...SUB, device: DEVICE });
+    await h.report("visible");
+    h.status("working");
+    h.status("done");
+    await until(h.armed, "the merge window to be armed");
+    h.fire();
+    await until(() => h.lines().length > 0, "the skip line");
+
+    expect(h.sends).toEqual([]);
+    expect(h.lines()).toEqual([
+      {
+        ts: expect.any(String),
+        kind: "turn",
+        host: "web.push.apple.com",
+        status: null,
+        reason: "foreground",
+        skipped: true,
+      },
+    ]);
+
+    // Putting the phone down afterwards brings nothing back.
+    await h.report("hidden");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(h.armed()).toBe(false);
+    expect(h.sends).toEqual([]);
+    expect(h.lines()).toHaveLength(1);
+    await h.stop();
+  });
+
+  test("foreground is read at expiry: picked up inside the window, the turn is skipped", async () => {
+    const h = await rig({ ...SUB, device: DEVICE });
+    await h.report("hidden");
+    h.status("working");
+    h.status("done");
+    await until(h.armed, "the merge window to be armed");
+    await h.report("visible");
+    h.fire();
+    await until(() => h.lines().length > 0, "the skip line");
+
+    expect(h.sends).toEqual([]);
+    expect(h.lines()[0]).toMatchObject({ kind: "turn", skipped: true });
+    await h.stop();
+  });
+
+  test("foreground is read at expiry: put down inside the window, the turn is sent", async () => {
+    const h = await rig({ ...SUB, device: DEVICE });
+    await h.report("visible");
+    h.status("working");
+    h.status("done");
+    await until(h.armed, "the merge window to be armed");
+    await h.report("hidden");
+    h.fire();
+    await until(() => h.sends.length > 0, "the turn push");
+
+    expect(h.sends).toEqual(["turn"]);
+    expect(h.lines()[0]).toMatchObject({ kind: "turn", status: 201, reason: null });
+    expect("skipped" in h.lines()[0]).toBe(false);
+    await h.stop();
+  });
+
+  test("a blocked pane is skipped at once while its phone is looking", async () => {
+    const h = await rig({ ...SUB, device: DEVICE });
+    await h.report("visible");
+    h.status("blocked");
+    await until(() => h.lines().length > 0, "the skip line");
+
+    expect(h.sends).toEqual([]);
+    expect(h.lines()[0]).toMatchObject({
+      kind: "permission",
+      status: null,
+      reason: "foreground",
+      skipped: true,
+    });
+    // Leaving `blocked` drops the pending request and its 90 s deny timer.
+    h.status("idle");
+    await h.stop();
+  });
+
+  test("a subscription registered without a device is sent to even while a phone is looking", async () => {
+    const h = await rig(SUB);
+    await h.report("visible");
+    h.status("working");
+    h.status("done");
+    await until(h.armed, "the merge window to be armed");
+    h.fire();
+    await until(() => h.sends.length > 0, "the turn push");
+
+    expect(h.sends).toEqual(["turn"]);
+    await h.stop();
   });
 });

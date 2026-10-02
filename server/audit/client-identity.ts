@@ -14,17 +14,26 @@ function header(source: HeaderSource | undefined, name: string): string | undefi
   return source[name] ?? source[name.toLowerCase()];
 }
 
+/**
+ * A device name as every consumer compares it. The WS `?device=` and the push
+ * subscription's `device` must normalise identically, or a foreground phone
+ * would never match its own subscription.
+ */
+export function normalizeDeviceName(raw: string | null | undefined): string | null {
+  const name = raw?.trim();
+  return name ? name.slice(0, DEVICE_LIMIT) : null;
+}
+
 export function captureClientIdentity(input: ClientIdentityInput): {
   ip: string | null;
   device: string | null;
 } {
   const forwarded = header(input.headers, "x-forwarded-for")?.split(",", 1)[0]?.trim();
-  const named = input.deviceName?.trim();
-  const userAgent = header(input.headers, "user-agent")?.trim();
-  const device = named || userAgent;
 
   return {
     ip: forwarded || input.remoteAddress?.trim() || null,
-    device: device ? device.slice(0, DEVICE_LIMIT) : null,
+    device:
+      normalizeDeviceName(input.deviceName) ??
+      normalizeDeviceName(header(input.headers, "user-agent")),
   };
 }

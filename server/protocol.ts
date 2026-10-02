@@ -156,6 +156,17 @@ const CapabilitiesRequestMessage = z.object({
   refresh: z.boolean().optional(),
 });
 
+/**
+ * The page's `document.visibilityState`, sent on connect, on every change, and
+ * repeated while visible — a `visible` the page stopped repeating is not
+ * believed (`server/push/foreground.ts`). It gets no reply: it only decides
+ * whether a push to this connection's device is suppressed.
+ */
+const VisibilityMessage = z.object({
+  type: z.literal("visibility"),
+  state: z.enum(["visible", "hidden"]),
+});
+
 export const ClientMessage = z.discriminatedUnion("type", [
   PermissionMessage,
   InterruptMessage,
@@ -168,6 +179,7 @@ export const ClientMessage = z.discriminatedUnion("type", [
   ListTerminalSessionsMessage,
   TranscriptPageRequestMessage,
   CapabilitiesRequestMessage,
+  VisibilityMessage,
 ]);
 
 export type ClientMessage = z.infer<typeof ClientMessage>;

@@ -23,6 +23,17 @@
  * The scope verdict is taken when the turn ends, never when the timer fires.
  * Read 45 seconds later it would be a verdict another turn has since spent,
  * and this module decides *when* to send, never *to whom*.
+ *
+ * Whether a device is looking at the app is the opposite verdict, read at the
+ * opposite moment: by the sender, as each push is about to leave — at window
+ * expiry for a turn, at once for `blocked`. The two may disagree and that is
+ * intended. Scope asks who asked for this work, a fact about the past that a
+ * later turn can overwrite; foreground asks whether to interrupt right now,
+ * and a phone is picked up or put down inside the window. A batch whose every
+ * device is foreground at expiry is dropped, not deferred — the pending panes
+ * were cleared before dispatch, so nothing re-sends them — and a `blocked`
+ * suppressed that way is not sent again when the phone is put down, because
+ * one blocked episode sends once.
  */
 
 import type { PhoneDrivenTracker } from "./phone-driven";

@@ -9,6 +9,12 @@ const MAX_SUBSCRIPTIONS = 10;
 export interface StoredSubscription {
   endpoint: string;
   keys: { p256dh: string; auth: string };
+  /**
+   * The `?device=` name of the phone that registered it. Absent for a bundle
+   * that predates foreground suppression, and such a subscription is always
+   * sent to: nothing can prove its phone is looking.
+   */
+  device?: string;
 }
 
 export interface SubscriptionStore {

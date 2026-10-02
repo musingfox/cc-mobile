@@ -1,5 +1,6 @@
 import { Elysia } from "elysia";
 import { z } from "zod";
+import { normalizeDeviceName } from "../audit/client-identity";
 import type { ServerConfig } from "../config";
 import {
   createSubscriptionStore,
@@ -11,6 +12,7 @@ import { loadVapidKeys } from "./vapid";
 const SubSchema = z.object({
   endpoint: z.string().url(),
   keys: z.object({ p256dh: z.string(), auth: z.string() }),
+  device: z.string().optional(),
 });
 
 export interface PushPluginOptions {
@@ -29,7 +31,9 @@ export function createPushPlugin(opts: PushPluginOptions = {}) {
         set.status = 400;
         return { error: "invalid_subscription" };
       }
-      const sub = parsed.data as StoredSubscription;
+      const { device: rawDevice, ...rest } = parsed.data;
+      const device = normalizeDeviceName(rawDevice);
+      const sub: StoredSubscription = device ? { ...rest, device } : rest;
       // The same predicate the store enforces, so a body the route accepts is
       // never silently dropped underneath it (and vice versa).
       if (!isAllowedPushEndpoint(sub.endpoint)) {

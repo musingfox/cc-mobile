@@ -335,3 +335,122 @@ describe("PushExpiredSubscriptionPruned via sender", () => {
     expect(removed.length).toBe(0);
   });
 });
+
+describe("ForegroundSuppression", () => {
+  const VAPID = { publicKey: "p", privateKey: "r" };
+
+  function lines() {
+    return readFileSync(logPath, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+  }
+
+  function build(isForeground: (device: string) => boolean) {
+    const sent: string[] = [];
+    const sender = createPushSender({
+      attemptLog: createAttemptLog({ path: logPath }),
+      send: async (sub) => {
+        sent.push(sub.endpoint);
+        return { statusCode: 201 };
+      },
+      isForeground,
+    });
+    return { sender, sent };
+  }
+
+  test("a foreground device is not sent to, and its line is a skip with a reason", async () => {
+    const { sender, sent } = build(() => true);
+    const result = await sender.dispatch(
+      "turn",
+      [{ endpoint: "https://web.push.apple.com/a", keys: {}, device: "phone-a" }],
+      VAPID,
+    );
+    expect(sent).toEqual([]);
+    expect(result.attempted).toBe(0);
+    expect(lines()).toEqual([
+      {
+        ts: expect.any(String),
+        kind: "turn",
+        host: "web.push.apple.com",
+        status: null,
+        reason: "foreground",
+        skipped: true,
+      },
+    ]);
+  });
+
+  test("a skip line and a failed send differ on `skipped`, not on reading the reason", async () => {
+    const failing = createPushSender({
+      attemptLog: createAttemptLog({ path: logPath }),
+      send: async () => {
+        throw new Error("connect ECONNREFUSED");
+      },
+    });
+    await failing.dispatch("turn", [{ endpoint: "https://web.push.apple.com/b", keys: {} }], VAPID);
+    await build(() => true).sender.dispatch(
+      "turn",
+      [{ endpoint: "https://web.push.apple.com/a", keys: {}, device: "phone-a" }],
+      VAPID,
+    );
+    const [failure, skip] = lines();
+    expect(failure.status).toBe(null);
+    expect("skipped" in failure).toBe(false);
+    expect(skip.skipped).toBe(true);
+  });
+
+  test("a device that is not foreground is sent to as before", async () => {
+    const { sender, sent } = build(() => false);
+    await sender.dispatch(
+      "permission",
+      [{ endpoint: "https://web.push.apple.com/a", keys: {}, device: "phone-a" }],
+      VAPID,
+    );
+    expect(sent).toEqual(["https://web.push.apple.com/a"]);
+    expect(lines()).toEqual([
+      {
+        ts: expect.any(String),
+        kind: "permission",
+        host: "web.push.apple.com",
+        status: 201,
+        reason: null,
+      },
+    ]);
+  });
+
+  test("a subscription with no device is sent to even when every device is foreground", async () => {
+    const asked: string[] = [];
+    const { sender, sent } = build((device) => {
+      asked.push(device);
+      return true;
+    });
+    await sender.dispatch("turn", [{ endpoint: "https://web.push.apple.com/a", keys: {} }], VAPID);
+    expect(sent).toEqual(["https://web.push.apple.com/a"]);
+    expect(asked).toEqual([]);
+  });
+
+  test("suppression is per device: one dispatch can skip one phone and send to another", async () => {
+    const { sender, sent } = build((device) => device === "phone-a");
+    const result = await sender.dispatch(
+      "turn",
+      [
+        { endpoint: "https://web.push.apple.com/a", keys: {}, device: "phone-a" },
+        { endpoint: "https://web.push.apple.com/b", keys: {}, device: "phone-b" },
+      ],
+      VAPID,
+    );
+    expect(sent).toEqual(["https://web.push.apple.com/b"]);
+    expect(result.attempted).toBe(1);
+    expect(lines().map((line) => line.skipped ?? false)).toEqual([true, false]);
+  });
+
+  test("the question is asked at each dispatch, not remembered from an earlier one", async () => {
+    let foreground = false;
+    const { sender, sent } = build(() => foreground);
+    const sub = { endpoint: "https://web.push.apple.com/a", keys: {}, device: "phone-a" };
+    await sender.dispatch("turn", [sub], VAPID);
+    foreground = true;
+    await sender.dispatch("turn", [sub], VAPID);
+    expect(sent).toHaveLength(1);
+  });
+});

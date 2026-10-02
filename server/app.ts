@@ -26,6 +26,7 @@ import { EventBuffer } from "./event-buffer";
 import { createHerdrBackend } from "./herdr/backend";
 import { stripBasePath } from "./path-utils";
 import { createAttemptLog } from "./push/attempt-log";
+import { createForegroundTracker } from "./push/foreground";
 import { createPushNotifier, type NotifierTimers } from "./push/notifier";
 import { createPhoneDrivenTracker, type PhoneDrivenTracker } from "./push/phone-driven";
 import { createPushPlugin } from "./push/plugin";
@@ -131,10 +132,13 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
   // sender sends to it, and the poll tier asks it whether anybody is listening.
   // Two instances here is the failure this whole feature is built to avoid.
   const pushStore = deps.pushStore ?? createSubscriptionStore();
+  // One tracker, written by the WS transport and read by the sender.
+  const foreground = createForegroundTracker();
   const sender = createPushSender({
     store: pushStore,
     attemptLog: createAttemptLog(deps.pushAttemptLogPath ? { path: deps.pushAttemptLogPath } : {}),
     ...(deps.pushSend ? { send: deps.pushSend } : {}),
+    isForeground: (device) => foreground.isForeground(device),
   });
 
   // Who spoke into which pane last. The scope rule reads it; the backend feeds
@@ -205,6 +209,7 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
         clientSink,
         auditLog,
         agentProfiles: deps.agentProfiles ?? createAgentProfileSource(),
+        foreground,
       }),
     )
     .use(createUploadPlugin(serverConfig))

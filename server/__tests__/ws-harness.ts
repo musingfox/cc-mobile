@@ -12,6 +12,7 @@ import { type AgentProfileSource, emptyAgentProfileSource } from "../agents/prof
 import type { AuditLog } from "../audit/audit-log";
 import type { ServerConfig } from "../config";
 import { EventBuffer } from "../event-buffer";
+import type { ForegroundTracker } from "../push/foreground";
 import type { SessionManager } from "../session-manager";
 import { createWsPlugin, type WsBackend } from "../ws";
 
@@ -48,6 +49,7 @@ export interface WsHarnessOverrides {
   /** Bun-only client headers; unsupported runtimes may omit them. */
   headers?: Record<string, string>;
   deviceName?: string;
+  foreground?: ForegroundTracker;
 }
 
 export async function startWsHarness(
@@ -66,6 +68,7 @@ export async function startWsHarness(
         clientSink: { current: null },
         auditLog: overrides.auditLog,
         agentProfiles: overrides.agentProfiles ?? emptyAgentProfileSource(),
+        foreground: overrides.foreground,
       }),
     )
     .listen(0);

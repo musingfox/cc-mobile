@@ -163,3 +163,53 @@ describe("PushPublicKeyEndpoint + subscribe", () => {
     expect(() => JSON.parse(readFileSync(storePath, "utf8"))).not.toThrow();
   });
 });
+
+describe("SubscriptionLinkedToDevice", () => {
+  async function post(plugin: ReturnType<typeof createPushPlugin>, body: unknown) {
+    return plugin.handle(
+      new Request("http://localhost/api/push/subscribe", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    );
+  }
+
+  const SUB = { endpoint: "https://web.push.apple.com/abc", keys: { p256dh: "BN", auth: "k1" } };
+
+  test("the device the phone sends is stored with its subscription, normalised like ?device=", async () => {
+    const store = createSubscriptionStore({ path: storePath });
+    const res = await post(createPushPlugin({ store }), { ...SUB, device: "  phone-a  " });
+    expect(res.status).toBe(201);
+    expect(store.list()).toEqual([{ ...SUB, device: "phone-a" }]);
+    expect(JSON.parse(readFileSync(storePath, "utf8"))).toEqual([{ ...SUB, device: "phone-a" }]);
+  });
+
+  test("a body without a device stores exactly what it stored before", async () => {
+    const store = createSubscriptionStore({ path: storePath });
+    await post(createPushPlugin({ store }), SUB);
+    expect(store.list()).toEqual([SUB]);
+  });
+
+  test("a blank device counts as none", async () => {
+    const store = createSubscriptionStore({ path: storePath });
+    await post(createPushPlugin({ store }), { ...SUB, device: "   " });
+    expect(store.list()).toEqual([SUB]);
+  });
+
+  test("a re-subscribe from the same endpoint replaces the device it was linked to", async () => {
+    const store = createSubscriptionStore({ path: storePath });
+    const plugin = createPushPlugin({ store });
+    await post(plugin, { ...SUB, device: "old-name" });
+    await post(plugin, { ...SUB, device: "new-name" });
+    expect(store.list()).toEqual([{ ...SUB, device: "new-name" }]);
+  });
+
+  test("a device that is not a string is refused as an invalid subscription", async () => {
+    const store = createSubscriptionStore({ path: storePath });
+    const res = await post(createPushPlugin({ store }), { ...SUB, device: 7 });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "invalid_subscription" });
+    expect(store.count()).toBe(0);
+  });
+});

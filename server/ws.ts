@@ -3,12 +3,13 @@ import { Elysia, t } from "elysia";
 import { resolveAgentAvailability } from "./agents/kinds";
 import type { AgentProfileSource } from "./agents/profiles";
 import type { AuditLog, AuditRecordInput } from "./audit/audit-log";
-import { captureClientIdentity } from "./audit/client-identity";
+import { captureClientIdentity, normalizeDeviceName } from "./audit/client-identity";
 import type { ServerConfig } from "./config";
 import { listDirectories } from "./directory-listing";
 import type { EventBuffer } from "./event-buffer";
 import { buildUrl } from "./path-utils";
 import { ClientMessage } from "./protocol";
+import type { ForegroundTracker } from "./push/foreground";
 import type { SessionManager } from "./session-manager";
 import {
   handleTerminalCreate,
@@ -117,6 +118,8 @@ export interface WsCollaborators {
   clientSink: ClientSink;
   auditLog?: AuditLog;
   agentProfiles: AgentProfileSource;
+  /** Where each connection's page visibility goes, for push suppression. */
+  foreground?: ForegroundTracker;
 }
 
 export function createWsPlugin(
@@ -124,7 +127,7 @@ export function createWsPlugin(
   serverConfig: ServerConfig,
   collaborators: WsCollaborators,
 ) {
-  const { backend, eventBuffer, clientSink, auditLog, agentProfiles } = collaborators;
+  const { backend, eventBuffer, clientSink, auditLog, agentProfiles, foreground } = collaborators;
   const wsPath = buildUrl(serverConfig.basePath, "/ws");
   async function audit(record: AuditRecordInput): Promise<void> {
     try {
@@ -149,23 +152,25 @@ export function createWsPlugin(
     return ws.raw ?? ws;
   }
 
+  function deviceQueryOf(ws: { data?: { request?: Request } }): string | null {
+    const request = ws.data?.request;
+    if (!request) return null;
+    try {
+      return new URL(request.url).searchParams.get("device");
+    } catch {
+      // 無法解析 URL 時仍保留 socket 與 header 身分。
+      return null;
+    }
+  }
+
   function identityOf(ws: { data?: { request?: Request }; remoteAddress?: string }): {
     ip: string | null;
     device: string | null;
   } {
-    const request = ws.data?.request;
-    let deviceName: string | null = null;
-    if (request) {
-      try {
-        deviceName = new URL(request.url).searchParams.get("device");
-      } catch {
-        // 無法解析 URL 時仍保留 socket 與 header 身分。
-      }
-    }
     return captureClientIdentity({
-      headers: request?.headers,
+      headers: ws.data?.request?.headers,
       remoteAddress: ws.remoteAddress,
-      deviceName,
+      deviceName: deviceQueryOf(ws),
     });
   }
 
@@ -539,6 +544,14 @@ export function createWsPlugin(
             break;
           }
 
+          case "visibility": {
+            // The `?device=` name only, never `identityOf`'s User-Agent
+            // fallback: a subscription is linked by the name the client sent,
+            // so a connection without one has nothing to suppress.
+            foreground?.report(ownerOf(ws), normalizeDeviceName(deviceQueryOf(ws)), message.state);
+            break;
+          }
+
           case "transcript_page_request": {
             const { sessionId } = message;
             const page = await backend.readTranscriptPage?.(sessionId, message.before ?? null);
@@ -580,6 +593,7 @@ export function createWsPlugin(
       // Remove this connection's uuid->sink bindings (baton map §cleanup).
       // Dead-binding leak prevention only; no rebind/replay to a new connection.
       backend.cleanupByOwner(ownerOf(ws));
+      foreground?.drop(ownerOf(ws));
 
       clientSink.current = null;
       console.log("[ws] client disconnected");
