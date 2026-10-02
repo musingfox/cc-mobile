@@ -1,7 +1,6 @@
 import type { PromptKind } from "../../server/protocol";
 import { debugLog } from "../components/DebugOverlay";
 import {
-  type ActiveTool,
   type AgentInfo,
   type AgentProfile,
   type CommandInfo,
@@ -17,229 +16,10 @@ import { hapticService } from "./haptic";
 import { notificationService } from "./notification";
 import { saveProject } from "./projects";
 import { toastService } from "./toast-service";
-import {
-  type CompactBoundaryEvent,
-  isApiRetry,
-  isCompactBoundary,
-  isHookResponse,
-  isHookStarted,
-  isMemoryRecall,
-  isNotification,
-  isPermissionDenied,
-  isPromptSuggestion,
-  isResultMessage,
-  isSessionStateChanged,
-  isTaskNotification,
-  isTaskProgress,
-  isTaskStarted,
-  type MemoryRecallEvent,
-  type PermissionDeniedEvent,
-  type TerminalReason,
-} from "./tool-events";
 import { messagesFromProjectedChunk } from "./transcript-projection";
-
-/**
- * Synthesize an `ActiveTool` entry for an SDK `memory_recall` system message
- * so it surfaces in `ActivityStrip` like any other tool. Existing sweepers
- * (e.g. text content_block_start, assistant turn cleanup) drop the entry
- * once the model starts replying — no dedicated removal path is required.
- */
-export function handleMemoryRecallChunk(
-  sessionId: string,
-  chunk: unknown,
-  store: { addActiveTool: (sessionId: string, toolUseId: string, tool: ActiveTool) => void },
-  now: () => number = Date.now,
-): boolean {
-  if (!isMemoryRecall(chunk)) return false;
-  const c = chunk as MemoryRecallEvent;
-  const memories = Array.isArray(c.memories) ? c.memories : [];
-  const paths = memories.map((m) => m?.path).filter((p): p is string => typeof p === "string");
-  const key = `memory-${c.uuid ?? "unknown"}`;
-  store.addActiveTool(sessionId, key, {
-    toolName: "Memory",
-    startedAt: now(),
-    input: {
-      paths,
-      count: paths.length,
-      ...(c.mode !== undefined ? { mode: c.mode } : {}),
-    },
-  });
-  return true;
-}
-
-/**
- * Append a greyed inline `permission_denied` marker to the chat and clear
- * the corresponding ActiveTool entry (if present). Triggered by SDK
- * `{type:"system", subtype:"permission_denied"}` chunks for auto-denials
- * (mode/rule/classifier) — interactive denials go through `canUseTool`.
- */
-export function handlePermissionDeniedChunk(
-  sessionId: string,
-  chunk: unknown,
-  store: {
-    addMessage: (sessionId: string, message: import("../stores/app-store").Message) => void;
-    removeActiveTool: (sessionId: string, toolUseId: string) => void;
-  },
-  now: () => number = Date.now,
-): boolean {
-  if (!isPermissionDenied(chunk)) return false;
-  const c = chunk as PermissionDeniedEvent;
-  const toolName = typeof c.tool_name === "string" && c.tool_name ? c.tool_name : "unknown tool";
-  const id = `deny-${c.uuid ?? `${now()}-${Math.random().toString(36).slice(2, 8)}`}`;
-  store.addMessage(sessionId, {
-    id,
-    kind: "permission_denied",
-    role: "assistant",
-    toolName,
-    content: typeof c.message === "string" ? c.message : "",
-    timestamp: now(),
-  });
-  if (typeof c.tool_use_id === "string" && c.tool_use_id) {
-    store.removeActiveTool(sessionId, c.tool_use_id);
-  }
-  return true;
-}
-
-/**
- * Dedupe API retry toasts within a single turn. The SDK emits one
- * `api_retry` message per attempt; if `(error_status, attempt)` has
- * already been surfaced, suppress the re-emit so a 3-retry burst no
- * longer produces duplicate toasts for the same attempt index.
- *
- * Compound key preserves the 1/3 → 2/3 → 3/3 progression while
- * collapsing accidental duplicates. Caller is expected to clear
- * `seenKeys` on `stream_end`.
- */
-export function handleApiRetryChunk(
-  chunk: Record<string, unknown>,
-  seenKeys: Set<string>,
-): boolean {
-  if (!isApiRetry(chunk)) return false;
-  const statusKey = chunk.error_status ?? "unknown";
-  const key = `${statusKey}-${chunk.attempt}`;
-  if (seenKeys.has(key)) return true; // handled (suppressed)
-  seenKeys.add(key);
-  const delayMs = chunk.retry_delay_ms as number | undefined;
-  const delaySec = delayMs && delayMs > 0 ? Math.round(delayMs / 1000) : 0;
-  const suffix = delaySec > 0 ? ` in ${delaySec}s...` : "...";
-  toastService.info(`API retrying (${chunk.attempt}/${chunk.max_retries})${suffix}`);
-  return true;
-}
-
-/**
- * Map an SDK `notification` chunk to a toast with priority-based
- * severity. Deduped by `key` (or by `text:<text>` when `key` is absent
- * or empty). Priority routing:
- *   - `immediate` | `high` → `toastService.error`
- *   - `medium` | unknown    → `toastService.info`
- *   - `low`                → `toastService.info` (shorter timeout)
- * Default timeouts: error 6000ms, medium 4000ms, low 2000ms; overridden
- * by `chunk.timeout_ms` when provided.
- */
-export function handleNotificationChunk(
-  chunk: Record<string, unknown>,
-  seenKeys: Set<string>,
-): boolean {
-  if (!isNotification(chunk)) return false;
-  const dedupeKey =
-    typeof chunk.key === "string" && chunk.key.length > 0 ? chunk.key : `text:${chunk.text}`;
-  if (seenKeys.has(dedupeKey)) return true; // handled (suppressed)
-  seenKeys.add(dedupeKey);
-
-  const text = chunk.text;
-  const priority = chunk.priority;
-  const timeoutMs = typeof chunk.timeout_ms === "number" ? chunk.timeout_ms : undefined;
-
-  if (priority === "immediate" || priority === "high") {
-    toastService.error(text, timeoutMs ?? 6000);
-  } else if (priority === "low") {
-    toastService.info(text, timeoutMs ?? 2000);
-  } else {
-    // medium or unknown value
-    toastService.info(text, timeoutMs ?? 4000);
-  }
-  return true;
-}
-
-/**
- * Surface SDK `compact_boundary` system events as in-chat dividers. We append
- * a synthetic `Message` flagged with `kind: "compact_boundary"` so the chat
- * renderer can draw a "history compacted" separator between the last
- * pre-compact and first post-compact turn.
- *
- * The divider is session-only — `HistoryMessageSchema` is intentionally NOT
- * extended, so reloads from disk won't include it.
- */
-export function handleCompactBoundaryChunk(
-  sessionId: string,
-  chunk: unknown,
-  store: {
-    sessions: Map<string, { messages: unknown[] }>;
-    addMessage: (sessionId: string, message: import("../stores/app-store").Message) => void;
-  },
-  now: () => number = Date.now,
-): boolean {
-  if (!isCompactBoundary(chunk)) return false;
-  const c = chunk as CompactBoundaryEvent;
-  if (!c.compact_metadata || typeof c.compact_metadata !== "object") {
-    console.warn("[ws-service] compact_boundary chunk missing compact_metadata", { chunk });
-    return false;
-  }
-  const session = store.sessions.get(sessionId);
-  if (!session) return false;
-  const meta = c.compact_metadata;
-  const trigger: "manual" | "auto" = meta.trigger === "manual" ? "manual" : "auto";
-  const compactMetadata: import("../stores/app-store").CompactMetadata = {
-    trigger,
-    ...(typeof meta.pre_tokens === "number" ? { preTokens: meta.pre_tokens } : {}),
-    ...(typeof meta.post_tokens === "number" ? { postTokens: meta.post_tokens } : {}),
-  };
-  store.addMessage(sessionId, {
-    id: `compact-${c.session_id ?? sessionId}-${c.uuid ?? "unknown"}`,
-    role: "assistant",
-    content: "",
-    timestamp: now(),
-    kind: "compact_boundary",
-    compactMetadata,
-  });
-  return true;
-}
-
-// Fallback context window when the active model's contextLength is unknown.
-// 200k matches Claude Sonnet 4.x; conservative for newer models.
-export const MAX_TOKENS_FALLBACK = 200_000;
 
 /** Server probe budget is 30s; 45s is that ceiling plus margin for a dropped reply. */
 export const CAPABILITIES_REQUEST_TIMEOUT_MS = 45_000;
-
-/**
- * Derive an aggregate context-occupancy snapshot from a `result.usage` payload.
- * Sums input, output, and cached input tokens (the same components Anthropic
- * counts against the context window). Returns `null` when the payload is
- * missing entirely so callers can preserve the previous chip reading.
- */
-export function deriveContextUsage(
-  usage:
-    | {
-        input_tokens?: number;
-        output_tokens?: number;
-        cache_read_input_tokens?: number;
-        cache_creation_input_tokens?: number;
-      }
-    | undefined,
-  maxTokens: number | null | undefined,
-): { totalTokens: number; maxTokens: number; percentage: number } | null {
-  if (!usage || typeof usage !== "object") return null;
-  const totalTokens =
-    (usage.input_tokens ?? 0) +
-    (usage.output_tokens ?? 0) +
-    (usage.cache_read_input_tokens ?? 0) +
-    (usage.cache_creation_input_tokens ?? 0);
-  const effectiveMax =
-    typeof maxTokens === "number" && maxTokens > 0 ? maxTokens : MAX_TOKENS_FALLBACK;
-  const percentage = totalTokens / effectiveMax;
-  return { totalTokens, maxTokens: effectiveMax, percentage };
-}
 
 /**
  * How long after a send an inbound `user` record may still be that send's echo.
@@ -316,37 +96,6 @@ export function pendingFromPermissionRequest(msg: Record<string, unknown>): Pend
   };
 }
 
-export function getTerminalReasonMessage(reason: TerminalReason | undefined): string | null {
-  if (!reason || reason === "completed") return null;
-
-  switch (reason) {
-    case "max_turns":
-      return "Maximum turns reached. You can continue the conversation to proceed.";
-    case "blocking_limit":
-      return "Rate limit reached. Please try again later.";
-    case "rapid_refill_breaker":
-      return "Too many requests in a short time. Please wait before continuing.";
-    case "prompt_too_long":
-      return "Prompt exceeds maximum length.";
-    case "image_error":
-      return "Image processing error occurred.";
-    case "model_error":
-      return "Model error occurred.";
-    case "aborted_streaming":
-      return "Streaming was aborted.";
-    case "aborted_tools":
-      return "Tool execution was aborted.";
-    case "stop_hook_prevented":
-      return "Stop hook prevented continuation.";
-    case "hook_stopped":
-      return "Hook stopped execution.";
-    case "tool_deferred":
-      return "Tool execution was deferred.";
-    default:
-      return null;
-  }
-}
-
 export function buildWsUrl(
   protocol: "ws:" | "wss:",
   host: string,
@@ -368,13 +117,6 @@ class WsService {
   // sessions and silently drop missed events on reconnect (→ stuck spinner).
   private lastEventIds = new Map<string, number>();
   private disconnectBannerTimeout: number | null = null;
-  // Dedupe set for `api_retry` toasts within a single turn. Cleared on
-  // `stream_end`. Key shape: `${error_status ?? "unknown"}-${attempt}`.
-  private apiRetrySeenKeys = new Set<string>();
-  // Dedupe set for `notification` toasts across the WS connection. Key is the
-  // notification `key` (globally unique per event) or `text:<text>` fallback;
-  // cleared on disconnect so a fresh session starts unbiased.
-  private notificationSeenKeys = new Set<string>();
   // Terminal sessions awaiting their `terminal_created` reply. Create failures come
   // back without a claudeUuid, so a failure clears every pending optimistic
   // session rather than guessing which one it belongs to.
@@ -513,8 +255,6 @@ class WsService {
     ws.onclose = () => {
       console.log("[ws-service] disconnected");
       this.ws = null;
-      // Reset notification dedupe — a fresh session starts unbiased.
-      this.notificationSeenKeys.clear();
       // Delay showing disconnect banner — if reconnect is fast, user won't notice
       this.disconnectBannerTimeout = window.setTimeout(() => {
         useAppStore.getState().setConnectionState("disconnected");
@@ -637,142 +377,6 @@ class WsService {
         if (!sessionId) break;
         const chunk = msg.chunk as Record<string, unknown>;
 
-        // Capture sdkSessionId from system/init message
-        if (chunk.type === "system" && chunk.subtype === "init" && chunk.session_id) {
-          store.setSdkSessionId(sessionId, chunk.session_id as string);
-        }
-
-        // Handle session_state_changed from stream_chunk (redundant detection for backward compat)
-        if (isSessionStateChanged(chunk)) {
-          store.setAgentState(sessionId, chunk.state);
-          break;
-        }
-
-        // Handle hook started — clear stale tools since hooks run after turn completes
-        if (isHookStarted(chunk)) {
-          store.clearActiveTools(sessionId);
-          store.clearActiveAgents(sessionId);
-          store.setActiveToolStatus(sessionId, null);
-          store.setActiveHook(sessionId, { hookId: chunk.hook_id, hookName: chunk.hook_name });
-          break;
-        }
-
-        // Handle hook response
-        if (isHookResponse(chunk)) {
-          store.setActiveHook(sessionId, null);
-          break;
-        }
-
-        // Handle API retry notifications (with per-turn dedupe)
-        if (handleApiRetryChunk(chunk, this.apiRetrySeenKeys)) {
-          break;
-        }
-
-        // Handle SDK notification queue (priority-routed toast, dedup by key)
-        if (handleNotificationChunk(chunk, this.notificationSeenKeys)) {
-          break;
-        }
-
-        // Handle prompt suggestions
-        if (isPromptSuggestion(chunk)) {
-          if (sessionId) {
-            store.setPromptSuggestion(sessionId, chunk.suggestion);
-          }
-          break;
-        }
-
-        // Handle result messages (cost/token data)
-        // Result marks end of turn — clear stale tool/agent state
-        if (isResultMessage(chunk)) {
-          const terminalReason = chunk.terminal_reason;
-          store.updateUsage(sessionId, {
-            totalCost: chunk.total_cost_usd ?? 0,
-            inputTokens: chunk.usage?.input_tokens ?? 0,
-            outputTokens: chunk.usage?.output_tokens ?? 0,
-            cacheReadTokens: chunk.usage?.cache_read_input_tokens ?? 0,
-            cacheCreationTokens: chunk.usage?.cache_creation_input_tokens ?? 0,
-            turns: chunk.num_turns ?? 0,
-            durationMs: chunk.duration_ms ?? 0,
-            terminalReason,
-          });
-
-          // Catalogue is gone; occupancy is always against MAX_TOKENS_FALLBACK.
-          const contextUsage = deriveContextUsage(chunk.usage, undefined);
-          if (contextUsage) {
-            store.setContextUsage(sessionId, contextUsage);
-          }
-
-          // Show toast for abnormal terminal reasons
-          const errorMessage = getTerminalReasonMessage(terminalReason);
-          if (errorMessage) {
-            toastService.error(errorMessage);
-          }
-
-          store.clearActiveTools(sessionId);
-          store.clearActiveAgents(sessionId);
-          store.setActiveToolStatus(sessionId, null);
-          break;
-        }
-
-        // Handle agent/task started
-        if (isTaskStarted(chunk)) {
-          store.addActiveAgent(sessionId, chunk.task_id, {
-            description: chunk.description,
-            taskType: chunk.task_type,
-            status: "running",
-            ...(chunk.tool_use_id ? { toolUseId: chunk.tool_use_id } : {}),
-          });
-          break;
-        }
-
-        // Handle agent/task progress
-        if (isTaskProgress(chunk)) {
-          if (chunk.task_id) {
-            store.updateActiveAgent(sessionId, chunk.task_id, {
-              toolCount: chunk.usage?.tool_uses,
-              tokenCount: chunk.usage?.total_tokens,
-              summary: chunk.summary,
-            });
-          }
-          // Update legacy status if tool name present
-          if (chunk.last_tool_name) {
-            store.setActiveToolStatus(sessionId, {
-              toolName: chunk.last_tool_name,
-              description: chunk.description,
-            });
-          }
-          break;
-        }
-
-        // Handle agent/task completion
-        if (isTaskNotification(chunk)) {
-          store.completeActiveAgent(sessionId, chunk.task_id, {
-            status: chunk.status,
-            summary: chunk.summary,
-            toolCount: chunk.usage?.tool_uses,
-            tokenCount: chunk.usage?.total_tokens,
-          });
-          break;
-        }
-
-        // Surface memory_recall as a synthetic `Memory` ActiveTool entry.
-        // Existing sweepers (text content_block_start, assistant turn cleanup)
-        // remove it once the model starts replying.
-        if (handleMemoryRecallChunk(sessionId, chunk, store)) {
-          break;
-        }
-
-        // Surface compact_boundary as an in-chat divider message.
-        if (handleCompactBoundaryChunk(sessionId, chunk, store)) {
-          break;
-        }
-
-        // Non-interactive permission denials (mode/rule/classifier) — render
-        // inline grey marker and drop matching ActiveTool entry.
-        if (handlePermissionDeniedChunk(sessionId, chunk, store)) {
-          break;
-        }
-
         // Extract tool input from assistant messages for ActivityPanel display.
         // Also clean up stale tools from previous turns: an `assistant` chunk
         // signals a new turn, so any active tools NOT listed in this message's
@@ -853,8 +457,6 @@ class WsService {
       }
 
       case "stream_end":
-        // Re-arm api_retry dedupe so the next turn can show its own toasts.
-        this.apiRetrySeenKeys.clear();
         if (sessionId) {
           const session = store.sessions.get(sessionId);
 

@@ -220,8 +220,7 @@ cc-mobile/
 │   │   ├── ws-service.ts       # WebSocket singleton
 │   │   ├── settings.ts         # localStorage persistence
 │   │   ├── projects.ts         # Saved projects persistence
-│   │   ├── pins.ts             # Pin management
-│   │   └── tool-events.ts      # Tool event processing
+│   │   └── pins.ts             # Pin management
 │   ├── utils/
 │   │   └── command-filter.ts   # Command/agent search filtering
 │   └── __tests__/

@@ -304,8 +304,7 @@ cc-mobile/
 │   │   ├── ws-service.ts        # WebSocket singleton (ADR-008)
 │   │   ├── settings.ts          # localStorage persistence
 │   │   ├── projects.ts          # Saved projects persistence
-│   │   ├── pins.ts              # Pin management
-│   │   └── tool-events.ts       # Tool event processing
+│   │   └── pins.ts              # Pin management
 │   └── __tests__/               # Frontend unit tests
 └── public/                      # (Future: PWA manifest, icons)
 ```
