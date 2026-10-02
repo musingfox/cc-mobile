@@ -389,6 +389,13 @@ export default function ChatScreen({ onNavigate }: Props) {
         )}
 
         {messages.map((m) => {
+          if (m.kind === "system_note") {
+            return (
+              <div key={m.id} className="lin-msg-system" role="note">
+                {m.content}
+              </div>
+            );
+          }
           if (m.role === "user") {
             return (
               <div key={m.id} className="lin-msg lin-msg--user">

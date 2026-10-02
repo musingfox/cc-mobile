@@ -29,4 +29,5 @@ Reading modes are a client projection over L2. They do not change L1, and they d
 | `L2-tool_use` | `tool_use` | hidden | visible |
 | `L2-tool_result` | `tool_result` | hidden | visible |
 | `L2-command-wrappers` | `<command-name>` / `<local-command-stdout>` | hidden | hidden |
+| `L2-system-injected` | user text opening with `<task-notification>` / `<teammate-message>` / `<agent-message>` / `<cross-session-message>`, shown as a muted note (label + the wrapper's summary), never a "YOU" bubble | visible | visible |
 | `L2-unrecognised-block` | unrecognised `type` | hidden | hidden |

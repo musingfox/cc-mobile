@@ -166,6 +166,15 @@
   text-align: right;
 }
 
+.lin-msg-system {
+  align-self: center;
+  max-width: 90%;
+  font-size: 12px;
+  color: #8a8a90;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
 .lin-msg--claude .lin-msg-label {
   color: #c2b89a;
 }

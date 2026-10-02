@@ -2,6 +2,7 @@ import type { Message } from "../stores/app-store";
 
 export type ProjectedPart =
   | { kind: "text"; text: string; stopReason?: string }
+  | { kind: "system_note"; text: string }
   | { kind: "thinking"; thinking: string; signature?: string }
   | { kind: "tool_use"; toolUseId: string; toolName: string; toolInput: Record<string, unknown> }
   | { kind: "tool_result"; toolUseId: string; text: string };
@@ -61,6 +62,12 @@ export const VISIBILITY_RULES: VisibilityRule[] = [
     modes: { conversation: "hidden", full: "hidden" },
   },
   {
+    id: "L2-system-injected",
+    layer: "client-block",
+    subject: "system-injected",
+    modes: { conversation: "visible", full: "visible" },
+  },
+  {
     id: "L2-unrecognised-block",
     layer: "client-block",
     subject: "unrecognised",
@@ -70,6 +77,31 @@ export const VISIBILITY_RULES: VisibilityRule[] = [
 
 function isWrapperText(s: string): boolean {
   return s.includes("<command-name>") || s.includes("<local-command-stdout>");
+}
+
+/**
+ * User-role records the harness writes rather than the person: a background
+ * task finishing, a teammate or subagent reporting, another session writing
+ * in. Shown as a muted note, not hidden: each still opens a turn of its own
+ * (claude answers it), so dropping it would fold that answer into the last
+ * prompt the person typed. Their bodies are addressed to the model; the note
+ * carries the wrapper's own one-line summary when it has one.
+ */
+const SYSTEM_INJECTED: Record<string, string> = {
+  "task-notification": "Background task",
+  "teammate-message": "Teammate message",
+  "agent-message": "Subagent report",
+  "cross-session-message": "Message from another session",
+};
+
+function systemNote(text: string): ProjectedPart | null {
+  const tag = /^\s*<([a-z-]+)[\s>]/.exec(text)?.[1];
+  const label = tag === undefined ? undefined : SYSTEM_INJECTED[tag];
+  if (label === undefined) return null;
+  const summary = (
+    /<summary>([\s\S]*?)<\/summary>/.exec(text)?.[1] ?? /\bsummary="([^"]*)"/.exec(text)?.[1]
+  )?.trim();
+  return { kind: "system_note", text: summary ? `${label} · ${summary}` : label };
 }
 
 function stopReasonOf(message: Record<string, unknown> | undefined): string | undefined {
@@ -110,6 +142,8 @@ export function projectChunk(chunk: Record<string, unknown>): ProjectedPart[] {
 
   if (typeof message.content === "string") {
     if (!message.content || isWrapperText(message.content)) return [];
+    const note = isUser ? systemNote(message.content) : null;
+    if (note) return [note];
     return [{ kind: "text", text: message.content, ...(stopReason ? { stopReason } : {}) }];
   }
 
@@ -121,6 +155,8 @@ export function projectChunk(chunk: Record<string, unknown>): ProjectedPart[] {
     .map((b) => b.text as string)
     .join("");
   if (isWrapperText(joinedText)) return [];
+  const note = isUser && blocks.every((b) => b?.type === "text") ? systemNote(joinedText) : null;
+  if (note) return [note];
 
   const parts: ProjectedPart[] = [];
   let textPart: { kind: "text"; text: string; stopReason?: string } | null = null;
@@ -170,7 +206,7 @@ export function projectChunk(chunk: Record<string, unknown>): ProjectedPart[] {
 }
 
 function roleForPart(chunk: Record<string, unknown>, part: ProjectedPart): Message["role"] {
-  if (part.kind === "tool_result") return "user";
+  if (part.kind === "tool_result" || part.kind === "system_note") return "user";
   if (part.kind === "text") {
     const message = chunk.message as { role?: string } | undefined;
     if (chunk.type === "user" || message?.role === "user") return "user";
@@ -179,7 +215,7 @@ function roleForPart(chunk: Record<string, unknown>, part: ProjectedPart): Messa
 }
 
 function contentForPart(part: ProjectedPart): string {
-  if (part.kind === "text") return part.text;
+  if (part.kind === "text" || part.kind === "system_note") return part.text;
   if (part.kind === "thinking") return part.thinking;
   if (part.kind === "tool_result") return part.text;
   return "";
@@ -211,6 +247,7 @@ export function messagesFromProjectedChunk(
     };
     if (part.kind === "text" && part.stopReason) message.stopReason = part.stopReason;
     if (part.kind === "thinking") message.kind = "thinking";
+    if (part.kind === "system_note") message.kind = "system_note";
     if (part.kind === "tool_use") {
       message.kind = "tool_use";
       message.toolName = part.toolName;

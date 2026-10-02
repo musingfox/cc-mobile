@@ -23,7 +23,7 @@ export type Message = {
   timestamp: number;
   toolName?: string;
   toolInput?: Record<string, unknown>;
-  kind?: "thinking" | "tool_use" | "tool_result";
+  kind?: "thinking" | "tool_use" | "tool_result" | "system_note";
   /** From transcript record for history / dedup */
   recordId?: string;
   seq?: number;
