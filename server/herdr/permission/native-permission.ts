@@ -196,6 +196,9 @@ export function createNativePermission(options: NativePermissionOptions) {
     };
     pending.set(sessionId, entry);
     bySessionOfRequest.set(requestId, sessionId);
+    // Armed before the frame goes out, so the frame can say whether it was.
+    armDeny(entry);
+    const autoDenyMs = timeLeft(entry);
 
     // An unreadable screen still raises a request: the user must be able to see
     // that something is waiting and cancel it, rather than watch a session sit
@@ -217,10 +220,30 @@ export function createNativePermission(options: NativePermissionOptions) {
       // Only when a parse claimed it. An unreadable screen says nothing about
       // which of the two it is, and a wrong claim is worse than no claim.
       ...(parsed ? { promptKind: parsed.promptKind } : {}),
+      // Relative, not a timestamp: the phone counts it down on its own clock,
+      // and the phone's clock and this machine's need not agree.
+      ...(autoDenyMs !== undefined ? { autoDenyMs } : {}),
     });
 
-    armDeny(entry);
     return entry;
+  }
+
+  /** What is left of a running countdown; `undefined` when none is running. */
+  function timeLeft(entry: PendingNativePermission): number | undefined {
+    if (entry.timerId === undefined || entry.armedAt === undefined) return undefined;
+    return Math.max(0, timeoutMs - entry.elapsedMs - (now() - entry.armedAt));
+  }
+
+  /**
+   * The countdown on this request as it stands now, for a frame sent again
+   * later (a reconnect replay). `undefined` when the request is not the
+   * current one, or when no deny is running for it — never armed, or frozen
+   * while no phone is connected.
+   */
+  function autoDenyMsFor(requestId: string): number | undefined {
+    const sessionId = bySessionOfRequest.get(requestId);
+    const entry = sessionId === undefined ? undefined : pending.get(sessionId);
+    return entry?.requestId === requestId ? timeLeft(entry) : undefined;
   }
 
   /**
@@ -576,6 +599,7 @@ export function createNativePermission(options: NativePermissionOptions) {
     forget,
     sessionOfRequest,
     isCurrent,
+    autoDenyMsFor,
     pendingFor,
     pendingCount,
   };

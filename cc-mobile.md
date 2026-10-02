@@ -99,7 +99,8 @@ a page reload.
 { type: "stream_end", sessionId: string }
 { type: "permission_request", sessionId: string, requestId: string,
   tool: { name: string, parameters: Record<string, unknown> },
-  promptKind?: "permission" | "question" }
+  promptKind?: "permission" | "question",
+  autoDenyMs?: number }  // ms until the server's own esc; absent when none is running
 { type: "capabilities", sessionId: string, commands: string[], agents: string[], model: string }
 { type: "terminal_created", claudeUuid: string, terminalName: string, paneRef: string }
 { type: "terminal_teardown_result", claudeUuid: string, killed: boolean }
@@ -133,6 +134,10 @@ it could not read, and a bundle cached before the field ignores it. The kind als
 decides the unattended countdown: a permission prompt nobody answers is still
 `esc`'d after 90 s on a pane cc-mobile launched, while a `"question"` waits —
 `esc` there cancels the question instead of declining a tool.
+`permission_request.autoDenyMs` is that countdown, as the time left when the
+frame was sent, and it is present only while the countdown runs; the card shows
+no number without it. CLAUDE.md's protocol section has the freeze and replay
+rules.
 
 `transcript_page_request` / `transcript_page` are the history pull: the phone
 asks a live session for one page of its own backlog and gets it outside the live

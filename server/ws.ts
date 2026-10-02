@@ -75,6 +75,8 @@ export interface WsBackend extends TerminalControlBackend {
    * without it a reconnect replays every buffered prompt, as it always did.
    */
   isPermissionCurrent?(requestId: string): boolean;
+  /** Milliseconds left on a request's auto-deny; `undefined` when none is running. */
+  permissionAutoDenyMs?(requestId: string): number | undefined;
   /**
    * One page of a session's own transcript backlog, older than `before`.
    * Resolves `null` when there is no transcript to read at all, which the
@@ -185,6 +187,18 @@ export function createWsPlugin(
       backend.isPermissionCurrent !== undefined &&
       !backend.isPermissionCurrent(String(message.requestId))
     );
+  }
+
+  /**
+   * A buffered prompt carries the countdown left when it was first sent. By a
+   * replay that figure is stale, and since every close freezes the server's
+   * countdown it is usually not running at all: re-read it, or drop it.
+   */
+  function withLiveCountdown(message: Record<string, unknown>): Record<string, unknown> {
+    if (message?.type !== "permission_request") return message;
+    const { autoDenyMs: _whenSent, ...rest } = message;
+    const left = backend.permissionAutoDenyMs?.(String(message.requestId));
+    return left === undefined ? rest : { ...rest, autoDenyMs: left };
   }
 
   // Helper to send buffered messages
@@ -483,7 +497,7 @@ export function createWsPlugin(
                   type: "event",
                   eventId: evt.eventId,
                   sessionId: evt.sessionId,
-                  payload: evt.message,
+                  payload: withLiveCountdown(evt.message),
                 });
               }
 

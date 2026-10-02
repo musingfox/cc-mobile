@@ -75,7 +75,10 @@ export { extractTextFromChunk } from "./transcript-projection";
  * state and not an error, and an unrecognised value is treated the same way
  * rather than passed through to the card.
  */
-export function pendingFromPermissionRequest(msg: Record<string, unknown>): PendingPermission {
+export function pendingFromPermissionRequest(
+  msg: Record<string, unknown>,
+  now = Date.now(),
+): PendingPermission {
   // The options are the terminal's own, parsed off its screen — never
   // synthesised here. An empty list means the screen was unreadable and the
   // sheet offers Cancel only.
@@ -94,6 +97,7 @@ export function pendingFromPermissionRequest(msg: Record<string, unknown>): Pend
     },
     options,
     ...(kind === "permission" || kind === "question" ? { promptKind: kind } : {}),
+    ...(typeof msg.autoDenyMs === "number" ? { deadline: now + msg.autoDenyMs } : {}),
   };
 }
 
@@ -166,6 +170,20 @@ class WsService {
   private clearCard(sessionId: string) {
     const store = useAppStore.getState();
     if (store.sessions.get(sessionId)?.pendingPermission) store.setPermission(sessionId, null);
+  }
+
+  /**
+   * The server freezes every auto-deny countdown when a connection closes and
+   * restarts it only when a prompt is raised again, so a deadline does not
+   * outlive the socket that delivered it.
+   */
+  private dropDeadlines() {
+    const store = useAppStore.getState();
+    for (const [id, session] of store.sessions) {
+      if (session.pendingPermission?.deadline === undefined) continue;
+      const { deadline: _frozen, ...card } = session.pendingPermission;
+      store.setPermission(id, card);
+    }
   }
 
   connect() {
@@ -306,6 +324,7 @@ class WsService {
       if (visibilityHeartbeat !== null) window.clearInterval(visibilityHeartbeat);
       document.removeEventListener("visibilitychange", reportIfCurrent);
       this.ws = null;
+      this.dropDeadlines();
       // Delay showing disconnect banner — if reconnect is fast, user won't notice
       this.disconnectBannerTimeout = window.setTimeout(() => {
         useAppStore.getState().setConnectionState("disconnected");

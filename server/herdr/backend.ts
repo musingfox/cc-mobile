@@ -148,6 +148,8 @@ export interface HerdrTerminalBackend extends TerminalBackend {
   paneIdForRequest(requestId: string): string | undefined;
   /** Whether this request is still the prompt its pane is waiting on. */
   isPermissionCurrent(requestId: string): boolean;
+  /** Milliseconds left before this request is `esc`'d; `undefined` when no deny is running. */
+  permissionAutoDenyMs(requestId: string): number | undefined;
   /** Connection lost: stop treating pending prompts as seen by the phone. */
   pausePermissions(): void;
   /** Reconnect: re-read and re-emit every prompt still on screen. */
@@ -531,6 +533,7 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
     resolvePermission: (requestId, answer) => permission.resolve(requestId, answer),
     paneIdForRequest: (requestId) => permission.sessionOfRequest(requestId),
     isPermissionCurrent: (requestId) => permission.isCurrent(requestId),
+    permissionAutoDenyMs: (requestId) => permission.autoDenyMsFor(requestId),
     pausePermissions: () => permission.pause(),
     resumePermissions: () => permission.resume(),
     pushSubscriberCount: () => options.push?.subscriberCount?.() ?? 0,

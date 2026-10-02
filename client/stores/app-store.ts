@@ -68,6 +68,13 @@ export type PendingPermission = {
    * honest answer there, not `"permission"`.
    */
   promptKind?: PromptKind;
+  /**
+   * When the server will press `esc` on this prompt by itself, on this device's
+   * clock (the server sends a duration, not a time). Absent when it will not:
+   * a pane cc-mobile did not launch, a question, or a countdown the server
+   * froze because the connection dropped.
+   */
+  deadline?: number;
 };
 
 /**

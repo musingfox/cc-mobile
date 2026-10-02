@@ -228,6 +228,13 @@ const PermissionRequestMessage = z.object({
    * ignores it.
    */
   promptKind: PromptKindSchema.optional(),
+  /**
+   * Milliseconds until the server presses `esc` on this prompt by itself,
+   * measured when the frame was sent. Absent when no such deny is running: a
+   * pane cc-mobile did not launch, a question, or a countdown frozen because
+   * no phone was connected. Relative so the phone counts down on its own clock.
+   */
+  autoDenyMs: z.number().int().nonnegative().optional(),
 });
 
 const ErrorMessage = z.object({

@@ -4,8 +4,11 @@ import { tokens as T } from "../../design/tokens";
 import { hapticService } from "../../services/haptic";
 import type { PendingPermission } from "../../stores/app-store";
 
-const TIMEOUT_SECONDS = 60;
 const SWIPE_THRESHOLD_PX = 80;
+
+function secondsUntil(deadline: number): number {
+  return Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+}
 
 /** What the sheet offers when the server could not parse the terminal's screen. */
 const CANCEL_ONLY = [{ id: "cancel", label: "Cancel", keystroke: "esc" }];
@@ -33,16 +36,20 @@ function targetOf(p: PendingPermission): string {
 }
 
 export default function PermissionSheetA({ pending, onApprove, onDeny, onChoose }: Props) {
-  const [secondsLeft, setSecondsLeft] = useState(TIMEOUT_SECONDS);
+  // The server's own countdown, or none at all: it sends one only when it will
+  // press esc by itself, so a pane it never auto-denies shows no number.
+  const deadline = pending?.deadline;
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(
+    deadline === undefined ? null : secondsUntil(deadline),
+  );
   const [dragX, setDragX] = useState(0);
   const [chosen, setChosen] = useState<string | null>(null);
   const touchStartX = useRef<number | null>(null);
 
-  // A question has no deadline and no swipe: the 60s counter and the swipe hint
-  // would promise a deadline and a gesture the screen does not have, and a right
-  // swipe would pick the first option on the user's behalf. Refusing the gesture
-  // at its start leaves the move and end handlers inert, so the card never even
-  // offers the drag as visual feedback.
+  // A question has no swipe: the hint would promise a gesture the screen does
+  // not have, and a right swipe would pick the first option on the user's
+  // behalf. Refusing the gesture at its start leaves the move and end handlers
+  // inert, so the card never even offers the drag as visual feedback.
   const isQuestion = pending?.promptKind === "question";
   // The server could not parse the screen and offers only its synthetic
   // Cancel (Esc). It may be a question, so there is nothing to approve: a
@@ -77,18 +84,20 @@ export default function PermissionSheetA({ pending, onApprove, onDeny, onChoose 
 
   useEffect(() => {
     if (!pending) return;
-    setSecondsLeft(TIMEOUT_SECONDS);
     setDragX(0);
     setChosen(null);
     touchStartX.current = null;
-    const start = Date.now();
-    const interval = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - start) / 1000);
-      const left = Math.max(0, TIMEOUT_SECONDS - elapsed);
-      setSecondsLeft(left);
-    }, 500);
-    return () => clearInterval(interval);
   }, [pending?.requestId]);
+
+  useEffect(() => {
+    if (deadline === undefined) {
+      setSecondsLeft(null);
+      return;
+    }
+    setSecondsLeft(secondsUntil(deadline));
+    const interval = setInterval(() => setSecondsLeft(secondsUntil(deadline)), 500);
+    return () => clearInterval(interval);
+  }, [deadline]);
 
   if (!pending) return null;
   const description = pending.tool.parameters.description;
@@ -116,7 +125,7 @@ export default function PermissionSheetA({ pending, onApprove, onDeny, onChoose 
         <span className="lin-permission-label">
           {isQuestion ? "Question" : unreadable ? "Can't read this prompt" : "Permission Required"}
         </span>
-        {!isQuestion && !unreadable && <span className="lin-permission-timer">{secondsLeft}s</span>}
+        {secondsLeft !== null && <span className="lin-permission-timer">{secondsLeft}s</span>}
       </div>
       {unreadable ? (
         <div className="lin-permission-description">

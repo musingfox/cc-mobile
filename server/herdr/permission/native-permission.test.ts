@@ -669,6 +669,73 @@ describe("QuestionExemptFromAutoDeny", () => {
 });
 
 /**
+ * The phone's countdown is the server's, or there is none. The card used to
+ * count from 60 s while the server waited 90 s, restart whenever it was
+ * redrawn, and run on panes the server never `esc`s (audit 2026-10-03 #8).
+ */
+describe("AutoDenyCountdownOnTheWire", () => {
+  const autoDenyOf = (h: Harness) =>
+    (h.sent.find((msg) => msg.type === "permission_request") as { autoDenyMs?: number }).autoDenyMs;
+
+  test("a prompt the server will esc says how long it has", async () => {
+    const h = harness({ origin: "self", clock: makeFakeClock() });
+
+    await h.permission.onStatus(PANE, "blocked", "claude");
+
+    expect(autoDenyOf(h)).toBe(UNATTENDED_DENY_MS);
+  });
+
+  test("a pane cc-mobile did not launch carries no countdown", async () => {
+    const h = harness({ origin: "foreign", clock: makeFakeClock() });
+
+    await h.permission.onStatus(PANE, "blocked", "claude");
+
+    expect("autoDenyMs" in (h.sent[0] as object)).toBe(false);
+  });
+
+  test("a question carries no countdown, an unreadable screen keeps its own", async () => {
+    const question = harness({ origin: "self", clock: makeFakeClock() });
+    question.screen.text = QUESTION;
+    await question.permission.onStatus(PANE, "blocked", "claude");
+    expect("autoDenyMs" in (question.sent[0] as object)).toBe(false);
+
+    const unreadable = harness({ origin: "self", clock: makeFakeClock() });
+    unreadable.screen.text = UNPARSEABLE;
+    await unreadable.permission.onStatus(PANE, "blocked", "claude");
+    expect(autoDenyOf(unreadable)).toBe(UNATTENDED_DENY_MS);
+  });
+
+  test("the countdown left is read live, and there is none while it is frozen", async () => {
+    const clock = makeFakeClock();
+    const h = harness({ origin: "self", clock });
+    await h.permission.onStatus(PANE, "blocked", "claude");
+
+    await clock.advance(30_000);
+    expect(h.permission.autoDenyMsFor("r1")).toBe(UNATTENDED_DENY_MS - 30_000);
+
+    h.permission.pause();
+    expect(h.permission.autoDenyMsFor("r1")).toBeUndefined();
+    expect(h.permission.autoDenyMsFor("not-mine")).toBeUndefined();
+  });
+
+  test("a prompt re-raised after a disconnect carries what was left, not a fresh 90 s", async () => {
+    const clock = makeFakeClock();
+    const h = harness({ origin: "self", clock });
+    await h.permission.onStatus(PANE, "blocked", "claude");
+    await clock.advance(30_000);
+
+    h.permission.pause();
+    await clock.advance(600_000);
+    await h.permission.resume();
+
+    const again = h.sent.filter((msg) => msg.type === "permission_request")[1] as {
+      autoDenyMs?: number;
+    };
+    expect(again.autoDenyMs).toBe(UNATTENDED_DENY_MS - 30_000);
+  });
+});
+
+/**
  * The answer to a question is the digit it prints, pressed in the pane — the
  * same send path a permission answer takes, guarded the same way. The guard
  * matters more here: the human at the terminal may have answered and been asked

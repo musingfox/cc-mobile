@@ -51,6 +51,89 @@ describe("QuestionKindReachesTheCard", () => {
 });
 
 /**
+ * The server sends how long it will wait before pressing Esc; the card keeps a
+ * deadline on this device's clock, so a redraw cannot restart it and the two
+ * machines' clocks never have to agree.
+ */
+describe("AutoDenyDeadline", () => {
+  const frame = {
+    type: "permission_request",
+    sessionId: "p1",
+    requestId: "r1",
+    tool: { name: "Bash command", parameters: { text: "touch x" } },
+    options: [{ id: "1", label: "Yes", keystroke: "1" }],
+    promptKind: "permission",
+  };
+
+  test("a countdown on the wire becomes a deadline on this clock", () => {
+    expect(pendingFromPermissionRequest({ ...frame, autoDenyMs: 90_000 }, 1_000).deadline).toBe(
+      91_000,
+    );
+  });
+
+  test("no countdown on the wire, no deadline", () => {
+    expect("deadline" in pendingFromPermissionRequest(frame, 1_000)).toBe(false);
+  });
+
+  test("a closed socket takes the deadline off the card and leaves the card", () => {
+    // The server freezes its countdown when the connection closes, so the
+    // number the card was showing stops being true at that moment.
+    const sockets: Array<{
+      onopen?: () => void;
+      onmessage?: (event: { data: string }) => void;
+      onclose?: () => void;
+      send: () => void;
+      close: () => void;
+    }> = [];
+    const realWebSocket = globalThis.WebSocket;
+    globalThis.WebSocket = class {
+      onopen?: () => void;
+      onmessage?: (event: { data: string }) => void;
+      onclose?: () => void;
+      send() {}
+      close() {}
+      constructor() {
+        sockets.push(this);
+      }
+    } as unknown as typeof WebSocket;
+    const internal = wsService as unknown as {
+      ws: WebSocket | null;
+      disconnectBannerTimeout: number | null;
+    };
+    const prevWs = internal.ws;
+
+    try {
+      useAppStore.setState({ sessions: new Map(), activeSessionId: null });
+      useAppStore.getState().addSession("p1", "/repo", { ready: true });
+      wsService.connect();
+      const socket = sockets[sockets.length - 1];
+      socket.onopen?.();
+      socket.onmessage?.({
+        data: JSON.stringify({
+          type: "event",
+          eventId: 1,
+          sessionId: "p1",
+          payload: { ...frame, autoDenyMs: 90_000 },
+        }),
+      });
+      expect(useAppStore.getState().sessions.get("p1")?.pendingPermission?.deadline).toBeNumber();
+
+      socket.onclose?.();
+
+      const card = useAppStore.getState().sessions.get("p1")?.pendingPermission;
+      expect(card?.requestId).toBe("r1");
+      expect(card?.deadline).toBeUndefined();
+    } finally {
+      wsService.destroy();
+      if (internal.disconnectBannerTimeout !== null) clearTimeout(internal.disconnectBannerTimeout);
+      internal.disconnectBannerTimeout = null;
+      internal.ws = prevWs;
+      globalThis.WebSocket = realWebSocket;
+    }
+  });
+});
+
+/**
  * History wording: a question's answer is not an approval. `recordPermissionAction`
  * already accepted "answered"; nothing used to reach it.
  */

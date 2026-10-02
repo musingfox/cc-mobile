@@ -203,9 +203,9 @@ describe("PermissionSheetServerOptions", () => {
 });
 
 /**
- * QuestionCardPresentation — the same sheet, worn as a question. The 60s
- * counter and the swipe hint are both claims about a permission prompt; on a
- * question they would describe a deadline and a gesture that do not exist.
+ * QuestionCardPresentation — the same sheet, worn as a question. A countdown
+ * and the swipe hint are both claims about a permission prompt; on a question
+ * they would describe a deadline and a gesture that do not exist.
  */
 describe("QuestionCardPresentation", () => {
   afterEach(() => cleanup());
@@ -246,7 +246,11 @@ describe("QuestionCardPresentation", () => {
 
   test("T3: a permission card is untouched — label, timer and hint all stand", () => {
     const { container } = render(
-      <PermissionSheetA pending={pending} onApprove={() => {}} onDeny={() => {}} />,
+      <PermissionSheetA
+        pending={{ ...pending, deadline: Date.now() + 90_000 }}
+        onApprove={() => {}}
+        onDeny={() => {}}
+      />,
     );
 
     expect(container.querySelector(".lin-permission-label")?.textContent).toBe(
@@ -374,5 +378,62 @@ describe("UnreadablePromptCard", () => {
     expect(actions.map((b) => b.textContent)).toEqual(["Cancel"]);
     fireEvent.click(actions[0]);
     expect(chosen).toEqual(["cancel"]);
+  });
+});
+
+/**
+ * ServerCountdown — the number on the card is the time until the server
+ * presses Esc, or there is no number. It used to start at 60 s against the
+ * server's 90 s, restart whenever the card was drawn again, and run on panes
+ * the server never auto-denies (audit 2026-10-03 #8).
+ */
+describe("ServerCountdown", () => {
+  afterEach(() => cleanup());
+
+  const timerOf = (container: HTMLElement) =>
+    container.querySelector(".lin-permission-timer")?.textContent ?? null;
+
+  test("counts down to the server's deadline", () => {
+    const { container } = render(
+      <PermissionSheetA
+        pending={{ ...pending, deadline: Date.now() + 42_000 }}
+        onApprove={() => {}}
+        onDeny={() => {}}
+      />,
+    );
+
+    expect(timerOf(container)).toBe("42s");
+  });
+
+  test("a card the server will not auto-deny shows no countdown", () => {
+    const { container } = render(
+      <PermissionSheetA pending={pending} onApprove={() => {}} onDeny={() => {}} />,
+    );
+
+    expect(timerOf(container)).toBeNull();
+  });
+
+  test("drawing the card again does not restart it", () => {
+    const card = { ...pending, deadline: Date.now() + 30_000 };
+    render(<PermissionSheetA pending={card} onApprove={() => {}} onDeny={() => {}} />);
+    cleanup();
+
+    const { container } = render(
+      <PermissionSheetA pending={card} onApprove={() => {}} onDeny={() => {}} />,
+    );
+
+    expect(timerOf(container)).toBe("30s");
+  });
+
+  test("a deadline already passed reads zero, not a negative number", () => {
+    const { container } = render(
+      <PermissionSheetA
+        pending={{ ...pending, deadline: Date.now() - 5_000 }}
+        onApprove={() => {}}
+        onDeny={() => {}}
+      />,
+    );
+
+    expect(timerOf(container)).toBe("0s");
   });
 });

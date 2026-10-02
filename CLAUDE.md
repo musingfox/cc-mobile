@@ -117,6 +117,19 @@ Cancel-only fallback omits the key rather than claim a kind it could not read,
 and a bundle cached before the field ignores it. A `"question"` is also the one
 prompt exempt from the 90-second `esc`.
 
+`permission_request` also carries an optional `autoDenyMs`: how long until the
+server presses `esc` on that prompt by itself, measured when the frame was sent.
+It is present **only while that countdown is running** — absent on a pane
+cc-mobile did not launch, on a question, and while the countdown is frozen —
+and the card shows a number only when it has one. It is a duration, not a
+timestamp, on purpose: the phone turns it into a deadline on its own clock, and
+the two machines' clocks need not agree. Every socket close freezes every
+countdown until the next `terminal_send` re-raises the prompt, so the phone
+drops its deadline when its socket closes, and a reconnect replays a buffered
+prompt with the time left re-read rather than the figure it was sent with. A
+buffered prompt that is no longer its pane's current one (answered, or
+superseded by a newer prompt) is not replayed at all.
+
 Since #31 `terminal_create` carries an optional `agentKind` naming which agent to
 start (`server/agents/kinds.ts`; absent → `claude`, which is what every bundle
 cached before #31 sends). Unlike `sessions[].agent` — herdr's inbound label, a
