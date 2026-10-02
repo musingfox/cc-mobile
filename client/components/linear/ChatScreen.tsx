@@ -109,6 +109,10 @@ export default function ChatScreen({ onNavigate }: Props) {
   // restore the reader's position from the growth in scrollHeight, and so the
   // live-arrival gate can ask whether the reader was already at the bottom.
   const beforeCommit = useRef<ScrollSnapshot>({ scrollTop: 0, scrollHeight: 0, clientHeight: 0 });
+  // Whether the view is held at the newest message while bodies finish rendering.
+  // Set wherever a commit lands the view at the bottom; cleared by the reader
+  // moving up (see handleScroll) and by a mode switch, which stays put.
+  const pinnedToBottom = useRef(true);
   const previousFirstId = useRef<string | undefined>(undefined);
   const previousReadingMode = useRef(readingMode);
   const autoHopsRef = useRef(0);
@@ -155,6 +159,7 @@ export default function ChatScreen({ onNavigate }: Props) {
       previousReadingMode.current = readingMode;
       previousFirstId.current = firstId;
       beforeCommit.current = snapshotOf(el);
+      pinnedToBottom.current = false;
       return;
     }
 
@@ -191,6 +196,7 @@ export default function ChatScreen({ onNavigate }: Props) {
     if (isEpochReset || isFirstMount || isOwnSend || !isSameConversationTail) {
       el.scrollTop = el.scrollHeight;
       beforeCommit.current = snapshotOf(el);
+      pinnedToBottom.current = true;
       return;
     }
 
@@ -201,14 +207,40 @@ export default function ChatScreen({ onNavigate }: Props) {
 
     el.scrollTop = el.scrollHeight;
     beforeCommit.current = snapshotOf(el);
+    pinnedToBottom.current = true;
     // lastContent: same-message streaming can grow height without a new first id
     void lastContent;
   }, [messages, lastContent, readingMode]);
 
+  // The commit above anchors before the bodies are final: MarkdownRenderer
+  // fills its HTML in a passive effect, then swaps in shiki and mermaid
+  // asynchronously, so an opened chat stopped short of the newest message.
+  // Growth after the commit — of a message or of the scroller itself, as when
+  // the keyboard opens — is followed while the view is pinned.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || messages.length === 0 || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      if (!pinnedToBottom.current) return;
+      el.scrollTop = el.scrollHeight;
+      beforeCommit.current = snapshotOf(el);
+    });
+    observer.observe(el);
+    for (const child of Array.from(el.children)) observer.observe(child);
+    return () => observer.disconnect();
+  }, [messages]);
+
   const handleScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
+    const previous = beforeCommit.current;
     beforeCommit.current = snapshotOf(el);
+    // Growth under a pinned view fires scroll events too (the browser's scroll
+    // anchoring nudges scrollTop down the page) and reads as "not at the
+    // bottom" before the observer catches up. Only a move up unpins.
+    pinnedToBottom.current =
+      wasNearBottom(beforeCommit.current) ||
+      (pinnedToBottom.current && el.scrollTop >= previous.scrollTop);
     if (el.scrollTop > 0) return;
     loadOlder();
   };

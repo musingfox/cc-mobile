@@ -655,6 +655,108 @@ describe("StayPutOnLiveArrival", () => {
   });
 });
 
+// Growth with no commit behind it: MarkdownRenderer fills a body in a passive
+// effect and swaps in shiki/mermaid later, so the commit that anchored the view
+// measured bodies that were not final. happy-dom's ResizeObserver never fires,
+// so these drive a stand-in by hand.
+describe("PinnedWhileBodiesRender", () => {
+  class FakeResizeObserver {
+    static live: FakeResizeObserver[] = [];
+    constructor(private readonly callback: ResizeObserverCallback) {}
+    observe() {
+      if (!FakeResizeObserver.live.includes(this)) FakeResizeObserver.live.push(this);
+    }
+    unobserve() {}
+    disconnect() {
+      FakeResizeObserver.live = FakeResizeObserver.live.filter((o) => o !== this);
+    }
+    static fire() {
+      for (const o of [...FakeResizeObserver.live]) o.callback([], o as unknown as ResizeObserver);
+    }
+  }
+
+  let originalResizeObserver: typeof ResizeObserver;
+
+  beforeEach(() => {
+    originalResizeObserver = globalThis.ResizeObserver;
+    FakeResizeObserver.live = [];
+    globalThis.ResizeObserver = FakeResizeObserver as unknown as typeof ResizeObserver;
+  });
+
+  afterEach(() => {
+    globalThis.ResizeObserver = originalResizeObserver;
+  });
+
+  function grow(scroller: HTMLElement, scrollHeight: number) {
+    Object.defineProperty(scroller, "scrollHeight", { value: scrollHeight, configurable: true });
+    act(() => FakeResizeObserver.fire());
+  }
+
+  test("T1: an opened chat follows bodies that finish rendering after the open", () => {
+    openSession({ readable: true, messages: [record("a", 10)] });
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    const scroller = stubScroller(container, 1000, 400, 600);
+
+    grow(scroller, 1500);
+
+    expect(scroller.scrollTop).toBe(1500);
+  });
+
+  test("T2: the scroll event growth itself fires does not unpin the view", () => {
+    openSession({ readable: true, messages: [record("a", 10)] });
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    const scroller = stubScroller(container, 1000, 400, 600);
+    fireEvent.scroll(scroller);
+    // Scroll anchoring: the body grew and the browser nudged scrollTop down the
+    // page, so the event reports a view 499px short before the observer runs.
+    Object.defineProperty(scroller, "scrollHeight", { value: 1500, configurable: true });
+    scroller.scrollTop = 401;
+    fireEvent.scroll(scroller);
+
+    grow(scroller, 1500);
+
+    expect(scroller.scrollTop).toBe(1500);
+  });
+
+  test("T3: a reader who scrolled up is left where they are", () => {
+    openSession({ readable: true, messages: [record("a", 10)] });
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    const scroller = stubScroller(container, 1000, 400, 600);
+    fireEvent.scroll(scroller);
+    scroller.scrollTop = 100;
+    fireEvent.scroll(scroller);
+
+    grow(scroller, 1500);
+
+    expect(scroller.scrollTop).toBe(100);
+  });
+
+  test("T4: late growth does not undo a mode switch's stay-put", () => {
+    openSession({ readable: true, messages: [record("a", 10)] });
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    const scroller = stubScroller(container, 2000, 1336, 600);
+    fireEvent.scroll(scroller);
+    act(() => {
+      useSettingsStore.getState().setReadingMode("conversation");
+    });
+
+    grow(scroller, 2400);
+
+    expect(scroller.scrollTop).toBe(1336);
+  });
+
+  test("T5: the scroller shrinking (the keyboard opening) keeps a pinned view on the newest message", () => {
+    openSession({ readable: true, messages: [record("a", 10)] });
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    const scroller = stubScroller(container, 1000, 400, 600);
+    Object.defineProperty(scroller, "clientHeight", { value: 300, configurable: true });
+
+    grow(scroller, 1000);
+
+    expect(scroller.scrollTop).toBe(1000);
+  });
+});
+
 function toolPart(recordId: string, seq: number): Message {
   return {
     id: `id-${recordId}`,
