@@ -436,23 +436,25 @@ class WsService {
           const userText = projected.find(
             (m) => m.kind === undefined && m.role === "user",
           )?.content;
-          const pending = this.lastOptimisticSend.get(sessionId) ?? [];
           const now = Date.now();
+          // An entry past the window can never pair again, so it is let go
+          // here, where paired echoes are consumed. Otherwise every send whose
+          // record never matched (the agent rewrote the text, or no record
+          // came) would stay in this array until the tab closes.
+          const pending = (this.lastOptimisticSend.get(sessionId) ?? []).filter(
+            (send) => now - send.sentAt < ECHO_PAIRING_WINDOW_MS,
+          );
           let echoId: string | undefined;
           if (userText) {
-            const paired = pending.findIndex(
-              (send) =>
-                send.prompt.trim() === userText.trim() &&
-                now - send.sentAt < ECHO_PAIRING_WINDOW_MS,
-            );
+            const paired = pending.findIndex((send) => send.prompt.trim() === userText.trim());
             if (paired >= 0) {
               const [echo] = pending.splice(paired, 1);
-              if (pending.length === 0) this.lastOptimisticSend.delete(sessionId);
-              else this.lastOptimisticSend.set(sessionId, pending);
               store.removeMessage(sessionId, echo.messageId);
               echoId = echo.messageId;
             }
           }
+          if (pending.length === 0) this.lastOptimisticSend.delete(sessionId);
+          else this.lastOptimisticSend.set(sessionId, pending);
           const messages = projected.map((m, i) =>
             i === 0 && echoId && m.kind === undefined ? { ...m, id: echoId } : m,
           );

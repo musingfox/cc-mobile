@@ -148,3 +148,63 @@ describe("TerminalPromptLeavesStreamingAlone", () => {
   });
 });
 
+
+// Review advisory #6: a send whose record never pairs (the agent rewrote the
+// text, or no record came) used to stay in lastOptimisticSend until the tab
+// closed. Entries past the pairing window are dropped where paired ones are.
+describe("OptimisticSendPruning", () => {
+  let prev: any;
+  let realNow: () => number;
+  let clock = 0;
+  beforeEach(() => {
+    prev = getInternal().ws;
+    getInternal().ws = { send: () => {} };
+    getInternal().lastOptimisticSend.clear();
+    useAppStore.setState({ sessions: new Map(), activeSessionId: null });
+    useAppStore.getState().addSession("s1", "/c");
+    realNow = Date.now;
+    clock = 1_000_000;
+    Date.now = () => clock;
+  });
+  afterEach(() => {
+    Date.now = realNow;
+    getInternal().ws = prev;
+    getInternal().lastOptimisticSend.clear();
+  });
+
+  function userRecord(content: string, recordId: string) {
+    getInternal().handleMessage({
+      type: "stream_chunk",
+      sessionId: "s1",
+      chunk: { type: "user", message: { role: "user", content }, recordId, seq: 1 },
+    });
+  }
+
+  const pendingPrompts = () => getInternal().lastOptimisticSend.get("s1")?.map((p) => p.prompt);
+
+  test("a user record that pairs with nothing still drops the sends past the window", () => {
+    wsService.terminalSend("s1", "stale");
+    clock += 200_000;
+    wsService.terminalSend("s1", "fresh");
+    clock += 150_000;
+
+    userRecord("unrelated", "r1");
+
+    expect(pendingPrompts()).toEqual(["fresh"]);
+  });
+
+  test("pairing the last live send leaves no entry for the session", () => {
+    wsService.terminalSend("s1", "stale");
+    clock += 200_000;
+    wsService.terminalSend("s1", "fresh");
+    clock += 150_000;
+
+    userRecord("fresh", "r1");
+
+    expect(getInternal().lastOptimisticSend.has("s1")).toBe(false);
+    const users = useAppStore.getState().sessions.get("s1")!.messages.filter((m) => m.role === "user");
+    // The fresh echo was superseded by its record; the stale one is only
+    // forgotten for pairing, and stays on screen as a local-only bubble.
+    expect(users.map((m) => m.recordId ?? m.content).sort()).toEqual(["r1", "stale"]);
+  });
+});
