@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { swUpdater } from "../../services/sw-update";
+import { bindVisualViewport } from "../../services/visual-viewport";
 import { useAppStore } from "../../stores/app-store";
 import AddProjectScreen from "./AddProjectScreen";
 import ChatScreen from "./ChatScreen";
@@ -44,6 +45,8 @@ export default function AppShell() {
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
+
+  useEffect(() => bindVisualViewport(), []);
 
   const go = (target: ScreenEntry) => {
     const step = planNavigation(readStack(window.history.state) ?? [entry], target);

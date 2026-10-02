@@ -9,7 +9,7 @@ html,
 body,
 #root {
   width: 100%;
-  height: 100vh;
+  height: var(--app-height, 100vh);
   overflow: hidden;
   background: #0e0e10;
 }
@@ -21,7 +21,7 @@ body,
     html,
     body,
     #root {
-      height: 100svh;
+      height: var(--app-height, 100svh);
     }
   }
 }
@@ -386,14 +386,14 @@ button {
 .app {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: var(--app-height, 100vh);
   width: 100%;
 }
 
 @supports (height: 100svh) {
   @media not all and (display-mode: standalone) {
     .app {
-      height: 100svh;
+      height: var(--app-height, 100svh);
     }
   }
 }
