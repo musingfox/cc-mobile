@@ -4,9 +4,9 @@
  * choice (claude by default); its flags come from `argvFor` below.
  *
  * Lifecycle contract: a plain agent argv, duplicate-uuid rejection. Launch is
- * herdr's two-step: `workspace.create` for a pane at a shell prompt, then
- * `agent.start` into that pane. The daemon assembles argv itself and passes
- * `args` through verbatim.
+ * herdr's two-step: `workspace.create` for a pane, then — once that pane's
+ * shell owns its terminal — `agent.start` into it. The daemon assembles argv
+ * itself and passes `args` through verbatim.
  *
  * Since #29 a session cc-mobile starts is an ORDINARY claude: no `--settings`,
  * no settings file, no hooks. Replies are read from the transcript and
@@ -21,7 +21,8 @@ import type { ZodType } from "zod";
 import { z } from "zod";
 import { DEFAULT_AGENT_KIND, type LaunchableAgentKind } from "../agents/kinds";
 import type { AgentGetFn } from "./readiness";
-import { waitForInteractiveReady } from "./readiness";
+import { waitForAvailableShell, waitForInteractiveReady } from "./readiness";
+import { PaneProcessInfoResultSchema } from "./schema";
 
 // ── Wire schemas (local: these three RPCs have no typed client method) ────────
 
@@ -58,6 +59,8 @@ export interface HerdrRegistryOptions {
   /** Readiness gate tuning + test seams. */
   readinessBudgetMs?: number;
   readinessPollMs?: number;
+  shellBudgetMs?: number;
+  shellPollMs?: number;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
 }
@@ -161,6 +164,17 @@ export function createHerdrRegistry(options: HerdrRegistryOptions) {
       );
       workspaceId = created.workspace.workspace_id;
       const paneId = created.root_pane.pane_id;
+
+      await waitForAvailableShell({
+        processInfo: async (pane) =>
+          (await client.call("pane.process_info", { pane_id: pane }, PaneProcessInfoResultSchema))
+            .process_info,
+        paneId,
+        budgetMs: options.shellBudgetMs,
+        pollMs: options.shellPollMs,
+        sleep: options.sleep,
+        now: options.now,
+      });
 
       // argv is passed through verbatim by the daemon.
       await client.call(

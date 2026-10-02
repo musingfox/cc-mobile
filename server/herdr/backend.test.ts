@@ -49,6 +49,18 @@ function makeFakeClient(results: Record<string, FakeResult> = {}) {
           root_pane: { pane_id: "p1" },
         };
       }
+      // The new pane's shell at its prompt, so createSession may start the agent.
+      if (method === "pane.process_info") {
+        return {
+          type: "pane_process_info",
+          process_info: {
+            pane_id: (params as { pane_id: string }).pane_id,
+            shell_pid: 4100,
+            foreground_process_group_id: 4100,
+            foreground_processes: [{ pid: 4100, name: "zsh" }],
+          },
+        };
+      }
       return { type: "ok" };
     },
     agentGet: async () => ({ interactive_ready: true }),

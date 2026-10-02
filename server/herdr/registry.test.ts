@@ -44,13 +44,46 @@ function makeFakeClient(
         // The fake must speak the daemon's dialect or schema bugs slip through.
         case "agent.start":
           return { type: "agent_started" };
+        // A shell at its prompt: it leads its own foreground group, alone.
+        case "pane.process_info":
+          return availableShell("p1");
         default:
           return { type: "ok" };
       }
     }) as never,
     agentGet,
   };
-  return { client, calls, methods: () => calls.map((call) => call.method) };
+  return {
+    client,
+    calls,
+    methods: () => calls.map((call) => call.method),
+    start: () => calls.find((call) => call.method === "agent.start"),
+  };
+}
+
+function availableShell(paneId: string) {
+  return {
+    type: "pane_process_info",
+    process_info: {
+      pane_id: paneId,
+      shell_pid: 4100,
+      foreground_process_group_id: 4100,
+      foreground_processes: [{ pid: 4100, name: "zsh" }],
+    },
+  };
+}
+
+/** The shell is still running an rc-file command in the foreground. */
+function busyShell(paneId: string) {
+  return {
+    type: "pane_process_info",
+    process_info: {
+      pane_id: paneId,
+      shell_pid: 4100,
+      foreground_process_group_id: 4188,
+      foreground_processes: [{ pid: 4188, name: "brew" }],
+    },
+  };
 }
 
 function makeRegistry(fake: ReturnType<typeof makeFakeClient>) {
@@ -81,13 +114,13 @@ describe("HerdrCreateSession", () => {
     // herdr rejects agent names longer than 32 chars.
     expect(result.agentName.length).toBeLessThanOrEqual(32);
 
-    expect(fake.methods()).toEqual(["workspace.create", "agent.start"]);
+    expect(fake.methods()).toEqual(["workspace.create", "pane.process_info", "agent.start"]);
     expect(fake.calls[0]?.params).toEqual({
       label: `ccm-${UUID}`,
       cwd: "/tmp",
       focus: false,
     });
-    expect(fake.calls[1]?.params).toEqual({
+    expect(fake.start()?.params).toEqual({
       name: "ccm-3f2a9b01",
       kind: "claude",
       pane_id: "p1",
@@ -109,7 +142,7 @@ describe("HerdrCreateSession", () => {
     // `--session-id` is claude's flag and omp would die on it; herdr hands omp
     // its transcript path instead. Live probe 2026-08-06: args:[] acks with
     // argv:["omp"].
-    expect(fake.calls[1]?.params).toEqual({
+    expect(fake.start()?.params).toEqual({
       name: "ccm-3f2a9b01",
       kind: "omp",
       pane_id: "p1",
@@ -128,7 +161,7 @@ describe("HerdrCreateSession", () => {
       profileArgs: ["--config", "/x.yml"],
     });
 
-    expect(fake.calls[1]?.params).toEqual({
+    expect(fake.start()?.params).toEqual({
       name: "ccm-3f2a9b01",
       kind: "omp",
       pane_id: "p1",
@@ -147,7 +180,7 @@ describe("HerdrCreateSession", () => {
       profileArgs: ["--foo"],
     });
 
-    expect(fake.calls[1]?.params).toEqual({
+    expect(fake.start()?.params).toEqual({
       name: "ccm-3f2a9b01",
       kind: "claude",
       pane_id: "p1",
@@ -166,7 +199,7 @@ describe("HerdrCreateSession", () => {
       profileArgs: ["--approval-mode", "always-ask"],
     });
 
-    expect(fake.calls[1]?.params).toEqual({
+    expect(fake.start()?.params).toEqual({
       name: "ccm-3f2a9b01",
       kind: "omp",
       pane_id: "p1",
@@ -181,8 +214,8 @@ describe("HerdrCreateSession", () => {
     // What every PWA bundle cached before #31 sends.
     await registry.createSession({ claudeUuid: UUID, cwd: "/tmp" });
 
-    expect((fake.calls[1]?.params as { kind: string }).kind).toBe("claude");
-    expect((fake.calls[1]?.params as { args: string[] }).args).toEqual(["--session-id", UUID]);
+    expect((fake.start()?.params as { kind: string }).kind).toBe("claude");
+    expect((fake.start()?.params as { args: string[] }).args).toEqual(["--session-id", UUID]);
   });
 
   test("registry-generated argv carries no gating flag, whatever the kind", async () => {
@@ -194,7 +227,7 @@ describe("HerdrCreateSession", () => {
 
       await registry.createSession({ claudeUuid: UUID, cwd: "/tmp", agentKind });
 
-      const args = (fake.calls[1]?.params as { args: string[] }).args;
+      const args = (fake.start()?.params as { args: string[] }).args;
       for (const flag of ["--permission-mode", "--approval-mode", "--auto-approve"]) {
         expect(args).not.toContain(flag);
       }
@@ -269,6 +302,65 @@ describe("HerdrCreateSession", () => {
   });
 });
 
+/**
+ * HerdrShellGate — `agent.start` refuses a pane whose shell does not own its
+ * terminal yet (`agent_pane_busy`), and `workspace.create` returns before the
+ * user's rc files have finished. Audit 2026-10-03: one create in two failed.
+ */
+describe("HerdrShellGate", () => {
+  test("starts the agent only once the new pane's shell owns its terminal", async () => {
+    const readings = [
+      { type: "pane_process_info", process_info: { pane_id: "p1", shell_pid: null } },
+      busyShell("p1"),
+      availableShell("p1"),
+    ];
+    const fake = makeFakeClient({
+      "pane.process_info": async () => readings.shift() ?? availableShell("p1"),
+      "agent.start": async () => {
+        // The daemon's own check, at the moment it would make it.
+        if (readings.length > 0) throw new Error("agent_pane_busy: not an available shell");
+        return { type: "agent_started" };
+      },
+    });
+    const registry = makeRegistry(fake);
+
+    await registry.createSession({ claudeUuid: UUID, cwd: "/tmp" });
+
+    expect(fake.methods()).toEqual([
+      "workspace.create",
+      "pane.process_info",
+      "pane.process_info",
+      "pane.process_info",
+      "agent.start",
+    ]);
+    expect(fake.calls[1]?.params).toEqual({ pane_id: "p1" });
+  });
+
+  test("a shell that never comes up fails the create plainly and leaves no workspace", async () => {
+    const fake = makeFakeClient({ "pane.process_info": async () => busyShell("p1") });
+    let current = 0;
+    const registry = createHerdrRegistry({
+      client: fake.client,
+      shellBudgetMs: 1_000,
+      shellPollMs: 100,
+      sleep: async (ms) => {
+        current += ms;
+      },
+      now: () => current,
+    });
+
+    await expect(registry.createSession({ claudeUuid: UUID, cwd: "/tmp" })).rejects.toThrow(
+      /did not reach its shell prompt/,
+    );
+
+    expect(fake.methods()).not.toContain("agent.start");
+    expect(fake.calls.find((call) => call.method === "workspace.close")?.params).toEqual({
+      workspace_id: "w1",
+    });
+    expect(registry.hasSession(UUID)).toEqual({ present: false });
+  });
+});
+
 describe("PersistentSessionLabel", () => {
   test("labels the workspace with the full lowercased uuid while the agent name stays 8 chars", async () => {
     const mixedCase = "3F2B8C1D-9E4A-4B6F-8C2D-1A5E7F9B0C3D";
@@ -284,7 +376,7 @@ describe("PersistentSessionLabel", () => {
     // herdr. The agent name cannot carry this — herdr caps names at 32.
     expect(createParams.label.length).toBe(40);
 
-    const startParams = fake.calls[1]?.params as { name: string };
+    const startParams = fake.start()?.params as { name: string };
     expect(startParams.name).toBe("ccm-3f2b8c1d");
     expect(startParams.name.length).toBeLessThanOrEqual(32);
   });

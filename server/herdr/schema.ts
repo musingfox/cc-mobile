@@ -160,6 +160,7 @@ export type SessionSnapshot = z.infer<typeof SessionSnapshotSchema>;
  */
 export const PaneProcessSchema = z
   .object({
+    pid: z.number().optional(),
     argv: z.array(z.string()).nullish(),
     argv0: z.string().nullish(),
   })
@@ -169,6 +170,8 @@ export type PaneProcess = z.infer<typeof PaneProcessSchema>;
 export const PaneProcessInfoSchema = z
   .object({
     pane_id: z.string(),
+    shell_pid: z.number().nullish(),
+    foreground_process_group_id: z.number().nullish(),
     foreground_processes: z.array(PaneProcessSchema).nullish(),
   })
   .passthrough();
