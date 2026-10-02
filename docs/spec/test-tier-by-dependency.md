@@ -5,10 +5,11 @@ scope:
   - "client/**/*.test.ts"
   - "client/**/*.test.tsx"
   - "server/**/*.test.ts"
+  - "test/*.test.ts"
   - "tests/**/*.test.ts"
   - "bunfig.toml"
   - "package.json"
-verify: null
+verify: test:server/__tests__/test-tier-guard.test.ts
 related: []
 source: null
 adr: null
@@ -23,7 +24,8 @@ daemon or an agent binary on `PATH` — and it never runs in the commit gate.
 
 Tier membership is enforced in two places that must agree. `bunfig.toml`'s
 `pathIgnorePatterns` and `package.json`'s test scripts decide what each command
-collects; a guard test walks the files the commit gate collects and asserts
+collects; `server/__tests__/test-tier-guard.test.ts` walks the files the commit
+gate collects — Bun's own discovery rule minus those patterns — and asserts
 zero hits for the forbidden dependencies, the way
 `server/__tests__/dead-code-residue.test.ts` walks `server/` and `client/` and
 asserts zero hits for deleted paths.
@@ -42,15 +44,29 @@ writes outside its sandbox can change what a live server serves — TC13 spawns
 `DIST_DIR` and what pm2's `cc-mobile-prod` is serving; each rebuild re-stamps
 `sw.js`'s `CACHE_NAME`, so every commit made the phone's PWA purge its cache.
 No assertion in that test mentions any of it. It now lives in
-`client/integration/pwa-build.test.ts`, out of the gate.
+`client/integration/pwa-build.test.ts`, out of the gate, and CI runs it as its
+own step (`bun run test:build`), where `dist/` is disposable.
 
-`verify` stays null because a check today could cover only two of the three
-clauses. Spawn is greppable and green now that TC13 has moved. The port clause
-is greppable only as a non-zero literal argument to `.listen(` or `Bun.serve(`
-— every bind in the collected tests is `.listen(0)`, so grepping the bare call
-would be red on day one. The write clause has no robust static form and is red
-regardless: every test exercising `createUploadPlugin` writes into
-`~/.cache/cc-mobile/uploads`, because `server/upload-manager.ts:7` hardcodes
-`homedir()` with no injectable root. A check asserting two clauses while the
-spec claims three is a false receipt, so this becomes `test:` when the write
-clause has both a sandbox seam and a check that does not need one.
+The guard is static, so each clause is checked in the form a scan can see. A
+spawn is a call to `Bun.spawn`, the Bun shell, or an import of
+`child_process`. A fixed port is a non-zero literal reaching `.listen(` or
+`Bun.serve(` — directly, or through an in-file binding such as
+`serverConfig.port` — or a `Bun.serve` that names no port at all and so takes
+3000; grepping the bare call would be red on day one, because every bind in the
+gate is `.listen(0)`. A write is a filesystem call whose path argument,
+followed through in-file bindings and path-building calls, is rooted at a
+string literal, `import.meta`, `__dirname`, `process.cwd()` or `homedir()`; or
+a call into the upload functions without the root `server/upload-manager.ts`
+takes, whose default is `~/.cache/cc-mobile/uploads`. That seam is what made the
+write clause checkable: before it, every test exercising `createUploadPlugin`
+wrote into the home cache and the check would have been red with no way to
+comply.
+
+What the scan cannot see stays a rule the reader holds, not a receipt: a path
+that arrives through a function parameter or from a helper module (imported,
+not collected — `ws-harness.ts` and `app-gate-harness.ts` both bind
+`.listen(0)` today), and a production default under the home directory that the
+guard's list does not name. The guard went red on the files it was written
+against, planted back into collected paths: the old `server/static.test.ts`
+writing `<repo>/test-dist`, the old upload tests writing the home cache, and
+TC13.

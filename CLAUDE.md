@@ -34,6 +34,7 @@ bun install              # Install dependencies
 bun run dev:server       # Elysia backend on 0.0.0.0:3001
 bunx vite --host         # Vite frontend on :5173 (network accessible)
 bun test                 # Run unit tests (bun:test) — hermetic, no daemon needed
+bun run test:build       # PWA build check — rewrites dist/client, so CI runs it, not the commit gate
 bun run test:herdr       # Live e2e against a running herdr daemon + `claude` binary
 bun run build            # Production build (Vite outputs to dist/client/)
 ```
