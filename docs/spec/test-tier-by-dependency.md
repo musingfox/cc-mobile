@@ -2,14 +2,18 @@
 id: test-tier-by-dependency
 status: accepted
 scope:
+  - "client/*.test.ts"
+  - "client/*.test.tsx"
   - "client/**/*.test.ts"
   - "client/**/*.test.tsx"
+  - "server/*.test.ts"
   - "server/**/*.test.ts"
   - "test/*.test.ts"
+  - "tests/*.test.ts"
   - "tests/**/*.test.ts"
   - "bunfig.toml"
   - "package.json"
-verify: test:server/__tests__/test-tier-guard.test.ts
+verify: check:bun test ./server/__tests__/test-tier-guard.test.ts
 related: []
 source: null
 adr: null
