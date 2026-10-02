@@ -314,7 +314,24 @@ Schemas defined in `server/protocol.ts`. Full spec in `cc-mobile.md`.
   A push suppressed for a foreground device is one line per subscription with
   `status: null`, `reason: "foreground"` and `skipped: true` — the field a sent
   or failed line never carries, so a skip cannot be read as either.
-- Constant generic payload only; no session/cwd/tool in the push body (traverses APNs).
+- **A push names the project, never the work** (`server/push/payload.ts`,
+  decided 2026-10-03, ADR-017 §push-meaningful-copy). The copy transits Apple and shows on a lock
+  screen anyone holding the phone can read without unlocking: a project name
+  is the accepted exposure, what the session is doing is not. A push about
+  exactly one pane — any `blocked`, or a turn window that flushes one pane —
+  names that pane's project, the basename of the cwd herdr reports
+  (`A turn finished in <project>`, `Permission needed in <project>`). A merged
+  turn for several panes carries only the count (`3 sessions finished`). The
+  pane title (`terminal_title_stripped`), the cwd above its basename, tool
+  names and task content are never sent; `PushAbout` has no field that could
+  carry them.
+- No cwd, a cwd with no usable basename, or a failed `agent.get` sends today's
+  exact generic copy (`A turn finished` / `Permission needed`) — never a blank,
+  never a guess. The project name is cut at 64 code points with `…`, so the
+  payload stays far under APNs' 4 KB whatever the directory is called.
+- The tag stays one per kind, so a later push replaces an earlier one of the
+  same kind on the lock screen: a turn in project B replaces the one that
+  named project A. Accepted, for the same reason the window merges turns.
 - VAPID from CC_MOBILE_VAPID_* envs; positive TTL (0→1); 410/404 prunes subscription.
 - Subscribe at /api/push/subscribe (dedup by endpoint, allowlist apple, max 10; optional `device` string, trimmed and capped at 200 exactly like `?device=`, blank → none); public key at /api/push/public-key (503 if unset).
 
