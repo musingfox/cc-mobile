@@ -14,6 +14,14 @@
  * Two files are excluded by name: this one, and the retired-message protocol
  * test, which has to spell the dead message names out in order to assert that
  * the schema refuses them.
+ *
+ * StreamEventPipelineResidueScan covers the client's SDK-era chunk pipeline,
+ * which the server stopped feeding at #25. Two of its patterns are narrower
+ * than the rest, on purpose: `stream_event` is scanned in production files
+ * only, because tests still feed it as a chunk the client must ignore; and
+ * `currentStreamMessageId` is allowed exactly once, in the loader that strips
+ * it from blobs older bundles left in localStorage. The exception is named
+ * here rather than hidden by splitting the identifier at its use site.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -25,15 +33,19 @@ const scanRoots = ["server", "client"].map((d) => join(repoRoot, d));
 
 const EXCLUDED_FILES = new Set(["dead-code-residue.test.ts", "protocol-retired-messages.test.ts"]);
 
-function collectSourceFiles(dir: string, out: string[] = []): string[] {
+function collectSourceFiles(
+  dir: string,
+  out: string[] = [],
+  extensions: string[] = [".ts", ".tsx"],
+): string[] {
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) {
       if (entry === "node_modules") continue;
-      collectSourceFiles(full, out);
+      collectSourceFiles(full, out, extensions);
       continue;
     }
-    if (!entry.endsWith(".ts") && !entry.endsWith(".tsx")) continue;
+    if (!extensions.some((extension) => entry.endsWith(extension))) continue;
     if (EXCLUDED_FILES.has(entry)) continue;
     out.push(full);
   }
@@ -56,6 +68,19 @@ const sourceFiles = (() => {
 function hits(pattern: string): string[] {
   return sourceFiles.filter((f) => f.text.includes(pattern)).map((f) => f.path);
 }
+
+function isProduction(path: string): boolean {
+  return !path.includes(".test.") && !path.includes("__tests__");
+}
+
+const stylesheets = (() => {
+  const files = collectSourceFiles(join(repoRoot, "client"), [], [".css"]);
+  if (files.length === 0) throw new Error("scan found no stylesheets");
+  return files.map((path) => ({
+    path: path.slice(repoRoot.length + 1),
+    text: readFileSync(path, "utf8"),
+  }));
+})();
 
 const packageJson = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8")) as {
   dependencies: Record<string, string>;
@@ -197,6 +222,80 @@ describe("DeadModuleResidueScan — deleted files stay deleted", () => {
     join("server", `session${"-"}history.ts`),
     join("server", `capabilities${"-"}cache.ts`),
     join("server", `capabilities${"-"}cache.test.ts`),
+  ])("%s does not exist", (relative) => {
+    expect(existsSync(join(repoRoot, relative))).toBe(false);
+  });
+});
+
+describe("StreamEventPipelineResidueScan", () => {
+  const deletedIdentifiers = [
+    // The chunk type-guard module, and the guards it exported.
+    `tool${"-"}events`,
+    `is${"Task"}Started`,
+    `is${"Task"}Progress`,
+    `is${"Task"}Notification`,
+    `is${"Hook"}Started`,
+    `is${"Hook"}Response`,
+    `is${"Prompt"}Suggestion`,
+    `is${"Api"}Retry`,
+    `is${"SessionState"}Changed`,
+    `is${"Memory"}Recall`,
+    `is${"Compact"}Boundary`,
+    `is${"Permission"}Denied`,
+    `Terminal${"Reason"}`,
+    // ws-service's handlers for those chunks.
+    `handle${"MemoryRecall"}Chunk`,
+    `handle${"PermissionDenied"}Chunk`,
+    `handle${"ApiRetry"}Chunk`,
+    `handle${"Notification"}Chunk`,
+    `handle${"CompactBoundary"}Chunk`,
+    `get${"TerminalReason"}Message`,
+    `derive${"Context"}Usage`,
+    `MAX_TOKENS${"_"}FALLBACK`,
+    `resolve${"Agent"}Attribution`,
+    // The streaming bubble and the renderer's fast path for it.
+    `start${"Stream"}Message`,
+    `appendToLast${"Assistant"}Message`,
+    `STREAM_RENDER${"_"}INTERVAL`,
+    `skip${"Enhancements"}`,
+    // The unmounted AskUserQuestion island.
+    `AskUserQuestion${"UI"}`,
+    `Question${"Stepper"}`,
+    `Option${"Button"}`,
+  ];
+
+  test.each(deletedIdentifiers)("no source file references %s", (pattern) => {
+    expect(hits(pattern)).toEqual([]);
+  });
+
+  test.each([
+    `lin${"-"}caret`,
+    `lin-thinking${"--"}streaming`,
+    `lin-tool-card${"-"}agent`,
+  ])("no stylesheet defines %s", (pattern) => {
+    expect(stylesheets.filter((f) => f.text.includes(pattern)).map((f) => f.path)).toEqual([]);
+  });
+
+  test("no production file names the stream_event chunk", () => {
+    expect(hits(`stream${"_"}event`).filter(isProduction)).toEqual([]);
+  });
+
+  test("the retired bubble id survives only as the field the loader strips", () => {
+    const field = `current${"StreamMessage"}Id`;
+    const production = hits(field).filter(isProduction);
+    expect(production).toEqual([join("client", "services", "session-persistence.ts")]);
+    const loader = sourceFiles.find((f) => f.path === production[0])?.text ?? "";
+    expect(loader.split(field).length - 1).toBe(1);
+    expect(loader).toContain(`Reflect.deleteProperty(parsed as object, "${field}")`);
+  });
+
+  test.each([
+    join("client", "services", `tool${"-"}events.ts`),
+    join("client", "components", `AskUserQuestion${"UI"}.tsx`),
+    join("client", "components", `Question${"Stepper"}.tsx`),
+    join("client", "components", `Option${"Button"}.tsx`),
+    join("client", "components", "linear", `ask${"-"}question.css`),
+    join("tests", `contracts${".test"}.ts`),
   ])("%s does not exist", (relative) => {
     expect(existsSync(join(repoRoot, relative))).toBe(false);
   });
