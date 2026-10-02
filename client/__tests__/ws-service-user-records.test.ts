@@ -111,3 +111,40 @@ describe("OptimisticEchoSupersede", () => {
     expect(useAppStore.getState().inputDraft).toContain("hello");
   });
 });
+
+// Review advisory #3: a prompt typed at the terminal reaches the phone as a
+// `user` record. Whether the agent is working is session_state's to say, and a
+// chunk-driven `true` that lands after an authoritative idle would never be
+// cleared, so a user record must not touch the flag at all.
+describe("TerminalPromptLeavesStreamingAlone", () => {
+  let prev: any;
+  beforeEach(() => {
+    prev = getInternal().ws;
+    getInternal().ws = { send: () => {} };
+    useAppStore.setState({ sessions: new Map(), activeSessionId: null });
+    useAppStore.getState().addSession("s1", "/c");
+  });
+  afterEach(() => { getInternal().ws = prev; });
+
+  const typed = {
+    type: "stream_chunk",
+    sessionId: "s1",
+    chunk: { type: "user", message: { role: "user", content: "typed at the terminal" }, recordId: "t1", seq: 5, epoch: "aaaa" },
+  };
+
+  test("a prompt typed at the terminal is shown without raising the streaming flag", () => {
+    getInternal().handleMessage(typed);
+    const session = useAppStore.getState().sessions.get("s1")!;
+    expect(session.messages.map((m) => m.recordId)).toEqual(["t1"]);
+    expect(session.isStreaming).toBe(false);
+  });
+
+  test("nor does it raise the flag again after session_state has said idle", () => {
+    getInternal().handleMessage({ type: "session_state", sessionId: "s1", state: "running" });
+    getInternal().handleMessage({ type: "session_state", sessionId: "s1", state: "idle" });
+    getInternal().handleMessage(typed);
+    getInternal().handleMessage({ type: "stream_end", sessionId: "s1" });
+    expect(useAppStore.getState().sessions.get("s1")!.isStreaming).toBe(false);
+  });
+});
+

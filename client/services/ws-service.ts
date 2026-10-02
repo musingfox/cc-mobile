@@ -428,6 +428,11 @@ class WsService {
             messages: projected,
           });
         } else if (chunk.type === "user") {
+          // No setStreaming here (review advisory #3): a user record is the
+          // prompt, not a reply, and whether the agent is working is
+          // session_state's to say. A chunk-driven `true` that lands after an
+          // authoritative idle is never cleared, because stream_end leaves the
+          // flag alone once session_state has spoken.
           const userText = projected.find(
             (m) => m.kind === undefined && m.role === "user",
           )?.content;
