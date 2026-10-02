@@ -1,14 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const TEST_DIST_DIR = join(import.meta.dir, "..", "test-dist", "client");
+const TEST_ROOT = mkdtempSync(join(tmpdir(), "static-test-"));
+const TEST_DIST_DIR = join(TEST_ROOT, "client");
 
 beforeAll(() => {
-  // Create test dist directory
-  if (existsSync(TEST_DIST_DIR)) {
-    rmSync(TEST_DIST_DIR, { recursive: true });
-  }
   mkdirSync(TEST_DIST_DIR, { recursive: true });
   writeFileSync(join(TEST_DIST_DIR, "index.html"), "<html>Test Index</html>");
   mkdirSync(join(TEST_DIST_DIR, "assets"), { recursive: true });
@@ -16,10 +14,7 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  // Cleanup
-  if (existsSync(join(import.meta.dir, "..", "test-dist"))) {
-    rmSync(join(import.meta.dir, "..", "test-dist"), { recursive: true });
-  }
+  rmSync(TEST_ROOT, { recursive: true, force: true });
 });
 
 describe("Static file serving", () => {
