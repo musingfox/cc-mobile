@@ -115,6 +115,11 @@ export interface AppTestDeps {
   agentProfiles?: AgentProfileSource;
   /** The built client to serve; production serves `DIST_DIR`. */
   distDir?: string;
+  /**
+   * The replay buffer, so a test can tell that an event landed while no socket
+   * was open — the one moment nothing else can observe it.
+   */
+  eventBuffer?: EventBuffer;
 }
 
 /** Builds the whole server. The returned app has not been listened on. */
@@ -126,7 +131,7 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
   const auditLog = createAuditLog(deps.auditLogPath ? { path: deps.auditLogPath } : {});
 
   // Persistent across reconnects; the WS plugin appends to it and replays from it.
-  const eventBuffer = new EventBuffer(500);
+  const eventBuffer = deps.eventBuffer ?? new EventBuffer(500);
 
   // Late-bound handle on the live socket. The WS plugin sets it on open and
   // clears it on close, which is what lets collaborators built here push to a

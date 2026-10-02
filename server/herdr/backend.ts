@@ -152,7 +152,7 @@ export interface HerdrTerminalBackend extends TerminalBackend {
   permissionAutoDenyMs(requestId: string): number | undefined;
   /** Connection lost: stop treating pending prompts as seen by the phone. */
   pausePermissions(): void;
-  /** Reconnect: re-read and re-emit every prompt still on screen. */
+  /** A phone listed its sessions: re-read and re-send every prompt still on screen. */
   resumePermissions(): Promise<void>;
   /**
    * How many phones are registered for background push, as this backend sees

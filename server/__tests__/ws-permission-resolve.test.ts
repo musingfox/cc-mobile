@@ -108,13 +108,19 @@ describe("PermissionAnswerKeySend — transport dispatch", () => {
     await harness.waitFor((msg) => msg.type === "terminal_sessions");
   });
 
-  test("a reconnect asks the backend to re-read prompts still on screen", async () => {
+  test("a session listing asks the backend to re-read prompts still on screen", async () => {
     const { backend, counts } = backendWithPermissions();
     harness = await startWsHarness(backend);
 
+    harness.send({ type: "list_terminal_sessions" });
+    await harness.waitFor((msg) => msg.type === "terminal_sessions");
+    await settle();
+    expect(counts().resumed).toBe(1);
+
+    // A prompt is not a reconnect: re-raising here would re-send every card on
+    // every message the user types.
     harness.send({ type: "terminal_send", claudeUuid: "u1", content: "hi" });
     await settle();
-
     expect(counts().resumed).toBe(1);
   });
 });

@@ -198,15 +198,25 @@ export function createNativePermission(options: NativePermissionOptions) {
     bySessionOfRequest.set(requestId, sessionId);
     // Armed before the frame goes out, so the frame can say whether it was.
     armDeny(entry);
+    raise(entry, sample);
+    return entry;
+  }
+
+  /** Sends the phone this request as it stands, countdown included. */
+  function raise(
+    entry: PendingNativePermission,
+    sample: { parsed: ParsedPrompt | null; text: string },
+  ): void {
+    const { parsed } = sample;
     const autoDenyMs = timeLeft(entry);
 
     // An unreadable screen still raises a request: the user must be able to see
     // that something is waiting and cancel it, rather than watch a session sit
     // silently blocked.
-    getSink(sessionId)?.({
+    getSink(entry.sessionId)?.({
       type: "permission_request",
-      sessionId,
-      requestId,
+      sessionId: entry.sessionId,
+      requestId: entry.requestId,
       tool: {
         name: parsed?.toolLabel || "Permission required",
         parameters: parsed
@@ -224,8 +234,6 @@ export function createNativePermission(options: NativePermissionOptions) {
       // and the phone's clock and this machine's need not agree.
       ...(autoDenyMs !== undefined ? { autoDenyMs } : {}),
     });
-
-    return entry;
   }
 
   /** What is left of a running countdown; `undefined` when none is running. */
@@ -538,12 +546,22 @@ export function createNativePermission(options: NativePermissionOptions) {
   }
 
   /**
-   * Reconnect: re-emit every still-live prompt as a FRESH request read from the
-   * live screen, rather than replaying a stored payload. A prompt answered at
-   * the terminal during the gap is dropped instead of re-shown (EX-C2).
+   * A phone has listed its sessions: hand it every prompt still on screen, read
+   * from the live screen rather than replayed from a stored payload, so a prompt
+   * answered at the terminal in the meantime is dropped instead of re-shown
+   * (EX-C2). A countdown frozen while no phone was connected runs again from
+   * the frame sent here.
+   *
+   * Not gated on a pause having happened. The server learns that a phone's old
+   * socket is gone only when it closes, up to the idle timeout later, so the
+   * phone routinely lists on a new socket before then — and a phone that
+   * reloaded has lost its card either way.
+   *
+   * The prompt the phone was shown keeps its id, so a card held through a short
+   * drop still answers. Only a prompt that changed during the gap is a new
+   * request, carrying the countdown already spent.
    */
   async function resume(): Promise<void> {
-    if (!paused) return;
     paused = false;
     for (const entry of [...pending.values()]) {
       let stillBlocked = false;
@@ -552,13 +570,21 @@ export function createNativePermission(options: NativePermissionOptions) {
       } catch (error) {
         warn(`${entry.sessionId}: agent.get failed on resume: ${describe(error)}`);
       }
+      // Replaced while the read was in flight: whatever replaced it was sent
+      // to the phone already, and is the newer word on this pane.
+      if (pending.get(entry.sessionId) !== entry) continue;
       if (!stillBlocked) {
         drop(entry.sessionId);
         continue;
       }
       const sample = await readPrompt(entry.sessionId);
-      if (!sample) continue;
-      const spent = entry.elapsedMs;
+      if (!sample || pending.get(entry.sessionId) !== entry) continue;
+      if ((sample.parsed?.fingerprint ?? UNPARSED_FINGERPRINT) === entry.fingerprint) {
+        if (entry.timerId === undefined) armDeny(entry);
+        raise(entry, sample);
+        continue;
+      }
+      const spent = entry.elapsedMs + (entry.armedAt === undefined ? 0 : now() - entry.armedAt);
       drop(entry.sessionId);
       emit(entry.sessionId, sample, entry.origin, spent);
     }

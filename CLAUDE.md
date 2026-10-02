@@ -124,11 +124,24 @@ cc-mobile did not launch, on a question, and while the countdown is frozen —
 and the card shows a number only when it has one. It is a duration, not a
 timestamp, on purpose: the phone turns it into a deadline on its own clock, and
 the two machines' clocks need not agree. Every socket close freezes every
-countdown until the next `terminal_send` re-raises the prompt, so the phone
-drops its deadline when its socket closes, and a reconnect replays a buffered
-prompt with the time left re-read rather than the figure it was sent with. A
-buffered prompt that is no longer its pane's current one (answered, or
-superseded by a newer prompt) is not replayed at all.
+countdown, so the phone drops its deadline when its socket closes, and a
+reconnect replays a buffered prompt with the time left re-read rather than the
+figure it was sent with. A buffered prompt that is no longer its pane's current
+one (answered, or superseded by a newer prompt) is not replayed at all.
+
+The card itself comes back from `list_terminal_sessions`, which every open
+sends: right after the `terminal_sessions` reply — never before, or a pane the
+phone has never seen would have no session to hold the card — the server
+re-reads every pending prompt off the live screen and sends it again. That is how
+a phone that was asleep when claude blocked, or that reloaded and lost its card
+(the card is not persisted, and the replay cursor may already be past it), gets
+it without sending anything. A prompt still showing the same fingerprint keeps
+its `requestId`, so a card held through a short drop still answers; one that
+changed during the gap is a new request, and one no longer on screen is dropped.
+The frozen countdown runs again from that frame, whose `autoDenyMs` is what was
+left — between the socket opening and its listing nothing counts down, because
+the phone has nothing to answer yet. `terminal_send` re-raises nothing: a typed
+prompt is not a reconnect.
 
 Since #31 `terminal_create` carries an optional `agentKind` naming which agent to
 start (`server/agents/kinds.ts`; absent → `claude`, which is what every bundle

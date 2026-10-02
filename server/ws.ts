@@ -458,6 +458,19 @@ export function createWsPlugin(
               claudeUuids: sessions.map((session) => session.sessionId),
               states,
             });
+
+            // Every open lists, so this is where a returning phone gets the
+            // prompts still on screen — whether they were raised before the
+            // drop or during it. After the reply, not before: the client files
+            // a card under a session it holds, and a pane it has never seen
+            // exists for it only once this listing has arrived.
+            try {
+              await backend.resumePermissions?.();
+            } catch (error) {
+              console.warn(
+                `[ws] pending prompts not re-raised: ${error instanceof Error ? error.message : String(error)}`,
+              );
+            }
             break;
           }
 
@@ -523,11 +536,7 @@ export function createWsPlugin(
               (msg: Record<string, unknown>) => sendBuffered(ws, claudeUuid, msg),
               ownerOf(ws),
             );
-            // Any prompt still blocked from before the disconnect is re-read
-            // from the live screen and re-raised to the freshly-rebound sink,
-            // rather than replayed from a stored payload.
             try {
-              await backend.resumePermissions?.();
               await backend.send({ claudeUuid, content });
               await audit({
                 action: "prompt_send",

@@ -458,3 +458,41 @@ handler、`SessionManager` 的 append 緩衝與 `stopTask`、client 的兩個 se
 
 `interrupt` 不在這次範圍。它對 session map 的刪除同樣是空操作，但 `destroySession` 仍會清掉
 該 id 的上傳目錄，要不要退休是另一個決定。
+
+## 2026-10-03 增修：待答提示在重連時由 session 列表重送
+
+手機的核心流程是：手機睡著時 claude 卡在權限提示，推播叫醒使用者，使用者打開 app，卡片必須
+已經在那裡可以回答。修正前卡片常常不在。
+
+### 查證到的原因
+
+- socket 關閉時 `cleanupByOwner` 只拿掉擁有者索引，sink 本身留著，仍綁在舊 socket 上
+  （`send-routing.ts`）。所以斷線期間出現的提示會進 replay buffer，但只有送出 `reconnect`、
+  而且游標早於那則提示的手機拿得回來。
+- 有兩種常見的手機拿不回來。一種是從沒列過那個 pane 的手機：沒有 sink，buffer 裡也沒有。另一種
+  是重新載入過的 PWA：卡片不持久化（`loadSessionState` 把 `pendingPermission` 歸零），持久化的
+  游標卻可能已經越過斷線前就收到的那則提示。
+- 會從畫面重讀並重送提示的 `resumePermissions()` 只在 `terminal_send` 裡呼叫，所以使用者得先送
+  一句話，卡片才會回來。
+
+### 決定
+
+1. **重送掛在 `list_terminal_sessions` 上，放在 `terminal_sessions` 回覆之後。** 每次開 socket
+   都會送列表。client 只把卡片放進它已有的 session，從沒見過的 pane 要等這個回覆才存在，所以
+   順序不能反過來。
+2. **不以「先前暫停過」為前提。** server 要等舊 socket 真的 close 才知道它斷了，最多晚一個 idle
+   timeout（240 秒）；手機常在那之前就用新 socket 列表。重新載入的手機不論有沒有暫停，都已經
+   沒有卡片。
+3. **畫面上 fingerprint 不變的提示沿用原本的 `requestId`。** 短暫斷線後手機留著的卡片照樣答得了；
+   換新 id 會讓那一下點擊變成 `unowned`，什麼鍵都沒按。斷線期間畫面換了一道提示才發新 id，並
+   沿用已花掉的倒數；畫面上已沒有提示就丟掉。這修訂了 `native-permission.ts` 原本「重連一律發
+   新 id」的做法。新 id 是為「換了一道題」準備的（見上一段 §權限回覆綁在 request 上），同一道
+   題沒有理由換。
+4. **`terminal_send` 不再重送。** 重送不再以暫停為前提之後，留在這裡等於使用者每送一句話，
+   每張卡片就重發一次。
+5. **倒數在重送的那一刻恢復**：重新上膛，frame 帶著剩下的 `autoDenyMs`。socket 開了但還沒列表的
+   這段時間不計時，因為手機還沒有東西可答。從不列表的連線會讓倒數一直凍著，方向是保守的：
+   `esc` 只是晚一點送。
+
+由 `server/__tests__/ws-permission-reconnect.test.ts` 的 `PermissionDeliveredOnReconnect` 釘住，
+走 `createApp` 的完整組裝，只有 herdr daemon 是假的。

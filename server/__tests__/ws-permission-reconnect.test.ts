@@ -16,6 +16,7 @@ import { join } from "node:path";
 import { WebSocket } from "ws";
 import { emptyAgentProfileSource } from "../agents/profiles";
 import { type AppBackend, createApp } from "../app";
+import { EventBuffer } from "../event-buffer";
 import { createSubscriptionStore } from "../push/subscription-store";
 import { testServerConfig } from "./ws-harness";
 
@@ -29,11 +30,12 @@ type PaneEvent = { event: string; data: unknown };
 type Frame = Record<string, unknown>;
 
 /**
- * A daemon with one claude pane in a workspace the user opened themselves. The
- * label is deliberately not `ccm-`: a self-launched pane arms the 90 s deny,
- * whose timer this test has no reason to own, and the answer path is the same.
+ * A daemon with one claude pane, by default in a workspace the user opened
+ * themselves. The default label is deliberately not `ccm-`: a self-launched pane
+ * arms the 90 s deny, whose timer only the countdown tests have reason to own,
+ * and the answer path is the same.
  */
-function fakeHerdr() {
+function fakeHerdr(workspaceLabel = "user-terminal") {
   const status = { value: "idle" };
   const keys: { pane: string; keys: string[] }[] = [];
   const emitter: { emit?: (event: PaneEvent) => void } = {};
@@ -55,7 +57,7 @@ function fakeHerdr() {
     sessionSnapshot: async () => ({
       version: "0.7.5",
       protocol: 17,
-      workspaces: [{ workspace_id: "w9R", label: "user-terminal" }],
+      workspaces: [{ workspace_id: "w9R", label: workspaceLabel }],
       panes: [],
       agents: [],
     }),
@@ -279,5 +281,157 @@ describe("ResolvedPromptNotReplayed", () => {
     const replayed = await replayAfter(() => {});
 
     expect(replayed.filter(isPermissionRequest)).toHaveLength(1);
+  }, 15_000);
+});
+
+const SELF_LAUNCHED = "ccm-0f8e7d6c-5b4a-4392-8170-6f5e4d3c2b1a";
+
+async function assembled(workspaceLabel?: string) {
+  const herdr = fakeHerdr(workspaceLabel);
+  const eventBuffer = new EventBuffer(500);
+  const backendRef: { current: AppBackend | null } = { current: null };
+  const app = createApp(testServerConfig, {
+    herdrClient: herdr.client as never,
+    backendRef,
+    gateEnv: {},
+    agentProfiles: emptyAgentProfileSource(),
+    eventBuffer,
+    ...tmpPaths(),
+  });
+  app.listen(0);
+  const server = app.server;
+  if (!server || server.port === undefined) throw new Error("app failed to listen");
+  const backend = backendRef.current as AppBackend | null;
+  if (!backend) throw new Error("createApp did not hand back its backend");
+  return {
+    herdr,
+    eventBuffer,
+    backend,
+    port: server.port,
+    async stop() {
+      await backend.teardownAll();
+      server.stop(true);
+    },
+  };
+}
+
+function report(herdr: ReturnType<typeof fakeHerdr>, status: string) {
+  herdr.status.value = status;
+  herdr.emitter.emit?.({
+    event: "pane_updated",
+    data: { pane: { pane_id: PANE, agent: "claude", agent_status: status } },
+  });
+}
+
+type Socket = Awaited<ReturnType<typeof connect>>;
+
+/** What every open sends, and the card it brings back. */
+async function listAndTakeCard(socket: Socket) {
+  socket.send({ type: "list_terminal_sessions" });
+  const envelope = await socket.waitFor(isPermissionRequest);
+  // After the listing, never before it: the client files a card under a
+  // session it already holds, and a pane it has never seen is created only by
+  // the listing.
+  const listedAt = socket.received.findIndex((frame) => frame.type === "terminal_sessions");
+  expect(listedAt).toBeGreaterThanOrEqual(0);
+  expect(listedAt).toBeLessThan(socket.received.indexOf(envelope));
+  return envelope.payload as { requestId: string; autoDenyMs?: number };
+}
+
+/**
+ * The push flow: claude blocks while the phone sleeps, the push wakes the user,
+ * the app opens. What the phone sends on that open is a session listing, not a
+ * prompt — and a phone that reloaded has neither the card nor a replay cursor
+ * that predates it. The card has to come from the listing.
+ */
+describe("PermissionDeliveredOnReconnect", () => {
+  test("a prompt raised while no phone was connected reaches the next one to list", async () => {
+    const env = await assembled();
+    try {
+      const first = await connect(env.port);
+      first.send({ type: "list_terminal_sessions" });
+      await first.waitFor((frame) => frame.type === "terminal_sessions");
+      await first.close();
+
+      report(env.herdr, "blocked");
+      await until(
+        () =>
+          env.eventBuffer
+            .replay(PANE, -1)
+            .some((event) => event.message?.type === "permission_request"),
+        "the prompt raised in the gap",
+      );
+
+      const second = await connect(env.port);
+      const card = await listAndTakeCard(second);
+      second.send({ type: "permission", requestId: card.requestId, optionId: "3" });
+      await until(() => env.herdr.keys.length > 0, "a key to reach the pane");
+
+      expect(env.herdr.keys).toEqual([{ pane: PANE, keys: ["3"] }]);
+      expect(second.received.filter((frame) => frame.type === "error")).toEqual([]);
+      await second.close();
+    } finally {
+      await env.stop();
+    }
+  }, 15_000);
+
+  test("a prompt already up before the drop reaches a phone that lost its card", async () => {
+    const env = await assembled();
+    try {
+      const first = await connect(env.port);
+      first.send({ type: "list_terminal_sessions" });
+      await first.waitFor((frame) => frame.type === "terminal_sessions");
+      report(env.herdr, "blocked");
+      await first.waitFor(isPermissionRequest);
+      await first.close();
+
+      const second = await connect(env.port);
+      const card = await listAndTakeCard(second);
+      second.send({ type: "permission", requestId: card.requestId, optionId: "3" });
+      await until(() => env.herdr.keys.length > 0, "a key to reach the pane");
+
+      expect(env.herdr.keys).toEqual([{ pane: PANE, keys: ["3"] }]);
+      await second.close();
+    } finally {
+      await env.stop();
+    }
+  }, 15_000);
+
+  test("the countdown frozen by the drop runs again from the card the listing raises", async () => {
+    const env = await assembled(SELF_LAUNCHED);
+    try {
+      const first = await connect(env.port);
+      first.send({ type: "list_terminal_sessions" });
+      await first.waitFor((frame) => frame.type === "terminal_sessions");
+      report(env.herdr, "blocked");
+      const raised = (await first.waitFor(isPermissionRequest)).payload as { requestId: string };
+      expect(env.backend.permissionAutoDenyMs?.(raised.requestId)).toBeNumber();
+
+      await first.close();
+      await until(
+        () => env.backend.permissionAutoDenyMs?.(raised.requestId) === undefined,
+        "the drop to freeze the countdown",
+      );
+
+      const second = await connect(env.port);
+      // Connected is not shown: until the listing raises the card again the
+      // phone has nothing to answer, so nothing counts down.
+      expect(env.backend.permissionAutoDenyMs?.(raised.requestId)).toBeUndefined();
+      const card = await listAndTakeCard(second);
+
+      expect(card.autoDenyMs).toBeGreaterThan(0);
+      expect(card.autoDenyMs).toBeLessThanOrEqual(90_000);
+      expect(env.backend.permissionAutoDenyMs?.(card.requestId)).toBeNumber();
+
+      // Settling the prompt is what clears its real 90 s timer.
+      report(env.herdr, "idle");
+      await until(
+        () => env.backend.permissionAutoDenyMs?.(card.requestId) === undefined,
+        "the settled prompt to drop its countdown",
+      );
+      await second.close();
+    } finally {
+      await env.stop();
+    }
   }, 15_000);
 });

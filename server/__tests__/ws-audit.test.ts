@@ -161,10 +161,6 @@ describe("PromptSendAudited", () => {
 
   test.each([
     ["send", { send: async () => Promise.reject(new Error("boom")) }],
-    [
-      "permission resume",
-      { resumePermissions: async () => Promise.reject(new Error("resume failed")) },
-    ],
   ])("records failed when %s rejects", async (_step, overrides) => {
     const { path, auditLog } = setup();
     harness = await startWsHarness(backend(overrides), undefined, { auditLog });

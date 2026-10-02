@@ -320,11 +320,12 @@ describe("UnattendedDenyForSelfLaunched — across a disconnect", () => {
     await h.clock.advance(90_000);
     await h.permission.resume();
 
-    // A fresh request read off the screen, not a replay of the stored payload.
+    // Re-sent after a live re-read, under the id the phone already holds: the
+    // screen still shows the prompt it was asked.
     expect(h.sent).toHaveLength(2);
     const second = h.sent[1] as { requestId: string; type: string };
     expect(second.type).toBe("permission_request");
-    expect(second.requestId).not.toBe(first);
+    expect(second.requestId).toBe(first);
 
     // 30 s was already spent, so 60 s remain — not a fresh 90.
     await h.clock.advance(59_999);

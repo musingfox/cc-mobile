@@ -313,7 +313,7 @@ describe("PermissionAnswerKeySend", () => {
 });
 
 describe("native permission across a disconnect", () => {
-  test("a reconnect re-emits the live prompt as a fresh request, not a replay", async () => {
+  test("a reconnect re-raises the prompt still on screen under the id the phone holds", async () => {
     const h = harness();
     await h.permission.onStatus(PANE, "blocked");
     const first = (h.sent[0] as { requestId: string }).requestId;
@@ -324,10 +324,43 @@ describe("native permission across a disconnect", () => {
     expect(h.sent).toHaveLength(2);
     const second = h.sent[1] as { requestId: string; type: string };
     expect(second.type).toBe("permission_request");
+    // A phone that kept its card through a short drop taps the id it already
+    // has; a fresh id here would make that tap press nothing.
+    expect(second.requestId).toBe(first);
+    expect(await h.permission.resolve(first, { optionId: "1" })).toBe(true);
+    expect(h.keys).toEqual([{ pane: PANE, keys: ["1"] }]);
+  });
+
+  test("a prompt replaced during the gap is raised as a new request", async () => {
+    const h = harness();
+    await h.permission.onStatus(PANE, "blocked");
+    const first = (h.sent[0] as { requestId: string }).requestId;
+
+    h.permission.pause();
+    h.screen.text = OTHER_PROMPT;
+    await h.permission.resume();
+
+    const second = h.sent[1] as { requestId: string };
     expect(second.requestId).not.toBe(first);
-    // The stale id no longer answers anything.
+    // The old id names a question nobody is asking any more.
     expect(await h.permission.resolve(first, { optionId: "1" })).toBe(false);
     expect(await h.permission.resolve(second.requestId, { optionId: "1" })).toBe(true);
+  });
+
+  test("a phone listing again while connected gets the prompt without a refilled countdown", async () => {
+    const clock = makeFakeClock();
+    const h = harness({ origin: "self", clock });
+    await h.permission.onStatus(PANE, "blocked", "claude");
+    await clock.advance(30_000);
+
+    await h.permission.resume();
+
+    const again = h.sent[1] as { requestId: string; autoDenyMs?: number };
+    expect(again.requestId).toBe("r1");
+    expect(again.autoDenyMs).toBe(UNATTENDED_DENY_MS - 30_000);
+
+    await clock.advance(UNATTENDED_DENY_MS - 30_000);
+    expect(h.keys).toEqual([{ pane: PANE, keys: ["esc"] }]);
   });
 
   test("a prompt answered in the terminal during the gap is dropped, not re-shown", async () => {
