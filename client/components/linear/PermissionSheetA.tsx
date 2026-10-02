@@ -44,9 +44,15 @@ export default function PermissionSheetA({ pending, onApprove, onDeny, onChoose 
   // at its start leaves the move and end handlers inert, so the card never even
   // offers the drag as visual feedback.
   const isQuestion = pending?.promptKind === "question";
+  // The server could not parse the screen and offers only its synthetic
+  // Cancel (Esc). It may be a question, so there is nothing to approve: a
+  // right swipe here used to send Esc too, cancelling whatever was asked.
+  const unreadable =
+    pending !== null &&
+    (!pending.options?.length || pending.options.every((option) => option.id === "cancel"));
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (isQuestion) return;
+    if (isQuestion || unreadable) return;
     touchStartX.current = e.touches[0].clientX;
   };
 
@@ -108,16 +114,23 @@ export default function PermissionSheetA({ pending, onApprove, onDeny, onChoose 
       <div className="lin-permission-row">
         <Icon name="shield" size={14} color={T.accentWarn} />
         <span className="lin-permission-label">
-          {isQuestion ? "Question" : "Permission Required"}
+          {isQuestion ? "Question" : unreadable ? "Can't read this prompt" : "Permission Required"}
         </span>
-        {!isQuestion && <span className="lin-permission-timer">{secondsLeft}s</span>}
+        {!isQuestion && !unreadable && <span className="lin-permission-timer">{secondsLeft}s</span>}
       </div>
-      <div className="lin-permission-tool">{pending.tool.name}</div>
+      {unreadable ? (
+        <div className="lin-permission-description">
+          The terminal is waiting, but cc-mobile can't read what it is asking. Answer it in the
+          terminal, or Cancel to press Esc there.
+        </div>
+      ) : (
+        <div className="lin-permission-tool">{pending.tool.name}</div>
+      )}
       <div className="lin-permission-target">{targetOf(pending)}</div>
       {typeof description === "string" && description.length > 0 && (
         <div className="lin-permission-description">{description}</div>
       )}
-      {!isQuestion && (
+      {!isQuestion && !unreadable && (
         <div className="lin-permission-hint">
           <Icon name="swipe" size={11} color={T.fg3} />
           <span>swipe right to approve, left to deny</span>

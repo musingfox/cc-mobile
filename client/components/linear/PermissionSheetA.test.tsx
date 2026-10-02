@@ -316,3 +316,63 @@ describe("QuestionCardIgnoresSwipe", () => {
     expect(counts.approved).toBe(1);
   });
 });
+
+/**
+ * UnreadablePromptCard — the server could not parse the screen and sent its
+ * Cancel-only fallback, with no kind. The card used to read "Permission
+ * Required" and promise "swipe right to approve", and both swipes sent Esc:
+ * on a question cc-mobile could not parse, a right swipe cancelled it
+ * (audit 2026-10-03 #4).
+ */
+describe("UnreadablePromptCard", () => {
+  afterEach(() => cleanup());
+
+  /** Exactly what native-permission sends for a screen it could not parse. */
+  const unreadable: PendingPermission = {
+    requestId: "req-u",
+    tool: { name: "Permission required", parameters: { text: "Enter to select · Esc to cancel" } },
+    options: [{ id: "cancel", label: "Cancel", keystroke: "esc" }],
+  };
+
+  test("says it cannot read the prompt, and promises no approval", () => {
+    const { container } = render(
+      <PermissionSheetA pending={unreadable} onApprove={() => {}} onDeny={() => {}} />,
+    );
+
+    expect(container.querySelector(".lin-permission-label")?.textContent).toBe(
+      "Can't read this prompt",
+    );
+    expect(container.textContent).not.toContain("Permission Required");
+    expect(container.textContent).not.toContain("approve");
+    expect(container.querySelector(".lin-permission-hint")).toBeNull();
+    expect(container.querySelector(".lin-permission-timer")).toBeNull();
+    expect(container.querySelector(".lin-permission-target")?.textContent).toBe(
+      "Enter to select · Esc to cancel",
+    );
+  });
+
+  test("neither swipe does anything; the only control is an explicit Cancel", () => {
+    const counts = { approved: 0, denied: 0 };
+    const chosen: string[] = [];
+    const { container } = render(
+      <PermissionSheetA
+        pending={unreadable}
+        onApprove={() => counts.approved++}
+        onDeny={() => counts.denied++}
+        onChoose={(id) => chosen.push(id)}
+      />,
+    );
+    const sheet = container.querySelector(".lin-permission") as HTMLElement;
+
+    swipe(sheet, 50, 150);
+    swipe(sheet, 200, 100);
+    expect(counts).toEqual({ approved: 0, denied: 0 });
+
+    const actions = Array.from(
+      container.querySelectorAll(".lin-permission-actions button"),
+    ) as HTMLButtonElement[];
+    expect(actions.map((b) => b.textContent)).toEqual(["Cancel"]);
+    fireEvent.click(actions[0]);
+    expect(chosen).toEqual(["cancel"]);
+  });
+});

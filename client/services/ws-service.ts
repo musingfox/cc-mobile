@@ -995,7 +995,9 @@ class WsService {
   approvePermission(sessionId: string) {
     const pending = useAppStore.getState().sessions.get(sessionId)?.pendingPermission;
     const first = pending?.options?.[0];
-    if (!first) return;
+    // An unreadable screen's only option is the synthetic Esc: an approval
+    // there would cancel whatever the terminal was asking.
+    if (!first || first.id === "cancel") return;
     this.answerPermissionOption(sessionId, first.id);
   }
 

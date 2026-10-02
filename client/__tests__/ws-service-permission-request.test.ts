@@ -1,5 +1,10 @@
-import { describe, expect, test } from "bun:test";
-import { pendingFromPermissionRequest, permissionResolution } from "../services/ws-service";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import {
+  pendingFromPermissionRequest,
+  permissionResolution,
+  wsService,
+} from "../services/ws-service";
+import { useAppStore } from "../stores/app-store";
 
 /**
  * The kind the server read off the screen has to survive the frame being
@@ -69,5 +74,57 @@ describe("permissionResolution", () => {
     expect(permissionResolution({ promptKind: "permission", options }, "1")).toBe("approved");
     expect(permissionResolution({ promptKind: "permission", options }, "2")).toBe("denied");
     expect(permissionResolution({ options }, "cancel")).toBe("denied");
+  });
+});
+
+/**
+ * The swipe-right shortcut takes the terminal's first option. On the
+ * Cancel-only fallback that option is Esc, so "approve" cancelled the prompt.
+ */
+describe("ApproveNeverCancels", () => {
+  const internal = wsService as unknown as { ws: WebSocket | null };
+  let prevWs: WebSocket | null;
+  const sent: string[] = [];
+
+  beforeEach(() => {
+    sent.length = 0;
+    prevWs = internal.ws;
+    internal.ws = { send: (data: string) => sent.push(data) } as unknown as WebSocket;
+    useAppStore.setState({ sessions: new Map(), activeSessionId: null });
+    useAppStore.getState().addSession("p1", "/repo", { ready: true });
+  });
+
+  afterEach(() => {
+    internal.ws = prevWs;
+  });
+
+  test("approving the Cancel-only fallback sends nothing and keeps the card", () => {
+    useAppStore.getState().setPermission("p1", {
+      requestId: "r1",
+      tool: { name: "Permission required", parameters: { text: "raw screen" } },
+      options: [{ id: "cancel", label: "Cancel", keystroke: "esc" }],
+    });
+
+    wsService.approvePermission("p1");
+
+    expect(sent).toEqual([]);
+    expect(useAppStore.getState().sessions.get("p1")?.pendingPermission?.requestId).toBe("r1");
+  });
+
+  test("approving a parsed permission prompt still answers its first option", () => {
+    useAppStore.getState().setPermission("p1", {
+      requestId: "r2",
+      tool: { name: "Bash command", parameters: { text: "touch x" } },
+      options: [
+        { id: "1", label: "Yes", keystroke: "1" },
+        { id: "2", label: "No", keystroke: "2" },
+      ],
+    });
+
+    wsService.approvePermission("p1");
+
+    expect(sent.map((data) => JSON.parse(data))).toEqual([
+      { type: "permission", requestId: "r2", optionId: "1" },
+    ]);
   });
 });
