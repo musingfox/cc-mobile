@@ -196,7 +196,9 @@ export function createWsPlugin(
     },
 
     async message(ws, data) {
-      console.log("[ws] received:", (data as Record<string, unknown>)?.type ?? "unknown");
+      const type = (data as Record<string, unknown>)?.type ?? "unknown";
+      // A visible phone heartbeats `visibility` every 10 s; logging it would bury the rest.
+      if (type !== "visibility") console.log("[ws] received:", type);
 
       const parsed = ClientMessage.safeParse(data);
       if (!parsed.success) {
