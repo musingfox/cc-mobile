@@ -38,6 +38,8 @@ export interface WsHarness {
     timeoutMs?: number,
   ): Promise<Record<string, unknown>>;
   close(): Promise<void>;
+  /** Closes this client's socket and leaves the server running. */
+  disconnect(): Promise<void>;
 }
 
 /** Collaborator overrides for tests that need a real one instead of the stub. */
@@ -112,6 +114,13 @@ export async function startWsHarness(
           clearTimeout(timer);
           resolve(msg);
         });
+      });
+    },
+    disconnect() {
+      if (socket.readyState === WebSocket.CLOSED) return Promise.resolve();
+      return new Promise<void>((resolve) => {
+        socket.onclose = () => resolve();
+        socket.close();
       });
     },
     close() {

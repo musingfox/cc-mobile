@@ -492,7 +492,8 @@ handler、`SessionManager` 的 append 緩衝與 `stopTask`、client 的兩個 se
    每張卡片就重發一次。
 5. **倒數在重送的那一刻恢復**：重新上膛，frame 帶著剩下的 `autoDenyMs`。socket 開了但還沒列表的
    這段時間不計時，因為手機還沒有東西可答。從不列表的連線會讓倒數一直凍著，方向是保守的：
-   `esc` 只是晚一點送。
+   `esc` 只是晚一點送。列表還在向 herdr 讀資料時 socket 就關了的話，那次列表不重送：沒有人
+   看得到卡片，重送只會把 close 剛凍結的倒數又啟動。
 
 由 `server/__tests__/ws-permission-reconnect.test.ts` 的 `PermissionDeliveredOnReconnect` 釘住，
 走 `createApp` 的完整組裝，只有 herdr daemon 是假的。

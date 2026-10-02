@@ -467,6 +467,10 @@ export function createWsPlugin(
             // drop or during it. After the reply, not before: the client files
             // a card under a session it holds, and a pane it has never seen
             // exists for it only once this listing has arrived.
+            // A socket that closed while the listing was read has nobody to
+            // show a card to, and resuming would restart the countdowns its
+            // close just froze.
+            if (!openConnections.has(ownerOf(ws))) break;
             try {
               await backend.resumePermissions?.();
             } catch (error) {
