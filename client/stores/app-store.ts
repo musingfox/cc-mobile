@@ -29,8 +29,6 @@ export type Message = {
   timestamp: number;
   toolName?: string;
   toolInput?: Record<string, unknown>;
-  agentLabel?: string;
-  agentDescription?: string;
   kind?: "compact_boundary" | "permission_denied" | "thinking" | "tool_use" | "tool_result";
   compactMetadata?: CompactMetadata;
   /** From transcript record for history / dedup */

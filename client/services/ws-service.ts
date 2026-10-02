@@ -1,7 +1,6 @@
 import type { PromptKind } from "../../server/protocol";
 import { debugLog } from "../components/DebugOverlay";
 import {
-  type ActiveAgent,
   type ActiveTool,
   type AgentInfo,
   type AgentProfile,
@@ -38,37 +37,6 @@ import {
   type TerminalReason,
 } from "./tool-events";
 import { messagesFromProjectedChunk } from "./transcript-projection";
-
-/**
- * Resolve the subagent attribution for a completed tool by walking
- * `precedingToolUseIds` → `activeTools[id].parentToolUseId` → `activeAgents`
- * (matched by `toolUseId`). Returns the first non-null match across the batch
- * so a summary covering multiple tool ids still attributes correctly.
- */
-export function resolveAgentAttribution(
-  session: { activeTools: Map<string, ActiveTool>; activeAgents: Map<string, ActiveAgent> },
-  precedingToolUseIds: string[],
-): { label: string; description: string } | null {
-  if (!precedingToolUseIds || precedingToolUseIds.length === 0) return null;
-
-  for (const toolUseId of precedingToolUseIds) {
-    const tool = session.activeTools.get(toolUseId);
-    if (!tool) continue;
-    const parentId = tool.parentToolUseId;
-    if (!parentId) continue;
-
-    for (const agent of session.activeAgents.values()) {
-      if (agent.toolUseId === parentId) {
-        return {
-          label: agent.taskType ?? "Agent",
-          description: agent.description,
-        };
-      }
-    }
-  }
-
-  return null;
-}
 
 /**
  * Synthesize an `ActiveTool` entry for an SDK `memory_recall` system message

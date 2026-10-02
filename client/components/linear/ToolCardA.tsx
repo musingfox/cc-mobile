@@ -8,8 +8,6 @@ interface Props {
   toolName: string;
   input: Record<string, unknown>;
   result: string;
-  agentLabel?: string;
-  agentDescription?: string;
 }
 
 function iconFor(toolName: string): IconName {
@@ -47,31 +45,15 @@ function diffOf(toolName: string, input: Record<string, unknown>) {
   }
 }
 
-export default function ToolCardA({
-  toolName,
-  input,
-  result,
-  agentLabel,
-  agentDescription,
-}: Props) {
+export default function ToolCardA({ toolName, input, result }: Props) {
   const [expanded, setExpanded] = useState(false);
   const diff = diffOf(toolName, input);
   const addCount = diff ? diff.filter((l) => l.type === "add").length : 0;
   const removeCount = diff ? diff.filter((l) => l.type === "remove").length : 0;
   const target = targetOf(toolName, input);
-  const showAgent = Boolean(agentLabel) && Boolean(agentDescription);
 
   return (
     <div className="lin-tool-card">
-      {showAgent && (
-        <div className="lin-tool-card-agent" title={agentDescription}>
-          <span className="lin-tool-card-agent-spark" aria-hidden>
-            ✦
-          </span>
-          <span className="lin-tool-card-agent-label">{agentLabel}</span>
-          <span className="lin-tool-card-agent-desc">{agentDescription}</span>
-        </div>
-      )}
       <button
         type="button"
         className="lin-tool-card-header"
