@@ -3,11 +3,11 @@ import { extname, join } from "node:path";
 import { Elysia, t } from "elysia";
 import type { ServerConfig } from "./config";
 import { buildUrl } from "./path-utils";
-import { ensureUploadDir, safeSessionDir } from "./upload-manager";
+import { DEFAULT_UPLOADS_ROOT, ensureUploadDir, safeSessionDir } from "./upload-manager";
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 
-export function createUploadPlugin(serverConfig: ServerConfig) {
+export function createUploadPlugin(serverConfig: ServerConfig, uploadsRoot = DEFAULT_UPLOADS_ROOT) {
   const uploadPath = buildUrl(serverConfig.basePath, "/api/upload");
 
   return new Elysia().post(
@@ -24,7 +24,7 @@ export function createUploadPlugin(serverConfig: ServerConfig) {
 
       // Guard: validate sessionId before touching the filesystem
       try {
-        safeSessionDir(sessionId);
+        safeSessionDir(sessionId, uploadsRoot);
       } catch {
         return new Response(JSON.stringify({ error: "invalid sessionId" }), {
           status: 400,
@@ -47,7 +47,7 @@ export function createUploadPlugin(serverConfig: ServerConfig) {
       }
 
       try {
-        const uploadDir = await ensureUploadDir(sessionId);
+        const uploadDir = await ensureUploadDir(sessionId, uploadsRoot);
         const uuid = crypto.randomUUID();
         const ext = extname(file.name);
         const filename = `${uuid}${ext}`;

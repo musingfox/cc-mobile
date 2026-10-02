@@ -1,5 +1,7 @@
-import { describe, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
+import { afterAll, describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Elysia } from "elysia";
 import { createUploadPlugin } from "../upload";
 import { cleanupUploads, getUploadDir } from "../upload-manager";
@@ -14,9 +16,15 @@ const serverConfig = {
   pushScope: "phone-last" as const,
 };
 
+const uploadsRoot = mkdtempSync(join(tmpdir(), "upload-test-"));
+
+afterAll(() => {
+  rmSync(uploadsRoot, { recursive: true, force: true });
+});
+
 describe("Upload endpoint", () => {
   test("C2-TC1: Successful file upload returns path and metadata", async () => {
-    const app = new Elysia().use(createUploadPlugin(serverConfig));
+    const app = new Elysia().use(createUploadPlugin(serverConfig, uploadsRoot));
     const sessionId = "sess-test-123";
 
     // Create a test file
@@ -47,11 +55,11 @@ describe("Upload endpoint", () => {
     expect(existsSync(result.path)).toBe(true);
 
     // Cleanup
-    await cleanupUploads(sessionId);
+    await cleanupUploads(sessionId, uploadsRoot);
   });
 
   test("C2-TC2: Missing sessionId returns 4xx error", async () => {
-    const app = new Elysia().use(createUploadPlugin(serverConfig));
+    const app = new Elysia().use(createUploadPlugin(serverConfig, uploadsRoot));
 
     const file = new File(["test"], "test.txt");
     const formData = new FormData();
@@ -75,7 +83,7 @@ describe("Upload endpoint", () => {
     // Creating an actual 100MB+ file would be too slow for unit tests
     // The size check is at line 26-31 in upload.ts: if (file.size > MAX_FILE_SIZE)
 
-    const app = new Elysia().use(createUploadPlugin(serverConfig));
+    const app = new Elysia().use(createUploadPlugin(serverConfig, uploadsRoot));
     const sessionId = "sess-size-check";
 
     // Test with a normal-sized file to ensure the code path works
@@ -95,15 +103,15 @@ describe("Upload endpoint", () => {
     expect(response.status).toBe(200);
 
     // Cleanup
-    await cleanupUploads(sessionId);
+    await cleanupUploads(sessionId, uploadsRoot);
   });
 
   test("C2-TC4: Upload directory is created if it doesn't exist", async () => {
-    const app = new Elysia().use(createUploadPlugin(serverConfig));
+    const app = new Elysia().use(createUploadPlugin(serverConfig, uploadsRoot));
     const sessionId = `sess-new-${Date.now()}`;
 
     // Ensure upload dir doesn't exist
-    const uploadDir = getUploadDir(sessionId);
+    const uploadDir = getUploadDir(sessionId, uploadsRoot);
     expect(existsSync(uploadDir)).toBe(false);
 
     const file = new File(["test"], "test.txt");
@@ -124,11 +132,11 @@ describe("Upload endpoint", () => {
     expect(existsSync(uploadDir)).toBe(true);
 
     // Cleanup
-    await cleanupUploads(sessionId);
+    await cleanupUploads(sessionId, uploadsRoot);
   });
 
   test("C2-TC5: Multiple files can be uploaded to same session", async () => {
-    const app = new Elysia().use(createUploadPlugin(serverConfig));
+    const app = new Elysia().use(createUploadPlugin(serverConfig, uploadsRoot));
     const sessionId = "sess-multi-upload";
 
     const file1 = new File(["content1"], "file1.txt");
@@ -166,6 +174,6 @@ describe("Upload endpoint", () => {
     expect(existsSync(result2.path)).toBe(true);
 
     // Cleanup
-    await cleanupUploads(sessionId);
+    await cleanupUploads(sessionId, uploadsRoot);
   });
 });

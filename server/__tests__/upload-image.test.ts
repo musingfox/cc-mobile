@@ -1,5 +1,7 @@
-import { describe, expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { afterAll, describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Elysia } from "elysia";
 import { createUploadImagePlugin } from "../upload-image";
 import { cleanupUploads, getUploadDir } from "../upload-manager";
@@ -13,6 +15,12 @@ const serverConfig = {
   allowedRoots: null,
   pushScope: "phone-last" as const,
 };
+
+const uploadsRoot = mkdtempSync(join(tmpdir(), "upload-image-test-"));
+
+afterAll(() => {
+  rmSync(uploadsRoot, { recursive: true, force: true });
+});
 
 // 1x1 transparent PNG
 const PNG_BASE64 =
@@ -30,7 +38,7 @@ function post(app: Elysia, body: unknown) {
 
 describe("Upload-image endpoint", () => {
   test("EX6: base64 PNG -> 200, path scoped to session, .png, file exists, bytes round-trip", async () => {
-    const app = new Elysia().use(createUploadImagePlugin(serverConfig));
+    const app = new Elysia().use(createUploadImagePlugin(serverConfig, uploadsRoot));
     const sessionId = "img-sess-ex6";
     try {
       const res = await post(app, {
@@ -50,33 +58,33 @@ describe("Upload-image endpoint", () => {
       const expected = Buffer.from(atob(PNG_BASE64), "binary");
       expect(Buffer.compare(written, expected)).toBe(0);
     } finally {
-      await cleanupUploads(sessionId);
+      await cleanupUploads(sessionId, uploadsRoot);
     }
   });
 
   test("EX7a: missing sessionId -> 4xx, no file written", async () => {
-    const app = new Elysia().use(createUploadImagePlugin(serverConfig));
+    const app = new Elysia().use(createUploadImagePlugin(serverConfig, uploadsRoot));
     const res = await post(app, { base64: PNG_BASE64, mediaType: "image/png" });
     expect(res.status).toBeGreaterThanOrEqual(400);
     expect(res.status).toBeLessThan(500);
   });
 
   test("EX7b: empty base64 -> 4xx, no file written for that session", async () => {
-    const app = new Elysia().use(createUploadImagePlugin(serverConfig));
+    const app = new Elysia().use(createUploadImagePlugin(serverConfig, uploadsRoot));
     const sessionId = "img-sess-ex7b";
     try {
       const res = await post(app, { sessionId, base64: "", mediaType: "image/png" });
       expect(res.status).toBeGreaterThanOrEqual(400);
       expect(res.status).toBeLessThan(500);
       // nothing should have been written
-      expect(existsSync(getUploadDir(sessionId))).toBe(false);
+      expect(existsSync(getUploadDir(sessionId, uploadsRoot))).toBe(false);
     } finally {
-      await cleanupUploads(sessionId);
+      await cleanupUploads(sessionId, uploadsRoot);
     }
   });
 
-  test("EX8: cleanupUploads(sessionId) after upload -> getUploadDir not present", async () => {
-    const app = new Elysia().use(createUploadImagePlugin(serverConfig));
+  test("EX8: cleanupUploads(sessionId, uploadsRoot) after upload -> getUploadDir not present", async () => {
+    const app = new Elysia().use(createUploadImagePlugin(serverConfig, uploadsRoot));
     const sessionId = "img-sess-ex8";
     const res = await post(app, {
       sessionId,
@@ -84,9 +92,9 @@ describe("Upload-image endpoint", () => {
       mediaType: "image/png",
     });
     expect(res.status).toBe(200);
-    expect(existsSync(getUploadDir(sessionId))).toBe(true);
-    await cleanupUploads(sessionId);
-    expect(existsSync(getUploadDir(sessionId))).toBe(false);
+    expect(existsSync(getUploadDir(sessionId, uploadsRoot))).toBe(true);
+    await cleanupUploads(sessionId, uploadsRoot);
+    expect(existsSync(getUploadDir(sessionId, uploadsRoot))).toBe(false);
   });
 
   test("EX-ext: mediaType maps to extension (jpeg->.jpg, gif->.gif, webp->.webp, other->.bin)", async () => {
@@ -97,7 +105,7 @@ describe("Upload-image endpoint", () => {
       ["application/octet-stream", ".bin"],
     ];
     for (const [mediaType, ext] of cases) {
-      const app = new Elysia().use(createUploadImagePlugin(serverConfig));
+      const app = new Elysia().use(createUploadImagePlugin(serverConfig, uploadsRoot));
       const sessionId = `img-sess-ext-${ext.slice(1)}`;
       try {
         const res = await post(app, { sessionId, base64: PNG_BASE64, mediaType });
@@ -105,7 +113,7 @@ describe("Upload-image endpoint", () => {
         const result = (await res.json()) as { path: string };
         expect(result.path.endsWith(ext)).toBe(true);
       } finally {
-        await cleanupUploads(sessionId);
+        await cleanupUploads(sessionId, uploadsRoot);
       }
     }
   });

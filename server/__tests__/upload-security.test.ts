@@ -7,12 +7,14 @@
 //   - Bad base64 → 400, no leftover dir
 //   - Oversize base64 → 413, no leftover dir
 //
-// Hermetic: random sessionIds and canary suffixes; afterEach/finally cleanup.
+// Hermetic: the uploads root is a child of a tmpdir() sandbox, so a traversal
+// canary sits beside it — exactly where `../<name>` would land — and every
+// write stays under tmpdir(). Random sessionIds and canary suffixes.
 // Pattern: new Elysia().use(plugin) + app.handle(new Request(...))
 
-import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, rmSync } from "node:fs";
-import { homedir } from "node:os";
+import { afterAll, afterEach, describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { Elysia } from "elysia";
 import { createUploadPlugin } from "../upload";
@@ -29,7 +31,12 @@ const serverConfig = {
   pushScope: "phone-last" as const,
 };
 
-const uploadsRoot = join(homedir(), ".cache", "cc-mobile", "uploads");
+const sandbox = mkdtempSync(join(tmpdir(), "upload-security-test-"));
+const uploadsRoot = join(sandbox, "uploads");
+
+afterAll(() => {
+  rmSync(sandbox, { recursive: true, force: true });
+});
 
 // 1×1 transparent PNG (valid base64, len % 4 === 0)
 const PNG_BASE64 =
@@ -63,12 +70,12 @@ function postJson(app: Elysia, body: unknown) {
 describe("Security: traversal sessionId — /api/upload (multipart)", () => {
   test("traversal sessionId -> 4xx, canary not written outside uploads root", async () => {
     const rand = crypto.randomUUID();
-    const canaryDir = `/tmp/cc-sec-${rand}`;
+    const canaryDir = join(sandbox, `cc-sec-${rand}`);
     toClean.add(canaryDir);
-    const sessionId = `../../../../tmp/cc-sec-${rand}`;
+    const sessionId = `../cc-sec-${rand}`;
 
     try {
-      const app = new Elysia().use(createUploadPlugin(serverConfig));
+      const app = new Elysia().use(createUploadPlugin(serverConfig, uploadsRoot));
       const file = new File(["x".repeat(64)], "doc.pdf", {
         type: "application/pdf",
       });
@@ -97,12 +104,12 @@ describe("Security: traversal sessionId — /api/upload (multipart)", () => {
 describe("Security: traversal sessionId — /api/upload-image (JSON)", () => {
   test("traversal sessionId -> 4xx, canary not written outside uploads root", async () => {
     const rand = crypto.randomUUID();
-    const canaryDir = `/tmp/cc-sec-img-${rand}`;
+    const canaryDir = join(sandbox, `cc-sec-img-${rand}`);
     toClean.add(canaryDir);
-    const sessionId = `../../../../tmp/cc-sec-img-${rand}`;
+    const sessionId = `../cc-sec-img-${rand}`;
 
     try {
-      const app = new Elysia().use(createUploadImagePlugin(serverConfig));
+      const app = new Elysia().use(createUploadImagePlugin(serverConfig, uploadsRoot));
       const res = await postJson(app, {
         sessionId,
         base64: PNG_BASE64,
@@ -152,10 +159,10 @@ describe("Security: safeSessionDir rejection table", () => {
 describe("Security: legal sessionId — no regression", () => {
   test("valid sessionId -> 200, returned path is under uploadsRoot", async () => {
     const sessionId = `sec-ok-${crypto.randomUUID()}`;
-    toClean.add(getUploadDir(sessionId));
+    toClean.add(getUploadDir(sessionId, uploadsRoot));
 
     try {
-      const app = new Elysia().use(createUploadImagePlugin(serverConfig));
+      const app = new Elysia().use(createUploadImagePlugin(serverConfig, uploadsRoot));
       const res = await postJson(app, {
         sessionId,
         base64: PNG_BASE64,
@@ -168,7 +175,7 @@ describe("Security: legal sessionId — no regression", () => {
       const rootPrefix = resolve(uploadsRoot) + sep;
       expect(resolve(body.path).startsWith(rootPrefix)).toBe(true);
     } finally {
-      rmSync(getUploadDir(sessionId), { recursive: true, force: true });
+      rmSync(getUploadDir(sessionId, uploadsRoot), { recursive: true, force: true });
     }
   });
 });
@@ -178,10 +185,10 @@ describe("Security: legal sessionId — no regression", () => {
 describe("Security: bad base64 input hardening", () => {
   test("base64 with length not a multiple of 4 ('abc') -> 400, no session dir", async () => {
     const sessionId = `sec-b64-${crypto.randomUUID()}`;
-    toClean.add(getUploadDir(sessionId));
+    toClean.add(getUploadDir(sessionId, uploadsRoot));
 
     try {
-      const app = new Elysia().use(createUploadImagePlugin(serverConfig));
+      const app = new Elysia().use(createUploadImagePlugin(serverConfig, uploadsRoot));
       const res = await postJson(app, {
         sessionId,
         base64: "abc",
@@ -189,18 +196,18 @@ describe("Security: bad base64 input hardening", () => {
       });
 
       expect(res.status).toBe(400);
-      expect(existsSync(getUploadDir(sessionId))).toBe(false);
+      expect(existsSync(getUploadDir(sessionId, uploadsRoot))).toBe(false);
     } finally {
-      rmSync(getUploadDir(sessionId), { recursive: true, force: true });
+      rmSync(getUploadDir(sessionId, uploadsRoot), { recursive: true, force: true });
     }
   });
 
   test("invalid base64 characters -> 4xx, no session dir", async () => {
     const sessionId = `sec-inv-${crypto.randomUUID()}`;
-    toClean.add(getUploadDir(sessionId));
+    toClean.add(getUploadDir(sessionId, uploadsRoot));
 
     try {
-      const app = new Elysia().use(createUploadImagePlugin(serverConfig));
+      const app = new Elysia().use(createUploadImagePlugin(serverConfig, uploadsRoot));
       const res = await postJson(app, {
         sessionId,
         base64: "!!!not-base64!!!",
@@ -209,9 +216,9 @@ describe("Security: bad base64 input hardening", () => {
 
       expect(res.status).toBeGreaterThanOrEqual(400);
       expect(res.status).toBeLessThan(600);
-      expect(existsSync(getUploadDir(sessionId))).toBe(false);
+      expect(existsSync(getUploadDir(sessionId, uploadsRoot))).toBe(false);
     } finally {
-      rmSync(getUploadDir(sessionId), { recursive: true, force: true });
+      rmSync(getUploadDir(sessionId, uploadsRoot), { recursive: true, force: true });
     }
   });
 });
@@ -221,11 +228,11 @@ describe("Security: bad base64 input hardening", () => {
 describe("Security: oversize image (413)", () => {
   test("16MB zero-byte image base64 -> 413, no leftover session dir", async () => {
     const sessionId = `sec-big-${crypto.randomUUID()}`;
-    toClean.add(getUploadDir(sessionId));
+    toClean.add(getUploadDir(sessionId, uploadsRoot));
 
     try {
       const bigBase64 = Buffer.from(new Uint8Array(16 * 1024 * 1024)).toString("base64");
-      const app = new Elysia().use(createUploadImagePlugin(serverConfig));
+      const app = new Elysia().use(createUploadImagePlugin(serverConfig, uploadsRoot));
       const res = await postJson(app, {
         sessionId,
         base64: bigBase64,
@@ -233,9 +240,9 @@ describe("Security: oversize image (413)", () => {
       });
 
       expect(res.status).toBe(413);
-      expect(existsSync(getUploadDir(sessionId))).toBe(false);
+      expect(existsSync(getUploadDir(sessionId, uploadsRoot))).toBe(false);
     } finally {
-      rmSync(getUploadDir(sessionId), { recursive: true, force: true });
+      rmSync(getUploadDir(sessionId, uploadsRoot), { recursive: true, force: true });
     }
   });
 });

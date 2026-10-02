@@ -4,9 +4,9 @@ import { homedir } from "node:os";
 import { join, resolve, sep } from "node:path";
 
 const SAFE_SESSION_RE = /^[A-Za-z0-9_-]+$/;
-const uploadsRoot = join(homedir(), ".cache", "cc-mobile", "uploads");
+export const DEFAULT_UPLOADS_ROOT = join(homedir(), ".cache", "cc-mobile", "uploads");
 
-export function safeSessionDir(sessionId: string): string {
+export function safeSessionDir(sessionId: string, uploadsRoot = DEFAULT_UPLOADS_ROOT): string {
   if (!sessionId || !SAFE_SESSION_RE.test(sessionId)) {
     throw new Error("invalid sessionId");
   }
@@ -17,20 +17,26 @@ export function safeSessionDir(sessionId: string): string {
   return dir;
 }
 
-export function getUploadDir(sessionId: string): string {
-  return safeSessionDir(sessionId);
+export function getUploadDir(sessionId: string, uploadsRoot = DEFAULT_UPLOADS_ROOT): string {
+  return safeSessionDir(sessionId, uploadsRoot);
 }
 
-export async function ensureUploadDir(sessionId: string): Promise<string> {
-  const dir = getUploadDir(sessionId);
+export async function ensureUploadDir(
+  sessionId: string,
+  uploadsRoot = DEFAULT_UPLOADS_ROOT,
+): Promise<string> {
+  const dir = getUploadDir(sessionId, uploadsRoot);
   if (!existsSync(dir)) {
     await mkdir(dir, { recursive: true });
   }
   return dir;
 }
 
-export async function cleanupUploads(sessionId: string): Promise<void> {
-  const dir = getUploadDir(sessionId);
+export async function cleanupUploads(
+  sessionId: string,
+  uploadsRoot = DEFAULT_UPLOADS_ROOT,
+): Promise<void> {
+  const dir = getUploadDir(sessionId, uploadsRoot);
   try {
     if (existsSync(dir)) {
       await rm(dir, { recursive: true, force: true });

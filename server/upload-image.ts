@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { Elysia } from "elysia";
 import type { ServerConfig } from "./config";
 import { buildUrl } from "./path-utils";
-import { ensureUploadDir, safeSessionDir } from "./upload-manager";
+import { DEFAULT_UPLOADS_ROOT, ensureUploadDir, safeSessionDir } from "./upload-manager";
 
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -29,7 +29,10 @@ export function decodeBase64(s: string): Uint8Array {
   return bytes;
 }
 
-export function createUploadImagePlugin(serverConfig: ServerConfig) {
+export function createUploadImagePlugin(
+  serverConfig: ServerConfig,
+  uploadsRoot = DEFAULT_UPLOADS_ROOT,
+) {
   const uploadPath = buildUrl(serverConfig.basePath, "/api/upload-image");
 
   return new Elysia().post(uploadPath, async ({ body, set }) => {
@@ -46,7 +49,7 @@ export function createUploadImagePlugin(serverConfig: ServerConfig) {
 
     // Guard: validate sessionId before touching the filesystem
     try {
-      safeSessionDir(sessionId);
+      safeSessionDir(sessionId, uploadsRoot);
     } catch {
       set.status = 400;
       return { error: "invalid sessionId" };
@@ -100,7 +103,7 @@ export function createUploadImagePlugin(serverConfig: ServerConfig) {
     }
 
     try {
-      const uploadDir = await ensureUploadDir(sessionId);
+      const uploadDir = await ensureUploadDir(sessionId, uploadsRoot);
       const uuid = crypto.randomUUID();
       const ext = mediaTypeToExt(mediaType ?? "");
       const filename = `${uuid}${ext}`;
