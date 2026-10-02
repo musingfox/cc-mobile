@@ -23,3 +23,18 @@ describe("Manifest start_url", () => {
     expect(shipped("/cc").start_url).toBe("/cc/");
   });
 });
+
+describe.each(["", "/cc"])("Manifest identity under BASE_PATH=%p", (basePath) => {
+  test("id and scope are the base path, like start_url", () => {
+    const manifest = shipped(basePath);
+    expect(manifest.id).toBe(`${basePath}/`);
+    expect(manifest.scope).toBe(`${basePath}/`);
+  });
+
+  test("the maskable icon is served from under the base path", () => {
+    const maskable = shipped(basePath).icons.find(
+      (i: { purpose?: string }) => i.purpose === "maskable",
+    );
+    expect(maskable.src).toBe(`${basePath}/icons/icon-maskable-512.png`);
+  });
+});

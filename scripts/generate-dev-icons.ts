@@ -15,7 +15,22 @@ const icons: IconConfig[] = [
   { input: "icon-192.png", output: "icon-192-dev.png", size: 192 },
   { input: "icon-512.png", output: "icon-512-dev.png", size: 512 },
   { input: "apple-touch-icon.png", output: "apple-touch-icon-dev.png", size: 180 },
+  { input: "icon-maskable-512.png", output: "icon-maskable-512-dev.png", size: 512 },
 ];
+
+// icon-512 is a circle on transparent corners, which Android's mask would
+// letterbox. Filling the corners with the circle's own rim colour makes it
+// full-bleed (as apple-touch-icon already is), and the logo already sits inside
+// the maskable safe zone, so nothing is rescaled.
+const MASKABLE_RIM = "#1a1412";
+
+async function generateMaskableIcon(): Promise<void> {
+  await sharp(join(iconsDir, "icon-512.png"))
+    .flatten({ background: MASKABLE_RIM })
+    .png()
+    .toFile(join(iconsDir, "icon-maskable-512.png"));
+  console.log("Generated: icon-maskable-512.png");
+}
 
 /**
  * Shift hue of colored pixels (orange → blue, green → purple)
@@ -100,6 +115,8 @@ async function generateDevIcon(config: IconConfig): Promise<void> {
 }
 
 async function main() {
+  await generateMaskableIcon();
+
   console.log("Generating dev icons with hue shift (blue/purple)...");
 
   for (const icon of icons) {

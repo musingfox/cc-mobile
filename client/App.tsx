@@ -47,13 +47,6 @@ export default function App() {
     };
   }, [handleOnline, handleOffline]);
 
-  // Pin theme-color and body background to the Linear neutral canvas.
-  useEffect(() => {
-    const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute("content", "#0e0e10");
-    document.body.style.backgroundColor = "#0e0e10";
-  }, []);
-
   return (
     <ToastProvider theme="dark">
       <div className="app theme-linear">

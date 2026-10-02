@@ -37,7 +37,11 @@ export function substituteBasePath(html: string, basePath: string) {
 
 export function stampManifest(source: string, basePath: string) {
   const manifest = JSON.parse(source);
+  // `id` equals the start_url a manifest without one is identified by, so a
+  // phone that installed before `id` existed keeps the same app.
+  manifest.id = `${basePath}/`;
   manifest.start_url = `${basePath}/`;
+  manifest.scope = `${basePath}/`;
   if (manifest.icons) {
     manifest.icons = manifest.icons.map((icon: { src: string }) => ({
       ...icon,

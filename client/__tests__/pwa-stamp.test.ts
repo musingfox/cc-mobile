@@ -81,6 +81,15 @@ describe("stampManifest", () => {
     expect(JSON.parse(stampManifest(MANIFEST_FIXTURE, "/cc")).start_url).toBe("/cc/");
   });
 
+  test("id and scope follow the base path, added when the source has none", () => {
+    const cc = JSON.parse(stampManifest(MANIFEST_FIXTURE, "/cc"));
+    expect(cc.id).toBe("/cc/");
+    expect(cc.scope).toBe("/cc/");
+    const root = JSON.parse(stampManifest(MANIFEST_FIXTURE, ""));
+    expect(root.id).toBe("/");
+    expect(root.scope).toBe("/");
+  });
+
   test("every icon src is prefixed with the base path, other icon fields kept", () => {
     const icons = JSON.parse(stampManifest(MANIFEST_FIXTURE, "/cc")).icons;
     expect(icons).toEqual([

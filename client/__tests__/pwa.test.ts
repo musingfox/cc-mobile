@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import sharp from "sharp";
+import { tokens } from "../design/tokens";
 
 const CLIENT_ROOT = join(import.meta.dir, "..");
 const PUBLIC_DIR = join(CLIENT_ROOT, "public");
@@ -29,20 +31,20 @@ describe("PWA Manifest", () => {
     expect(Array.isArray(manifest.icons)).toBe(true);
   });
 
-  test("TC2: manifest.json theme_color matches dark theme accent", () => {
+  test("TC2: manifest.json theme_color is the app canvas", () => {
     const manifestPath = join(PUBLIC_DIR, "manifest.json");
     const manifestContent = readFileSync(manifestPath, "utf-8");
     const manifest = JSON.parse(manifestContent);
 
-    expect(manifest.theme_color).toBe("#DA7756");
+    expect(manifest.theme_color).toBe(tokens.bg);
   });
 
-  test("TC3: manifest.json background_color matches dark theme bg", () => {
+  test("TC3: manifest.json background_color is the app canvas", () => {
     const manifestPath = join(PUBLIC_DIR, "manifest.json");
     const manifestContent = readFileSync(manifestPath, "utf-8");
     const manifest = JSON.parse(manifestContent);
 
-    expect(manifest.background_color).toBe("#1a1a2e");
+    expect(manifest.background_color).toBe(tokens.bg);
   });
 
   test("TC4: manifest.json has minimum required icons", () => {
@@ -119,6 +121,23 @@ describe("Icon Files", () => {
     expect(existsSync(icon512)).toBe(true);
     expect(existsSync(appleTouchIcon)).toBe(true);
   });
+
+  // Android crops a maskable icon to its own shape; transparent corners would
+  // show as a letterbox instead.
+  test.each([
+    "manifest.json",
+    "manifest.dev.json",
+  ])("TC19: %s names a full-bleed 512px maskable icon", async (name) => {
+    const manifest = JSON.parse(readFileSync(join(PUBLIC_DIR, name), "utf-8"));
+    const maskable = manifest.icons.filter((i: { purpose?: string }) => i.purpose === "maskable");
+    expect(maskable).toHaveLength(1);
+    expect(maskable[0].sizes).toBe("512x512");
+
+    const file = join(PUBLIC_DIR, maskable[0].src);
+    const { width, height } = await sharp(file).metadata();
+    expect([width, height]).toEqual([512, 512]);
+    expect((await sharp(file).stats()).isOpaque).toBe(true);
+  });
 });
 
 describe("Notification Service", () => {
@@ -156,11 +175,12 @@ describe("SW Notification Click", () => {
   });
 });
 
-describe("Dynamic Theme Color", () => {
-  test("TC14: App.tsx contains theme-color meta tag update logic", () => {
-    const appPath = join(CLIENT_ROOT, "App.tsx");
-    const appContent = readFileSync(appPath, "utf-8");
-
-    expect(appContent).toContain("theme-color");
+describe("Theme Color", () => {
+  // The splash screen and toolbar are painted from these before any script
+  // runs; a value that differs from the canvas flips colour once the app loads.
+  test("TC14: index.html's theme-color meta is the app canvas", () => {
+    const html = readFileSync(join(CLIENT_ROOT, "index.html"), "utf-8");
+    const meta = html.match(/<meta name="theme-color" content="([^"]+)"/);
+    expect(meta?.[1]).toBe(tokens.bg);
   });
 });
