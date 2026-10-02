@@ -315,4 +315,48 @@ describe("TranscriptChunkRecordId", () => {
     expect(() => transcriptRecordToChunk(42 as any)).not.toThrow();
     expect(transcriptRecordToChunk(42 as any)).toBeNull();
   });
+
+  it("T6: only a string becomes a recordId — a numeric uuid or id leaves the key absent", () => {
+    const claude = transcriptRecordToChunk({
+      uuid: 123,
+      type: "assistant",
+      message: { role: "assistant", content: [{ type: "text", text: "n" }] },
+    });
+    const omp = transcriptRecordToChunk({
+      id: 7,
+      type: "message",
+      message: { role: "user", content: "n" },
+    });
+    expect(claude).not.toBeNull();
+    expect(omp).not.toBeNull();
+    expect("recordId" in (claude as object)).toBe(false);
+    expect("recordId" in (omp as object)).toBe(false);
+  });
+
+  it("T7: an empty-string uuid or id is no id at all — the key is absent, deliberately", () => {
+    // `""` would key every such record on the phone as the same message, and as
+    // a page cursor it fails the wire's `min(1)` on its way back.
+    const claude = transcriptRecordToChunk({
+      uuid: "",
+      type: "assistant",
+      message: { role: "assistant", content: [{ type: "text", text: "e" }] },
+    });
+    const omp = transcriptRecordToChunk({
+      id: "",
+      type: "message",
+      message: { role: "user", content: "e" },
+    });
+    expect("recordId" in (claude as object)).toBe(false);
+    expect("recordId" in (omp as object)).toBe(false);
+  });
+
+  it("T8: a candidate that is not an id does not hide the one that is", () => {
+    const chunk = transcriptRecordToChunk({
+      uuid: "",
+      id: "fallback",
+      type: "assistant",
+      message: { role: "assistant", content: [{ type: "text", text: "f" }] },
+    });
+    expect(chunk?.recordId).toBe("fallback");
+  });
 });

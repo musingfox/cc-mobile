@@ -67,6 +67,19 @@ const SUPPRESSING_FLAGS = ["isSidechain", "isMeta", "isCompactSummary"] as const
 const OMP_RECORD_TYPE = "message";
 
 /**
+ * A record's own id, as the phone keys it and a page cursor names it: the first
+ * candidate that is a non-empty string. `""` is not one — the cursor schema is
+ * `min(1)`, so handing it out would come back refused — and neither is a number,
+ * which no downstream `typeof … === "string"` guard would accept anyway.
+ */
+export function ownRecordId(...candidates: unknown[]): string | undefined {
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate !== "") return candidate;
+  }
+  return undefined;
+}
+
+/**
  * omp's `{type:"message", message:{role, content}}` in claude's envelope, so the
  * client's existing dispatcher renders it with no client change at all.
  */
@@ -94,8 +107,8 @@ export function transcriptRecordToChunk(record: unknown): TranscriptChunk | null
   if (type === OMP_RECORD_TYPE) {
     const chunk = ompRecordToChunk(message);
     if (!chunk) return null;
-    const rid = (fields.id ?? fields.uuid) as string | undefined;
-    if (rid) (chunk as any).recordId = rid;
+    const rid = ownRecordId(fields.id, fields.uuid);
+    if (rid) chunk.recordId = rid;
     return chunk;
   }
   // L1-claude-type-not-user-assistant (and L1-omp-type-not-message for non-message types)
@@ -104,7 +117,7 @@ export function transcriptRecordToChunk(record: unknown): TranscriptChunk | null
   if (typeof message !== "object" || message === null) return null;
 
   const chunk: TranscriptChunk = { type, message };
-  const rid = (fields.uuid ?? fields.id) as string | undefined;
-  if (rid) (chunk as any).recordId = rid;
+  const rid = ownRecordId(fields.uuid, fields.id);
+  if (rid) chunk.recordId = rid;
   return chunk;
 }

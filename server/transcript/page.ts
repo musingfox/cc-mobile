@@ -26,7 +26,7 @@ import {
   TRANSCRIPT_WINDOW_BYTES,
   type TranscriptReadFs,
 } from "./reader";
-import { transcriptRecordToChunk } from "./records";
+import { ownRecordId, transcriptRecordToChunk } from "./records";
 
 /**
  * Records per page. Fixed on the server and absent from the wire: a client
@@ -82,9 +82,7 @@ interface PageItem {
 function recordIdOf(record: unknown, chunk: Record<string, unknown> | null): string | undefined {
   if (chunk && typeof chunk.recordId === "string") return chunk.recordId;
   const fields = record as { uuid?: unknown; id?: unknown } | null;
-  if (typeof fields?.uuid === "string") return fields.uuid;
-  if (typeof fields?.id === "string") return fields.id;
-  return undefined;
+  return ownRecordId(fields?.uuid, fields?.id);
 }
 
 /**

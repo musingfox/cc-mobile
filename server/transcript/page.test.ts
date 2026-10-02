@@ -409,4 +409,22 @@ describe("PageReadsOneWindow", () => {
     expect(res.records.every((r: any) => r.recordId === undefined)).toBe(true);
     expect(res.nextBefore).toEqual(before);
   });
+
+  it("T16: a bookkeeping line with an empty uuid is not a place a cursor can stop", async () => {
+    const head = paddedRec("u0", 100);
+    const emptyId = { type: "file-history-snapshot", uuid: "" };
+    const named = { type: "file-history-snapshot", uuid: "b1" };
+    const anonymous = [anonymousRec(100), anonymousRec(100)];
+    const path = await writeLines("p.jsonl", [head, emptyId, named, ...anonymous]);
+    const lineBytes = (rec: unknown) => Buffer.byteLength(JSON.stringify(rec), "utf8") + 1;
+    // Starts 10 bytes inside u0's line, so u0 is cut off and the window holds
+    // exactly the two bookkeeping lines and the two anonymous records.
+    const maxBytes =
+      lineBytes(emptyId) + lineBytes(named) + anonymous.reduce((n, r) => n + lineBytes(r), 0) + 10;
+
+    const res = await readTranscriptPage({ path, before: null, limit: 50, maxBytes });
+
+    expect(res.records).toHaveLength(2);
+    expect(res.nextBefore?.recordId).toBe("b1");
+  });
 });
