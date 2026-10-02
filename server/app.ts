@@ -59,6 +59,8 @@ export interface AppBackend extends WsBackend {
    * inject a backend that has no push wiring at all.
    */
   pushSubscriberCount?(): number;
+  /** A pane's working directory for push copy. Optional for the same reason. */
+  paneCwd?(paneId: string): Promise<string | null>;
 }
 
 /**
@@ -146,9 +148,12 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
   const phoneDriven = deps.phoneDriven ?? createPhoneDrivenTracker();
   const notifier = createPushNotifier({
     getSubscriptions: () => pushStore.list(),
-    dispatch: (kind, subs, vapid) => sender.dispatch(kind, subs, vapid),
+    dispatch: (kind, subs, vapid, about) => sender.dispatch(kind, subs, vapid, about),
     // Read per dispatch, not captured: the keys are environment-only.
     getVapid: () => loadVapidKeys(),
+    // Late-bound: the backend is built below, and this runs only once a pane
+    // has a push to send.
+    cwdOf: (paneId) => backend.paneCwd?.(paneId) ?? Promise.resolve(null),
     scope: serverConfig.pushScope,
     phoneDriven,
     ...deps.pushTimers,

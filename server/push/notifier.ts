@@ -6,8 +6,9 @@
  * pane is polled and an episode is one question, not one question per sample.
  * `done` — idle and not yet seen — opens a window instead of sending, and the
  * first window to expire flushes every pane pending at that moment as a single
- * notification: several sessions finishing together are one thing to know, and
- * the payload names no pane anyway (it crosses APNs, so it carries nothing).
+ * notification: several sessions finishing together are one thing to know. A
+ * batch of one names its project; a larger batch only counts its panes, since
+ * one project name cannot stand for several (`payload.ts`).
  *
  * `idle` is not end-of-turn. It means "not busy", which includes a pane that
  * never ran anything, so it initiates nothing — and it cancels nothing either:
@@ -36,6 +37,7 @@
  * one blocked episode sends once.
  */
 
+import type { PushAbout } from "./payload";
 import type { PhoneDrivenTracker } from "./phone-driven";
 import type { PushSubscription, VapidConfig } from "./sender";
 
@@ -59,9 +61,15 @@ export interface NotifierOptions extends NotifierTimers {
     kind: "turn" | "permission",
     subs: PushSubscription[],
     vapid?: VapidConfig,
+    about?: PushAbout,
   ) => Promise<{ attempted: number }>;
   getSubscriptions: () => PushSubscription[];
   getVapid?: () => VapidConfig | null;
+  /**
+   * A pane's working directory, read when its push is about to go out. Null or
+   * a rejection means the copy falls back to the generic text.
+   */
+  cwdOf?: (paneId: string) => Promise<string | null>;
   warn?: (message: string) => void;
 }
 
@@ -112,8 +120,16 @@ export function createPushNotifier(opts: NotifierOptions) {
     return subs;
   }
 
-  async function send(kind: "turn" | "permission", subs: PushSubscription[]) {
-    await opts.dispatch(kind, subs, getVapid() ?? undefined);
+  async function send(kind: "turn" | "permission", subs: PushSubscription[], about: PushAbout) {
+    await opts.dispatch(kind, subs, getVapid() ?? undefined, about);
+  }
+
+  async function aboutPane(paneId: string): Promise<PushAbout> {
+    try {
+      return { cwd: (await opts.cwdOf?.(paneId)) ?? null };
+    } catch {
+      return { cwd: null };
+    }
   }
 
   function drop(paneId: string): void {
@@ -127,11 +143,20 @@ export function createPushNotifier(opts: NotifierOptions) {
     // One pane's deadline flushes the machine-wide batch. Clear every other
     // timer before dispatch so it cannot trail behind as another vibration.
     if (pending.size === 0) return;
+    // The batch is fixed here, before the cwd lookup can yield: a `done` that
+    // arrives while it is in flight opens the next batch instead of joining
+    // or being cleared with this one.
+    const panes = [...pending.keys()];
     for (const entry of pending.values()) clearTimeoutFn(entry.timer);
     pending.clear();
     const subs = opts.getSubscriptions();
     if (subs.length === 0) return;
-    void send("turn", subs).catch((error: unknown) =>
+    void (async () => {
+      const [only] = panes;
+      const about: PushAbout =
+        panes.length === 1 && only !== undefined ? await aboutPane(only) : { count: panes.length };
+      await send("turn", subs, about);
+    })().catch((error: unknown) =>
       warn(`turn push failed: ${error instanceof Error ? error.message : String(error)}`),
     );
   }
@@ -157,7 +182,7 @@ export function createPushNotifier(opts: NotifierOptions) {
     const subs = admit(paneId);
     if (!subs) return;
     try {
-      await send("permission", subs);
+      await send("permission", subs, await aboutPane(paneId));
     } catch (error) {
       warn(`permission push failed: ${error instanceof Error ? error.message : String(error)}`);
     }

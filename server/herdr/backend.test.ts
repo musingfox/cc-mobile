@@ -1121,3 +1121,36 @@ describe("PromptReadbackAnchor", () => {
     }
   });
 });
+
+describe("PaneCwdForPushCopy", () => {
+  function backendAnswering(agentGet: (target: string) => Promise<unknown>) {
+    const fake = makeFakeClient();
+    const client = { ...fake.client, agentGet } as unknown as NonNullable<
+      HerdrBackendOptions["client"]
+    >;
+    return createHerdrBackend({ client });
+  }
+
+  test("reads the pane's cwd from agent.get", async () => {
+    const asked: string[] = [];
+    const backend = backendAnswering(async (target) => {
+      asked.push(target);
+      return { cwd: "/srv/cc-mobile", foreground_cwd: "/srv/elsewhere" };
+    });
+    expect(await backend.paneCwd("w1:p1")).toBe("/srv/cc-mobile");
+    expect(asked).toEqual(["w1:p1"]);
+  });
+
+  test("falls back to foreground_cwd, the order the session listing uses", async () => {
+    const backend = backendAnswering(async () => ({ foreground_cwd: "/srv/fg" }));
+    expect(await backend.paneCwd("w1:p1")).toBe("/srv/fg");
+  });
+
+  test("answers null when herdr reports no cwd or cannot be asked", async () => {
+    expect(await backendAnswering(async () => ({})).paneCwd("w1:p1")).toBe(null);
+    const failing = backendAnswering(async () => {
+      throw new Error("agent_not_found");
+    });
+    expect(await failing.paneCwd("w1:p1")).toBe(null);
+  });
+});

@@ -11,7 +11,7 @@
 import webpush from "web-push";
 import type { AttemptLog } from "./attempt-log";
 import { createAttemptLog } from "./attempt-log";
-import { buildPayload } from "./payload";
+import { buildPayload, type PushAbout } from "./payload";
 
 export interface PushSubscription {
   endpoint: string;
@@ -79,6 +79,7 @@ export function createPushSender(opts: PushSenderOptions = {}) {
     kind: "turn" | "permission",
     subs: PushSubscription[],
     vapid?: VapidConfig,
+    about?: PushAbout,
   ): Promise<PushSendResult> {
     if (!vapid || !vapid.publicKey || !vapid.privateKey) {
       if (!warnedMissingVapid) {
@@ -91,7 +92,7 @@ export function createPushSender(opts: PushSenderOptions = {}) {
     }
     if (!subs || subs.length === 0) return { attempted: 0 };
 
-    const payloadStr = JSON.stringify(buildPayload(kind));
+    const payloadStr = JSON.stringify(buildPayload(kind, about));
     const configured = kind === "permission" ? ttlConfig.permission : ttlConfig.turn;
     const options: PushRequestOptions = {
       // A TTL of 0 means "deliver now or drop it", which for a phone that is

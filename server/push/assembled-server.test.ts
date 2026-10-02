@@ -190,10 +190,12 @@ describe("the assembled server can actually transmit a push", () => {
     // 4. What actually went out.
     expect(sends).toHaveLength(1);
     expect(sends[0].sub.endpoint).toBe(APPLE_ENDPOINT);
+    // The project is the basename of the cwd herdr reports for the pane
+    // (`/tmp/probe`): one pane in the batch, so it is named.
     expect(JSON.parse(sends[0].payload)).toEqual({
       kind: "turn",
       title: "CCMobile",
-      body: "A turn finished",
+      body: "A turn finished in probe",
       tag: "cc-mobile-push-turn",
     });
     expect(sends[0].opts.TTL).toBe(300);
@@ -266,6 +268,7 @@ describe("the assembled server can actually transmit a push", () => {
     const sent = permissionSend() as { payload: string; opts: PushRequestOptions };
     expect(JSON.parse(sent.payload)).toMatchObject({
       kind: "permission",
+      body: "Permission needed in probe",
       tag: "cc-mobile-push-permission",
     });
     // A prompt is worth waking a phone for and is worthless once answered.

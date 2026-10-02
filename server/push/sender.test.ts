@@ -454,3 +454,28 @@ describe("ForegroundSuppression", () => {
     expect(sent).toHaveLength(1);
   });
 });
+
+describe("PushCopyReachesTheWire", () => {
+  test("what the notifier says about the panes is the body that is sent", async () => {
+    const bodies: string[] = [];
+    const sender = createPushSender({
+      attemptLog: createAttemptLog({ path: logPath }),
+      send: async (_sub, payload) => {
+        bodies.push(JSON.parse(payload).body);
+        return { statusCode: 201 };
+      },
+    });
+    const subs = [{ endpoint: "https://web.push.apple.com/a", keys: {} }];
+    const vapid = { publicKey: "p", privateKey: "r" };
+    await sender.dispatch("turn", subs, vapid, { cwd: "/srv/cc-mobile" });
+    await sender.dispatch("turn", subs, vapid, { count: 2 });
+    await sender.dispatch("permission", subs, vapid, { cwd: "/srv/cc-mobile" });
+    await sender.dispatch("permission", subs, vapid);
+    expect(bodies).toEqual([
+      "A turn finished in cc-mobile",
+      "2 sessions finished",
+      "Permission needed in cc-mobile",
+      "Permission needed",
+    ]);
+  });
+});

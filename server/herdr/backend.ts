@@ -164,6 +164,12 @@ export interface HerdrTerminalBackend extends TerminalBackend {
     sessionId: string,
     options?: { refresh?: boolean },
   ): Promise<CapabilitiesReadResult>;
+  /**
+   * The pane's working directory, for push copy, preferred in the order the
+   * session listing uses so a push names what the session card shows. Never
+   * rejects: whatever herdr cannot answer is null.
+   */
+  paneCwd(paneId: string): Promise<string | null>;
 }
 
 /**
@@ -445,6 +451,14 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
     },
     hasSession: (claudeUuid) => registry.hasSession(claudeUuid),
     listLive: () => registry.listSessions(),
+    async paneCwd(paneId) {
+      try {
+        const info = await client.agentGet(paneId);
+        return info.cwd || info.foreground_cwd || null;
+      } catch {
+        return null;
+      }
+    },
     /**
      * Derived on demand from the daemon rather than from this process's memory,
      * which is what makes a pane the user opened in their own terminal — and a

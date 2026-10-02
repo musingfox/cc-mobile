@@ -17,14 +17,16 @@ function build(
     subs?: unknown[];
     scope?: "phone-last" | "all";
     tracker?: boolean;
+    cwdOf?: (paneId: string) => Promise<string | null>;
   } = {},
 ) {
-  const { driven = true, subs = [SUB], scope, tracker: withTracker = true } = options;
+  const { driven = true, subs = [SUB], scope, tracker: withTracker = true, cwdOf } = options;
 
   let now = 0;
   let nextId = 0;
   const timers = new Map<number, { at: number; fn: () => void }>();
   const kinds: string[] = [];
+  const abouts: unknown[] = [];
   const warnings: string[] = [];
 
   const tracker = createPhoneDrivenTracker();
@@ -33,9 +35,11 @@ function build(
   const notifier = createPushNotifier({
     ...(withTracker ? { phoneDriven: tracker } : {}),
     ...(scope ? { scope } : {}),
+    ...(cwdOf ? { cwdOf } : {}),
     getSubscriptions: () => subs as never[],
-    dispatch: async (kind) => {
+    dispatch: async (kind, _subs, _vapid, about) => {
       kinds.push(kind);
+      abouts.push(about);
       return { attempted: 1 };
     },
     warn: (message) => warnings.push(message),
@@ -60,7 +64,12 @@ function build(
     await Promise.resolve();
   };
 
-  return { notifier, kinds, warnings, tracker, advance };
+  return { notifier, kinds, abouts, warnings, tracker, advance };
+}
+
+/** Lets the flush's own awaits (the cwd lookup, then dispatch) run out. */
+async function drain() {
+  for (let i = 0; i < 10; i++) await Promise.resolve();
 }
 
 describe("BlockedPushesImmediately", () => {
@@ -256,5 +265,81 @@ describe("push scope", () => {
     expect(
       h.warnings.filter((message) => message.includes("no send tracker is wired")),
     ).toHaveLength(1);
+  });
+});
+
+describe("PushCopyNamesOnePane", () => {
+  test("a batch of one pane is described by that pane's cwd", async () => {
+    const h = build({ cwdOf: async (paneId) => `/srv/${paneId}-project` });
+    await h.notifier.onAgentStatus("p1", "done");
+    await h.advance(TURN_PUSH_WINDOW_MS);
+    await drain();
+    expect(h.abouts).toEqual([{ cwd: "/srv/p1-project" }]);
+  });
+
+  test("a batch of several panes is only counted, and no cwd is looked up", async () => {
+    const asked: string[] = [];
+    const h = build({
+      cwdOf: async (paneId) => {
+        asked.push(paneId);
+        return `/srv/${paneId}`;
+      },
+    });
+    h.tracker.markSent("p2");
+    h.tracker.markSent("p3");
+    await h.notifier.onAgentStatus("p1", "done");
+    await h.notifier.onAgentStatus("p2", "done");
+    await h.notifier.onAgentStatus("p3", "done");
+    await h.advance(TURN_PUSH_WINDOW_MS);
+    await drain();
+    expect(h.abouts).toEqual([{ count: 3 }]);
+    expect(asked).toEqual([]);
+  });
+
+  test("a blocked pane is described by its cwd", async () => {
+    const h = build({ cwdOf: async () => "/srv/blocked-project" });
+    await h.notifier.onAgentStatus("p1", "blocked");
+    expect(h.abouts).toEqual([{ cwd: "/srv/blocked-project" }]);
+  });
+
+  test("a cwd lookup that fails still sends, with no cwd to name", async () => {
+    const h = build({
+      cwdOf: async () => {
+        throw new Error("daemon gone");
+      },
+    });
+    await h.notifier.onAgentStatus("p1", "blocked");
+    await h.notifier.onAgentStatus("p1", "done");
+    await h.advance(TURN_PUSH_WINDOW_MS);
+    await drain();
+    expect(h.kinds).toEqual(["permission", "turn"]);
+    expect(h.abouts).toEqual([{ cwd: null }, { cwd: null }]);
+  });
+
+  test("a `done` arriving during the lookup starts the next batch, not this one", async () => {
+    let release: (cwd: string) => void = () => {};
+    const lookups: string[] = [];
+    const h = build({
+      cwdOf: (paneId) => {
+        lookups.push(paneId);
+        return new Promise((resolve) => {
+          release = resolve;
+        });
+      },
+    });
+    h.tracker.markSent("p2");
+    await h.notifier.onAgentStatus("p1", "done");
+    await h.advance(TURN_PUSH_WINDOW_MS);
+    // p1's flush is waiting on its cwd; p2 finishes in the meantime.
+    await h.notifier.onAgentStatus("p2", "done");
+    release("/srv/one");
+    await drain();
+    expect(h.abouts).toEqual([{ cwd: "/srv/one" }]);
+
+    await h.advance(TURN_PUSH_WINDOW_MS);
+    release("/srv/two");
+    await drain();
+    expect(lookups).toEqual(["p1", "p2"]);
+    expect(h.abouts).toEqual([{ cwd: "/srv/one" }, { cwd: "/srv/two" }]);
   });
 });
