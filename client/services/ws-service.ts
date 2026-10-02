@@ -501,18 +501,18 @@ class WsService {
 
         if (projected.length === 0) break;
 
+        // No setStreaming for either record (review advisory #3): whether the
+        // agent is working is session_state's to say. A chunk-driven `true`
+        // that lands after an authoritative idle is never cleared, because
+        // stream_end leaves the flag alone once session_state has spoken — and
+        // the server sends idle before its settle read delivers the turn's
+        // last records, so that order is every ordinary turn.
         if (chunk.type === "assistant") {
-          store.setStreaming(sessionId, true);
           store.applyTranscriptMessages(sessionId, {
             epoch: epochOfChunk(chunk),
             messages: projected,
           });
         } else if (chunk.type === "user") {
-          // No setStreaming here (review advisory #3): a user record is the
-          // prompt, not a reply, and whether the agent is working is
-          // session_state's to say. A chunk-driven `true` that lands after an
-          // authoritative idle is never cleared, because stream_end leaves the
-          // flag alone once session_state has spoken.
           const userText = projected.find(
             (m) => m.kind === undefined && m.role === "user",
           )?.content;

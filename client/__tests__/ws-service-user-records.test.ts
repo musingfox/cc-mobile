@@ -148,6 +148,34 @@ describe("TerminalPromptLeavesStreamingAlone", () => {
   });
 });
 
+// The same ruling for the reply. The server announces idle before its settle
+// read delivers the turn's last records and stream_end, so this order is every
+// ordinary turn, not a race.
+describe("ReplyAfterIdleLeavesStreamingAlone", () => {
+  let prev: any;
+  beforeEach(() => {
+    prev = getInternal().ws;
+    getInternal().ws = { send: () => {} };
+    useAppStore.setState({ sessions: new Map(), activeSessionId: null });
+    useAppStore.getState().addSession("s1", "/c");
+  });
+  afterEach(() => { getInternal().ws = prev; });
+
+  test("running, idle, a late assistant record, stream_end: the spinner is down", () => {
+    getInternal().handleMessage({ type: "session_state", sessionId: "s1", state: "running" });
+    getInternal().handleMessage({ type: "session_state", sessionId: "s1", state: "idle" });
+    getInternal().handleMessage({
+      type: "stream_chunk",
+      sessionId: "s1",
+      chunk: { type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "done" }] }, recordId: "a1", seq: 9, epoch: "aaaa" },
+    });
+    getInternal().handleMessage({ type: "stream_end", sessionId: "s1" });
+    const session = useAppStore.getState().sessions.get("s1")!;
+    expect(session.messages.map((m) => m.recordId)).toEqual(["a1"]);
+    expect(session.isStreaming).toBe(false);
+  });
+});
+
 
 // Review advisory #6: a send whose record never pairs (the agent rewrote the
 // text, or no record came) used to stay in lastOptimisticSend until the tab

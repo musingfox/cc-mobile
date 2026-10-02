@@ -46,10 +46,12 @@ describe("assistant stream_chunk identity", () => {
     expect(assistant[0].content).toBe("Hello world");
     expect(assistant[0].recordId).toBe("rec-live-1");
     expect(assistant[0].seq).toBe(42);
-    expect(session?.isStreaming).toBe(true);
+    // Rendering a reply says nothing about whether the agent is still working.
+    expect(session?.isStreaming).toBe(false);
   });
 
   test("stream_end clears the live-turn streaming flag", () => {
+    useAppStore.getState().setStreaming(sessionId, true);
     internals().handleMessage({
       type: "stream_chunk",
       sessionId,
