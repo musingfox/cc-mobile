@@ -270,6 +270,33 @@ removed end to end with the subagent card's stop button.
 
 Schemas defined in `server/protocol.ts`. Full spec in `cc-mobile.md`.
 
+## PWA Plumbing
+- The static catch-all falls back to `index.html` only for a navigation — an
+  `Accept: text/html` request for a path with no extension. Any other miss is a
+  404: a hashed chunk a deploy removed, answered with HTML and status 200, was
+  stored by the service worker as that chunk.
+- `sw.js` caches a fetched response only when its content-type matches the
+  request's destination (script, style, image, font), never by URL alone.
+- An installed iOS app is rarely closed and a waiting worker never takes over
+  on its own, so the app pulls updates in itself (`client/services/sw-update.ts`):
+  an update check whenever it returns to the foreground, and activation plus a
+  reload right after a screen change while the composer is empty — the draft
+  lives only in memory (`draft-persistence.ts` is not wired). Never on `hidden`:
+  the iOS photo picker and camera hide the page, and a reload there loses the
+  picked file.
+- Each screen is a browser-history entry (`client/components/linear/screen-history.ts`)
+  so Android back and the iOS edge swipe walk the in-app screens. The URL never
+  changes; every entry's state carries the screen stack, so a reload — the
+  update's own included — lands on the same screen.
+- Nothing loads from another origin in `<head>`: the Google Fonts stylesheet
+  held first paint for as long as that origin took (5 s held, 5 s blank) and
+  failed offline. Fonts come from `@fontsource`, bundled and cached by the worker.
+- The manifest `id` is `${BASE_PATH}/`, the start_url an id-less manifest was
+  identified by, so installs that predate it stay the same app. The maskable
+  icon is derived from `icon-512.png` by `generate:icons`.
+- `client/public/` holds nothing test-shaped: vite copies it verbatim into
+  `dist/client`, which is served to anyone and collected by `bun test`.
+
 ## Background Push (web push for iOS PWA)
 - Scope is `phone-last` (`server/push/notifier.ts`, `phone-driven.ts`): a pane triggers `dispatch` when the phone is behind its current turn — cc-mobile injected the prompt. The tracker is in-memory, so after a restart no pane is in scope until the phone speaks again.
 - Timing reads herdr's `agent_status`, not a trigger of cc-mobile's own. `blocked`
