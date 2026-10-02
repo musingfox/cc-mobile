@@ -5,6 +5,8 @@ import {
   AgentInfoResultSchema,
   AgentListResultSchema,
   type AgentStatus,
+  type IntegrationInfo,
+  IntegrationListResultSchema,
   OkResultSchema,
   type PaneRead,
   PaneReadResultSchema,
@@ -65,6 +67,12 @@ export const SUPPORTED_PROTOCOL = 22;
 const DEFAULT_AGENT_WAIT_TIMEOUT_MS = 60_000;
 /** Client read-deadline margin so the daemon's own timeout always fires first. */
 const AGENT_WAIT_DEADLINE_MARGIN_MS = 5_000;
+/**
+ * integration.list is awaited inline by the `get_server_config` reply, which
+ * otherwise answers at once; a hung daemon should cost the phone a couple of
+ * seconds, not the transport's 10 s default.
+ */
+const INTEGRATION_LIST_TIMEOUT_MS = 2_000;
 
 export interface HerdrClientOptions {
   /** Explicit socket path; falls back to $HERDR_SOCKET_PATH, then ~/.config/herdr/herdr.sock. */
@@ -130,6 +138,14 @@ export function createHerdrClient(options: HerdrClientOptions = {}) {
   async function agentList(): Promise<AgentInfo[]> {
     const result = await call("agent.list", {}, AgentListResultSchema);
     return result.agents;
+  }
+
+  /** Every agent integration herdr knows, installed or not, with its state. */
+  async function integrationList(): Promise<IntegrationInfo[]> {
+    const result = await call("integration.list", {}, IntegrationListResultSchema, {
+      timeoutMs: INTEGRATION_LIST_TIMEOUT_MS,
+    });
+    return result.integrations;
   }
 
   /**
@@ -203,6 +219,7 @@ export function createHerdrClient(options: HerdrClientOptions = {}) {
     agentList,
     agentGet,
     agentWait,
+    integrationList,
     paneRead,
     paneSendText,
     paneSendKeys,

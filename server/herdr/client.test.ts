@@ -6,6 +6,7 @@ import {
   AGENT_INFO_LINE,
   AGENT_LIST_LINE,
   AGENT_NOT_FOUND_ERROR_LINE,
+  INTEGRATION_LIST_LINE,
   OK_LINE,
   PANE_NOT_FOUND_ERROR_LINE,
   PANE_READ_LINE,
@@ -204,6 +205,22 @@ describe("herdr client: AgentList", () => {
       expect(statuses).toContain(agent.agent_status);
       expect(typeof agent.revision).toBe("number");
     }
+  });
+});
+
+describe("herdr client: IntegrationList", () => {
+  it("T1: lists every target herdr knows with its state, under a short deadline", async () => {
+    const { transport, calls } = fakeTransport(() => resultOf(INTEGRATION_LIST_LINE));
+    const client = createHerdrClient({ transport });
+
+    const integrations = await client.integrationList();
+
+    expect(calls[0]?.method).toBe("integration.list");
+    expect(calls[0]?.params).toEqual({});
+    expect(calls[0]?.options?.timeoutMs).toBeLessThan(10_000);
+    expect(integrations.length).toBe(17);
+    expect(integrations.find((entry) => entry.target === "omp")?.state).toBe("current");
+    expect(integrations.find((entry) => entry.target === "copilot")?.state).toBe("not_installed");
   });
 });
 

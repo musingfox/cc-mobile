@@ -251,6 +251,30 @@ export const AgentInfoResultSchema = z
   .passthrough();
 export type AgentInfoResult = z.infer<typeof AgentInfoResultSchema>;
 
+/**
+ * One entry of `integration.list`. Only `target` and `state` are required:
+ * they are the two fields cc-mobile reads. `available` is not used — measured
+ * 2026-10-03 it is herdr's own PATH check on `command`, which `Bun.which`
+ * already answers. `state` is a plain string rather than herdr's three-value
+ * enum because the list spans every target herdr knows (17 at 0.9.3), and a
+ * new value on one cc-mobile never launches must not void the whole answer.
+ */
+export const IntegrationInfoSchema = z
+  .object({
+    target: z.string(),
+    state: z.string(),
+  })
+  .passthrough();
+export type IntegrationInfo = z.infer<typeof IntegrationInfoSchema>;
+
+export const IntegrationListResultSchema = z
+  .object({
+    type: z.literal("integration_list"),
+    integrations: z.array(IntegrationInfoSchema),
+  })
+  .passthrough();
+export type IntegrationListResult = z.infer<typeof IntegrationListResultSchema>;
+
 export const OkResultSchema = z
   .object({
     type: z.literal("ok"),
