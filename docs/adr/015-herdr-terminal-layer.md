@@ -504,3 +504,15 @@ handler、`SessionManager` 的 append 緩衝與 `stopTask`、client 的兩個 se
 （以 `ws.raw` 為鍵，和 sink 的擁有者同一個鍵），只有最後一條關閉時才凍結。由同一個測試檔的
 `CountdownFrozenOnlyWithNoPhone` 釘住：舊 socket 關閉時倒數照跑，最後一條關閉時才停。後半段
 同時證明 `open` 與 `close` 拿到的鍵是同一個，否則連線集合永遠不會清空，倒數也就永遠不會凍結。
+
+### `blocked` 之後變成 `unknown`：收回卡片
+
+`unknown` 不對應任何 `session_state`，原則是「沒有主張就不說話」，`pane-events.ts` 因此什麼都
+不送。但從 `blocked` 變成 `unknown` 時，權限端已經丟掉那則 pending，手機卻還留著 server 自己
+送出的 `requires_action` 和卡片。點下去 server 什麼鍵都不按（`unowned`），手機卻照樣把它記成
+已回答，對話裡多一則「Allowed」。
+
+決定只在這個邊界送 `session_state: "idle"`：client 只有這個值能收回卡片又不聲稱 pane 在跑或在等。
+`unknown` 通常代表 agent 已經不在 pane 裡，這時送出的 prompt 會被 `session_busy` 擋下，所以
+`idle` 的不精確不會讓任何東西被送進 shell。其他轉成 `unknown` 的情況照舊不送；`working` 變成
+`unknown` 會留下一個轉不停的狀態，是同一個機制，不在這次範圍。由 `pane-events.test.ts` 釘住。

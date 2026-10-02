@@ -181,6 +181,27 @@ describe("PaneEventStatusForwarding", () => {
     ]);
   });
 
+  test("a pane leaving a prompt for a status the UI has no word for takes the prompt back", async () => {
+    const h = harness();
+    await h.events.start();
+
+    h.emit({
+      event: "pane_updated",
+      data: { pane: { pane_id: "w3V:p1", agent_status: "blocked" } },
+    });
+    h.emit({
+      event: "pane_updated",
+      data: { pane: { pane_id: "w3V:p1", agent_status: "unknown" } },
+    });
+
+    // Without the second frame the phone keeps a card whose tap presses
+    // nothing and still files "Allowed" in the chat.
+    expect(h.sent["w3V:p1"]).toEqual([
+      { type: "session_state", sessionId: "w3V:p1", state: "requires_action" },
+      { type: "session_state", sessionId: "w3V:p1", state: "idle" },
+    ]);
+  });
+
   test("says nothing at all about a status it does not recognise", async () => {
     const h = harness();
     await h.events.start();

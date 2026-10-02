@@ -145,6 +145,12 @@ left — between the socket opening and its listing nothing counts down, because
 the phone has nothing to answer yet. `terminal_send` re-raises nothing: a typed
 prompt is not a reconnect.
 
+A pane that leaves `blocked` for a status the phone has no word for (herdr's
+`unknown`, typically the agent gone from the pane) is sent `session_state:
+"idle"`. That takes back the `requires_action` and the card, whose prompt the
+server has already dropped: a tap on it would press nothing while the phone
+filed it as answered. Any other move to `unknown` is still sent nothing.
+
 Since #31 `terminal_create` carries an optional `agentKind` naming which agent to
 start (`server/agents/kinds.ts`; absent → `claude`, which is what every bundle
 cached before #31 sends). Unlike `sessions[].agent` — herdr's inbound label, a
