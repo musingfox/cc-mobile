@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { LAUNCHABLE_AGENT_KINDS } from "./agents/kinds";
+import { AGENT_INTEGRATION_STATES, LAUNCHABLE_AGENT_KINDS } from "./agents/kinds";
 
 // Content blocks for multimodal input
 const TextBlockSchema = z.object({
@@ -302,6 +302,14 @@ const ServerConfigMessage = z.object({
     // reply to `get_server_config`; the four `set_*` echoes carry a partial
     // config and the client merges field by field, so it is not dropped there.
     availableAgents: z.array(z.enum(LAUNCHABLE_AGENT_KINDS)).optional(),
+    // herdr's integration state for each kind in `availableAgents`, or null
+    // when herdr could not be asked and that list is PATH-only. Always sent
+    // with `availableAgents`: the client merges field by field, so "unknown"
+    // has to be a value rather than an absent key.
+    agentIntegrations: z
+      .record(z.enum(LAUNCHABLE_AGENT_KINDS), z.enum(AGENT_INTEGRATION_STATES))
+      .nullable()
+      .optional(),
     agentProfiles: z.array(AgentProfileSummarySchema).optional(),
   }),
 });

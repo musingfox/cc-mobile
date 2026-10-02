@@ -45,10 +45,11 @@ export interface HerdrBackendOptions {
     HerdrClient,
     "call" | "agentGet" | "paneRead" | "paneSendText" | "paneSendKeys" | "subscribeEvents"
   > &
-    // Optional because both degrade rather than fail: a client slice without
-    // `sessionSnapshot` costs the UI its status dot, and one without
-    // `agentList` answers an empty session list — never a thrown reply.
-    Partial<Pick<HerdrClient, "sessionSnapshot" | "agentList">>;
+    // Optional because all three degrade rather than fail: a client slice without
+    // `sessionSnapshot` costs the UI its status dot, one without `agentList`
+    // answers an empty session list, and one without `integrationList` answers
+    // agent availability from PATH alone — never a thrown reply.
+    Partial<Pick<HerdrClient, "sessionSnapshot" | "agentList" | "integrationList">>;
   /** Injectable label suppression for the live-e2e suites (Decision M9). */
   suppressSessionLabel?: (label: string) => boolean;
   readinessBudgetMs?: number;
@@ -111,6 +112,12 @@ export interface HerdrTerminalBackend extends TerminalBackend {
    * reply.
    */
   listStates(): Promise<Record<string, AgentState>>;
+  /**
+   * herdr's agent integration state per target, or `null` when the daemon
+   * could not be asked. Never rejects: a failure is logged once per run of
+   * failures and answered `null`, which availability reads as "PATH only".
+   */
+  integrationStates(): Promise<Record<string, string> | null>;
   /**
    * One page of a session's own transcript, older than `before`. Resolves
    * `null` — not an empty page — when the session is not listed, has no
@@ -227,6 +234,31 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
       client: client as SessionListingClient,
       suppressLabel: options.suppressSessionLabel,
     });
+  }
+
+  // Once per run of failures rather than once per process: a daemon that
+  // recovers and later fails again is a new fact worth a line, but the phone
+  // asks on every reconnect and must not flood the log while it stays down.
+  let integrationFailureLogged = false;
+
+  async function integrationStates(): Promise<Record<string, string> | null> {
+    if (typeof client.integrationList !== "function") return null;
+    try {
+      const integrations = await client.integrationList();
+      integrationFailureLogged = false;
+      return Object.fromEntries(integrations.map(({ target, state }) => [target, state]));
+    } catch (error) {
+      if (!integrationFailureLogged) {
+        integrationFailureLogged = true;
+        const detail = error instanceof Error ? error.message : String(error);
+        console.warn(
+          `[herdr] integration.list failed: ${detail}. availableAgents falls back to PATH ` +
+            "only until it answers again, so a kind whose herdr integration is missing is " +
+            "offered and then never reports status (fix: herdr integration install <kind>).",
+        );
+      }
+      return null;
+    }
   }
 
   /**
@@ -440,6 +472,7 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
         return {};
       }
     },
+    integrationStates,
     async readTranscriptPage(sessionId, before) {
       const path = await resolveTranscriptPath(sessionId);
       if (!path) return null;

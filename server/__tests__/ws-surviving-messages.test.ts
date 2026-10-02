@@ -72,8 +72,9 @@ describe("WsRoutingWithoutPermissionHandler", () => {
 });
 
 describe("ServerConfigStillAnswered", () => {
-  // `availableAgents` is read off PATH when the reply is built (`ws.ts:356`),
-  // so the reply depends on the machine unless the test says what is
+  // `availableAgents` is read off PATH and herdr's integration state when the
+  // reply is built; this stub backend cannot ask herdr, so PATH alone decides,
+  // and the reply depends on the machine unless the test says what is
   // installed. It used to depend on the developer's own PATH, which held
   // `claude` and made the assertion below look universal; the CI runner has
   // none, so it failed there on every push from 2026-08-06 while staying
@@ -101,6 +102,9 @@ describe("ServerConfigStillAnswered", () => {
     const config = reply.config as Record<string, unknown>;
 
     expect(Object.keys(config).sort()).toEqual([
+      // Each available kind's herdr integration state, beside the list it
+      // qualifies (ADR-015 §2026-10-03).
+      "agentIntegrations",
       "agentProfiles",
       "allowedRoots",
       // Which kinds this machine can launch (#31) — the phone's agent choice
@@ -111,6 +115,8 @@ describe("ServerConfigStillAnswered", () => {
     // Reported because this test's PATH holds it — not because the server
     // assumes its own machine can run claude.
     expect(config.availableAgents).toEqual(["claude"]);
+    // This stub backend cannot ask herdr, so the list is PATH-only and says so.
+    expect(config.agentIntegrations).toBeNull();
     // An agent's own settings are its own: the server neither sets nor reports
     // them here any more.
     for (const gone of ["permissionMode", "model", "effort"]) {

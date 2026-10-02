@@ -1,4 +1,7 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { AgentProfile, AgentProfileSource } from "../agents/profiles";
 import { ServerMessage } from "../protocol";
 import { startWsHarness, testServerConfig, type WsHarness } from "./ws-harness";
@@ -15,6 +18,27 @@ function profileSource(profiles: AgentProfile[]): AgentProfileSource {
 }
 
 describe("AgentProfileWireExposure", () => {
+  // A profile is listed only while its kind is available, and with no herdr to
+  // ask that means PATH — so the test says what is installed rather than
+  // leaning on the developer's own machine (the CI failure noted in
+  // ws-surviving-messages.test.ts).
+  const REAL_PATH = process.env.PATH;
+  let binDir: string | null = null;
+
+  beforeEach(() => {
+    binDir = mkdtempSync(join(tmpdir(), "ccm-profiles-wire-"));
+    for (const kind of ["claude", "omp"]) {
+      writeFileSync(join(binDir, kind), "#!/bin/sh\n", { mode: 0o755 });
+    }
+    process.env.PATH = binDir;
+  });
+
+  afterEach(() => {
+    process.env.PATH = REAL_PATH;
+    if (binDir) rmSync(binDir, { recursive: true, force: true });
+    binDir = null;
+  });
+
   test("server config exposes profile metadata without argv", async () => {
     harness = await startWsHarness({}, testServerConfig, {
       agentProfiles: profileSource([
@@ -47,6 +71,7 @@ describe("AgentProfileWireExposure", () => {
     const config = frame.config as Record<string, unknown>;
 
     expect(Object.keys(config).sort()).toEqual([
+      "agentIntegrations",
       "agentProfiles",
       "allowedRoots",
       "availableAgents",

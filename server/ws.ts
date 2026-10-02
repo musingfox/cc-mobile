@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { Elysia, t } from "elysia";
-import { availableAgentKinds } from "./agents/kinds";
+import { resolveAgentAvailability } from "./agents/kinds";
 import type { AgentProfileSource } from "./agents/profiles";
 import type { AuditLog, AuditRecordInput } from "./audit/audit-log";
 import { captureClientIdentity } from "./audit/client-identity";
@@ -50,6 +50,12 @@ export interface WsBackend extends TerminalControlBackend {
    * session list.
    */
   listStates?(): Promise<Record<string, "idle" | "running" | "requires_action">>;
+  /**
+   * herdr's agent integration state per target; `null` when it could not be
+   * asked. Optional: a backend without one is answered like a failed ask —
+   * availability from PATH alone, and the phone told so.
+   */
+  integrationStates?(): Promise<Record<string, string> | null>;
   /**
    * Answers a screen-derived permission prompt by pressing a key in the pane,
    * after re-proving on live RPCs that the same prompt is still up. Resolves
@@ -345,17 +351,24 @@ export function createWsPlugin(
             // Only what the server knows and the client cannot. An agent's
             // gating, model and effort are the agent's own settings: cc-mobile
             // neither sets them nor reports them here.
+            // Read per request rather than cached at boot: installing omp, or
+            // its herdr integration, while the server runs should show up on
+            // the next reload, not require a restart (#31).
+            const availability = resolveAgentAvailability(
+              (await backend.integrationStates?.()) ?? null,
+            );
             ws.send({
               type: "server_config",
               config: {
                 allowedRoots: serverConfig.allowedRoots,
                 homeDirectory: homedir(),
-                // Read per request rather than cached at boot: installing omp
-                // while the server runs should show up on the next reload, not
-                // require a restart (#31).
-                availableAgents: availableAgentKinds(),
+                availableAgents: availability.kinds,
+                agentIntegrations: availability.integrations,
+                // A profile is a kind plus argv, so an unavailable kind's
+                // profile fails the same silent way the kind would.
                 agentProfiles: agentProfiles
                   .list()
+                  .filter(({ kind }) => availability.kinds.includes(kind))
                   .map(({ id, label, kind }) => ({ id, label, kind })),
               },
             });

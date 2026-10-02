@@ -5,7 +5,7 @@
  * transport, so the protocol check under test is the production one.
  */
 
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -893,6 +893,65 @@ describe("ClaudeIdleAttentionNoticeDelivery wiring", () => {
     expect(request?.requestId).toBeDefined();
     await backend.resolvePermission(request!.requestId, { allow: false });
     expect(keys).toEqual([{ pane: "p1", keys: ["esc"] }]);
+  });
+});
+
+describe("IntegrationStatesBackendPort", () => {
+  function backendWith(integrationList?: () => Promise<{ target: string; state: string }[]>) {
+    const fake = makeFakeClient();
+    const client = integrationList ? { ...fake.client, integrationList } : fake.client;
+    return createHerdrBackend({ client: client as NonNullable<HerdrBackendOptions["client"]> });
+  }
+
+  test("T1: herdr's answer comes back keyed by target", async () => {
+    const backend = backendWith(async () => [
+      { target: "claude", state: "current" },
+      { target: "omp", state: "outdated" },
+    ]);
+
+    expect(await backend.integrationStates()).toEqual({ claude: "current", omp: "outdated" });
+  });
+
+  test("T2: a failing RPC answers null and is logged once, not once per ask", async () => {
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const backend = backendWith(async () => {
+        throw new HerdrTransportError("herdr integration.list: no response within 2000ms");
+      });
+
+      expect(await backend.integrationStates()).toBeNull();
+      expect(await backend.integrationStates()).toBeNull();
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0]?.[0])).toContain("PATH");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  test("T3: a recovery re-arms the log, so the next outage is reported too", async () => {
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      let failing = true;
+      const backend = backendWith(async () => {
+        if (failing) throw new Error("down");
+        return [{ target: "claude", state: "current" }];
+      });
+
+      await backend.integrationStates();
+      failing = false;
+      expect(await backend.integrationStates()).toEqual({ claude: "current" });
+      failing = true;
+      await backend.integrationStates();
+
+      expect(warn).toHaveBeenCalledTimes(2);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  test("T4: a client slice without integrationList answers null", async () => {
+    expect(await backendWith().integrationStates()).toBeNull();
   });
 });
 
