@@ -1,10 +1,19 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const CLIENT_ROOT = join(import.meta.dir, "..");
 const PUBLIC_DIR = join(CLIENT_ROOT, "public");
 const ICONS_DIR = join(PUBLIC_DIR, "icons");
+
+describe("Public directory", () => {
+  // Vite copies public/ verbatim into dist/client, which the server serves to
+  // anyone and `bun test` collects wherever a dist exists.
+  test("ships nothing test-shaped", () => {
+    const entries = readdirSync(PUBLIC_DIR, { recursive: true }) as string[];
+    expect(entries.filter((p) => /__tests__|\.test\./.test(p))).toEqual([]);
+  });
+});
 
 describe("PWA Manifest", () => {
   test("TC1: manifest.json is valid JSON with required fields", () => {

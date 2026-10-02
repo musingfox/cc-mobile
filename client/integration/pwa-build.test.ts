@@ -13,13 +13,13 @@
  * `pathIgnorePatterns` excludes by path and the other seventeen tests in that
  * file are ordinary unit tests. Run it with `bun run test:build`.
  *
- * What it asserts — that vite copies `public/` into `dist/` — is untouched by
- * the move; whether the assertion earns its sixty seconds is a separate
+ * What it asserts — that vite copies `public/` into `dist/`, and that no test
+ * file rides along to be served — is untouched by the move; whether the assertion earns its sixty seconds is a separate
  * question, deliberately left open.
  */
 
 import { describe, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 const CLIENT_ROOT = join(import.meta.dir, "..");
@@ -43,5 +43,8 @@ describe("Build Integration", () => {
 
     expect(existsSync(distManifest)).toBe(true);
     expect(existsSync(distSw)).toBe(true);
+
+    const shipped = readdirSync(distClientDir, { recursive: true }) as string[];
+    expect(shipped.filter((p) => /__tests__|\.test\./.test(p))).toEqual([]);
   }, 60_000);
 });
