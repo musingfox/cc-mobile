@@ -140,6 +140,9 @@ class WsService {
     Array<{ messageId: string; prompt: string; sentAt: number }>
   >();
 
+  /** Prompt cards on screen when this socket opened: sessionId → requestId. */
+  private cardsAtOpen = new Map<string, string>();
+
   private sendMessage(msg: Record<string, unknown>) {
     if (!this.ws) return;
     debugLog.add("send", msg);
@@ -151,6 +154,18 @@ class WsService {
       type: "visibility",
       state: document.visibilityState === "visible" ? "visible" : "hidden",
     });
+  }
+
+  private rememberCardsAtOpen() {
+    this.cardsAtOpen = new Map();
+    for (const [id, session] of useAppStore.getState().sessions) {
+      if (session.pendingPermission) this.cardsAtOpen.set(id, session.pendingPermission.requestId);
+    }
+  }
+
+  private clearCard(sessionId: string) {
+    const store = useAppStore.getState();
+    if (store.sessions.get(sessionId)?.pendingPermission) store.setPermission(sessionId, null);
   }
 
   connect() {
@@ -194,6 +209,7 @@ class WsService {
       store.setConnectionState("connected");
       this.reconnectDelay = 1000;
       this.ws = ws;
+      this.rememberCardsAtOpen();
       // Which paths are allowed, and which agents this machine can launch.
       // Nothing is pushed the other way any more: an agent's model, effort and
       // gating are its own settings, not cc-mobile's to restore.
@@ -380,7 +396,21 @@ class WsService {
           } else {
             store.setReceivedAuthoritativeState(sessionId, true);
           }
+          // This state was read before this socket's sinks were bound, so a
+          // prompt raised meanwhile arrives ahead of it: "running" may simply
+          // be older than the card. It is trusted only against a card carried
+          // over from before the socket opened — answered at the terminal
+          // while no sink was bound to say so. "idle" is a turn over.
+          const pending = store.sessions.get(sessionId)?.pendingPermission;
+          if (
+            pending &&
+            (state === "idle" ||
+              (state === "running" && this.cardsAtOpen.get(sessionId) === pending.requestId))
+          ) {
+            this.clearCard(sessionId);
+          }
         }
+        this.cardsAtOpen.clear();
 
         // Anything not in the list is gone. Materialise before mutating:
         // removeSession replaces the sessions Map.
@@ -405,6 +435,9 @@ class WsService {
           state: "idle" | "running" | "requires_action";
         };
         store.setAgentState(sessionId, state);
+        // A pane that is working or settled is waiting on nobody: whoever
+        // answered, the terminal or the phone, the card is over.
+        if (state !== "requires_action") this.clearCard(sessionId);
         break;
       }
 
