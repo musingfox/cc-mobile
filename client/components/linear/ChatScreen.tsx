@@ -6,15 +6,10 @@ import { wsService } from "../../services/ws-service";
 import { useAppStore } from "../../stores/app-store";
 import { useSettingsStore } from "../../stores/settings-store";
 import MarkdownRenderer from "../MarkdownRenderer";
-import ActivityStrip from "./ActivityStrip";
 import type { LinearScreen } from "./AppShell";
-import CompactDivider from "./CompactDivider";
-import ContextUsageChip from "./ContextUsageChip";
 import InputBarA, { type InputBarAHandle } from "./InputBarA";
-import PermissionDeniedMarker from "./PermissionDeniedMarker";
 import PermissionSheetA from "./PermissionSheetA";
 import PickerSheet from "./PickerSheet";
-import PromptSuggestionChip from "./PromptSuggestionChip";
 import QuickActions from "./QuickActions";
 import ToolCardA from "./ToolCardA";
 import "./chat.css";
@@ -268,10 +263,6 @@ export default function ChatScreen({ onNavigate }: Props) {
 
   const pendingPermission = session.pendingPermission;
   const isStreaming = session.isStreaming;
-  const activeTools = session.activeTools;
-  const activeAgents = session.activeAgents;
-  const usage = session.usage;
-  const contextUsage = session.contextUsage;
   const terminalStarting = session.terminal !== undefined && !session.terminal.ready;
   const projectName = basename(session.cwd);
   const displayPath = session.cwd.replace(/^\/Users\/[^/]+/, "~");
@@ -333,7 +324,6 @@ export default function ChatScreen({ onNavigate }: Props) {
         >
           {readingMode === "conversation" ? "Conversation" : "Full"}
         </button>
-        <ContextUsageChip contextUsage={contextUsage} />
       </header>
 
       <div className="lin-chat-scroll lin-scroll" ref={scrollRef} onScroll={handleScroll}>
@@ -367,24 +357,6 @@ export default function ChatScreen({ onNavigate }: Props) {
         )}
 
         {messages.map((m) => {
-          if (m.kind === "compact_boundary") {
-            return (
-              <CompactDivider
-                key={m.id}
-                preTokens={m.compactMetadata?.preTokens}
-                postTokens={m.compactMetadata?.postTokens}
-              />
-            );
-          }
-          if (m.kind === "permission_denied") {
-            return (
-              <PermissionDeniedMarker
-                key={m.id}
-                toolName={m.toolName || "unknown tool"}
-                message={m.content}
-              />
-            );
-          }
           if (m.role === "user") {
             return (
               <div key={m.id} className="lin-msg lin-msg--user">
@@ -438,18 +410,7 @@ export default function ChatScreen({ onNavigate }: Props) {
         })}
 
         {thinkingKind && <ThinkingCard kind={thinkingKind} />}
-
-        <ActivityStrip tools={activeTools} agents={activeAgents} />
       </div>
-
-      {usage && (
-        <div className="lin-status-bar">
-          <span>
-            ${usage.totalCost.toFixed(2)} · {formatTokens(usage.inputTokens + usage.outputTokens)}{" "}
-            tok · {usage.turns}t
-          </span>
-        </div>
-      )}
 
       {messages.length === 0 && <QuickActions />}
 
@@ -458,8 +419,6 @@ export default function ChatScreen({ onNavigate }: Props) {
           {copyNotice}
         </div>
       )}
-
-      <PromptSuggestionChip sessionId={activeSessionId} />
 
       <PermissionSheetA
         pending={pendingPermission}
@@ -503,12 +462,6 @@ export default function ChatScreen({ onNavigate }: Props) {
       )}
     </div>
   );
-}
-
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-  return String(n);
 }
 
 type ThinkingCardKind = "thinking" | "waiting-permission" | "waiting-answer";

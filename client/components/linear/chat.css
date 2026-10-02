@@ -480,18 +480,6 @@
   color: #a0a0a0;
 }
 
-/* Status bar (bottom of scroll, above input) ---------------- */
-
-.lin-status-bar {
-  padding: 6px 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
-  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 10.5px;
-  color: #6a6a6a;
-  display: flex;
-  justify-content: space-between;
-}
-
 /* Permission sheet (A2) ------------------------------------ */
 
 .lin-permission {

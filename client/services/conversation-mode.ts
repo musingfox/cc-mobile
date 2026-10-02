@@ -3,10 +3,6 @@ import type { Message } from "../stores/app-store";
 
 const TURN_ENDING = new Set(["end_turn", "stop_sequence", "stop"]);
 
-function isMarker(message: Message): boolean {
-  return message.kind === "compact_boundary" || message.kind === "permission_denied";
-}
-
 /**
  * A prompt is what the human typed. The projection hands tool_result parts
  * role "user" too (transcript-projection.ts `roleForPart`), so role alone
@@ -14,7 +10,7 @@ function isMarker(message: Message): boolean {
  * bubble. The block kind is what separates the two.
  */
 function isUserPrompt(message: Message): boolean {
-  return message.role === "user" && message.kind !== "tool_result" && !isMarker(message);
+  return message.role === "user" && message.kind !== "tool_result";
 }
 
 function isTextBubble(message: Message): boolean {
@@ -41,7 +37,7 @@ function pickAnswer(segment: Message[]): Message | undefined {
 /**
  * Conversation reading mode: every user prompt, plus at most one final text
  * answer per turn. Turns are the segments between user prompts (lookahead to
- * the next user message). Markers pass through and do not split turns.
+ * the next user message).
  */
 export function selectConversationMessages(messages: Message[]): Message[] {
   const out: Message[] = [];
@@ -50,7 +46,7 @@ export function selectConversationMessages(messages: Message[]): Message[] {
   const flush = () => {
     const answer = pickAnswer(segment);
     for (const message of segment) {
-      if (isMarker(message) || message === answer) out.push(message);
+      if (message === answer) out.push(message);
     }
     segment = [];
   };

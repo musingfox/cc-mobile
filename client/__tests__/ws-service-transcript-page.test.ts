@@ -66,19 +66,15 @@ describe("HistoryPageApplyIsolated", () => {
   function midTurn() {
     const store = useAppStore.getState();
     store.setStreaming("s1", true);
-    store.addActiveTool("s1", "t1", { toolName: "Read", startedAt: Date.now() });
-    store.addActiveTool("s1", "t2", { toolName: "Bash", startedAt: Date.now() });
   }
 
-  test("T1: a page arriving mid-turn disturbs neither the active tools nor the streaming flag", () => {
+  test("T1: a page arriving mid-turn does not disturb the streaming flag", () => {
     midTurn();
-    expect(session().activeTools.size).toBe(2);
 
     internals().handleMessage(
       pageFrame("aaaa", [assistantRecord("p1", 10), assistantRecord("p2", 20), assistantRecord("p3", 30)]),
     );
 
-    expect(session().activeTools.size).toBe(2);
     expect(session().isStreaming).toBe(true);
   });
 

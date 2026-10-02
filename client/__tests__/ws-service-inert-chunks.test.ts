@@ -173,12 +173,7 @@ describe("StreamEventPipelineRemoved: SDK-era chunks are inert", () => {
     infoSpy = spyOn(toastService, "info").mockImplementation(() => "" as never);
     errorSpy = spyOn(toastService, "error").mockImplementation(() => "" as never);
     useAppStore.setState({ sessions: new Map(), activeSessionId: null });
-    const store = useAppStore.getState();
-    store.addSession("s1", "/tmp");
-    // Seeded so that the task and permission-denied shapes would each have
-    // had something to update, had their handlers still been there.
-    store.addActiveAgent("s1", "t1", { description: "explore", status: "running" });
-    store.addActiveTool("s1", "tool-1", { toolName: "Bash", startedAt: 0 });
+    useAppStore.getState().addSession("s1", "/tmp");
   });
 
   afterEach(() => {

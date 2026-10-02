@@ -19,16 +19,9 @@ describe("session-persistence", () => {
     const mockState: SessionState = {
       id: "sess-1",
       cwd: "/test",
-      sdkSessionId: null,
       messages: [{ id: "m1", role: "user", content: "hello", timestamp: 123 }],
       pendingPermission: null,
       isStreaming: false,
-      activeToolStatus: null,
-      activeTools: new Map(),
-      activeAgents: new Map(),
-      activeHook: null,
-      usage: null,
-      promptSuggestion: null,
       resolvedActions: [],
       agentState: null,
       receivedAuthoritativeState: false,
@@ -50,19 +43,12 @@ describe("session-persistence", () => {
     const mockState: SessionState = {
       id: "sess-1",
       cwd: "/test",
-      sdkSessionId: null,
       messages: [
         { id: "m1", role: "user", content: "hello", timestamp: 123 },
         { id: "m2", role: "assistant", content: "world", timestamp: 456 },
       ],
       pendingPermission: null,
       isStreaming: false,
-      activeToolStatus: null,
-      activeTools: new Map(),
-      activeAgents: new Map(),
-      activeHook: null,
-      usage: null,
-      promptSuggestion: null,
       resolvedActions: [],
       agentState: null,
       receivedAuthoritativeState: false,
@@ -84,17 +70,9 @@ describe("session-persistence", () => {
     const mockState: SessionState = {
       id: "sess-term",
       cwd: "/test",
-      sdkSessionId: null,
       messages: [],
       pendingPermission: null,
       isStreaming: false,
-      activeToolStatus: null,
-      activeTools: new Map(),
-      activeAgents: new Map(),
-      activeHook: null,
-      usage: null,
-      contextUsage: null,
-      promptSuggestion: null,
       resolvedActions: [],
       agentState: null,
       receivedAuthoritativeState: false,
@@ -112,58 +90,14 @@ describe("session-persistence", () => {
     expect(loaded).toBeNull();
   });
 
-  // TC-SP4: Map fields are correctly serialized/deserialized
-  test("TC-SP4: Map fields (activeTools) are preserved", () => {
-    const mockState: SessionState = {
-      id: "sess-1",
-      cwd: "/test",
-      sdkSessionId: null,
-      messages: [],
-      pendingPermission: null,
-      isStreaming: false,
-      activeToolStatus: null,
-      activeTools: new Map([
-        ["tool1", { toolName: "Read", startedAt: 1000 }],
-        ["tool2", { toolName: "Write", startedAt: 2000 }],
-      ]),
-      activeAgents: new Map([["agent1", { description: "Test agent", status: "running" }]]),
-      activeHook: null,
-      usage: null,
-      promptSuggestion: null,
-      resolvedActions: [],
-      agentState: null,
-      receivedAuthoritativeState: false,
-    };
-
-    saveSessionState("sess-1", mockState);
-    const loaded = loadSessionState("sess-1");
-
-    expect(loaded).not.toBeNull();
-    expect(loaded?.activeTools).toBeInstanceOf(Map);
-    expect(loaded?.activeTools.size).toBe(2);
-    expect(loaded?.activeTools.get("tool1")?.toolName).toBe("Read");
-    expect(loaded?.activeTools.get("tool2")?.startedAt).toBe(2000);
-
-    expect(loaded?.activeAgents).toBeInstanceOf(Map);
-    expect(loaded?.activeAgents.size).toBe(1);
-    expect(loaded?.activeAgents.get("agent1")?.description).toBe("Test agent");
-  });
-
   // TC-SP5: getAllSessionIds with multiple sessions
   test("TC-SP5: getAllSessionIds returns all saved session IDs", () => {
     const mock1: SessionState = {
       id: "sess-1",
       cwd: "/test1",
-      sdkSessionId: null,
       messages: [],
       pendingPermission: null,
       isStreaming: false,
-      activeToolStatus: null,
-      activeTools: new Map(),
-      activeAgents: new Map(),
-      activeHook: null,
-      usage: null,
-      promptSuggestion: null,
       resolvedActions: [],
       agentState: null,
       receivedAuthoritativeState: false,
@@ -172,16 +106,9 @@ describe("session-persistence", () => {
     const mock2: SessionState = {
       id: "sess-2",
       cwd: "/test2",
-      sdkSessionId: null,
       messages: [],
       pendingPermission: null,
       isStreaming: false,
-      activeToolStatus: null,
-      activeTools: new Map(),
-      activeAgents: new Map(),
-      activeHook: null,
-      usage: null,
-      promptSuggestion: null,
       resolvedActions: [],
       agentState: null,
       receivedAuthoritativeState: false,
@@ -190,16 +117,9 @@ describe("session-persistence", () => {
     const mock3: SessionState = {
       id: "sess-3",
       cwd: "/test3",
-      sdkSessionId: null,
       messages: [],
       pendingPermission: null,
       isStreaming: false,
-      activeToolStatus: null,
-      activeTools: new Map(),
-      activeAgents: new Map(),
-      activeHook: null,
-      usage: null,
-      promptSuggestion: null,
       resolvedActions: [],
       agentState: null,
       receivedAuthoritativeState: false,
@@ -236,16 +156,9 @@ describe("session-persistence", () => {
     const mockState: SessionState = {
       id: "sess-1",
       cwd: "/test",
-      sdkSessionId: null,
       messages: [],
       pendingPermission: null,
       isStreaming: false,
-      activeToolStatus: null,
-      activeTools: new Map(),
-      activeAgents: new Map(),
-      activeHook: null,
-      usage: null,
-      promptSuggestion: null,
       resolvedActions: [],
       agentState: null,
       receivedAuthoritativeState: false,
@@ -306,7 +219,6 @@ describe("session-persistence", () => {
     // The content cache half is untouched.
     expect(loaded?.messages).toHaveLength(1);
     expect(loaded?.cwd).toBe("/p");
-    expect(loaded?.sdkSessionId).toBe("sdk-1");
     expect(loaded?.terminal).toEqual({ ready: true });
   });
 
@@ -378,6 +290,70 @@ describe("session-persistence", () => {
     expect(loadSessionState("legacy")?.messages.map((m) => m.id)).toEqual(["m1", "m2"]);
   });
 
+  // The activity strip, usage bar, context chip and prompt suggestion lost
+  // their only producer with the SDK chunk pipeline, and so did the two marker
+  // kinds. Blobs older bundles wrote still carry all of them.
+  test("SdkEraSessionStateRetired: a blob carrying the retired fields and marker kinds loads, and none is carried on", () => {
+    const retired = {
+      sdkSessionId: "sdk-1",
+      activeToolStatus: { toolName: "Read", description: "Reading" },
+      activeTools: [["t1", { toolName: "Read", startedAt: 1 }]],
+      activeAgents: [["a1", { description: "explore", status: "running" }]],
+      activeHook: { hookId: "h1", hookName: "Stop" },
+      usage: { totalCost: 0.5, inputTokens: 1, outputTokens: 2, turns: 1 },
+      contextUsage: { totalTokens: 10, maxTokens: 100, percentage: 10 },
+      promptSuggestion: "run the tests",
+    };
+    localStorage.setItem(
+      "ccm:session:sdk-era",
+      JSON.stringify({
+        id: "sdk-era",
+        cwd: "/p",
+        messages: [
+          { id: "m1", role: "user", content: "hi", timestamp: 1 },
+          {
+            id: "c1",
+            role: "assistant",
+            content: "",
+            timestamp: 2,
+            kind: "compact_boundary",
+            compactMetadata: { trigger: "auto", preTokens: 9 },
+          },
+          {
+            id: "d1",
+            role: "assistant",
+            content: "denied",
+            timestamp: 3,
+            kind: "permission_denied",
+            toolName: "Bash",
+          },
+          { id: "m2", role: "assistant", content: "hello", timestamp: 4 },
+        ],
+        pendingPermission: null,
+        isStreaming: false,
+        resolvedActions: [],
+        agentState: null,
+        receivedAuthoritativeState: false,
+        terminal: { ready: true },
+        epoch: "aaaa",
+        ...retired,
+      }),
+    );
+
+    const loaded = loadSessionState("sdk-era");
+    expect(loaded?.messages.map((m) => m.id)).toEqual(["m1", "m2"]);
+    expect(loaded?.terminal).toEqual({ ready: true });
+    expect(loaded?.epoch).toBe("aaaa");
+    expect(Object.keys(retired).filter((field) => Object.hasOwn(loaded as object, field))).toEqual(
+      [],
+    );
+
+    saveSessionState("sdk-era", loaded as SessionState);
+    const rewritten = JSON.parse(localStorage.getItem("ccm:session:sdk-era") ?? "null");
+    expect(Object.keys(retired).filter((field) => Object.hasOwn(rewritten, field))).toEqual([]);
+    expect(loadSessionState("sdk-era")?.messages.map((m) => m.id)).toEqual(["m1", "m2"]);
+  });
+
   // LocalOnlyDiscardOnFirstPage T5 — the reload half.
   //
   // Without the epoch, every reload would look exactly like a rotation, and the
@@ -389,19 +365,18 @@ describe("session-persistence", () => {
     const state = {
       id: "u3",
       cwd: "/test",
-      sdkSessionId: null,
       messages: [
-        { id: "m1", role: "assistant" as const, content: "hi", timestamp: 1, recordId: "r1", seq: 10 },
+        {
+          id: "m1",
+          role: "assistant" as const,
+          content: "hi",
+          timestamp: 1,
+          recordId: "r1",
+          seq: 10,
+        },
       ],
       pendingPermission: null,
       isStreaming: false,
-      activeToolStatus: null,
-      activeTools: new Map(),
-      activeAgents: new Map(),
-      activeHook: null,
-      usage: null,
-      contextUsage: null,
-      promptSuggestion: null,
       resolvedActions: [],
       agentState: null,
       receivedAuthoritativeState: false,
@@ -433,17 +408,9 @@ describe("session-persistence", () => {
       return {
         id: "sess-parts",
         cwd: "/test",
-        sdkSessionId: null,
         messages,
         pendingPermission: null,
         isStreaming: false,
-        activeToolStatus: null,
-        activeTools: new Map(),
-        activeAgents: new Map(),
-        activeHook: null,
-        usage: null,
-        contextUsage: null,
-        promptSuggestion: null,
         resolvedActions: [],
         agentState: null,
         receivedAuthoritativeState: false,
@@ -452,16 +419,48 @@ describe("session-persistence", () => {
 
     const mixed: SessionState["messages"] = [
       { id: "u", role: "user", content: "hi", timestamp: 1, recordId: "r-u", seq: 10 },
-      { id: "th", role: "assistant", content: "plan", timestamp: 2, recordId: "r-a", seq: 20, blockIndex: 0, kind: "thinking" },
-      { id: "tu", role: "assistant", content: "", timestamp: 2, recordId: "r-a", seq: 20, blockIndex: 1, kind: "tool_use", toolName: "Read" },
-      { id: "tx", role: "assistant", content: "done", timestamp: 2, recordId: "r-a", seq: 20, blockIndex: 2, stopReason: "end_turn" },
+      {
+        id: "th",
+        role: "assistant",
+        content: "plan",
+        timestamp: 2,
+        recordId: "r-a",
+        seq: 20,
+        blockIndex: 0,
+        kind: "thinking",
+      },
+      {
+        id: "tu",
+        role: "assistant",
+        content: "",
+        timestamp: 2,
+        recordId: "r-a",
+        seq: 20,
+        blockIndex: 1,
+        kind: "tool_use",
+        toolName: "Read",
+      },
+      {
+        id: "tx",
+        role: "assistant",
+        content: "done",
+        timestamp: 2,
+        recordId: "r-a",
+        seq: 20,
+        blockIndex: 2,
+        stopReason: "end_turn",
+      },
     ];
 
     test("T1: localStorage JSON contains only the two text messages", () => {
       saveSessionState("sess-parts", base(mixed));
       const stored = JSON.parse(localStorage.getItem("ccm:session:sess-parts") ?? "{}");
       expect(stored.messages.map((m: { id: string }) => m.id)).toEqual(["u", "tx"]);
-      expect(stored.messages.some((m: { kind?: string }) => m.kind === "thinking" || m.kind === "tool_use")).toBe(false);
+      expect(
+        stored.messages.some(
+          (m: { kind?: string }) => m.kind === "thinking" || m.kind === "tool_use",
+        ),
+      ).toBe(false);
     });
 
     test("T2: restore keeps the two text messages in order with recordId/seq/stopReason", () => {

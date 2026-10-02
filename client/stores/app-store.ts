@@ -9,12 +9,6 @@ import {
   saveSessionState,
 } from "../services/session-persistence";
 
-export type CompactMetadata = {
-  trigger: "manual" | "auto";
-  preTokens?: number;
-  postTokens?: number;
-};
-
 /** The earlier of two file positions, where either may be absent. */
 function earliestSeq(a: number | undefined, b: number | undefined): number | undefined {
   if (a === undefined) return b;
@@ -29,8 +23,7 @@ export type Message = {
   timestamp: number;
   toolName?: string;
   toolInput?: Record<string, unknown>;
-  kind?: "compact_boundary" | "permission_denied" | "thinking" | "tool_use" | "tool_result";
-  compactMetadata?: CompactMetadata;
+  kind?: "thinking" | "tool_use" | "tool_result";
   /** From transcript record for history / dedup */
   recordId?: string;
   seq?: number;
@@ -131,77 +124,22 @@ export type SessionCapabilitiesState =
   | { status: "ready"; commands: CommandInfo[]; agents: AgentInfo[] }
   | { status: "unavailable"; reason: "unsupported" | "failed" };
 
-export type ActiveTool = {
-  toolName: string;
-  startedAt: number;
-  elapsedSeconds?: number;
-  parentToolUseId?: string | null;
-  input?: Record<string, unknown>;
-};
-
-export type ActiveAgent = {
-  description: string;
-  taskType?: string;
-  status: "running" | "completed" | "failed" | "stopped";
-  toolCount?: number;
-  tokenCount?: number;
-  summary?: string;
-  /**
-   * `tool_use_id` of the Task tool that spawned this subagent. Sub-tools
-   * fired by the agent carry this value as their `parent_tool_use_id`, so we
-   * group on it in the UI.
-   */
-  toolUseId?: string;
-};
-
 export type ResolvedAction = {
   id: string;
   timestamp: number;
-} & (
-  | {
-      type: "permission";
-      toolName: string;
-      parameters: Record<string, unknown>;
-      resolution: "approved" | "denied" | "answered";
-      answer?: string;
-    }
-  | {
-      type: "activity";
-      tools: Array<{ toolName: string; detail?: string; elapsed?: string }>;
-      agents: Array<{ description: string; toolCount?: number; tokenCount?: number }>;
-    }
-);
-
-export type UsageData = {
-  totalCost: number;
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadTokens: number;
-  cacheCreationTokens: number;
-  turns: number;
-  durationMs: number;
-};
-
-export type ContextUsage = {
-  totalTokens: number;
-  maxTokens: number;
-  percentage: number;
+  type: "permission";
+  toolName: string;
+  parameters: Record<string, unknown>;
+  resolution: "approved" | "denied" | "answered";
+  answer?: string;
 };
 
 export type SessionState = {
   id: string;
   cwd: string;
-  sdkSessionId: string | null;
   messages: Message[];
   pendingPermission: PendingPermission | null;
   isStreaming: boolean;
-  activeToolStatus?: { toolName: string; description: string } | null;
-  activeTools: Map<string, ActiveTool>;
-  activeAgents: Map<string, ActiveAgent>;
-  activeHook: { hookId: string; hookName: string } | null;
-  usage: UsageData | null;
-  contextUsage: ContextUsage | null;
-  promptSuggestion: string | null;
   resolvedActions: ResolvedAction[];
   agentState: "idle" | "running" | "requires_action" | null;
   receivedAuthoritativeState: boolean;
@@ -310,7 +248,6 @@ interface AppState {
     descriptor: SessionDescriptorFlags & { sessionId: string; cwd: string },
   ) => void;
   setTerminalReady: (sessionId: string, ready: boolean) => void;
-  setSdkSessionId: (sessionId: string, sdkSessionId: string) => void;
   removeSession: (sessionId: string) => void;
   setActiveSession: (sessionId: string) => void;
 
@@ -324,44 +261,10 @@ interface AppState {
   // Permissions
   setPermission: (sessionId: string, permission: PendingPermission | null) => void;
 
-  // Tool Status (legacy)
-  setActiveToolStatus: (
-    sessionId: string,
-    status: { toolName: string; description: string } | null,
-  ) => void;
-
-  // Active Tool Management
-  addActiveTool: (sessionId: string, toolUseId: string, tool: ActiveTool) => void;
-  updateActiveTool: (sessionId: string, toolUseId: string, updates: Partial<ActiveTool>) => void;
-  removeActiveTool: (sessionId: string, toolUseId: string) => void;
-
-  // Active Agent Management
-  addActiveAgent: (sessionId: string, taskId: string, agent: ActiveAgent) => void;
-  updateActiveAgent: (sessionId: string, taskId: string, updates: Partial<ActiveAgent>) => void;
-  completeActiveAgent: (
-    sessionId: string,
-    taskId: string,
-    completion: Partial<ActiveAgent>,
-  ) => void;
-
-  // Cleanup
-  clearActiveTools: (sessionId: string) => void;
-  clearActiveAgents: (sessionId: string) => void;
-
-  // Active Hook Management
-  setActiveHook: (sessionId: string, hook: { hookId: string; hookName: string } | null) => void;
-
-  // Usage
-  updateUsage: (sessionId: string, usage: UsageData) => void;
-  setContextUsage: (sessionId: string, contextUsage: ContextUsage | null) => void;
-
   setSessionCapabilities: (
     sessionId: string,
     capabilities: SessionCapabilitiesState | null,
   ) => void;
-
-  // Prompt suggestion (per-session)
-  setPromptSuggestion: (sessionId: string, suggestion: string | null) => void;
 
   // Global error (e.g., invalid cwd)
   globalError: string | null;
@@ -455,17 +358,9 @@ export const useAppStore = create<AppState>((set) => ({
       next.set(sessionId, {
         id: sessionId,
         cwd,
-        sdkSessionId: null,
         messages: [],
         pendingPermission: null,
         isStreaming: false,
-        activeToolStatus: null,
-        activeTools: new Map(),
-        activeAgents: new Map(),
-        activeHook: null,
-        usage: null,
-        contextUsage: null,
-        promptSuggestion: null,
         resolvedActions: [],
         agentState: null,
         receivedAuthoritativeState: false,
@@ -505,17 +400,9 @@ export const useAppStore = create<AppState>((set) => ({
         ...(existing ?? {
           id: sessionId,
           cwd,
-          sdkSessionId: null,
           messages: [],
           pendingPermission: null,
           isStreaming: false,
-          activeToolStatus: null,
-          activeTools: new Map(),
-          activeAgents: new Map(),
-          activeHook: null,
-          usage: null,
-          contextUsage: null,
-          promptSuggestion: null,
           resolvedActions: [],
           agentState: null,
           receivedAuthoritativeState: false,
@@ -534,15 +421,6 @@ export const useAppStore = create<AppState>((set) => ({
         terminal: { ready },
       })),
     })),
-
-  setSdkSessionId: (sessionId, sdkSessionId) =>
-    set((state) => {
-      const session = state.sessions.get(sessionId);
-      if (!session) return state;
-      const next = new Map(state.sessions);
-      next.set(sessionId, { ...session, sdkSessionId });
-      return { sessions: next };
-    }),
 
   removeSession: (sessionId) => {
     clearSessionState(sessionId);
@@ -597,14 +475,6 @@ export const useAppStore = create<AppState>((set) => ({
       })),
     })),
 
-  setActiveToolStatus: (sessionId, status) =>
-    set((state) => ({
-      sessions: updateSession(state.sessions, sessionId, (s) => ({
-        ...s,
-        activeToolStatus: status,
-      })),
-    })),
-
   setSessionCapabilities: (sessionId, capabilities) =>
     set((state) => ({
       sessions: updateSession(state.sessions, sessionId, (session) => {
@@ -616,119 +486,11 @@ export const useAppStore = create<AppState>((set) => ({
       }),
     })),
 
-  setPromptSuggestion: (sessionId, suggestion) =>
-    set((state) => ({
-      sessions: updateSession(state.sessions, sessionId, (s) => ({
-        ...s,
-        promptSuggestion: suggestion,
-      })),
-    })),
-
   globalError: null,
   setGlobalError: (globalError) => set({ globalError }),
 
   inputDraft: "",
   setInputDraft: (inputDraft) => set({ inputDraft }),
-
-  addActiveTool: (sessionId, toolUseId, tool) =>
-    set((state) => ({
-      sessions: updateSession(state.sessions, sessionId, (s) => {
-        const next = new Map(s.activeTools);
-        next.set(toolUseId, tool);
-        return { ...s, activeTools: next };
-      }),
-    })),
-
-  updateActiveTool: (sessionId, toolUseId, updates) =>
-    set((state) => ({
-      sessions: updateSession(state.sessions, sessionId, (s) => {
-        const tool = s.activeTools.get(toolUseId);
-        if (!tool) return s;
-        const next = new Map(s.activeTools);
-        next.set(toolUseId, { ...tool, ...updates });
-        return { ...s, activeTools: next };
-      }),
-    })),
-
-  removeActiveTool: (sessionId, toolUseId) =>
-    set((state) => ({
-      sessions: updateSession(state.sessions, sessionId, (s) => {
-        const next = new Map(s.activeTools);
-        next.delete(toolUseId);
-        return { ...s, activeTools: next };
-      }),
-    })),
-
-  addActiveAgent: (sessionId, taskId, agent) =>
-    set((state) => ({
-      sessions: updateSession(state.sessions, sessionId, (s) => {
-        const next = new Map(s.activeAgents);
-        next.set(taskId, agent);
-        return { ...s, activeAgents: next };
-      }),
-    })),
-
-  updateActiveAgent: (sessionId, taskId, updates) =>
-    set((state) => ({
-      sessions: updateSession(state.sessions, sessionId, (s) => {
-        const agent = s.activeAgents.get(taskId);
-        if (!agent) return s;
-        const next = new Map(s.activeAgents);
-        next.set(taskId, { ...agent, ...updates });
-        return { ...s, activeAgents: next };
-      }),
-    })),
-
-  completeActiveAgent: (sessionId, taskId, completion) =>
-    set((state) => ({
-      sessions: updateSession(state.sessions, sessionId, (s) => {
-        const agent = s.activeAgents.get(taskId);
-        if (!agent) return s;
-        const next = new Map(s.activeAgents);
-        next.set(taskId, { ...agent, ...completion });
-        return { ...s, activeAgents: next };
-      }),
-    })),
-
-  clearActiveTools: (sessionId) =>
-    set((state) => ({
-      sessions: updateSession(state.sessions, sessionId, (s) => ({
-        ...s,
-        activeTools: new Map(),
-      })),
-    })),
-
-  clearActiveAgents: (sessionId) =>
-    set((state) => ({
-      sessions: updateSession(state.sessions, sessionId, (s) => ({
-        ...s,
-        activeAgents: new Map(),
-      })),
-    })),
-
-  setActiveHook: (sessionId, hook) =>
-    set((state) => ({
-      sessions: updateSession(state.sessions, sessionId, (s) => ({
-        ...s,
-        activeHook: hook,
-      })),
-    })),
-
-  updateUsage: (sessionId, usage) =>
-    set((state) => ({
-      sessions: updateSession(state.sessions, sessionId, (s) => ({
-        ...s,
-        usage,
-      })),
-    })),
-
-  setContextUsage: (sessionId, contextUsage) =>
-    set((state) => ({
-      sessions: updateSession(state.sessions, sessionId, (s) => ({
-        ...s,
-        contextUsage,
-      })),
-    })),
 
   addResolvedAction: (sessionId, action) =>
     set((state) => ({

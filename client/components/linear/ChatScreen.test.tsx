@@ -327,13 +327,12 @@ describe("ChatHeaderModelLabelRemoved", () => {
     expect(container.querySelector(".lin-chat-model")).toBeNull();
   });
 
-  test("T2: basename and context chip remain", () => {
+  test("T2: basename remains", () => {
     const store = useAppStore.getState();
     store.addSession("s1", "/tmp/cc-mobile");
     store.setActiveSession("s1");
-    const { container, getByText } = render(<ChatScreen onNavigate={() => {}} />);
+    const { getByText } = render(<ChatScreen onNavigate={() => {}} />);
     expect(getByText("cc-mobile")).not.toBeNull();
-    expect(container.querySelector(".lin-context-usage-chip")).not.toBeNull();
   });
 
   test("T3: header does not say claude when the descriptor has no agent", () => {
@@ -537,12 +536,9 @@ describe("ReadingModeToggle", () => {
       const sessions = new Map(state.sessions);
       const session = sessions.get("s1");
       if (!session) return state;
-      const tools = new Map(session.activeTools);
-      tools.set("t1", { toolName: "Bash", startedAt: 1, input: {} });
       sessions.set("s1", {
         ...session,
         isStreaming: true,
-        activeTools: tools,
         pendingPermission: {
           requestId: "p1",
           tool: { name: "Bash", parameters: {} },
@@ -554,7 +550,6 @@ describe("ReadingModeToggle", () => {
     fireEvent.click(getByLabelText("Reading mode: Conversation"));
     const session = useAppStore.getState().sessions.get("s1");
     expect(session?.isStreaming).toBe(true);
-    expect(session?.activeTools.size).toBe(1);
     expect(session?.pendingPermission?.requestId).toBe("p1");
   });
 

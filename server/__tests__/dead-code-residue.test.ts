@@ -26,6 +26,15 @@
  * OrphanResidueScan covers leftovers that had no user at all when they were
  * deleted: a content-block builder nothing imported, the schemas only it
  * spoke, and stylesheet rules no component names.
+ *
+ * SdkEraSessionStateResidueScan covers what that pipeline was the only
+ * producer for: the store setters and fields, and the screens that read them.
+ * The retired session fields follow the `currentStreamMessageId` rule — each
+ * survives exactly once, in the loader's strip list — and so do the two marker
+ * kinds, scanned in client production files only because the server's
+ * transcript reader names `compact_boundary` as a record type and the
+ * directory listing uses `permission_denied` as an error code. `usage` is not
+ * scanned at all: it is an ordinary word.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -285,12 +294,7 @@ describe("StreamEventPipelineResidueScan", () => {
   });
 
   test("the retired bubble id survives only as the field the loader strips", () => {
-    const field = `current${"StreamMessage"}Id`;
-    const production = hits(field).filter(isProduction);
-    expect(production).toEqual([join("client", "services", "session-persistence.ts")]);
-    const loader = sourceFiles.find((f) => f.path === production[0])?.text ?? "";
-    expect(loader.split(field).length - 1).toBe(1);
-    expect(loader).toContain(`Reflect.deleteProperty(parsed as object, "${field}")`);
+    expect(retiredFieldPlacement(`current${"StreamMessage"}Id`)).toEqual(LOADER_ONLY);
   });
 
   test.each([
@@ -330,5 +334,104 @@ describe("OrphanResidueScan", () => {
     expect(existsSync(join(repoRoot, "client", "utils", `content${"-"}block-builder.ts`))).toBe(
       false,
     );
+  });
+});
+
+const LOADER = join("client", "services", "session-persistence.ts");
+const LOADER_ONLY = { production: [LOADER], occurrences: 1, inStripList: true };
+
+/** Where a retired session field still appears, and whether the loader strips it. */
+function retiredFieldPlacement(field: string) {
+  const loader = sourceFiles.find((f) => f.path === LOADER)?.text ?? "";
+  const listStart = loader.indexOf("const RETIRED_SESSION_FIELDS = [");
+  const stripList = listStart < 0 ? "" : loader.slice(listStart, loader.indexOf("];", listStart));
+  const stripped = loader.includes(
+    "for (const field of RETIRED_SESSION_FIELDS) Reflect.deleteProperty(parsed as object, field);",
+  );
+  return {
+    production: hits(field).filter(isProduction),
+    occurrences: loader.split(field).length - 1,
+    inStripList: stripped && stripList.includes(`"${field}"`),
+  };
+}
+
+describe("SdkEraSessionStateResidueScan", () => {
+  const deletedIdentifiers = [
+    // Store setters whose only callers were the deleted chunk handlers.
+    `set${"SdkSessionId"}`,
+    `set${"PromptSuggestion"}`,
+    `set${"ActiveToolStatus"}`,
+    `add${"ActiveTool"}`,
+    `update${"ActiveTool"}`,
+    `remove${"ActiveTool"}`,
+    `clear${"ActiveTools"}`,
+    `add${"ActiveAgent"}`,
+    `update${"ActiveAgent"}`,
+    `complete${"ActiveAgent"}`,
+    `clear${"ActiveAgents"}`,
+    `set${"ActiveHook"}`,
+    `update${"Usage"}`,
+    `set${"ContextUsage"}`,
+    // The types those setters carried.
+    `Active${"Tool"}`,
+    `Active${"Agent"}`,
+    `Usage${"Data"}`,
+    `Context${"Usage"}`,
+    `Compact${"Metadata"}`,
+    // The screens that read them.
+    `Activity${"Strip"}`,
+    `Context${"UsageChip"}`,
+    `Compact${"Divider"}`,
+    `Permission${"DeniedMarker"}`,
+    `Prompt${"SuggestionChip"}`,
+  ];
+
+  test.each(deletedIdentifiers)("no source file references %s", (pattern) => {
+    expect(hits(pattern)).toEqual([]);
+  });
+
+  test.each([
+    `sdk${"SessionId"}`,
+    `active${"ToolStatus"}`,
+    `active${"Tools"}`,
+    `active${"Agents"}`,
+    `active${"Hook"}`,
+    `context${"Usage"}`,
+    `prompt${"Suggestion"}`,
+  ])("%s survives only as a field the loader strips", (field) => {
+    expect(retiredFieldPlacement(field)).toEqual(LOADER_ONLY);
+  });
+
+  test.each([
+    `compact${"_"}boundary`,
+    `permission${"_"}denied`,
+  ])("the %s kind survives in client production code only as a kind the loader drops", (kind) => {
+    const client = hits(kind).filter((p) => isProduction(p) && p.startsWith("client"));
+    expect(client).toEqual([LOADER]);
+    const loader = sourceFiles.find((f) => f.path === LOADER)?.text ?? "";
+    const kinds = loader.slice(loader.indexOf("const RETIRED_MESSAGE_KINDS"));
+    expect(kinds.slice(0, kinds.indexOf(";"))).toContain(`"${kind}"`);
+  });
+
+  test.each([
+    `lin-status${"-"}bar`,
+    `lin${"-"}activity`,
+    `lin-context${"-"}usage-chip`,
+    `lin-compact${"-"}divider`,
+    `lin-deny${"-"}marker`,
+    `lin-prompt${"-"}suggestion`,
+  ])("no stylesheet defines %s", (pattern) => {
+    expect(stylesheets.filter((f) => f.text.includes(pattern)).map((f) => f.path)).toEqual([]);
+  });
+
+  test.each([
+    join("client", "components", "linear", `Activity${"Strip"}.tsx`),
+    join("client", "components", "linear", `activity${".css"}`),
+    join("client", "components", "linear", `Context${"UsageChip"}.tsx`),
+    join("client", "components", "linear", `Compact${"Divider"}.tsx`),
+    join("client", "components", "linear", `Permission${"DeniedMarker"}.tsx`),
+    join("client", "components", "linear", `Prompt${"SuggestionChip"}.tsx`),
+  ])("%s does not exist", (relative) => {
+    expect(existsSync(join(repoRoot, relative))).toBe(false);
   });
 });

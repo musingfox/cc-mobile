@@ -60,9 +60,6 @@ export function buildDebugStoreSnapshot(state: ReturnType<typeof useAppStore.get
           messageCount: active?.messages.length ?? 0,
           isStreaming: active?.isStreaming ?? false,
           pendingPermission: active?.pendingPermission ? "present" : "none",
-          activeToolsCount: active?.activeTools.size ?? 0,
-          activeAgentsCount: active?.activeAgents.size ?? 0,
-          usage: active?.usage ?? null,
           capabilities: debugCapabilitiesStatus(active),
         }
       : null,

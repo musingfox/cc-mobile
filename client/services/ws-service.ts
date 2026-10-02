@@ -411,36 +411,6 @@ class WsService {
         if (!sessionId) break;
         const chunk = msg.chunk as Record<string, unknown>;
 
-        // Extract tool input from assistant messages for ActivityPanel display.
-        // Also clean up stale tools from previous turns: an `assistant` chunk
-        // signals a new turn, so any active tools NOT listed in this message's
-        // content are leftovers that the SDK already finished executing.
-        if (chunk.type === "assistant") {
-          const message = chunk.message as { content?: Array<Record<string, unknown>> } | undefined;
-          const currentTurnToolIds = new Set<string>();
-          if (message?.content) {
-            for (const block of message.content) {
-              if (block.type === "tool_use" && typeof block.id === "string") {
-                currentTurnToolIds.add(block.id);
-                if (block.input) {
-                  store.updateActiveTool(sessionId, block.id as string, {
-                    input: block.input as Record<string, unknown>,
-                  });
-                }
-              }
-            }
-          }
-          // Remove tools from previous turns
-          const session = store.sessions.get(sessionId);
-          if (session) {
-            for (const [toolId, tool] of session.activeTools) {
-              if (!currentTurnToolIds.has(toolId) && !tool.parentToolUseId) {
-                store.removeActiveTool(sessionId, toolId);
-              }
-            }
-          }
-        }
-
         const projected = messagesFromProjectedChunk(
           chunk,
           (part, index) =>
@@ -494,40 +464,11 @@ class WsService {
         if (sessionId) {
           const session = store.sessions.get(sessionId);
 
-          // Snapshot completed activity before clearing
-          if (session) {
-            const completedTools = Array.from(session.activeTools.values());
-            const completedAgents = Array.from(session.activeAgents.values()).filter(
-              (a) => a.status !== "running",
-            );
-            if (completedTools.length > 0 || completedAgents.length > 0) {
-              store.addResolvedAction(sessionId, {
-                id: `action-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                type: "activity",
-                timestamp: Date.now(),
-                tools: completedTools.map((t) => ({
-                  toolName: t.toolName,
-                  elapsed: t.elapsedSeconds ? `${Math.floor(t.elapsedSeconds)}s` : undefined,
-                })),
-                agents: completedAgents.map((a) => ({
-                  description: a.description,
-                  toolCount: a.toolCount,
-                  tokenCount: a.tokenCount,
-                })),
-              });
-            }
-          }
-
           // If we received authoritative state during this turn, trust it
           // and skip the legacy stream_end setStreaming(false)
           if (session?.receivedAuthoritativeState) {
             // Reset flag for next turn, but don't touch streaming state
             store.setReceivedAuthoritativeState(sessionId, false);
-            // Still do cleanup
-            store.setActiveToolStatus(sessionId, null);
-            store.clearActiveTools(sessionId);
-            store.clearActiveAgents(sessionId);
-            store.setActiveHook(sessionId, null);
             hapticService.complete();
             // Notify when response completes while app is in background
             if (document.hidden) {
@@ -540,10 +481,6 @@ class WsService {
           } else {
             // Backward compat: no session_state_changed received, use legacy behavior
             store.setStreaming(sessionId, false);
-            store.setActiveToolStatus(sessionId, null);
-            store.clearActiveTools(sessionId);
-            store.clearActiveAgents(sessionId);
-            store.setActiveHook(sessionId, null);
             hapticService.complete();
             // Notify when response completes while app is in background
             if (document.hidden) {
@@ -590,8 +527,8 @@ class WsService {
 
         // Records go through the same visible-text rule as live chunks, so a
         // page of tool plumbing legitimately yields no bubbles. Nothing here
-        // touches activeTools, isStreaming or the pending permission: loading
-        // older conversation must not disturb the turn running right now.
+        // touches isStreaming or the pending permission: loading older
+        // conversation must not disturb the turn running right now.
         const records = (msg.records as Record<string, unknown>[]) ?? [];
         const messages: Message[] = [];
         for (const record of records) {
@@ -942,8 +879,6 @@ class WsService {
     this.sendMessage({ type: "terminal_send", claudeUuid: sessionId, content: prompt });
 
     useAppStore.getState().setStreaming(sessionId, true);
-    // Clear any pending prompt suggestion — it's stale once the user sends.
-    useAppStore.getState().setPromptSuggestion(sessionId, null);
   }
 
   private recordPermissionAction(

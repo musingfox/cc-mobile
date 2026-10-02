@@ -22,12 +22,8 @@ Not a terminal replacement — a touch translation of terminal interactions. Run
 │  │ Edit: src/auth.ts:42       │ │
 │  │ [  Deny  ] [  Approve  ]  │  │  48px+ touch targets
 │  └────────────────────────────┘ │
-│                                 │
-│  ── Read (0.3s) ✓  Grep (1.2s)  │  live tool/agent status
 ├─────────────────────────────────┤
 │ /commit  /plan  /review-pr      │  pinnable quick actions
-├─────────────────────────────────┤
-│  $0.03 · 15.7k tokens · 2 turns │  cost & usage status bar
 ├─────────────────────────────────┤
 │ [ Type a message...     ] [>]   │  input bar
 └─────────────────────────────────┘
@@ -41,8 +37,6 @@ Not a terminal replacement — a touch translation of terminal interactions. Run
 - **Multi-session** — run multiple Claude Code sessions in parallel with tab switching
 - **Session resume** — list and resume previous sessions from any project
 - **Input autocomplete** — type `/` or `@` to filter commands and agents
-- **Tool & agent status** — live display of running tools, agent progress, and completion
-- **Cost & usage bar** — token count, cost, turns, and duration per session
 - **Plugin support** — loads all installed Claude Code plugins and skills
 - **Theme** — dark, light, and Claude brand themes
 - **Settings** — configurable default working directory, theme, pin management

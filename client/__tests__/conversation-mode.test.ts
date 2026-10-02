@@ -85,21 +85,6 @@ describe("ConversationModeSelection", () => {
     expect(selectConversationMessages([userA, seq, end])).toEqual([userA, end]);
   });
 
-  test("T10: compact_boundary and permission_denied survive and do not open or close a segment", () => {
-    const userA = msg({ id: "uA", role: "user", content: "A" });
-    const compact = msg({ id: "c", role: "assistant", kind: "compact_boundary", content: "compacted" });
-    const denied = msg({ id: "d", role: "user", kind: "permission_denied", content: "denied" });
-    const end = msg({ id: "end", role: "assistant", stopReason: "end_turn", content: "answer" });
-    const userB = msg({ id: "uB", role: "user", content: "B" });
-    expect(selectConversationMessages([userA, compact, denied, end, userB])).toEqual([
-      userA,
-      compact,
-      denied,
-      end,
-      userB,
-    ]);
-  });
-
   test("T11: local-only optimistic user echo is kept and opens a new segment", () => {
     const userA = msg({ id: "uA", role: "user", content: "A", recordId: "r1" });
     const end = msg({ id: "end", role: "assistant", stopReason: "end_turn", content: "answer" });

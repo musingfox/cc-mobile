@@ -10,17 +10,9 @@ const LAST_EVENT_IDS_KEY = "ccm:lastEventIds";
 interface SerializableSessionState {
   id: string;
   cwd: string;
-  sdkSessionId: string | null;
   messages: SessionState["messages"];
   pendingPermission: SessionState["pendingPermission"];
   isStreaming: boolean;
-  activeToolStatus: SessionState["activeToolStatus"];
-  activeTools: [string, SessionState["activeTools"] extends Map<string, infer T> ? T : never][];
-  activeAgents: [string, SessionState["activeAgents"] extends Map<string, infer T> ? T : never][];
-  activeHook: SessionState["activeHook"];
-  usage: SessionState["usage"];
-  contextUsage: SessionState["contextUsage"];
-  promptSuggestion: string | null;
   resolvedActions: ResolvedAction[];
   agentState: "idle" | "running" | "requires_action" | null;
   receivedAuthoritativeState: boolean;
@@ -43,8 +35,38 @@ interface SerializableSessionState {
 
 const TRANSIENT_PART_KINDS = new Set(["thinking", "tool_use", "tool_result"]);
 
+/**
+ * Kinds only the deleted SDK chunk pipeline ever produced. Nothing renders them
+ * any more, so one restored from an older blob would fall through to an empty
+ * assistant bubble.
+ */
+const RETIRED_MESSAGE_KINDS = new Set(["compact_boundary", "permission_denied"]);
+
+/**
+ * Fields older bundles wrote into every session blob, for state whose only
+ * producer is gone: the streaming bubble, and the SDK chunk pipeline behind the
+ * activity strip, the usage bar, the context chip and the prompt suggestion.
+ * Those blobs are still on phones, so they must load; each field is dropped on
+ * the way in rather than carried onto the session and written back out.
+ */
+const RETIRED_SESSION_FIELDS = [
+  "currentStreamMessageId",
+  "sdkSessionId",
+  "activeToolStatus",
+  "activeTools",
+  "activeAgents",
+  "activeHook",
+  "usage",
+  "contextUsage",
+  "promptSuggestion",
+];
+
 function persistableMessages(messages: SessionState["messages"]): SessionState["messages"] {
-  return messages.filter((message) => !message.kind || !TRANSIENT_PART_KINDS.has(message.kind));
+  return messages.filter(
+    (message) =>
+      !message.kind ||
+      (!TRANSIENT_PART_KINDS.has(message.kind) && !RETIRED_MESSAGE_KINDS.has(message.kind)),
+  );
 }
 
 export function saveSessionState(sessionId: string, state: SessionState): void {
@@ -52,17 +74,9 @@ export function saveSessionState(sessionId: string, state: SessionState): void {
     const serializable: SerializableSessionState = {
       id: state.id,
       cwd: state.cwd,
-      sdkSessionId: state.sdkSessionId,
       messages: persistableMessages(state.messages),
       pendingPermission: state.pendingPermission,
       isStreaming: state.isStreaming,
-      activeToolStatus: state.activeToolStatus,
-      activeTools: Array.from(state.activeTools.entries()),
-      activeAgents: Array.from(state.activeAgents.entries()),
-      activeHook: state.activeHook,
-      usage: state.usage,
-      contextUsage: state.contextUsage,
-      promptSuggestion: state.promptSuggestion,
       resolvedActions: state.resolvedActions || [],
       agentState: state.agentState,
       receivedAuthoritativeState: state.receivedAuthoritativeState,
@@ -91,10 +105,8 @@ export function loadSessionState(sessionId: string): SessionState | null {
     if (!json) return null;
 
     const parsed = JSON.parse(json) as SerializableSessionState;
-    Reflect.deleteProperty(parsed as object, "currentStreamMessageId");
+    for (const field of RETIRED_SESSION_FIELDS) Reflect.deleteProperty(parsed as object, field);
 
-    // Deserialize Maps and provide defaults for new fields.
-    //
     // Everything after the spread is an activity claim, and localStorage has
     // no standing to make one: a reload used to resurrect a "busy" session
     // whose work had long since finished, spinner and all. Conversation text
@@ -103,11 +115,7 @@ export function loadSessionState(sessionId: string): SessionState | null {
     return {
       ...parsed,
       messages: persistableMessages(parsed.messages ?? []),
-      sdkSessionId: parsed.sdkSessionId ?? null,
-      activeTools: new Map(parsed.activeTools),
-      activeAgents: new Map(parsed.activeAgents),
       resolvedActions: parsed.resolvedActions || [],
-      contextUsage: parsed.contextUsage ?? null,
       isStreaming: false,
       pendingPermission: null,
       agentState: null,
