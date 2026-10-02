@@ -113,6 +113,46 @@ describe("HerdrPromptInjection", () => {
     expect(String(seen[0]?.message)).toContain("not reachable");
   });
 
+  test("the target pane is prepared after readiness and before anything is typed", async () => {
+    const harness = makeHarness();
+    const routing = createHerdrSendRouting({
+      client: harness.client,
+      resolvePane: () => "p1",
+      beforeInject: async (paneId) => {
+        harness.order.push(`beforeInject(${paneId})`);
+      },
+    });
+    routing.registerClient("u1", () => {});
+
+    await routing.send({ claudeUuid: "u1", content: "hi" });
+
+    expect(harness.order).toEqual([
+      "agentGet(p1)",
+      "paneRead(p1)",
+      "beforeInject(p1)",
+      'paneSendText(p1,"hi")',
+      'paneSendKeys(p1,["Enter"])',
+    ]);
+  });
+
+  test("a preparation that fails does not swallow the prompt", async () => {
+    const harness = makeHarness();
+    const routing = createHerdrSendRouting({
+      client: harness.client,
+      resolvePane: () => "p1",
+      beforeInject: async () => {
+        throw new Error("transcript unreadable");
+      },
+    });
+    const seen: Record<string, unknown>[] = [];
+    routing.registerClient("u1", (msg) => seen.push(msg));
+
+    await routing.send({ claudeUuid: "u1", content: "hi" });
+
+    expect(harness.order).toContain('paneSendKeys(p1,["Enter"])');
+    expect(seen).toEqual([]);
+  });
+
   test("a session key that addresses no pane fails the same way rather than hanging", async () => {
     const harness = makeHarness({});
     const seen: Record<string, unknown>[] = [];

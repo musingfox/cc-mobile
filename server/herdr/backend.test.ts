@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, spyOn, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createApp } from "../app";
@@ -526,7 +526,9 @@ describe("CapabilitiesBackendPort", () => {
 
   function portBackend(input: {
     listing: Listing[] | (() => Promise<Listing[]>);
-    fetch?: () => Promise<{ ok: true; commands: { name: string }[]; agents: { name: string }[] } | { ok: false }>;
+    fetch?: () => Promise<
+      { ok: true; commands: { name: string }[]; agents: { name: string }[] } | { ok: false }
+    >;
   }) {
     let fetchCalls = 0;
     const listingFn =
@@ -539,7 +541,11 @@ describe("CapabilitiesBackendPort", () => {
           list: async () => {
             fetchCalls += 1;
             if (!input.fetch) {
-              return { ok: true as const, commands: [{ name: "help" }], agents: [{ name: "Explore" }] };
+              return {
+                ok: true as const,
+                commands: [{ name: "help" }],
+                agents: [{ name: "Explore" }],
+              };
             }
             return input.fetch();
           },
@@ -723,7 +729,9 @@ describe("BlockedScreenNoticeDelivery wiring", () => {
     const h = noticeBackend("");
     await h.open("w3V:p1");
     await h.report("w3V:p1", "blocked", "omp");
-    expect(h.sent.filter((msg) => msg.type === "error" || msg.type === "permission_request")).toEqual([]);
+    expect(
+      h.sent.filter((msg) => msg.type === "error" || msg.type === "permission_request"),
+    ).toEqual([]);
   });
 });
 
@@ -955,3 +963,76 @@ describe("IntegrationStatesBackendPort", () => {
   });
 });
 
+// ── PromptReadbackAnchor ─────────────────────────────────────────────────────
+
+describe("PromptReadbackAnchor", () => {
+  /** One omp transcript line; omp because herdr hands over its path directly. */
+  function ompRecord(id: string, role: "user" | "assistant", text: string): string {
+    return `${JSON.stringify({ type: "message", id, message: { role, content: [{ type: "text", text }] } })}\n`;
+  }
+
+  test("a turn the phone starts is read back even when it settles before the pane is first sampled", async () => {
+    // The restarted-server case, live 2026-10-02: no pane.updated arrived during
+    // the turn, and the first status sample landed after the reply was on disk.
+    const dir = mkdtempSync(join(tmpdir(), "ccm-anchor-"));
+    const transcript = join(dir, "session.jsonl");
+    writeFileSync(transcript, ompRecord("r1", "assistant", "an earlier turn"));
+    const pane = "w9:p1";
+    const agentRow = {
+      pane_id: pane,
+      workspace_id: "w9",
+      agent: "omp",
+      agent_status: "idle",
+      cwd: dir,
+      agent_session: { kind: "path", value: transcript },
+    };
+    let settled = false;
+
+    const client = {
+      call: async (method: string) =>
+        method === "pane.process_info"
+          ? { type: "pane_process_info", process_info: { pane_id: pane, foreground_processes: [] } }
+          : { type: "ok" },
+      agentGet: async () => agentRow,
+      agentList: async () => [agentRow],
+      paneRead: async () => ({ text: "" }),
+      paneSendText: async () => {},
+      paneSendKeys: async () => {
+        appendFileSync(transcript, ompRecord("r2", "user", "What was the codeword?"));
+        appendFileSync(transcript, ompRecord("r3", "assistant", "ZEBRA-7"));
+        settled = true;
+      },
+      subscribeEvents: async () => ({ stop: () => {} }),
+      sessionSnapshot: async () => ({
+        workspaces: [],
+        panes: settled ? [{ ...agentRow, agent_status: "done" }] : [],
+        agents: settled ? [{ ...agentRow, agent_status: "done", state_change_seq: 2 }] : [],
+      }),
+    } as unknown as NonNullable<HerdrBackendOptions["client"]>;
+
+    const backend = createHerdrBackend({ client, statusPollIntervalMs: 5 });
+    const sent: Record<string, unknown>[] = [];
+    try {
+      backend.registerClient(pane, (msg) => sent.push(msg), {});
+      await backend.listSessionDescriptors();
+      await backend.send({ claudeUuid: pane, content: "What was the codeword?" });
+
+      const deadline = Date.now() + 2_000;
+      while (!sent.some((msg) => msg.type === "stream_end") && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+
+      const texts = sent
+        .filter((msg) => msg.type === "stream_chunk")
+        .map((msg) => JSON.stringify(msg.chunk));
+      expect(texts.some((text) => text.includes("ZEBRA-7"))).toBe(true);
+      // Anchored at end of file, not at its start: nothing from before the
+      // prompt is replayed.
+      expect(texts.some((text) => text.includes("an earlier turn"))).toBe(false);
+      expect(sent.at(-1)).toEqual({ type: "stream_end", sessionId: pane });
+    } finally {
+      await backend.teardownAll();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

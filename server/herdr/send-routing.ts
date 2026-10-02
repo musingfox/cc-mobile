@@ -42,6 +42,11 @@ export interface HerdrSendRoutingOptions {
    * which this process's registry has never heard of (Decision H1/H5).
    */
   listDrivablePanes?: () => Promise<string[]>;
+  /**
+   * Runs with the target pane once readiness has passed and before anything is
+   * typed. A rejection is swallowed: whatever it prepares, the prompt still goes.
+   */
+  beforeInject?: (paneId: string) => Promise<void>;
 }
 
 /** Statuses in which claude is waiting for input rather than doing something. */
@@ -55,6 +60,7 @@ export interface HerdrSendParams {
 export function createHerdrSendRouting(options: HerdrSendRoutingOptions) {
   const { client, resolvePane } = options;
   const listDrivablePanes = options.listDrivablePanes ?? (async () => []);
+  const beforeInject = options.beforeInject ?? (async () => {});
 
   const clientSinks = new Map<string, ClientSink>();
   const ownerToUuids = new Map<unknown, Set<string>>();
@@ -150,6 +156,8 @@ export function createHerdrSendRouting(options: HerdrSendRoutingOptions) {
       });
       return;
     }
+
+    if (paneId !== undefined) await beforeInject(paneId).catch(() => {});
 
     try {
       if (paneId === undefined) {

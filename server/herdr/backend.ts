@@ -226,6 +226,12 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
       (await listSessionDescriptors())
         .filter((session) => session.drivable)
         .map((session) => session.sessionId),
+    // The reply is read from wherever the pane's transcript cursor stands, and
+    // a pane takes its cursor at end of file on first contact. Left to the
+    // status poll, first contact can come after the reply is already on disk —
+    // a pane this process never launched gets no pane.updated during a turn
+    // (live 2026-10-02) — so the cursor is taken here, before the prompt lands.
+    beforeInject: (paneId) => delivery.attach(paneId),
   });
 
   async function listSessionDescriptors(): Promise<SessionDescriptor[]> {
