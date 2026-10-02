@@ -392,3 +392,40 @@ transport 錯誤、逾時，以及 schema 漂移。這個呼叫的逾時設成 2
   pane，和這個決定之前一樣。要在建立時擋下來，是另一個決定。
 - **不讀 herdr 寫在 `~/.local/state/herdr/` 的檔案。** 這是舊註解留下的退路建議；socket 上有了
   方法，就沒有理由繞過 trunk。
+
+## 2026-10-03 增修：權限回覆綁在 request 上，不綁 session
+
+`permission` 只帶 `requestId`，送鍵的 pane 由 server 從 id 查出來。這一段記錄為什麼**不加**
+`sessionId` 讓 server 比對，以及比對真正該落在哪裡。
+
+### 綁 session 不增加任何東西
+
+- client 從不指定 pane。送鍵目標來自 server 在發出提示當下自己記下的對應
+  （`native-permission.ts` 的 `bySessionOfRequest`，emit 時寫入）。每個 id 由
+  `crypto.randomUUID()` 產生、只對應一個 pane，所以任何回覆不論帶什麼欄位，都只能落在那個 id
+  被發出時的 pane 上。
+- client 若帶 `sessionId`，那個值與 `requestId` 來自同一個 `permission_request` 訊框。握有 id 的人
+  同時握有 pane id，比對兩者不增加任何授權，只會拒絕一個內部狀態自相矛盾的 client。
+- 送鍵前的 fire-time guard 會重讀 `agent_status` 並比對螢幕 fingerprint。稽核紀錄的 `paneId`
+  也是 server 從 id 查出來的，不是 client 說的。
+
+### 真正的過期風險在同一個 pane 之內
+
+同一個 pane 先後出兩道提示時，第二道取代 pending，但第一道的 id 仍對應到同一個 pane。修正前
+`resolve()` 取的是 pane **目前**的 entry，所以給第一道的回覆會拿第二道的選項來驗、拿第二道的
+fingerprint 過 guard，最後按在第二道上：使用者對一個工具說的「Yes」批准了另一個他沒看過的工具。
+guard 擋不住，因為它比對的正是目前的提示。兩道提示的 `sessionId` 相同，綁 session 也抓不到。
+
+因此回覆綁在 request 上：`resolve()` 要求 pending entry 的 `requestId` 就是這個 id，與
+`denyUnattended` 原有的檢查一致；不符就當成不認得的 id，靜默、不送鍵。由
+`native-permission.test.ts` 的「an answer to a superseded request presses nothing on the prompt that
+replaced it」釘住。
+
+照實記錄可觸發性：`pane-events.ts` 只在狀態改變時才呼叫 `permission.onStatus`（見 §2026-09-14
+「同一個 blocked episode 內的畫面變化，cc-mobile 一律看不到」），所以生產環境要觸發取代，需要同一個
+pane 的兩次 `blocked` 觀察同時在途，也就是 blocked、離開、再 blocked 發生在一次 `pane.read` 的延遲
+之內。機率低，但模組自己的 API 與測試都接受「同 pane 換提示就發新 id」，所以檢查必須在模組本身。
+
+被取代的 id 留下兩樣東西沒清：`bySessionOfRequest` 裡的對應，以及它可能已上膛的 90 秒計時器。
+兩者無害。計時器觸發時，`denyUnattended` 的同一個檢查讓它什麼都不做；對應只多佔一筆記憶體，
+而且讓過期回覆的稽核紀錄仍記得它瞄準的是哪個 pane（outcome 為 `unowned`）。
