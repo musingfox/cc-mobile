@@ -23,17 +23,6 @@ export type ImageBlock = z.infer<typeof ImageBlockSchema>;
 export type ContentBlock = z.infer<typeof ContentBlockSchema>;
 
 // Client → Server messages
-const AppendUserMessageSchema = z.object({
-  type: z.literal("append_user_message"),
-  sessionId: z.string(),
-  content: z.union([z.string(), z.array(ContentBlockSchema)]),
-});
-
-const StopTaskMessage = z.object({
-  type: z.literal("stop_task"),
-  sessionId: z.string(),
-  taskId: z.string(),
-});
 
 /**
  * The user's answer to a permission prompt.
@@ -173,8 +162,6 @@ export const ClientMessage = z.discriminatedUnion("type", [
   GetServerConfigMessage,
   ListDirectoriesMessage,
   ReconnectMessage,
-  AppendUserMessageSchema,
-  StopTaskMessage,
   TerminalSendMessage,
   TerminalCreateMessage,
   TerminalTeardownMessage,

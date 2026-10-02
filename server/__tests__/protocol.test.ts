@@ -51,46 +51,6 @@ describe("ClientMessage schema", () => {
   // set_env_vars and the other agent-settings messages are retired; that they
   // are refused is pinned in protocol-retired-messages.test.ts.
 
-  test("append_user_message valid with string content", () => {
-    const result = ClientMessage.safeParse({
-      type: "append_user_message",
-      sessionId: "s1",
-      content: "later note",
-    });
-    expect(result.success).toBe(true);
-  });
-
-  test("append_user_message valid with ContentBlock[]", () => {
-    const result = ClientMessage.safeParse({
-      type: "append_user_message",
-      sessionId: "s1",
-      content: [
-        { type: "text", text: "note 1" },
-        {
-          type: "image",
-          source: { type: "base64", media_type: "image/png", data: "abc" },
-        },
-      ],
-    });
-    expect(result.success).toBe(true);
-  });
-
-  test("append_user_message rejects missing content", () => {
-    const result = ClientMessage.safeParse({
-      type: "append_user_message",
-      sessionId: "s1",
-    });
-    expect(result.success).toBe(false);
-  });
-
-  test("append_user_message rejects missing sessionId", () => {
-    const result = ClientMessage.safeParse({
-      type: "append_user_message",
-      content: "hi",
-    });
-    expect(result.success).toBe(false);
-  });
-
   test("capabilities_request with a named session parses", () => {
     const result = ClientMessage.safeParse({
       type: "capabilities_request",

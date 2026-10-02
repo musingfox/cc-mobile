@@ -118,6 +118,9 @@ describe("DeadModuleResidueScan — retired message names", () => {
     `set${"_"}session_title`,
     `session${"_"}list`,
     `session${"_"}history`,
+    // Accepted but inert since #25, then removed end to end.
+    `stop${"_"}task`,
+    `append${"_"}user_message`,
     // `session_created` is deliberately NOT scanned for the same reason as
     // `new_session` below: it is an ordinary payload name that appears as a
     // debug-log sample. Its refusal is proved at the schema level instead.
@@ -129,6 +132,14 @@ describe("DeadModuleResidueScan — retired message names", () => {
 
   test.each(retiredNames)("no source file mentions %s", (pattern) => {
     expect(hits(pattern)).toEqual([]);
+  });
+});
+
+describe("DeadModuleResidueScan — cleared follow-up markers", () => {
+  test("no source file carries a #25 follow-up marker", () => {
+    // Every one pointed at an inert path #25 left behind, and those are gone.
+    // New debt gets its own ticket rather than reviving a closed one's tag.
+    expect(hits(`25${"-"}followup`)).toEqual([]);
   });
 });
 

@@ -75,7 +75,6 @@ All messages are Zod-validated (see [ADR-001](docs/adr/001-zod-runtime-validatio
 { type: "list_terminal_sessions" }
 { type: "permission", requestId: string, allow: boolean, answers?: Record<string, string> }
 { type: "interrupt", sessionId: string }
-{ type: "stop_task", sessionId: string, taskId: string }
 { type: "get_server_config" }
 { type: "transcript_page_request", sessionId: string,
   before?: { epoch: string, seq: number, recordId: string } }
@@ -89,7 +88,8 @@ agent's own settings and not cc-mobile's to decide (ADR-003 superseded) — plus
 `resume_session` and `set_session_title` (removed in #26 with the whole
 browse-past-conversations path), plus #25's `new_session`, `send`, `command`,
 `pty_send`, `get_session_info` and the `tmux_*` names that `terminal_*`
-replaced. There is no compatibility window — a cached PWA bundle recovers with
+replaced, plus `stop_task` and `append_user_message`, which were accepted but
+inert since #25. There is no compatibility window — a cached PWA bundle recovers with
 a page reload.
 
 ### Server → Client
@@ -317,8 +317,7 @@ cc-mobile/
 The in-process `query()` turn driver was removed in #25 (ADR-015). Turns are
 driven by the herdr backend; `SessionManager` now holds only the session map —
 the settings state went with the messages that wrote it. That map has had no
-writer since #26 deleted the resume handler, so every session-scoped message
-(`append_user_message`) answers `session_not_found`, and `interrupt` is a silent
+writer since #26 deleted the resume handler, so `interrupt` is a silent
 no-op.
 
 ```typescript

@@ -441,13 +441,7 @@ export default function ChatScreen({ onNavigate }: Props) {
 
         {thinkingKind && <ThinkingCard kind={thinkingKind} />}
 
-        <ActivityStrip
-          tools={activeTools}
-          agents={activeAgents}
-          onStopAgent={(taskId) => {
-            if (activeSessionId) wsService.stopTask(activeSessionId, taskId);
-          }}
-        />
+        <ActivityStrip tools={activeTools} agents={activeAgents} />
       </div>
 
       {usage && (

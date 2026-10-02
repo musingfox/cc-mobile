@@ -92,7 +92,7 @@ All recorded in `docs/adr/`. Key decisions:
 
 ### WebSocket Protocol
 
-Client→Server: `terminal_create`, `terminal_send`, `terminal_teardown`, `list_terminal_sessions`, `permission`, `interrupt`, `stop_task`, `append_user_message`, `get_server_config`, `list_directories`, `reconnect`, `transcript_page_request`, `capabilities_request`
+Client→Server: `terminal_create`, `terminal_send`, `terminal_teardown`, `list_terminal_sessions`, `permission`, `interrupt`, `get_server_config`, `list_directories`, `reconnect`, `transcript_page_request`, `capabilities_request`
 
 `permission` carries `optionId` — the id of one of the options the server parsed
 off the terminal's screen. The pre-#29 `allow` boolean is still accepted for one
@@ -258,7 +258,10 @@ Refused by the Zod gate: `set_permission_mode`, `set_model`, `set_effort`,
 agent's mode is its own), `list_sessions`, `resume_session`, `set_session_title`,
 `session_list`, `session_history`, `session_created` (all #26), plus #25's
 `new_session`, `send`, `command`, `pty_send`, `get_session_info`,
-`session_info`, `result` and the `tmux_*` names `terminal_*` replaced.
+`session_info`, `result` and the `tmux_*` names `terminal_*` replaced, plus
+`stop_task` and `append_user_message` — accepted but inert since #25 (nothing
+drained the append buffer, and no in-process turn was left to stop), then
+removed end to end with the subagent card's stop button.
 
 Schemas defined in `server/protocol.ts`. Full spec in `cc-mobile.md`.
 

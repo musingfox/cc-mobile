@@ -251,32 +251,6 @@ export function createWsPlugin(
 
       try {
         switch (message.type) {
-          // TODO(#25-followup, #26): the append buffer this fills has no
-          // consumer — the SDK turn driver that used to drain it is gone. And
-          // with the last session-registering handler deleted in #26, the
-          // manager's map is permanently empty, so this now always answers
-          // `session_not_found`. Accepted rather than rejected at the schema so
-          // the client method does not start throwing.
-          case "append_user_message": {
-            try {
-              sessionManager.appendUserMessage(message.sessionId, message.content);
-            } catch (err) {
-              const errMsg = err instanceof Error ? err.message : String(err);
-              const code = errMsg.includes("not found")
-                ? "session_not_found"
-                : errMsg === "append_buffer_full"
-                  ? "append_buffer_full"
-                  : "append_failed";
-              ws.send({
-                type: "error",
-                code,
-                message: errMsg,
-                sessionId: message.sessionId,
-              });
-            }
-            break;
-          }
-
           // `answers` (the AskUserQuestion payload) is still accepted by the
           // schema so a cached bundle's message parses, but it is carried
           // nowhere: an answer is a keystroke in a pane now, and there is no
@@ -326,25 +300,11 @@ export function createWsPlugin(
             break;
           }
 
-          // TODO(#25-followup, #26): the session map is permanently empty, so
-          // this deletes nothing and stays silent — no frame of any kind.
+          // Silent whatever it finds: the session map has had no writer since
+          // #26, so there is nothing for a frame to report, and an error here
+          // would put a bubble in the chat for a close the user asked for.
           case "interrupt": {
             sessionManager.destroySession(message.sessionId);
-            break;
-          }
-
-          // TODO(#25-followup, #26): there is no in-process turn to stop any more, so
-          // this always answers `no_active_query`. The UI's stop button stays
-          // wired but inert until herdr exposes a per-task interrupt.
-          case "stop_task": {
-            await sessionManager.stopTask(message.sessionId, message.taskId, (code, errMsg) => {
-              sendBuffered(ws, message.sessionId, {
-                type: "error",
-                code,
-                message: errMsg,
-                sessionId: message.sessionId,
-              });
-            });
             break;
           }
 

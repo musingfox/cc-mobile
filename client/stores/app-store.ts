@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ContentBlock, PromptKind } from "../../server/protocol";
+import type { PromptKind } from "../../server/protocol";
 import {
   clearSessionState,
   getAllSessionIds,
@@ -29,7 +29,6 @@ export type Message = {
   timestamp: number;
   toolName?: string;
   toolInput?: Record<string, unknown>;
-  contentBlocks?: ContentBlock[];
   agentLabel?: string;
   agentDescription?: string;
   kind?: "compact_boundary" | "permission_denied" | "thinking" | "tool_use" | "tool_result";

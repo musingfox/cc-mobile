@@ -45,6 +45,10 @@ describe("RetiredMessageTypesRejected", () => {
     ["set_model", { type: "set_model", model: "opus" }],
     ["set_effort", { type: "set_effort", effort: "high" }],
     ["set_env_vars", { type: "set_env_vars", envVars: { FOO: "bar" } }],
+    // Accepted and inert since #25: nothing drained the append buffer, and no
+    // in-process turn was left to stop.
+    ["append_user_message", { type: "append_user_message", sessionId: "s", content: "hi" }],
+    ["stop_task", { type: "stop_task", sessionId: "s", taskId: "t1" }],
   ])("client message %s no longer parses", (_name, payload) => {
     expect(ClientMessage.safeParse(payload).success).toBe(false);
   });

@@ -1,4 +1,4 @@
-import type { ContentBlock, PromptKind } from "../../server/protocol";
+import type { PromptKind } from "../../server/protocol";
 import { debugLog } from "../components/DebugOverlay";
 import {
   type ActiveAgent,
@@ -1342,38 +1342,6 @@ class WsService {
     useAppStore.getState().setPromptSuggestion(sessionId, null);
   }
 
-  /**
-   * TODO(#25-followup): the server buffers this but nothing drains the buffer —
-   * the SDK turn driver that used to prepend it is gone. There is no production
-   * caller today; the method is kept so the follow-up ticket can reconnect it.
-   */
-  appendUserMessage(sessionId: string, content: string | ContentBlock[]) {
-    if (!this.ws) return;
-
-    // Derive the display text the same way the chat bubble shows it while typing.
-    let displayContent: string;
-    let contentBlocks: ContentBlock[] | undefined;
-
-    if (typeof content === "string") {
-      displayContent = content;
-    } else {
-      const textBlocks = content.filter((block) => block.type === "text");
-      displayContent = textBlocks.map((block) => block.text).join("\n");
-      contentBlocks = content;
-    }
-
-    useAppStore.getState().addMessage(sessionId, {
-      id: `user-${Date.now()}`,
-      role: "user",
-      content: displayContent,
-      timestamp: Date.now(),
-      ...(contentBlocks ? { contentBlocks } : {}),
-    });
-
-    this.sendMessage({ type: "append_user_message", sessionId, content });
-    // Do NOT set streaming — no turn is driven by this frame.
-  }
-
   private recordPermissionAction(
     sessionId: string,
     resolution: "approved" | "denied" | "answered",
@@ -1469,16 +1437,6 @@ class WsService {
   interrupt(sessionId: string) {
     if (!this.ws) return;
     this.sendMessage({ type: "interrupt", sessionId });
-  }
-
-  /**
-   * Stop a single subagent task without aborting the parent conversation.
-   * The server emits an `error` message (code `no_active_query` or
-   * `stop_task_failed`) if the SDK cannot stop the task.
-   */
-  stopTask(sessionId: string, taskId: string) {
-    if (!this.ws) return;
-    this.sendMessage({ type: "stop_task", sessionId, taskId });
   }
 
   listDirectories(path: string) {

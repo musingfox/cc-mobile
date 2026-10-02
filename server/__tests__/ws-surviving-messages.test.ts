@@ -139,47 +139,6 @@ describe("RetiredConfigMessagesRefused", () => {
     const reply = await h.waitFor((m) => m.type === "error");
     expect(reply.code).toBe("invalid_message");
   });
-
-  test("append_user_message on a known session raises no error", async () => {
-    const sessionManager = new SessionManager();
-    await sessionManager.createSession("s1", "/tmp");
-    const h = await start(sessionManager);
-
-    h.send({ type: "append_user_message", sessionId: "s1", content: "hi" });
-    h.send({ type: "get_server_config" });
-    await h.waitFor((m) => m.type === "server_config");
-
-    expect(errorFrames(h)).toEqual([]);
-  });
-});
-
-describe("StopTaskReportsNoActiveQuery", () => {
-  test("stop_task on a known session answers no_active_query", async () => {
-    const sessionManager = new SessionManager();
-    await sessionManager.createSession("s1", "/tmp");
-    const h = await start(sessionManager);
-
-    h.send({ type: "stop_task", sessionId: "s1", taskId: "t1" });
-
-    // The error rides inside a buffered `event` envelope.
-    const envelope = await h.waitFor(
-      (m) => m.type === "event" && (m.payload as Record<string, unknown>)?.type === "error",
-    );
-    const payload = envelope.payload as Record<string, unknown>;
-    expect(payload.code).toBe("no_active_query");
-    expect(payload.sessionId).toBe("s1");
-  });
-
-  test("stop_task on an unknown session answers the same way, without throwing", async () => {
-    const h = await start();
-
-    h.send({ type: "stop_task", sessionId: "ghost", taskId: "t1" });
-
-    const envelope = await h.waitFor(
-      (m) => m.type === "event" && (m.payload as Record<string, unknown>)?.type === "error",
-    );
-    expect((envelope.payload as Record<string, unknown>).code).toBe("no_active_query");
-  });
 });
 
 describe("InterruptWithoutSessionIsSilentNoOp", () => {

@@ -429,3 +429,32 @@ pane 的兩次 `blocked` 觀察同時在途，也就是 blocked、離開、再 b
 被取代的 id 留下兩樣東西沒清：`bySessionOfRequest` 裡的對應，以及它可能已上膛的 90 秒計時器。
 兩者無害。計時器觸發時，`denyUnattended` 的同一個檢查讓它什麼都不做；對應只多佔一筆記憶體，
 而且讓過期回覆的稽核紀錄仍記得它瞄準的是哪個 pane（outcome 為 `unowned`）。
+
+## 2026-10-03 增修：移除 `stop_task` 與 `append_user_message`
+
+這兩則訊息自 #25 起收下但不作用。`append_user_message` 把內容存進一個沒有人讀的緩衝（讀它的
+SDK turn driver 已刪除），而且 #26 之後 session map 永遠是空的，所以它一律回 `session_not_found`。
+`stop_task` 沒有 in-process turn 可停，一律回 `no_active_query`。手機上子 agent 卡片的停止按鈕
+因此一直是按了也沒效果的控制項。
+
+### 決定
+
+兩則都從 `ClientMessage` 移除，由 Zod 閘門拒絕（回 `invalid_message`）。一併刪除 server 的
+handler、`SessionManager` 的 append 緩衝與 `stopTask`、client 的兩個 sender、子 agent 卡片的停止
+按鈕，以及只有 `appendUserMessage` 寫入的 `Message.contentBlocks`。
+
+### 理由
+
+與 §2026-08-06 移除四則設定訊息同一條：那四則「本來就是謊」，這兩則也是。停止按鈕按下去，
+對話裡多一則 `Error: No active turn to stop`，client 還順手把 streaming 狀態關掉，而 agent 其實
+還在跑。原本的 TODO 等的是 herdr 提供單一 task 的中斷介面；真有那一天，停止按鈕應該對著那個介面
+重新設計，而不是復活一則 SDK 時代留下的訊息。
+
+### 相容性
+
+比照 §2026-08-06，無相容視窗。快取的 bundle 按停止按鈕會收到一則 `invalid_message`，它不帶
+`sessionId`，所以顯示成全域錯誤 toast，而不是對話裡的錯誤泡泡；兩者都不會停下任何東西。
+`append_user_message` 沒有正式呼叫端，舊 bundle 不會送出。重新載入頁面即恢復。
+
+`interrupt` 不在這次範圍。它對 session map 的刪除同樣是空操作，但 `destroySession` 仍會清掉
+該 id 的上傳目錄，要不要退休是另一個決定。
