@@ -10,3 +10,6 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - run: bun test
+      # TC13 builds the client into dist/; out of the commit gate, which runs
+      # where a live server serves dist/client (docs/spec/test-tier-by-dependency.md).
+      - run: bun run test:build
