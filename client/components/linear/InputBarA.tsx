@@ -211,6 +211,7 @@ const InputBarA = forwardRef<InputBarAHandle, Props>(function InputBarA(
     }
   };
 
+  const projectName = sessionCwd?.split("/").filter(Boolean).pop();
   const hasAttachments = images.length > 0 || files.length > 0;
   const canSend =
     !disabled && !isUploading && !terminalNotReady && (inputDraft.trim() || hasAttachments);
@@ -284,7 +285,7 @@ const InputBarA = forwardRef<InputBarAHandle, Props>(function InputBarA(
           value={inputDraft}
           onChange={(e) => setInputDraft(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Message cc-mobile…"
+          placeholder={projectName ? `Message ${projectName}…` : "Message…"}
           rows={1}
           disabled={disabled}
         />

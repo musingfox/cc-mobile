@@ -162,6 +162,12 @@ describe("InputBarA", () => {
     expect(container.querySelector('[aria-label="Send"]')).toBeNull();
     expect(container.querySelector('[aria-label="Stop"]')).not.toBeNull();
   });
+
+  test("the placeholder names the session's project, not this app", () => {
+    seed("", { ready: true });
+    const { container } = render(<InputBarA sessionId="s1" />);
+    expect(container.querySelector("textarea")?.getAttribute("placeholder")).toBe("Message proj…");
+  });
 });
 
 /**
