@@ -13,6 +13,12 @@ const STATIC_ASSETS = [
   BASE_PATH + "/icons/icon-512.png",
   BASE_PATH + "/icons/apple-touch-icon.png",
 ];
+const CACHEABLE_TYPES = {
+  script: /javascript/,
+  style: /^text\/css/,
+  image: /^image\//,
+  font: /^font\/|woff/,
+};
 
 // Install event: cache static assets
 self.addEventListener("install", (event) => {
@@ -106,11 +112,11 @@ self.addEventListener("fetch", (event) => {
         return cachedResponse;
       }
       return fetch(request).then((response) => {
-        // Cache successful responses for JS, CSS, images
-        if (
-          response.ok &&
-          (request.url.match(/\.(js|css|png|jpg|jpeg|svg|ico)$/) || request.url.includes("/icons/"))
-        ) {
+        // Judged by what was asked for, not by the URL: a stale chunk answered
+        // with HTML and status 200 must never be stored as that chunk.
+        const expected = CACHEABLE_TYPES[request.destination];
+        const contentType = response.headers.get("content-type") || "";
+        if (response.ok && expected?.test(contentType)) {
           const responseToCache = response.clone();
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(request, responseToCache);
