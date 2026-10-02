@@ -123,9 +123,10 @@
 /* Scroll body ---------------------------------------------- */
 
 .lin-chat-scroll {
+  --lin-chat-gutter: 16px;
   flex: 1;
   min-height: 0;
-  padding: 16px 16px 8px;
+  padding: 16px var(--lin-chat-gutter) 8px;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -209,6 +210,14 @@
   background: transparent;
   padding: 0;
   border-radius: 0;
+}
+/* A fence is where line width decides how much of a long line can be read, so a
+   top-level one takes back the scroller's gutters. Nested ones (in a list or a
+   quote) sit off that edge by their own indent and keep their margins. */
+.lin-md .md-content > pre,
+.lin-md .md-content > .shiki-wrapper {
+  margin-left: calc(-1 * var(--lin-chat-gutter));
+  margin-right: calc(-1 * var(--lin-chat-gutter));
 }
 .lin-md a {
   color: #c2b89a;
