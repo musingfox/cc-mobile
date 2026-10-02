@@ -435,3 +435,41 @@ describe("PermissionDeliveredOnReconnect", () => {
     }
   }, 15_000);
 });
+
+/**
+ * The server hears a socket close only when it happens, up to an idle timeout
+ * after the phone left it — by then the phone is usually back on a new one.
+ * That late close must not freeze a countdown the live socket is showing.
+ */
+describe("CountdownFrozenOnlyWithNoPhone", () => {
+  test("an old socket closing behind a live one freezes nothing; the last one does", async () => {
+    const env = await assembled(SELF_LAUNCHED);
+    try {
+      const first = await connect(env.port);
+      first.send({ type: "list_terminal_sessions" });
+      await first.waitFor((frame) => frame.type === "terminal_sessions");
+      report(env.herdr, "blocked");
+      const raised = (await first.waitFor(isPermissionRequest)).payload as { requestId: string };
+
+      const second = await connect(env.port);
+      second.send({ type: "list_terminal_sessions" });
+      await second.waitFor((frame) => frame.type === "terminal_sessions");
+
+      await first.close();
+      // A round trip on the live socket, so the old one's close has been handled.
+      second.send({ type: "get_server_config" });
+      await second.waitFor((frame) => frame.type === "server_config");
+      expect(env.backend.permissionAutoDenyMs?.(raised.requestId)).toBeNumber();
+
+      await second.close();
+      await until(
+        () => env.backend.permissionAutoDenyMs?.(raised.requestId) === undefined,
+        "the last close to freeze the countdown",
+      );
+    } finally {
+      // Settles the prompt, so no real 90 s timer outlives a failed assertion.
+      report(env.herdr, "idle");
+      await env.stop();
+    }
+  }, 15_000);
+});

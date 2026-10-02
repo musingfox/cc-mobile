@@ -150,7 +150,7 @@ export interface HerdrTerminalBackend extends TerminalBackend {
   isPermissionCurrent(requestId: string): boolean;
   /** Milliseconds left before this request is `esc`'d; `undefined` when no deny is running. */
   permissionAutoDenyMs(requestId: string): number | undefined;
-  /** Connection lost: stop treating pending prompts as seen by the phone. */
+  /** The last phone connection closed: stop treating pending prompts as seen. */
   pausePermissions(): void;
   /** A phone listed its sessions: re-read and re-send every prompt still on screen. */
   resumePermissions(): Promise<void>;

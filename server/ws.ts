@@ -159,6 +159,8 @@ export function createWsPlugin(
     return ws.raw ?? ws;
   }
 
+  const openConnections = new Set<unknown>();
+
   function deviceQueryOf(ws: { data?: { request?: Request } }): string | null {
     const request = ws.data?.request;
     if (!request) return null;
@@ -223,6 +225,7 @@ export function createWsPlugin(
 
     open(ws) {
       console.log("[ws] client connected");
+      openConnections.add(ownerOf(ws));
       clientSink.current = (msg) => ws.send(msg);
     },
 
@@ -633,8 +636,12 @@ export function createWsPlugin(
 
     close(ws) {
       // Pending permissions survive the gap: claude is blocked on its own
-      // screen either way, and the prompt is re-read on reconnect.
-      backend.pausePermissions?.();
+      // screen either way, and the prompt is re-read on reconnect. Only the
+      // last socket closing is a gap: the server hears a close up to an idle
+      // timeout after the phone left it, often with the phone already back on
+      // a new socket.
+      openConnections.delete(ownerOf(ws));
+      if (openConnections.size === 0) backend.pausePermissions?.();
 
       // Remove this connection's uuid->sink bindings (baton map §cleanup).
       // Dead-binding leak prevention only; no rebind/replay to a new connection.

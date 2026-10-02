@@ -496,3 +496,11 @@ handler、`SessionManager` 的 append 緩衝與 `stopTask`、client 的兩個 se
 
 由 `server/__tests__/ws-permission-reconnect.test.ts` 的 `PermissionDeliveredOnReconnect` 釘住，
 走 `createApp` 的完整組裝，只有 herdr daemon 是假的。
+
+### 只在最後一條連線關閉時凍結倒數
+
+修正前每次 socket close 都會凍結倒數，包括舊 socket 在新 socket 已經連上之後才逾時關閉的那一次。
+上面說過這是常態，結果是手機明明連著、卡片也顯示著，倒數卻停了。`ws.ts` 現在記錄開著的連線
+（以 `ws.raw` 為鍵，和 sink 的擁有者同一個鍵），只有最後一條關閉時才凍結。由同一個測試檔的
+`CountdownFrozenOnlyWithNoPhone` 釘住：舊 socket 關閉時倒數照跑，最後一條關閉時才停。後半段
+同時證明 `open` 與 `close` 拿到的鍵是同一個，否則連線集合永遠不會清空，倒數也就永遠不會凍結。

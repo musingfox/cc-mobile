@@ -123,11 +123,13 @@ It is present **only while that countdown is running** — absent on a pane
 cc-mobile did not launch, on a question, and while the countdown is frozen —
 and the card shows a number only when it has one. It is a duration, not a
 timestamp, on purpose: the phone turns it into a deadline on its own clock, and
-the two machines' clocks need not agree. Every socket close freezes every
-countdown, so the phone drops its deadline when its socket closes, and a
-reconnect replays a buffered prompt with the time left re-read rather than the
-figure it was sent with. A buffered prompt that is no longer its pane's current
-one (answered, or superseded by a newer prompt) is not replayed at all.
+the two machines' clocks need not agree. The last open socket closing freezes
+every countdown; a close the server hears while another socket is open is an old
+socket timing out behind a phone already back, and freezes nothing. The phone
+drops its deadline when its own socket closes, and a reconnect replays a
+buffered prompt with the time left re-read rather than the figure it was sent
+with. A buffered prompt that is no longer its pane's current one (answered, or
+superseded by a newer prompt) is not replayed at all.
 
 The card itself comes back from `list_terminal_sessions`, which every open
 sends: right after the `terminal_sessions` reply — never before, or a pane the

@@ -527,7 +527,7 @@ export function createNativePermission(options: NativePermissionOptions) {
   }
 
   /**
-   * Connection lost: freeze the countdown, keep the pending records.
+   * No phone connected any more: freeze the countdown, keep the pending records.
    *
    * The gap does not count against the user — they cannot answer a prompt they
    * cannot see. What was already spent is remembered, so a long disconnect does
