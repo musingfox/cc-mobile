@@ -16,7 +16,7 @@
  */
 
 import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Elysia } from "elysia";
 import { type AgentProfileSource, createAgentProfileSource } from "./agents/profiles";
@@ -113,11 +113,14 @@ export interface AppTestDeps {
    */
   gateEnv?: Record<string, string | undefined>;
   agentProfiles?: AgentProfileSource;
+  /** The built client to serve; production serves `DIST_DIR`. */
+  distDir?: string;
 }
 
 /** Builds the whole server. The returned app has not been listened on. */
 export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
   const sessionManager = deps.sessionManager ?? new SessionManager();
+  const distDir = deps.distDir ?? DIST_DIR;
   // WebSocket 入口與原生 pane 送鍵共用同一支延遲寫入器；
   // 只有真正寫入時才會建立目錄與檔案，單純組裝或 listen 不碰磁碟。
   const auditLog = createAuditLog(deps.auditLogPath ? { path: deps.auditLogPath } : {});
@@ -222,17 +225,17 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
     .use(createPushPlugin({ store: pushStore, config: serverConfig }))
     .get("*", async ({ request }) => {
       // Skip if dist/ doesn't exist (dev mode)
-      if (!existsSync(DIST_DIR)) {
+      if (!existsSync(distDir)) {
         return new Response("Not found", { status: 404 });
       }
 
       const url = new URL(request.url);
       let pathname = stripBasePath(url.pathname, serverConfig.basePath);
       pathname = pathname === "/" ? "/index.html" : pathname;
-      const filePath = join(DIST_DIR, pathname);
+      const filePath = join(distDir, pathname);
 
       // Prevent directory traversal
-      if (!filePath.startsWith(DIST_DIR)) {
+      if (!filePath.startsWith(distDir)) {
         return new Response("Forbidden", { status: 403 });
       }
 
@@ -241,9 +244,13 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
         return new Response(file);
       }
 
-      // Fallback to index.html for SPA routing
-      if (pathname !== "/index.html") {
-        const indexFile = Bun.file(join(DIST_DIR, "index.html"));
+      // Only a page navigation falls back to index.html. A missed asset — a
+      // hashed chunk a deploy removed — answered with HTML and status 200 is
+      // stored by the service worker as that chunk.
+      const isNavigation =
+        extname(pathname) === "" && (request.headers.get("accept") ?? "").includes("text/html");
+      if (isNavigation) {
+        const indexFile = Bun.file(join(distDir, "index.html"));
         if (await indexFile.exists()) {
           return new Response(indexFile);
         }
