@@ -12,6 +12,8 @@ export interface BufferedEvent {
 interface SessionBuffer {
   events: BufferedEvent[];
   nextId: number;
+  /** Highest eventId dropped by overflow; 0 when nothing was. See `hasGap`. */
+  lostThrough: number;
 }
 
 export class EventBuffer {
@@ -33,6 +35,7 @@ export class EventBuffer {
       sessionBuffer = {
         events: [],
         nextId: 1,
+        lostThrough: 0,
       };
       this.sessions.set(sessionId, sessionBuffer);
     }
@@ -49,7 +52,8 @@ export class EventBuffer {
 
     // Buffer overflow: drop oldest event
     if (sessionBuffer.events.length > this.maxSize) {
-      sessionBuffer.events.shift();
+      const dropped = sessionBuffer.events.shift();
+      if (dropped) sessionBuffer.lostThrough = dropped.eventId;
     }
 
     return eventId;
@@ -82,10 +86,27 @@ export class EventBuffer {
   }
 
   /**
-   * Clear session buffer
+   * Whether a client whose cursor stands at `afterEventId` missed events this
+   * buffer can no longer replay. Only overflow loses events: what `clear`
+   * removed was retired on purpose, and a replay that starts past it is whole.
+   */
+  hasGap(sessionId: string, afterEventId: number): boolean {
+    const sessionBuffer = this.sessions.get(sessionId);
+    return sessionBuffer !== undefined && afterEventId < sessionBuffer.lostThrough;
+  }
+
+  /**
+   * Drops every buffered event for the session. Ids keep counting from where
+   * they were: the client holds a per-session cursor and asks for events after
+   * it, so a sequence that restarted at 1 would read to every phone holding a
+   * higher cursor as "already seen" — the events after a clear would never be
+   * replayed to it.
    */
   clear(sessionId: string): void {
-    this.sessions.delete(sessionId);
+    const sessionBuffer = this.sessions.get(sessionId);
+    if (!sessionBuffer) return;
+    sessionBuffer.events = [];
+    sessionBuffer.lostThrough = 0;
   }
 
   /**

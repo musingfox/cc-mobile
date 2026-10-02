@@ -91,6 +91,46 @@ describe("EventBuffer", () => {
     expect(latestId).toBeNull();
   });
 
+  // ClearRotationNotice: a rotation clears the session's buffer, and a phone
+  // still holding a cursor from before it must be replayed what comes after.
+  it("clear keeps the id sequence, so a later event outranks every earlier cursor", () => {
+    const buffer = new EventBuffer();
+    buffer.append("s1", { type: "m1" });
+    const cursor = buffer.append("s1", { type: "m2" });
+
+    buffer.clear("s1");
+    const next = buffer.append("s1", { type: "m3" });
+
+    expect(next).toBe(cursor + 1);
+    expect(buffer.replay("s1", cursor).map((event) => event.message)).toEqual([{ type: "m3" }]);
+  });
+
+  it("hasGap reports events overflow dropped before a lagging cursor could read them", () => {
+    const buffer = new EventBuffer(2);
+    buffer.append("s1", { type: "m1" });
+    buffer.append("s1", { type: "m2" });
+    buffer.append("s1", { type: "m3" });
+
+    expect(buffer.hasGap("s1", 0)).toBe(true);
+    // Event 1 was the one dropped, and this cursor already has it.
+    expect(buffer.hasGap("s1", 1)).toBe(false);
+  });
+
+  it("hasGap does not count what clear removed", () => {
+    const buffer = new EventBuffer(2);
+    for (const type of ["m1", "m2", "m3"]) buffer.append("s1", { type });
+
+    buffer.clear("s1");
+    buffer.append("s1", { type: "m4" });
+
+    expect(buffer.hasGap("s1", 0)).toBe(false);
+    expect(buffer.hasGap("s1", 2)).toBe(false);
+  });
+
+  it("hasGap is false for a session with no buffer", () => {
+    expect(new EventBuffer().hasGap("nonexistent", 0)).toBe(false);
+  });
+
   it("unknown session returns empty", () => {
     const buffer = new EventBuffer();
 

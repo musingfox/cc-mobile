@@ -455,8 +455,7 @@ export function createWsPlugin(
               const hasBaseline = perSession !== undefined || lastEventId !== null;
               const baseline = perSession ?? lastEventId ?? -1;
               const events = eventBuffer.replay(sessionId, baseline);
-              const stats = eventBuffer.getStats(sessionId);
-              const gapDetected = hasBaseline && stats.oldest !== null && baseline < stats.oldest;
+              const gapDetected = hasBaseline && eventBuffer.hasGap(sessionId, baseline);
 
               for (const evt of events) {
                 ws.send({
