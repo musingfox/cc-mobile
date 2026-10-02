@@ -122,6 +122,7 @@ a page reload.
 { type: "transcript_page", sessionId: string, epoch: string,
   records: Record<string, unknown>[],
   nextBefore: { epoch: string, seq: number, recordId: string } | null }
+{ type: "transcript_rotated", sessionId: string, epoch: string }  // buffered; never empty
 ```
 
 `permission_request.promptKind` says which of two things the terminal is waiting
@@ -159,6 +160,16 @@ no transcript key, or runs a kind with no registered reader gets
 `{code:"transcript_unavailable"}` instead of a page. Every `stream_chunk.chunk`
 carries the same `epoch`, plus `recordId` and `seq`, so the phone can tell a live
 chunk and a page entry apart from a *different* conversation.
+
+`transcript_rotated` tells the phone about a terminal `/clear` as it happens: a
+pane's `agent_session` moved from one non-null value to a different one, and
+`epoch` names the new file. It is sent only when that path resolved, and never
+for an agent exiting or starting (a null on either side). The phone applies it
+as an epoch-only delivery under the same rule a chunk would meet, so an idle
+phone clears now rather than on the new file's first chunk. It travels through
+the session's buffered sink, and the server empties that session's replay buffer
+before appending it, so a reconnect replays the notice and nothing from the
+cleared file; event ids keep counting, and `gapDetected` ignores the trim.
 
 `server_config` now carries only what the server knows and the client cannot:
 which paths are allowed, where `$HOME` is, and which agents this machine can

@@ -79,7 +79,7 @@ All recorded in `docs/adr/`. Key decisions:
 
 Client→Server: `terminal_create`, `terminal_send`, `terminal_teardown`, `list_terminal_sessions`, `permission`, `interrupt`, `get_server_config`, `list_directories`, `reconnect`, `transcript_page_request`, `capabilities_request`
 
-Server→Client: `terminal_created`, `terminal_teardown_result`, `terminal_sessions`, `stream_chunk`, `stream_end`, `session_state`, `permission_request`, `capabilities_list`, `server_config`, `directory_listing`, `event`, `replay_complete`, `error`, `transcript_page`
+Server→Client: `terminal_created`, `terminal_teardown_result`, `terminal_sessions`, `stream_chunk`, `stream_end`, `session_state`, `permission_request`, `capabilities_list`, `server_config`, `directory_listing`, `event`, `replay_complete`, `error`, `transcript_page`, `transcript_rotated`
 
 `terminal_create` takes an optional `agentKind` (#31) — a closed enum
 (`server/agents/kinds.ts`), unlike the free-string `sessions[].agent`, because
@@ -100,6 +100,10 @@ erroring, and the reply's `epoch` says which file that was. No transcript at all
 answers `{code:"transcript_unavailable"}`, never a page with an empty `epoch`.
 `stream_chunk.chunk` carries the same `epoch` plus `recordId` and `seq` (the
 record's absolute byte offset, the only total order the data supports).
+`transcript_rotated {sessionId, epoch}` names the new file after a terminal
+`/clear` (an `agent_session` move between two non-null values), so an idle phone
+applies the epoch rule without waiting for a chunk; it is buffered, and it
+empties that session's replay buffer before taking its place at the front.
 
 Browsing past conversations is gone since #26: there is no session history,
 no listing and no resume — herdr's live sessions are the only sessions there

@@ -110,3 +110,16 @@ Decision M1（不重塑內容）不受影響：歷史信封裡的 record body �
 - **閱讀模式是 client 端的投影選擇**，不改動決策 3（畫面順序是檔案順序），也不改動 ADR-015 Decision M1（server 仍不重塑、含它沒見過的 block 一併轉送）。thinking 由 server 刻意保留；是否畫出來是 L2 的事。
 - **「N=50 界不住 payload」的風險由讀層視窗消化**，頁的單位仍是 mapper 回傳非 null 的 record，沒有改成分頁位元組上限、也沒有為了體積去動「不重塑」。
 - **排除規則清單現在寫在** [`docs/transcript-visibility.md`](../transcript-visibility.md)，並且是兩層兩種尺度的聯集（server record-unit ∪ client block-unit），不是假裝成一層。
+
+## 2026-10-03 修訂（終端機 `/clear` 推給閒置的手機）
+
+§90 留下一個缺口：連著、閒置、沒重開該 session 的手機，會繼續顯示已被清空的對話。這一版把它關掉。它在 §90 是延後，不是禁止。
+
+- **server 在輪替時推 `transcript_rotated {sessionId, epoch}`**。觸發條件是 `agent_session` 從一個非 null 值換成另一個不同的非 null 值（`server/herdr/pane-events.ts`）。`resetCursor` 照舊先跑，行為不變；通知等它重新附著時的那一次路徑解析，帶新檔的 epoch 送出（`server/transcript/delivery.ts` 的 `announceRotation`）。解析不到路徑就不送：§83「解析不到路徑時不得蓋 epoch」原封適用。
+- **null 的兩側都不推，這是裁決，不是遺漏**。值 → null 是 agent 結束，沒有檔可以命名；null → 值是 agent 啟動，新檔的第一個 chunk 本來就帶 epoch，套的是同一條規則。只有兩個真實對話之間的移動才是終端機清空。
+- **client 沒有新規則**。通知等於一次「帶 epoch、不帶訊息」的 `applyTranscriptMessages`，清不清完全由 §83 的既有規則決定：兩個不同的非 null epoch 之間才清，缺席、null、空字串都不清，已退役的 epoch 直接丟。它改變的只是清空發生的時間。
+- **通知走 buffered sink，並在那裡裁掉該 session 的 `eventBuffer`**（`server/ws.ts` 的 `sendBuffered`）。輪替前的事件屬於被清掉的檔，重連不該重播；通知本身成為裁剪後的第一筆事件，所以輪替時不在線的手機重連時先收到它。§90「server 的 `eventBuffer` 仍然不裁剪」自此不再成立。
+  - 裁剪不重設 eventId：client 的重播游標拿 id 比大小，從 1 重新起算會讓之後的事件全被當成已讀。
+  - 斷線偵測只算 overflow 丟掉的事件，不算裁剪（`EventBuffer.hasGap`）。否則每次 `/clear` 之後重連都會跳出「可能漏了訊息」，而手機在背景時斷線正是常態。
+- **退役的 epoch 跟著 localStorage 持久化**，存成陣列，因為 Set 撐不過 JSON。重載後退役集合若是空的，一筆重播的舊檔 chunk 會被讀成「轉回舊對話」。裁剪 buffer 排除不了這種 chunk：輪替當下正在讀舊檔的那次讀取，結果會排在通知後面進 buffer。這也關掉 transcript 投影 review 的 advisory #1。不設上限：每次 `/clear` 只多 16 個十六進位字元，pane 消失時整筆 session 一起清掉。
+

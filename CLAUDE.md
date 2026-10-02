@@ -154,7 +154,7 @@ selectors are a client bug, not a merge — both before `workspace.create`, so a
 refused launch leaves nothing behind. A message with neither is what every
 bundle cached before profiles sends, and still starts claude.
 
-Server→Client: `terminal_created`, `terminal_teardown_result`, `terminal_sessions`, `stream_chunk`, `stream_end`, `session_state`, `permission_request`, `capabilities_list`, `server_config`, `directory_listing`, `event`, `replay_complete`, `error`, `transcript_page`
+Server→Client: `terminal_created`, `terminal_teardown_result`, `terminal_sessions`, `stream_chunk`, `stream_end`, `session_state`, `permission_request`, `capabilities_list`, `server_config`, `directory_listing`, `event`, `replay_complete`, `error`, `transcript_page`, `transcript_rotated`
 
 Browsing past conversations is gone since #26: there is no session history,
 no listing and no resume — herdr's live sessions are the only sessions there
@@ -187,6 +187,21 @@ only total order the transcript supports, since timestamps both tie and invert)
 and `epoch`. The phone keys messages by `recordId`, orders them by `seq`, and
 treats a move between two different non-null `epoch`s — and only that — as the
 terminal having reset the conversation.
+
+The server does not leave that to the new file's first chunk. When a pane's
+`agent_session` moves from one non-null value to a different non-null one (a
+terminal `/clear`), it sends `transcript_rotated {sessionId, epoch}` naming the
+new file — never when the path did not resolve, and never for a null on either
+side, which is an agent exiting or starting rather than a clear. The phone
+applies it as an epoch-only delivery under exactly the rule above, so it changes
+*when* an idle phone clears, never *whether*. Unlike `transcript_page` it goes
+through the session's buffered sink, because a phone away during the `/clear`
+must hear it on reconnect, and it is also where the server empties that
+session's replay buffer: a reconnect replays the notice first and nothing from
+the cleared file. Event ids keep counting across that trim, and `gapDetected`
+counts only events lost to overflow, so a trimmed buffer never reads as missed
+messages. The phone persists the epochs it has left (`retiredEpochs`, as an
+array), so a reload keeps refusing them (ADR-016 §2026-10-03).
 
 Since #29 the session key on the wire is herdr's `pane_id`, not a claude uuid: it
 exists for every pane and survives a `/clear`. `terminal_sessions` carries
