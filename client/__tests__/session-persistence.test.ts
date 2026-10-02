@@ -395,6 +395,28 @@ describe("session-persistence", () => {
     expect("pagingCursor" in stored).toBe(false);
   });
 
+  // ClearRotationNotice / review advisory #1 — the storage half.
+  test("the epochs a session has left are stored as an array and come back as a set", () => {
+    const state = {
+      id: "u4",
+      cwd: "/test",
+      messages: [],
+      pendingPermission: null,
+      isStreaming: false,
+      resolvedActions: [],
+      agentState: null,
+      receivedAuthoritativeState: false,
+      epoch: "cccc",
+      retiredEpochs: new Set(["aaaa", "bbbb"]),
+    } as SessionState;
+
+    saveSessionState("u4", state);
+
+    const stored = JSON.parse(localStorage.getItem("ccm:session:u4") ?? "{}");
+    expect(stored.retiredEpochs).toEqual(["aaaa", "bbbb"]);
+    expect(loadSessionState("u4")?.retiredEpochs).toEqual(new Set(["aaaa", "bbbb"]));
+  });
+
   // SessionRemovalDropsReplayCursor — the storage half of the choke point.
   test("clearing a session also forgets its replay cursor", () => {
     localStorage.setItem("ccm:lastEventIds", JSON.stringify({ u1: 5, u2: 9 }));

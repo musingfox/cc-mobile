@@ -31,6 +31,15 @@ interface SerializableSessionState {
    * against a file that may have rotated while the app was closed.
    */
   epoch?: string;
+  /**
+   * The files this session has left, so a reload keeps refusing them. An
+   * empty set after a reload would read the first retired-epoch chunk as a
+   * rotation back to the old conversation, and such a chunk can still reach a
+   * reloaded phone: the server trims its replay buffer at the rotation notice,
+   * but a read of the old file that was in flight at the `/clear` lands behind
+   * that notice. An array because a Set does not survive JSON.
+   */
+  retiredEpochs?: string[];
 }
 
 const TRANSIENT_PART_KINDS = new Set(["thinking", "tool_use", "tool_result"]);
@@ -82,6 +91,7 @@ export function saveSessionState(sessionId: string, state: SessionState): void {
       receivedAuthoritativeState: state.receivedAuthoritativeState,
       terminal: state.terminal,
       epoch: state.epoch,
+      retiredEpochs: state.retiredEpochs ? [...state.retiredEpochs] : undefined,
     };
 
     const key = `${SESSION_KEY_PREFIX}${sessionId}`;
@@ -116,6 +126,9 @@ export function loadSessionState(sessionId: string): SessionState | null {
       ...parsed,
       messages: persistableMessages(parsed.messages ?? []),
       resolvedActions: parsed.resolvedActions || [],
+      retiredEpochs: Array.isArray(parsed.retiredEpochs)
+        ? new Set(parsed.retiredEpochs)
+        : undefined,
       isStreaming: false,
       pendingPermission: null,
       agentState: null,

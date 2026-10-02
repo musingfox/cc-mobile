@@ -552,6 +552,18 @@ class WsService {
         break;
       }
 
+      case "transcript_rotated": {
+        if (!sessionId) break;
+        // The terminal cleared its conversation. This is the epoch rule a
+        // chunk from the new file would apply anyway, with no messages — it
+        // only spares an idle phone from waiting for that chunk to arrive.
+        store.applyTranscriptMessages(sessionId, {
+          epoch: typeof msg.epoch === "string" ? msg.epoch : null,
+          messages: [],
+        });
+        break;
+      }
+
       case "capabilities_list": {
         this.clearCapabilitiesTimeout(sessionId);
         if (!sessionId) break;
