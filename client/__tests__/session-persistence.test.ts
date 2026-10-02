@@ -339,6 +339,45 @@ describe("session-persistence", () => {
     expect(loadSessionState("u2")?.terminal).toBeUndefined();
   });
 
+  // A bundle cached before the stream_event bubble was removed wrote this
+  // field into every session blob, and those blobs are still on phones.
+  test("StreamEventPipelineRemoved: a blob carrying currentStreamMessageId loads, and the field is not carried on", () => {
+    localStorage.setItem(
+      "ccm:session:legacy",
+      JSON.stringify({
+        id: "legacy",
+        cwd: "/p",
+        sdkSessionId: null,
+        messages: [
+          { id: "m1", role: "user", content: "hi", timestamp: 1 },
+          { id: "m2", role: "assistant", content: "hello", timestamp: 2 },
+        ],
+        pendingPermission: null,
+        isStreaming: true,
+        currentStreamMessageId: "m2",
+        activeToolStatus: null,
+        activeTools: [],
+        activeAgents: [],
+        activeHook: null,
+        usage: null,
+        contextUsage: null,
+        promptSuggestion: null,
+        resolvedActions: [],
+        agentState: null,
+        receivedAuthoritativeState: false,
+      }),
+    );
+
+    const loaded = loadSessionState("legacy");
+    expect(loaded?.messages.map((m) => m.id)).toEqual(["m1", "m2"]);
+    expect(Object.hasOwn(loaded as object, "currentStreamMessageId")).toBe(false);
+
+    saveSessionState("legacy", loaded as SessionState);
+    const rewritten = JSON.parse(localStorage.getItem("ccm:session:legacy") ?? "null");
+    expect(Object.hasOwn(rewritten, "currentStreamMessageId")).toBe(false);
+    expect(loadSessionState("legacy")?.messages.map((m) => m.id)).toEqual(["m1", "m2"]);
+  });
+
   // LocalOnlyDiscardOnFirstPage T5 — the reload half.
   //
   // Without the epoch, every reload would look exactly like a rotation, and the
