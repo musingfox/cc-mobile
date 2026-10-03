@@ -126,9 +126,7 @@ describe("AgentProfileFileLoad", () => {
 
   test("operator args pass through without a denylist", () => {
     const path = profileFile(
-      JSON.stringify([
-        { id: "loose", label: "Loose", kind: "omp", args: ["--auto-approve"] },
-      ]),
+      JSON.stringify([{ id: "loose", label: "Loose", kind: "omp", args: ["--auto-approve"] }]),
     );
 
     expect(createAgentProfileSource({ path }).list()).toEqual([

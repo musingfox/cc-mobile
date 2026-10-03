@@ -35,9 +35,19 @@ describe("ConversationModeSelection", () => {
     const userA = msg({ id: "uA", role: "user", content: "A" });
     const text = msg({ id: "text", role: "assistant", stopReason: "tool_use", content: "bubble" });
     const thinking = msg({ id: "th", role: "assistant", kind: "thinking", content: "plan" });
-    const tool = msg({ id: "tool", role: "assistant", kind: "tool_use", toolName: "Bash", content: "" });
+    const tool = msg({
+      id: "tool",
+      role: "assistant",
+      kind: "tool_use",
+      toolName: "Bash",
+      content: "",
+    });
     const userB = msg({ id: "uB", role: "user", content: "B" });
-    expect(selectConversationMessages([userA, text, thinking, tool, userB])).toEqual([userA, text, userB]);
+    expect(selectConversationMessages([userA, text, thinking, tool, userB])).toEqual([
+      userA,
+      text,
+      userB,
+    ]);
   });
 
   test("T4: missing stopReason is a non-match absorbed by the fallback", () => {
@@ -48,7 +58,12 @@ describe("ConversationModeSelection", () => {
 
   test("T5: omp stopReason stop with text is a turn-ending match", () => {
     const userA = msg({ id: "uA", role: "user", content: "A" });
-    const assistant = msg({ id: "a", role: "assistant", stopReason: "stop", content: "omp answer" });
+    const assistant = msg({
+      id: "a",
+      role: "assistant",
+      stopReason: "stop",
+      content: "omp answer",
+    });
     expect(selectConversationMessages([userA, assistant])).toEqual([userA, assistant]);
   });
 
@@ -80,7 +95,12 @@ describe("ConversationModeSelection", () => {
 
   test("T9: last turn-ending match wins inside a segment", () => {
     const userA = msg({ id: "uA", role: "user", content: "A" });
-    const seq = msg({ id: "seq", role: "assistant", stopReason: "stop_sequence", content: "earlier" });
+    const seq = msg({
+      id: "seq",
+      role: "assistant",
+      stopReason: "stop_sequence",
+      content: "earlier",
+    });
     const end = msg({ id: "end", role: "assistant", stopReason: "end_turn", content: "later" });
     expect(selectConversationMessages([userA, seq, end])).toEqual([userA, end]);
   });
@@ -94,7 +114,13 @@ describe("ConversationModeSelection", () => {
 
   test("T13: a tool_result is neither an answer nor a prompt, and does not split the turn", () => {
     const userA = msg({ id: "uA", role: "user", content: "A" });
-    const use = msg({ id: "tu", role: "assistant", kind: "tool_use", toolName: "Bash", content: "" });
+    const use = msg({
+      id: "tu",
+      role: "assistant",
+      kind: "tool_use",
+      toolName: "Bash",
+      content: "",
+    });
     // The projection gives a tool_result role "user" (transcript-projection.ts
     // roleForPart), which is why role alone cannot decide what a prompt is.
     const result = msg({ id: "tr", role: "user", kind: "tool_result", content: "stdout blah" });

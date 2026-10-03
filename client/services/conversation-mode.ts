@@ -15,7 +15,11 @@ function isUserPrompt(message: Message): boolean {
 
 function isTextBubble(message: Message): boolean {
   if (message.role !== "assistant") return false;
-  if (message.kind === "thinking" || message.kind === "tool_use" || message.kind === "tool_result") {
+  if (
+    message.kind === "thinking" ||
+    message.kind === "tool_use" ||
+    message.kind === "tool_result"
+  ) {
     return false;
   }
   return true;

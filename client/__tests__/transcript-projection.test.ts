@@ -127,8 +127,15 @@ describe("projectChunk — which parts does this record project to", () => {
   });
 
   test("user record text extraction (UserRecordBubble) projects to one text part", () => {
-    const chunk = { type: "user", message: { role: "user", content: "from terminal" }, recordId: "u9", seq: 9 };
-    expect(projectChunk(chunk as Record<string, unknown>)).toEqual([{ kind: "text", text: "from terminal" }]);
+    const chunk = {
+      type: "user",
+      message: { role: "user", content: "from terminal" },
+      recordId: "u9",
+      seq: 9,
+    };
+    expect(projectChunk(chunk as Record<string, unknown>)).toEqual([
+      { kind: "text", text: "from terminal" },
+    ]);
   });
 
   describe("no user bubble ever renders wrapper markup", () => {

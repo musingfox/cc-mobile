@@ -80,9 +80,9 @@ describe("ClientMessage schema", () => {
   });
 
   test("capabilities_request with empty sessionId is refused", () => {
-    expect(
-      ClientMessage.safeParse({ type: "capabilities_request", sessionId: "" }).success,
-    ).toBe(false);
+    expect(ClientMessage.safeParse({ type: "capabilities_request", sessionId: "" }).success).toBe(
+      false,
+    );
   });
 });
 

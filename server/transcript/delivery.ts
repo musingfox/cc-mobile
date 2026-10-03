@@ -26,6 +26,7 @@
  *     hook still answered for cc-mobile-launched panes went with that pipeline.
  */
 
+import { epochOf } from "./epoch";
 import {
   defaultTranscriptReadFs,
   initCursorAtEof,
@@ -34,7 +35,6 @@ import {
   type TranscriptReadResult,
 } from "./reader";
 import { type TranscriptChunk, transcriptRecordToChunk } from "./records";
-import { epochOf } from "./epoch";
 
 export type ClientSink = (msg: Record<string, unknown>) => void;
 

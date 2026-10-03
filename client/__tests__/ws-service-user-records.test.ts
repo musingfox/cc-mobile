@@ -6,7 +6,7 @@ function getInternal() {
   return wsService as unknown as {
     ws: any;
     handleMessage: (m: any) => void;
-    lastOptimisticSend: Map<string, Array<{messageId:string; prompt:string; sentAt:number}>>;
+    lastOptimisticSend: Map<string, Array<{ messageId: string; prompt: string; sentAt: number }>>;
   };
 }
 
@@ -18,10 +18,16 @@ describe("UserRecordBubble", () => {
     useAppStore.setState({ sessions: new Map(), activeSessionId: null });
     useAppStore.getState().addSession("s1", "/c");
   });
-  afterEach(() => { getInternal().ws = prev; });
+  afterEach(() => {
+    getInternal().ws = prev;
+  });
 
-  test("T1: given {type:\"user\", message:{role:\"user\", content:\"hello\"}, recordId:\"u1\", seq:10} -> expect 1 message {role:\"user\", content:\"hello\", recordId:\"u1\", seq:10}", () => {
-    getInternal().handleMessage({ type: "stream_chunk", sessionId: "s1", chunk: { type: "user", message: { role: "user", content: "hello" }, recordId: "u1", seq: 10 } });
+  test('T1: given {type:"user", message:{role:"user", content:"hello"}, recordId:"u1", seq:10} -> expect 1 message {role:"user", content:"hello", recordId:"u1", seq:10}', () => {
+    getInternal().handleMessage({
+      type: "stream_chunk",
+      sessionId: "s1",
+      chunk: { type: "user", message: { role: "user", content: "hello" }, recordId: "u1", seq: 10 },
+    });
     const m = useAppStore.getState().sessions.get("s1")!.messages[0];
     expect(m.role).toBe("user");
     expect(m.content).toBe("hello");
@@ -30,29 +36,78 @@ describe("UserRecordBubble", () => {
   });
 
   test("T2: given user tool_result -> 0", () => {
-    getInternal().handleMessage({ type: "stream_chunk", sessionId: "s1", chunk: { type: "user", message: { role: "user", content: [{type:"tool_result"}] }, recordId: "u2", seq: 20 } });
+    getInternal().handleMessage({
+      type: "stream_chunk",
+      sessionId: "s1",
+      chunk: {
+        type: "user",
+        message: { role: "user", content: [{ type: "tool_result" }] },
+        recordId: "u2",
+        seq: 20,
+      },
+    });
     const msgs = useAppStore.getState().sessions.get("s1")!.messages;
     expect(msgs).toHaveLength(1);
     expect(msgs[0].kind).toBe("tool_result");
   });
 
   test("T3: command-name -> 0", () => {
-    getInternal().handleMessage({ type: "stream_chunk", sessionId: "s1", chunk: { type: "user", message: { role: "user", content: "<command-name>/c</command-name>" }, recordId: "u3", seq: 30 } });
+    getInternal().handleMessage({
+      type: "stream_chunk",
+      sessionId: "s1",
+      chunk: {
+        type: "user",
+        message: { role: "user", content: "<command-name>/c</command-name>" },
+        recordId: "u3",
+        seq: 30,
+      },
+    });
     expect(useAppStore.getState().sessions.get("s1")!.messages.length).toBe(0);
   });
 
   test("T4: local stdout -> 0", () => {
-    getInternal().handleMessage({ type: "stream_chunk", sessionId: "s1", chunk: { type: "user", message: { role: "user", content: "<local-command-stdout>ok</local-command-stdout>" }, recordId: "u4", seq: 40 } });
+    getInternal().handleMessage({
+      type: "stream_chunk",
+      sessionId: "s1",
+      chunk: {
+        type: "user",
+        message: { role: "user", content: "<local-command-stdout>ok</local-command-stdout>" },
+        recordId: "u4",
+        seq: 40,
+      },
+    });
     expect(useAppStore.getState().sessions.get("s1")!.messages.length).toBe(0);
   });
 
   test("T5: mixed -> ab", () => {
-    getInternal().handleMessage({ type: "stream_chunk", sessionId: "s1", chunk: { type: "user", message: { role: "user", content: [{type:"text",text:"a"},{type:"tool_result"},{type:"text",text:"b"}] }, recordId: "u5", seq: 50 } });
+    getInternal().handleMessage({
+      type: "stream_chunk",
+      sessionId: "s1",
+      chunk: {
+        type: "user",
+        message: {
+          role: "user",
+          content: [
+            { type: "text", text: "a" },
+            { type: "tool_result" },
+            { type: "text", text: "b" },
+          ],
+        },
+        recordId: "u5",
+        seq: 50,
+      },
+    });
     expect(useAppStore.getState().sessions.get("s1")!.messages[0].content).toBe("ab");
   });
 
   test("T6: malformed -> 0 no throw", () => {
-    expect(() => getInternal().handleMessage({ type: "stream_chunk", sessionId: "s1", chunk: { type: "user", message: {} } })).not.toThrow();
+    expect(() =>
+      getInternal().handleMessage({
+        type: "stream_chunk",
+        sessionId: "s1",
+        chunk: { type: "user", message: {} },
+      }),
+    ).not.toThrow();
     expect(useAppStore.getState().sessions.get("s1")!.messages.length).toBe(0);
   });
 });
@@ -65,11 +120,22 @@ describe("OptimisticEchoSupersede", () => {
     useAppStore.setState({ sessions: new Map(), activeSessionId: null });
     useAppStore.getState().addSession("s1", "/c");
   });
-  afterEach(() => { getInternal().ws = prev; });
+  afterEach(() => {
+    getInternal().ws = prev;
+  });
 
-  test("T1: given send \"hello\", then {type:\"user\", ... \"hello \", recordId:\"u1\", seq:70} 2s later -> expect 1", () => {
+  test('T1: given send "hello", then {type:"user", ... "hello ", recordId:"u1", seq:70} 2s later -> expect 1', () => {
     wsService.terminalSend("s1", "hello");
-    getInternal().handleMessage({ type: "stream_chunk", sessionId: "s1", chunk: { type: "user", message: { role: "user", content: "hello " }, recordId: "u1", seq: 70 } });
+    getInternal().handleMessage({
+      type: "stream_chunk",
+      sessionId: "s1",
+      chunk: {
+        type: "user",
+        message: { role: "user", content: "hello " },
+        recordId: "u1",
+        seq: 70,
+      },
+    });
     const msgs = useAppStore.getState().sessions.get("s1")!.messages;
     expect(msgs.length).toBe(1);
     expect(msgs[0].recordId).toBe("u1");
@@ -77,16 +143,31 @@ describe("OptimisticEchoSupersede", () => {
 
   test("T2: mismatch content -> 2", () => {
     wsService.terminalSend("s1", "hello");
-    getInternal().handleMessage({ type: "stream_chunk", sessionId: "s1", chunk: { type: "user", message: { role: "user", content: "goodbye" }, recordId: "x", seq: 1 } });
+    getInternal().handleMessage({
+      type: "stream_chunk",
+      sessionId: "s1",
+      chunk: { type: "user", message: { role: "user", content: "goodbye" }, recordId: "x", seq: 1 },
+    });
     expect(useAppStore.getState().sessions.get("s1")!.messages.length).toBe(2);
   });
 
   test("T3: 301s later -> 2", () => {
-    const o = Date.now; let t=0; (Date as any).now=()=>t;
+    const o = Date.now;
+    let t = 0;
+    (Date as any).now = () => t;
     try {
       wsService.terminalSend("s1", "hello");
       t += 301000;
-      getInternal().handleMessage({ type: "stream_chunk", sessionId: "s1", chunk: { type: "user", message: { role: "user", content: "hello" }, recordId: "late", seq: 2 } });
+      getInternal().handleMessage({
+        type: "stream_chunk",
+        sessionId: "s1",
+        chunk: {
+          type: "user",
+          message: { role: "user", content: "hello" },
+          recordId: "late",
+          seq: 2,
+        },
+      });
     } finally {
       (Date as any).now = o;
     }
@@ -96,17 +177,33 @@ describe("OptimisticEchoSupersede", () => {
   test("T4: two sends + two records -> 2 bubbles (use queue)", () => {
     wsService.terminalSend("s1", "hello");
     wsService.terminalSend("s1", "hello");
-    getInternal().handleMessage({ type: "stream_chunk", sessionId: "s1", chunk: { type: "user", message: { role: "user", content: "hello" }, recordId: "u1", seq: 10 } });
-    getInternal().handleMessage({ type: "stream_chunk", sessionId: "s1", chunk: { type: "user", message: { role: "user", content: "hello" }, recordId: "u2", seq: 20 } });
-    const us = useAppStore.getState().sessions.get("s1")!.messages.filter(m=>m.role==='user');
+    getInternal().handleMessage({
+      type: "stream_chunk",
+      sessionId: "s1",
+      chunk: { type: "user", message: { role: "user", content: "hello" }, recordId: "u1", seq: 10 },
+    });
+    getInternal().handleMessage({
+      type: "stream_chunk",
+      sessionId: "s1",
+      chunk: { type: "user", message: { role: "user", content: "hello" }, recordId: "u2", seq: 20 },
+    });
+    const us = useAppStore
+      .getState()
+      .sessions.get("s1")!
+      .messages.filter((m) => m.role === "user");
     expect(us.length).toBe(2);
-    expect(us.map(u=>u.recordId)).toEqual(["u1","u2"]);
+    expect(us.map((u) => u.recordId)).toEqual(["u1", "u2"]);
   });
 
   test("T5: busy removes echo (preserve)", () => {
     useAppStore.getState().setActiveSession("s1");
     wsService.terminalSend("s1", "hello");
-    getInternal().handleMessage({ type: "error", sessionId: "s1", code: "session_busy", message: "b" });
+    getInternal().handleMessage({
+      type: "error",
+      sessionId: "s1",
+      code: "session_busy",
+      message: "b",
+    });
     expect(useAppStore.getState().sessions.get("s1")!.messages.length).toBe(0);
     expect(useAppStore.getState().inputDraft).toContain("hello");
   });
@@ -124,12 +221,20 @@ describe("TerminalPromptLeavesStreamingAlone", () => {
     useAppStore.setState({ sessions: new Map(), activeSessionId: null });
     useAppStore.getState().addSession("s1", "/c");
   });
-  afterEach(() => { getInternal().ws = prev; });
+  afterEach(() => {
+    getInternal().ws = prev;
+  });
 
   const typed = {
     type: "stream_chunk",
     sessionId: "s1",
-    chunk: { type: "user", message: { role: "user", content: "typed at the terminal" }, recordId: "t1", seq: 5, epoch: "aaaa" },
+    chunk: {
+      type: "user",
+      message: { role: "user", content: "typed at the terminal" },
+      recordId: "t1",
+      seq: 5,
+      epoch: "aaaa",
+    },
   };
 
   test("a prompt typed at the terminal is shown without raising the streaming flag", () => {
@@ -159,7 +264,9 @@ describe("ReplyAfterIdleLeavesStreamingAlone", () => {
     useAppStore.setState({ sessions: new Map(), activeSessionId: null });
     useAppStore.getState().addSession("s1", "/c");
   });
-  afterEach(() => { getInternal().ws = prev; });
+  afterEach(() => {
+    getInternal().ws = prev;
+  });
 
   test("running, idle, a late assistant record, stream_end: the spinner is down", () => {
     getInternal().handleMessage({ type: "session_state", sessionId: "s1", state: "running" });
@@ -167,7 +274,13 @@ describe("ReplyAfterIdleLeavesStreamingAlone", () => {
     getInternal().handleMessage({
       type: "stream_chunk",
       sessionId: "s1",
-      chunk: { type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "done" }] }, recordId: "a1", seq: 9, epoch: "aaaa" },
+      chunk: {
+        type: "assistant",
+        message: { role: "assistant", content: [{ type: "text", text: "done" }] },
+        recordId: "a1",
+        seq: 9,
+        epoch: "aaaa",
+      },
     });
     getInternal().handleMessage({ type: "stream_end", sessionId: "s1" });
     const session = useAppStore.getState().sessions.get("s1")!;
@@ -175,7 +288,6 @@ describe("ReplyAfterIdleLeavesStreamingAlone", () => {
     expect(session.isStreaming).toBe(false);
   });
 });
-
 
 // Review advisory #6: a send whose record never pairs (the agent rewrote the
 // text, or no record came) used to stay in lastOptimisticSend until the tab
@@ -208,7 +320,10 @@ describe("OptimisticSendPruning", () => {
     });
   }
 
-  const pendingPrompts = () => getInternal().lastOptimisticSend.get("s1")?.map((p) => p.prompt);
+  const pendingPrompts = () =>
+    getInternal()
+      .lastOptimisticSend.get("s1")
+      ?.map((p) => p.prompt);
 
   test("a user record that pairs with nothing still drops the sends past the window", () => {
     wsService.terminalSend("s1", "stale");
@@ -230,7 +345,10 @@ describe("OptimisticSendPruning", () => {
     userRecord("fresh", "r1");
 
     expect(getInternal().lastOptimisticSend.has("s1")).toBe(false);
-    const users = useAppStore.getState().sessions.get("s1")!.messages.filter((m) => m.role === "user");
+    const users = useAppStore
+      .getState()
+      .sessions.get("s1")!
+      .messages.filter((m) => m.role === "user");
     // The fresh echo was superseded by its record; the stale one is only
     // forgotten for pairing, and stays on screen as a local-only bubble.
     expect(users.map((m) => m.recordId ?? m.content).sort()).toEqual(["r1", "stale"]);

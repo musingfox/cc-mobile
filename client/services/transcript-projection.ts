@@ -27,10 +27,22 @@ export const VISIBILITY_RULES: VisibilityRule[] = [
   { id: "L1-isSidechain", layer: "server-record", subject: "isSidechain" },
   { id: "L1-isMeta", layer: "server-record", subject: "isMeta" },
   { id: "L1-isCompactSummary", layer: "server-record", subject: "isCompactSummary" },
-  { id: "L1-claude-type-not-user-assistant", layer: "server-record", subject: "claude-type-not-in-user-assistant" },
+  {
+    id: "L1-claude-type-not-user-assistant",
+    layer: "server-record",
+    subject: "claude-type-not-in-user-assistant",
+  },
   { id: "L1-omp-type-not-message", layer: "server-record", subject: "omp-type-not-message" },
-  { id: "L1-omp-role-not-user-assistant", layer: "server-record", subject: "omp-role-not-in-user-assistant" },
-  { id: "L1-conversational-no-message-body", layer: "server-record", subject: "conversational-record-with-no-message-body" },
+  {
+    id: "L1-omp-role-not-user-assistant",
+    layer: "server-record",
+    subject: "omp-role-not-in-user-assistant",
+  },
+  {
+    id: "L1-conversational-no-message-body",
+    layer: "server-record",
+    subject: "conversational-record-with-no-message-body",
+  },
   {
     id: "L2-text",
     layer: "client-block",
@@ -118,9 +130,11 @@ function toolResultText(block: Record<string, unknown>): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
     return content
-      .map((c) => (c && typeof c === "object" && typeof (c as { text?: unknown }).text === "string"
-        ? (c as { text: string }).text
-        : ""))
+      .map((c) =>
+        c && typeof c === "object" && typeof (c as { text?: unknown }).text === "string"
+          ? (c as { text: string }).text
+          : "",
+      )
       .join("");
   }
   if (typeof block.text === "string") return block.text;
@@ -195,7 +209,12 @@ export function projectChunk(chunk: Record<string, unknown>): ProjectedPart[] {
     if (block.type === "tool_result") {
       parts.push({
         kind: "tool_result",
-        toolUseId: typeof block.tool_use_id === "string" ? block.tool_use_id : typeof block.toolUseId === "string" ? block.toolUseId : "",
+        toolUseId:
+          typeof block.tool_use_id === "string"
+            ? block.tool_use_id
+            : typeof block.toolUseId === "string"
+              ? block.toolUseId
+              : "",
         text: toolResultText(block),
       });
     }
@@ -221,7 +240,10 @@ function contentForPart(part: ProjectedPart): string {
   return "";
 }
 
-export function transcriptPositionOf(chunk: Record<string, unknown>): { recordId?: string; seq?: number } {
+export function transcriptPositionOf(chunk: Record<string, unknown>): {
+  recordId?: string;
+  seq?: number;
+} {
   return {
     ...(typeof chunk.recordId === "string" ? { recordId: chunk.recordId } : {}),
     ...(typeof chunk.seq === "number" ? { seq: chunk.seq } : {}),

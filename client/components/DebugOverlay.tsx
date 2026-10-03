@@ -39,7 +39,6 @@ export const debugLog = {
   },
 };
 
-
 export function debugCapabilitiesStatus(
   session: { capabilities?: { status: string } } | undefined,
 ): "ready" | "loading" | "unavailable" | "none" {

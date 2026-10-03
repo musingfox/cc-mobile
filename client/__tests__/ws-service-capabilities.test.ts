@@ -127,7 +127,6 @@ describe("CapabilityListApplied", () => {
   });
 });
 
-
 describe("CapabilityRequestIssuedOnPickerOpen", () => {
   let fake: FakeWebSocket;
   let prevWs: WebSocket | null;
@@ -219,7 +218,6 @@ describe("CapabilityRequestIssuedOnPickerOpen", () => {
   });
 });
 
-
 describe("CapabilityUnavailableApplied", () => {
   let fake: FakeWebSocket;
   let prevWs: WebSocket | null;
@@ -291,7 +289,6 @@ describe("CapabilityUnavailableApplied", () => {
     expect(useAppStore.getState().sessions.size).toBe(before);
   });
 });
-
 
 describe("CapabilityRequestTimeout", () => {
   let fake: FakeWebSocket;

@@ -2,11 +2,7 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
-import {
-  isAgentKindAvailable,
-  LAUNCHABLE_AGENT_KINDS,
-  type LaunchableAgentKind,
-} from "./kinds";
+import { isAgentKindAvailable, LAUNCHABLE_AGENT_KINDS, type LaunchableAgentKind } from "./kinds";
 
 export interface AgentProfile {
   id: string;
@@ -72,11 +68,7 @@ export function createAgentProfileSource(
       const ids = new Set<string>();
       for (const entry of input) {
         const parsed = AgentProfileSchema.safeParse(entry);
-        if (
-          !parsed.success ||
-          ids.has(parsed.data.id) ||
-          !isAgentKindAvailable(parsed.data.kind)
-        ) {
+        if (!parsed.success || ids.has(parsed.data.id) || !isAgentKindAvailable(parsed.data.kind)) {
           continue;
         }
         ids.add(parsed.data.id);

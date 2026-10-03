@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { epochOf } from "./epoch";
 
 describe("TranscriptEpochIdentity", () => {
-  it("T1: given epochOf(\"/Users/x/.claude/projects/p/a.jsonl\") called twice -> expect the same 16-char lowercase hex string both times, and the same value in a fresh process", () => {
+  it('T1: given epochOf("/Users/x/.claude/projects/p/a.jsonl") called twice -> expect the same 16-char lowercase hex string both times, and the same value in a fresh process', () => {
     const p = "/Users/x/.claude/projects/p/a.jsonl";
     const e1 = epochOf(p);
     const e2 = epochOf(p);
@@ -12,7 +12,7 @@ describe("TranscriptEpochIdentity", () => {
     expect(epochOf(p)).toBe(e1);
   });
 
-  it("T2: given epochOf on \"/…/p/a.jsonl\" vs \"/…/p/b.jsonl\" -> expect two different values", () => {
+  it('T2: given epochOf on "/…/p/a.jsonl" vs "/…/p/b.jsonl" -> expect two different values', () => {
     const e1 = epochOf("/Users/x/.claude/projects/p/a.jsonl");
     const e2 = epochOf("/Users/x/.claude/projects/p/b.jsonl");
     expect(e1).not.toBe(e2);

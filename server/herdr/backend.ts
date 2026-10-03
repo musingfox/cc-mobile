@@ -11,19 +11,19 @@
  */
 
 import {
-  capabilityFetcherFor as defaultCapabilityFetcherFor,
   type CapabilityFetcher,
   type CapabilityListResult,
+  capabilityFetcherFor as defaultCapabilityFetcherFor,
 } from "../agents/capability-fetchers";
-import { createCapabilityCache } from "../capabilities/cache";
 import { resolveAgentTranscriptPath } from "../agents/transcript-readers";
+import { createCapabilityCache } from "../capabilities/cache";
 import type { ClientSink, TerminalBackend, TerminalSessionInfo } from "../terminal-backend";
 import { createTranscriptDelivery } from "../transcript/delivery";
 import { type PageCursor, readTranscriptPage, type TranscriptPage } from "../transcript/page";
 import { type AgentState, statesFromSnapshot } from "./agent-state";
 import { createHerdrClient, type HerdrClient, SUPPORTED_PROTOCOL } from "./client";
-import { createHerdrPaneEvents } from "./pane-events";
 import { createAgentNotice } from "./notice/agent-notice";
+import { createHerdrPaneEvents } from "./pane-events";
 import { createNativePermission } from "./permission/native-permission";
 import { createHerdrRegistry } from "./registry";
 import { createHerdrSendRouting } from "./send-routing";
@@ -130,10 +130,7 @@ export interface HerdrTerminalBackend extends TerminalBackend {
    * never scans a directory, so an omp session cannot page in a nested
    * sub-agent transcript.
    */
-  readTranscriptPage(
-    sessionId: string,
-    before: PageCursor | null,
-  ): Promise<TranscriptPage | null>;
+  readTranscriptPage(sessionId: string, before: PageCursor | null): Promise<TranscriptPage | null>;
   /**
    * Presses the chosen option's key in the pane, after re-proving on live RPCs
    * that the same prompt is still on screen. Resolves `false` — silently, with
@@ -325,8 +322,7 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
       paneSendKeys: (paneId, keys) => client.paneSendKeys(paneId, keys),
     },
     getSink: (sessionId) => routing.getClient(sessionId),
-    onUnparsedBlockedScreen: (sessionId, screen) =>
-      notice.announceBlockedScreen(sessionId, screen),
+    onUnparsedBlockedScreen: (sessionId, screen) => notice.announceBlockedScreen(sessionId, screen),
     // Recorded at emit time because it gates the automated deny (Decision H2),
     // which must not depend on a listing succeeding 90 s later.
     originOf: async (sessionId) => {

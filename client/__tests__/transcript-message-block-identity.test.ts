@@ -8,7 +8,9 @@ function session(sessionId = "s1") {
   return state;
 }
 
-function apply(...args: Parameters<ReturnType<typeof useAppStore.getState>["applyTranscriptMessages"]>) {
+function apply(
+  ...args: Parameters<ReturnType<typeof useAppStore.getState>["applyTranscriptMessages"]>
+) {
   useAppStore.getState().applyTranscriptMessages(...args);
 }
 
@@ -56,13 +58,10 @@ describe("MessageIdentityByBlock", () => {
   test("T2: a 3-part record applied twice holds 3 messages not 6", () => {
     const parts = threeParts("r1", 100);
     apply("s1", { epoch: "aaaa", messages: parts });
-    apply(
-      "s1",
-      {
-        epoch: "aaaa",
-        messages: parts.map((m, i) => ({ ...m, id: `replay-${i}` })),
-      },
-    );
+    apply("s1", {
+      epoch: "aaaa",
+      messages: parts.map((m, i) => ({ ...m, id: `replay-${i}` })),
+    });
     expect(session().messages).toHaveLength(3);
     expect(session().messages.map((m) => m.blockIndex)).toEqual([0, 1, 2]);
   });
@@ -90,13 +89,12 @@ describe("MessageIdentityByBlock", () => {
 
   test("T5: C4 duplicate recordId at two byte offsets keeps earlier seq per block", () => {
     apply("s1", { epoch: "aaaa", messages: threeParts("dup", 100).slice(0, 2) });
-    apply(
-      "s1",
-      {
-        epoch: "aaaa",
-        messages: threeParts("dup", 90000).slice(0, 2).map((m) => ({ ...m, id: `later-${m.blockIndex}` })),
-      },
-    );
+    apply("s1", {
+      epoch: "aaaa",
+      messages: threeParts("dup", 90000)
+        .slice(0, 2)
+        .map((m) => ({ ...m, id: `later-${m.blockIndex}` })),
+    });
     expect(session().messages).toHaveLength(2);
     expect(session().messages.every((m) => m.seq === 100)).toBe(true);
   });

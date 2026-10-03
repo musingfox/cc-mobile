@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { createElement } from "react";
 import { cleanup, render } from "@testing-library/react";
+import { createElement } from "react";
 import DebugOverlay, { buildDebugStoreSnapshot, debugLog } from "../components/DebugOverlay";
 import { useAppStore } from "../stores/app-store";
 

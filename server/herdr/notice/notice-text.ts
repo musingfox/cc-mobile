@@ -13,8 +13,7 @@ const LAST_LINES = 20;
 const MAX_CHARS = 2000;
 
 /** JWT: three base64url segments, header typically starts with eyJ. */
-const JWT =
-  /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g;
+const JWT = /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g;
 /** Anthropic API keys. */
 const SK_ANT = /\bsk-ant-[A-Za-z0-9-]+\b/g;
 /** xAI API keys (`xai-` + hex-ish body). */

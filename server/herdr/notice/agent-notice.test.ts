@@ -11,7 +11,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { createAgentNotice, type AgentNoticeOptions } from "./agent-notice";
+import { type AgentNoticeOptions, createAgentNotice } from "./agent-notice";
 
 const FIXTURES = join(import.meta.dir, "../permission/fixtures");
 const OMP_API_FAILURE = readFileSync(join(FIXTURES, "omp-api-failure.txt"), "utf8");
@@ -133,10 +133,9 @@ type PaneReadFn = (params: {
   source: "detection";
 }) => Promise<{ text: string; revision: number }>;
 
-function idleHarness(input: {
-  screen?: string;
-  paneRead?: "missing" | "throw" | "reject" | PaneReadFn;
-} = {}) {
+function idleHarness(
+  input: { screen?: string; paneRead?: "missing" | "throw" | "reject" | PaneReadFn } = {},
+) {
   const sink: Record<string, unknown>[] = [];
   const reads: unknown[] = [];
   const keys: { pane: string; keys: string[] }[] = [];

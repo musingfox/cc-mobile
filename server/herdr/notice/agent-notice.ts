@@ -43,8 +43,7 @@ function ledgerFor(map: Map<string, Set<string>>, sessionId: string, screen: str
 
 export function createAgentNotice(options: AgentNoticeOptions) {
   const { getSink } = options;
-  const warn =
-    options.warn ?? ((message: string) => console.warn(`[herdr] notice: ${message}`));
+  const warn = options.warn ?? ((message: string) => console.warn(`[herdr] notice: ${message}`));
 
   /** sessionId → screens already announced in this blocked episode. */
   const announced = new Map<string, Set<string>>();

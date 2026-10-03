@@ -25,7 +25,11 @@ let dir: string;
 let harness: WsHarness | null = null;
 
 function assistantRecord(uuid: string, text: string) {
-  return { uuid, type: "assistant", message: { role: "assistant", content: [{ type: "text", text }] } };
+  return {
+    uuid,
+    type: "assistant",
+    message: { role: "assistant", content: [{ type: "text", text }] },
+  };
 }
 
 async function writeTranscript(name: string, records: unknown[]): Promise<string> {

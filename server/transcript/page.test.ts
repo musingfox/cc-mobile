@@ -16,50 +16,59 @@ async function writeLines(name: string, recs: unknown[]): Promise<string> {
 }
 
 function makeRec(id: string, text: string) {
-  return { uuid: id, type: "assistant", message: { role: "assistant", content: [{ type: "text", text }] } };
+  return {
+    uuid: id,
+    type: "assistant",
+    message: { role: "assistant", content: [{ type: "text", text }] },
+  };
 }
 
-beforeEach(async () => { dir = await mkdtemp(join(tmpdir(), "page-")); });
-afterEach(async () => { await rm(dir, { recursive: true, force: true }); });
+beforeEach(async () => {
+  dir = await mkdtemp(join(tmpdir(), "page-"));
+});
+afterEach(async () => {
+  await rm(dir, { recursive: true, force: true });
+});
 
 describe("TranscriptBackwardPage", () => {
   it("T1: given file with 7 mapper-non-null records, before:null, limit:3 -> expect records #5,#6,#7 oldest→newest; nextBefore names record #5", async () => {
-    const recs = Array.from({length:7}, (_,i) => makeRec("u"+(i+1), "t"+(i+1)));
+    const recs = Array.from({ length: 7 }, (_, i) => makeRec("u" + (i + 1), "t" + (i + 1)));
     const path = await writeLines("p.jsonl", recs);
     const res = await readTranscriptPage({ path, before: null, limit: 3 });
-    expect(res.records.map((r:any)=>r.recordId)).toEqual(["u5","u6","u7"]);
-    expect(res.nextBefore).toEqual({ epoch: expect.any(String), seq: expect.any(Number), recordId: "u5" });
+    expect(res.records.map((r: any) => r.recordId)).toEqual(["u5", "u6", "u7"]);
+    expect(res.nextBefore).toEqual({
+      epoch: expect.any(String),
+      seq: expect.any(Number),
+      recordId: "u5",
+    });
   });
 
   it("T2: given same file, before naming record #5, limit:3 -> expect records #2,#3,#4; nextBefore names record #1", async () => {
-    const recs = Array.from({length:7}, (_,i) => makeRec("u"+(i+1), "t"+(i+1)));
+    const recs = Array.from({ length: 7 }, (_, i) => makeRec("u" + (i + 1), "t" + (i + 1)));
     const path = await writeLines("p.jsonl", recs);
     const page1 = await readTranscriptPage({ path, before: null, limit: 3 });
     expect(page1.nextBefore?.recordId).toBe("u5");
     const res = await readTranscriptPage({ path, before: page1.nextBefore, limit: 3 });
-    expect(res.records.map((r:any)=>r.recordId)).toEqual(["u2","u3","u4"]);
+    expect(res.records.map((r: any) => r.recordId)).toEqual(["u2", "u3", "u4"]);
     expect(res.nextBefore?.recordId).toBe("u2");
   });
 
   it("T3: given same file, before naming record #2, limit:3 -> expect record #1 only; nextBefore null", async () => {
-    const recs = Array.from({length:7}, (_,i) => makeRec("u"+(i+1), "t"+(i+1)));
+    const recs = Array.from({ length: 7 }, (_, i) => makeRec("u" + (i + 1), "t" + (i + 1)));
     const path = await writeLines("p.jsonl", recs);
     const page1 = await readTranscriptPage({ path, before: null, limit: 3 });
     const page2 = await readTranscriptPage({ path, before: page1.nextBefore, limit: 3 });
     expect(page2.nextBefore?.recordId).toBe("u2");
     const res = await readTranscriptPage({ path, before: page2.nextBefore, limit: 3 });
-    expect(res.records.map((r:any)=>r.recordId)).toEqual(["u1"]);
+    expect(res.records.map((r: any) => r.recordId)).toEqual(["u1"]);
     expect(res.nextBefore).toBeNull();
   });
 
   it("T4: given file where every record before the batch is isMeta:true / bookkeeping -> expect non-empty batch with nextBefore null", async () => {
-    const recs = [
-      { uuid: "m1", type: "user", isMeta: true, message: {} },
-      makeRec("u1", "real"),
-    ];
+    const recs = [{ uuid: "m1", type: "user", isMeta: true, message: {} }, makeRec("u1", "real")];
     const path = await writeLines("p.jsonl", recs);
     const res = await readTranscriptPage({ path, before: null, limit: 10 });
-    expect(res.records.map((r:any)=>r.recordId)).toEqual(["u1"]);
+    expect(res.records.map((r: any) => r.recordId)).toEqual(["u1"]);
     expect(res.nextBefore).toBeNull();
   });
 
@@ -72,7 +81,7 @@ describe("TranscriptBackwardPage", () => {
 
   it("T6: given file containing the same recordId at offsets 3000 and 90000 (the C4 duplicate), before:null, limit:50 -> expect both entries present, each with its own seq", async () => {
     const r = makeRec("dup", "x");
-    const path = await writeLines("p.jsonl", [r, {type:"noise"}, r]);
+    const path = await writeLines("p.jsonl", [r, { type: "noise" }, r]);
     const res = await readTranscriptPage({ path, before: null, limit: 50 });
     expect(res.records.length).toBe(2);
     expect(res.records[0].recordId).toBe("dup");
@@ -81,29 +90,41 @@ describe("TranscriptBackwardPage", () => {
   });
 
   it("T7: given a path that does not exist -> expect {records: [], nextBefore: null}, no throw", async () => {
-    const res = await readTranscriptPage({ path: join(dir, "nope.jsonl"), before: null, limit: 10 });
+    const res = await readTranscriptPage({
+      path: join(dir, "nope.jsonl"),
+      before: null,
+      limit: 10,
+    });
     expect(res.records).toEqual([]);
     expect(res.nextBefore).toBeNull();
   });
 
   it("T8: given no limit argument -> expect at most 50 records", async () => {
-    const recs = Array.from({length:60}, (_,i) => makeRec("u"+i, "t"));
+    const recs = Array.from({ length: 60 }, (_, i) => makeRec("u" + i, "t"));
     const path = await writeLines("p.jsonl", recs);
     const res = await readTranscriptPage({ path, before: null });
     expect(res.records.length).toBeLessThanOrEqual(50);
   });
 
   it("T9: given a file whose mid-file records include a compact_boundary + isCompactSummary pair (C16) -> expect the page spans the boundary with no marker and no break", async () => {
-    const recs = [makeRec("u1","a"), {type:"compact_boundary"}, {type:"user", isCompactSummary:true, message:{}}, makeRec("u2","b")];
+    const recs = [
+      makeRec("u1", "a"),
+      { type: "compact_boundary" },
+      { type: "user", isCompactSummary: true, message: {} },
+      makeRec("u2", "b"),
+    ];
     const path = await writeLines("p.jsonl", recs);
     const res = await readTranscriptPage({ path, before: null, limit: 10 });
-    expect(res.records.map((r:any)=>r.recordId)).toEqual(["u1","u2"]);
+    expect(res.records.map((r: any) => r.recordId)).toEqual(["u1", "u2"]);
   });
 });
 
 describe("TranscriptPageCursorGuard", () => {
   async function sevenRecordFile(): Promise<string> {
-    return writeLines("p.jsonl", Array.from({ length: 7 }, (_, i) => makeRec("u" + (i + 1), "t" + (i + 1))));
+    return writeLines(
+      "p.jsonl",
+      Array.from({ length: 7 }, (_, i) => makeRec("u" + (i + 1), "t" + (i + 1))),
+    );
   }
 
   it("T1: given before naming record #5 in the current epoch -> expect the page ending just before it, labelled with the current epoch", async () => {
@@ -190,7 +211,10 @@ function paddedRec(id: string, targetBytes: number) {
 /** Kept by the mapper, but with no uuid/id: nothing can name it in a cursor. */
 function anonymousRec(targetBytes: number) {
   let text = "x";
-  const build = () => ({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text }] } });
+  const build = () => ({
+    type: "assistant",
+    message: { role: "assistant", content: [{ type: "text", text }] },
+  });
   let rec = build();
   while (Buffer.byteLength(JSON.stringify(rec), "utf8") + 1 < targetBytes) {
     text += "y";
@@ -201,7 +225,12 @@ function anonymousRec(targetBytes: number) {
 
 function metaRec(id: string, targetBytes: number) {
   let extra = "";
-  let rec: Record<string, unknown> = { uuid: id, type: "user", isMeta: true, message: { role: "user", content: extra } };
+  let rec: Record<string, unknown> = {
+    uuid: id,
+    type: "user",
+    isMeta: true,
+    message: { role: "user", content: extra },
+  };
   while (Buffer.byteLength(JSON.stringify(rec), "utf8") + 1 < targetBytes) {
     extra += "m";
     rec = { uuid: id, type: "user", isMeta: true, message: { role: "user", content: extra } };

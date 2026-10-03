@@ -258,9 +258,7 @@ export async function readTranscriptSince(
   const chunk = await fs.readSlice(path, start, size);
   const parsed = parseCompleteRecords(chunk, start);
   const lastUuid =
-    parsed.records.length > 0
-      ? uuidOf(parsed.records[parsed.records.length - 1])
-      : cursor.lastUuid;
+    parsed.records.length > 0 ? uuidOf(parsed.records[parsed.records.length - 1]) : cursor.lastUuid;
 
   return {
     records: parsed.records,

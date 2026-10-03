@@ -27,7 +27,9 @@ function session(sessionId = "s1") {
   return state;
 }
 
-function apply(...args: Parameters<ReturnType<typeof useAppStore.getState>["applyTranscriptMessages"]>) {
+function apply(
+  ...args: Parameters<ReturnType<typeof useAppStore.getState>["applyTranscriptMessages"]>
+) {
   useAppStore.getState().applyTranscriptMessages(...args);
 }
 
@@ -52,7 +54,13 @@ describe("TranscriptMessageUpsert", () => {
   });
 
   test("T3: a reconnect replay of five already-applied chunks changes nothing", () => {
-    const replay = [record("u1", 10), record("u2", 20), record("u3", 30), record("u4", 40), record("u5", 50)];
+    const replay = [
+      record("u1", 10),
+      record("u2", 20),
+      record("u3", 30),
+      record("u4", 40),
+      record("u5", 50),
+    ];
     for (const message of replay) apply("s1", { epoch: "aaaa", messages: [message] });
     expect(session().messages).toHaveLength(5);
     for (const message of replay) apply("s1", { epoch: "aaaa", messages: [message] });
@@ -113,7 +121,10 @@ describe("TranscriptMessageOrdering", () => {
 
 describe("TranscriptEpochReset", () => {
   test("T1: a chunk from a different file replaces the whole conversation", () => {
-    apply("s1", { epoch: "aaaa", messages: [record("a", 10), record("b", 20), record("c", 30), record("d", 40)] });
+    apply("s1", {
+      epoch: "aaaa",
+      messages: [record("a", 10), record("b", 20), record("c", 30), record("d", 40)],
+    });
     expect(session().messages).toHaveLength(4);
     apply("s1", { epoch: "bbbb", messages: [record("n1", 0)] });
     expect(session().messages).toHaveLength(1);

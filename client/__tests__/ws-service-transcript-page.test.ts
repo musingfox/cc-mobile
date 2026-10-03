@@ -32,11 +32,7 @@ function assistantRecord(recordId: string, seq: number, text = recordId) {
   };
 }
 
-function pageFrame(
-  epoch: string,
-  records: Record<string, unknown>[],
-  nextBefore: unknown = null,
-) {
+function pageFrame(epoch: string, records: Record<string, unknown>[], nextBefore: unknown = null) {
   return { type: "transcript_page", sessionId: "s1", epoch, records, nextBefore };
 }
 
@@ -59,7 +55,6 @@ beforeEach(() => {
 
 afterEach(() => {
   internals().ws = previousWs;
-
 });
 
 describe("HistoryPageApplyIsolated", () => {
@@ -72,7 +67,11 @@ describe("HistoryPageApplyIsolated", () => {
     midTurn();
 
     internals().handleMessage(
-      pageFrame("aaaa", [assistantRecord("p1", 10), assistantRecord("p2", 20), assistantRecord("p3", 30)]),
+      pageFrame("aaaa", [
+        assistantRecord("p1", 10),
+        assistantRecord("p2", 20),
+        assistantRecord("p3", 30),
+      ]),
     );
 
     expect(session().isStreaming).toBe(true);
@@ -81,7 +80,11 @@ describe("HistoryPageApplyIsolated", () => {
   test("T2: the same page still adds its three messages", () => {
     midTurn();
     internals().handleMessage(
-      pageFrame("aaaa", [assistantRecord("p1", 10), assistantRecord("p2", 20), assistantRecord("p3", 30)]),
+      pageFrame("aaaa", [
+        assistantRecord("p1", 10),
+        assistantRecord("p2", 20),
+        assistantRecord("p3", 30),
+      ]),
     );
     expect(session().messages).toHaveLength(3);
   });
@@ -108,14 +111,21 @@ describe("LocalOnlyDiscardOnFirstPage", () => {
   function restoreLocalOnly(count: number) {
     const store = useAppStore.getState();
     for (let i = 0; i < count; i++) {
-      store.addMessage("s1", { id: `restored-${i}`, role: "user", content: `old ${i}`, timestamp: 1 });
+      store.addMessage("s1", {
+        id: `restored-${i}`,
+        role: "user",
+        content: `old ${i}`,
+        timestamp: 1,
+      });
     }
   }
 
   test("T1: three restored local-only messages give way to the page's two records", () => {
     restoreLocalOnly(3);
     wsService.requestTranscriptPage("s1");
-    internals().handleMessage(pageFrame("aaaa", [assistantRecord("a", 10), assistantRecord("b", 20)]));
+    internals().handleMessage(
+      pageFrame("aaaa", [assistantRecord("a", 10), assistantRecord("b", 20)]),
+    );
     expect(session().messages.map((m) => m.recordId)).toEqual(["a", "b"]);
   });
 
@@ -135,7 +145,12 @@ describe("LocalOnlyDiscardOnFirstPage", () => {
   test("T3: a transcript_unavailable reply discards nothing", () => {
     restoreLocalOnly(3);
     wsService.requestTranscriptPage("s1");
-    internals().handleMessage({ type: "error", sessionId: "s1", code: "transcript_unavailable", message: "" });
+    internals().handleMessage({
+      type: "error",
+      sessionId: "s1",
+      code: "transcript_unavailable",
+      message: "",
+    });
     expect(session().messages).toHaveLength(3);
   });
 
@@ -170,14 +185,21 @@ describe("SessionOpenNewestPage — the request side", () => {
 
   test("the guard clears on transcript_unavailable too, so a retry is possible", () => {
     wsService.requestTranscriptPage("s1");
-    internals().handleMessage({ type: "error", sessionId: "s1", code: "transcript_unavailable", message: "" });
+    internals().handleMessage({
+      type: "error",
+      sessionId: "s1",
+      code: "transcript_unavailable",
+      message: "",
+    });
     expect(wsService.isTranscriptPageInFlight("s1")).toBe(false);
     expect(wsService.requestTranscriptPage("s1")).toBe(true);
   });
 
   test("T4: re-opening a session the terminal cleared holds only the new page", () => {
     wsService.requestTranscriptPage("s1");
-    internals().handleMessage(pageFrame("aaaa", [assistantRecord("old1", 10), assistantRecord("old2", 20)]));
+    internals().handleMessage(
+      pageFrame("aaaa", [assistantRecord("old1", 10), assistantRecord("old2", 20)]),
+    );
     expect(session().messages).toHaveLength(2);
 
     wsService.requestTranscriptPage("s1");
@@ -214,14 +236,24 @@ describe("TranscriptEpochAbsenceIgnored — the wire's half", () => {
     );
     expect(session().messages).toHaveLength(4);
 
-    internals().handleMessage({ type: "error", sessionId: "s1", code: "transcript_unavailable", message: "" });
+    internals().handleMessage({
+      type: "error",
+      sessionId: "s1",
+      code: "transcript_unavailable",
+      message: "",
+    });
 
     expect(session().messages).toHaveLength(4);
     expect(session().epoch).toBe("aaaa");
   });
 
   test("a transcript_unavailable reply raises no error bubble", () => {
-    internals().handleMessage({ type: "error", sessionId: "s1", code: "transcript_unavailable", message: "" });
+    internals().handleMessage({
+      type: "error",
+      sessionId: "s1",
+      code: "transcript_unavailable",
+      message: "",
+    });
     expect(session().messages).toHaveLength(0);
   });
 });

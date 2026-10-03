@@ -66,6 +66,8 @@ describe("assistant stream_chunk identity", () => {
 
     const session = useAppStore.getState().sessions.get(sessionId);
     expect(session?.isStreaming).toBe(false);
-    expect(session?.messages.some((m) => m.role === "assistant" && m.content === "done")).toBe(true);
+    expect(session?.messages.some((m) => m.role === "assistant" && m.content === "done")).toBe(
+      true,
+    );
   });
 });

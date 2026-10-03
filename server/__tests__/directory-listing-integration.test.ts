@@ -189,8 +189,7 @@ describe("Directory Listing Integration Tests", () => {
 
       const validConfig = {
         type: "server_config",
-        config: {
-        },
+        config: {},
       };
 
       const result = ServerMessage.safeParse(validConfig);

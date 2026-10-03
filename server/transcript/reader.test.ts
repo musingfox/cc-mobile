@@ -214,7 +214,11 @@ describe("TranscriptReadRecordOffsets", () => {
       while (Buffer.byteLength(s, "utf8") + nl < target) s += " ";
       return s;
     };
-    const path = await writeTranscript("off.jsonl", [makeLine(10, "0"), makeLine(20, "1"), makeLine(30, "2")]);
+    const path = await writeTranscript("off.jsonl", [
+      makeLine(10, "0"),
+      makeLine(20, "1"),
+      makeLine(30, "2"),
+    ]);
 
     const { records, offsets } = await readTranscriptSince({ path, cursor: START });
 
@@ -229,7 +233,11 @@ describe("TranscriptReadRecordOffsets", () => {
       while (Buffer.byteLength(s, "utf8") + nl < target) s += " ";
       return s;
     };
-    const path = await writeTranscript("off.jsonl", [makeLine(10, "0"), makeLine(20, "1"), makeLine(30, "2")]);
+    const path = await writeTranscript("off.jsonl", [
+      makeLine(10, "0"),
+      makeLine(20, "1"),
+      makeLine(30, "2"),
+    ]);
     const first = await readTranscriptSince({ path, cursor: START });
     const cur = { byteOffset: 10, lastUuid: uuidOf(first.records[0]) };
 

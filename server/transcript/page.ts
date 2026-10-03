@@ -172,11 +172,7 @@ function nameTheRecordBefore(
   return { from, cursor: null };
 }
 
-function itemsFromWindow(
-  records: unknown[],
-  offsets: number[],
-  endExclusive: number,
-): PageItem[] {
+function itemsFromWindow(records: unknown[], offsets: number[], endExclusive: number): PageItem[] {
   const items: PageItem[] = [];
   for (let index = 0; index < records.length; index++) {
     const chunk = transcriptRecordToChunk(records[index]);

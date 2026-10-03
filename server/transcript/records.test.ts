@@ -265,7 +265,7 @@ describe("TranscriptRecordToChunk — omp", () => {
 });
 
 describe("TranscriptChunkRecordId", () => {
-  it("T1: given {uuid:\"u1\", type:\"assistant\", message:{role:\"assistant\", content:[{type:\"text\", text:\"hi\"}]}} -> expect {type:\"assistant\", message:{…}, recordId:\"u1\"}", () => {
+  it('T1: given {uuid:"u1", type:"assistant", message:{role:"assistant", content:[{type:"text", text:"hi"}]}} -> expect {type:"assistant", message:{…}, recordId:"u1"}', () => {
     const record = {
       uuid: "u1",
       type: "assistant",
@@ -278,7 +278,7 @@ describe("TranscriptChunkRecordId", () => {
     });
   });
 
-  it("T2: given {id:\"o1\", type:\"message\", message:{role:\"user\", content:\"hi\"}} -> expect {type:\"user\", message:{…}, recordId:\"o1\"}", () => {
+  it('T2: given {id:"o1", type:"message", message:{role:"user", content:"hi"}} -> expect {type:"user", message:{…}, recordId:"o1"}', () => {
     const record = {
       id: "o1",
       type: "message",
@@ -291,7 +291,7 @@ describe("TranscriptChunkRecordId", () => {
     });
   });
 
-  it("T3: given {uuid:\"u2\", type:\"user\", isMeta:true, message:{…}} -> expect null", () => {
+  it('T3: given {uuid:"u2", type:"user", isMeta:true, message:{…}} -> expect null', () => {
     const record = {
       uuid: "u2",
       type: "user",
@@ -301,7 +301,7 @@ describe("TranscriptChunkRecordId", () => {
     expect(transcriptRecordToChunk(record)).toBeNull();
   });
 
-  it("T4: given {type:\"assistant\", message:{…}} with no uuid and no id -> expect a chunk where \"recordId\" in chunk === false (absent, not undefined)", () => {
+  it('T4: given {type:"assistant", message:{…}} with no uuid and no id -> expect a chunk where "recordId" in chunk === false (absent, not undefined)', () => {
     const record = {
       type: "assistant",
       message: { role: "assistant", content: [{ type: "text", text: "no id" }] },

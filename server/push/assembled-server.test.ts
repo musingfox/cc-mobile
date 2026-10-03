@@ -19,8 +19,8 @@ import { WebSocket as WsClient } from "ws";
 import type { AppBackend } from "../app";
 import { createApp } from "../app";
 import { parseServerConfig } from "../config";
-import type { PushRequestOptions, PushSubscription } from "./sender";
 import { createPhoneDrivenTracker } from "./phone-driven";
+import type { PushRequestOptions, PushSubscription } from "./sender";
 import { createSubscriptionStore } from "./subscription-store";
 
 const SELF_LABEL = "ccm-3f2a9b01-1111-4222-8333-444455556666";

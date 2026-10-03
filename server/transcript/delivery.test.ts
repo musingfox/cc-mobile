@@ -41,7 +41,7 @@ function fakeFile(initial: unknown[] = []) {
     get size() {
       return records.length;
     },
-      read: async ({ cursor }: { path: string; cursor: TranscriptCursor }) => {
+    read: async ({ cursor }: { path: string; cursor: TranscriptCursor }) => {
       const fresh = records.slice(cursor.byteOffset);
       return {
         records: fresh,
@@ -534,7 +534,10 @@ describe("TranscriptChunkPositionStamp", () => {
         return {
           records: fresh.map((it) => it.rec),
           offsets: fresh.map((it) => it.off),
-          cursor: { byteOffset: last ? last.off + 10 : cursor.byteOffset, lastUuid: last ? "uX" : cursor.lastUuid },
+          cursor: {
+            byteOffset: last ? last.off + 10 : cursor.byteOffset,
+            lastUuid: last ? "uX" : cursor.lastUuid,
+          },
         };
       },
     };
@@ -587,7 +590,15 @@ describe("TranscriptChunkPositionStamp", () => {
 
   it("T3: given a record with isSidechain:true -> expect no sink write; the cursor still advances", async () => {
     const file = offsetAwareFake([
-      { rec: { type: "assistant", isSidechain: true, message: { role: "assistant", content: [] }, uuid: "side" }, off: 0 },
+      {
+        rec: {
+          type: "assistant",
+          isSidechain: true,
+          message: { role: "assistant", content: [] },
+          uuid: "side",
+        },
+        off: 0,
+      },
     ]);
     const spy = sinkSpy();
     const delivery = createTranscriptDelivery({
