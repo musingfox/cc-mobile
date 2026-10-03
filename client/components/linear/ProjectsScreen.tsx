@@ -38,6 +38,7 @@ export default function ProjectsScreen({ onNavigate, onOpenProject, onAddProject
   // store mutation replaces the Map, so this also catches the
   // terminal_created → setTerminalReady → saveProject sequence, where the
   // optimistic session had already grown the map and the size never changes.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the session map is the trigger, not an input — saved projects live in localStorage, which React cannot watch.
   useEffect(() => {
     setSaved(loadProjects());
   }, [sessions]);
@@ -140,6 +141,7 @@ function ProjectRowView({ row, onOpen }: { row: ProjectRow; onOpen: () => void }
                   ? { background: "#c2b89a", boxShadow: "0 0 0 2px rgba(194,184,154,0.18)" }
                   : undefined
               }
+              role="img"
               aria-label={live ? "live" : "active"}
             />
           )}

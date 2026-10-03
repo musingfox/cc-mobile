@@ -28,7 +28,7 @@ export default function QuickActions() {
   }
 
   return (
-    <div className="lin-quick-actions" aria-label="Quick actions">
+    <div className="lin-quick-actions">
       {pins.map((pin) => (
         <button
           type="button"

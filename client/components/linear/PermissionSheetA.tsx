@@ -80,12 +80,13 @@ export default function PermissionSheetA({ pending, onApprove, onDeny, onChoose 
     }
   };
 
+  const requestId = pending?.requestId;
   useEffect(() => {
-    if (!pending) return;
+    if (!requestId) return;
     setDragX(0);
     setChosen(null);
     touchStartX.current = null;
-  }, [pending?.requestId]);
+  }, [requestId]);
 
   useEffect(() => {
     if (deadline === undefined) {

@@ -87,6 +87,7 @@ export default function ToolCardA({ toolName, input, result }: Props) {
                       : "lin-diff-context";
                 const prefix = line.type === "add" ? "+" : line.type === "remove" ? "-" : " ";
                 return (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: a diff's lines are rendered once in file order and never reordered; position is their identity, and two lines can share content.
                   <div key={idx} className={cls}>
                     <span className="lin-diff-prefix">{prefix}</span>
                     {line.content}

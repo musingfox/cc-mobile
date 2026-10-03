@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Icon } from "../../design/icons";
 import { tokens as T } from "../../design/tokens";
 import { hapticService } from "../../services/haptic";
@@ -69,6 +69,7 @@ const InputBarA = forwardRef<InputBarAHandle, Props>(function InputBarA(
   const [isUploading, setIsUploading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the draft is the trigger, not an input — the height is measured off the DOM after the controlled value renders.
   useEffect(() => {
     const ta = textareaRef.current;
     if (!ta) return;
@@ -78,22 +79,25 @@ const InputBarA = forwardRef<InputBarAHandle, Props>(function InputBarA(
 
   // Reads latest draft via store getter so the handle doesn't need
   // re-creating on every keystroke.
-  const insertAtCursor = (text: string) => {
-    const ta = textareaRef.current;
-    const current = useAppStore.getState().inputDraft;
-    if (!ta) {
-      setInputDraft(current + text);
-      return;
-    }
-    const start = ta.selectionStart ?? current.length;
-    const end = ta.selectionEnd ?? current.length;
-    const next = current.slice(0, start) + text + current.slice(end);
-    setInputDraft(next);
-    requestAnimationFrame(() => {
-      ta.focus();
-      ta.setSelectionRange(start + text.length, start + text.length);
-    });
-  };
+  const insertAtCursor = useCallback(
+    (text: string) => {
+      const ta = textareaRef.current;
+      const current = useAppStore.getState().inputDraft;
+      if (!ta) {
+        setInputDraft(current + text);
+        return;
+      }
+      const start = ta.selectionStart ?? current.length;
+      const end = ta.selectionEnd ?? current.length;
+      const next = current.slice(0, start) + text + current.slice(end);
+      setInputDraft(next);
+      requestAnimationFrame(() => {
+        ta.focus();
+        ta.setSelectionRange(start + text.length, start + text.length);
+      });
+    },
+    [setInputDraft],
+  );
 
   useImperativeHandle(
     ref,
@@ -101,7 +105,7 @@ const InputBarA = forwardRef<InputBarAHandle, Props>(function InputBarA(
       insertAtCursor,
       focus: () => textareaRef.current?.focus(),
     }),
-    [setInputDraft],
+    [insertAtCursor],
   );
 
   const handleSend = () => {

@@ -2944,7 +2944,6 @@ button {
 .input-bar-action-btn {
   min-height: 32px;
   width: 32px;
-  font-size: 14px;
   border-radius: 50%;
   background: var(--bg-tertiary);
   color: var(--accent-cyan);
