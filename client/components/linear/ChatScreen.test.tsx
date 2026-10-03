@@ -143,9 +143,12 @@ describe("ChatScreen", () => {
     const store = useAppStore.getState();
     store.addSession("s1", "/tmp/project");
     store.setActiveSession("s1");
+    // Options make it a parsed prompt: a pending permission with none is the
+    // unreadable-screen fallback, which has its own card.
     store.setPermission("s1", {
       requestId: "p1",
       tool: { name: "Bash", parameters: {} },
+      options: [{ id: "1", label: "Yes", keystroke: "1" }],
     });
 
     const { container, getByText } = render(<ChatScreen onNavigate={() => {}} />);
@@ -153,6 +156,24 @@ describe("ChatScreen", () => {
 
     expect(card?.classList.contains("lin-thinking--waiting")).toBe(true);
     expect(getByText("Waiting for permission")).not.toBeNull();
+  });
+
+  test("an unreadable prompt's waiting card says what the prompt card says", () => {
+    const store = useAppStore.getState();
+    store.addSession("s1", "/tmp/project");
+    store.setActiveSession("s1");
+    store.setPermission("s1", {
+      requestId: "p1",
+      tool: { name: "Permission required", parameters: { text: "raw screen" } },
+      options: [{ id: "cancel", label: "Cancel", keystroke: "esc" }],
+    });
+
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    const card = container.querySelector(".lin-thinking");
+
+    expect(card?.classList.contains("lin-thinking--waiting")).toBe(true);
+    expect(card?.textContent).toContain("Can't read this prompt");
+    expect(card?.textContent).not.toContain("permission");
   });
 
   test("waiting permission state overrides streaming state", () => {
@@ -164,6 +185,7 @@ describe("ChatScreen", () => {
     store.setPermission("s1", {
       requestId: "p1",
       tool: { name: "Bash", parameters: {} },
+      options: [{ id: "1", label: "Yes", keystroke: "1" }],
     });
 
     const { container, getByText } = render(<ChatScreen onNavigate={() => {}} />);

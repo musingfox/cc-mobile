@@ -3,7 +3,7 @@ import { Icon } from "../../design/icons";
 import { tokens as T } from "../../design/tokens";
 import { mergeToolParts, selectConversationMessages } from "../../services/conversation-mode";
 import { wsService } from "../../services/ws-service";
-import { useAppStore } from "../../stores/app-store";
+import { isUnreadablePrompt, useAppStore } from "../../stores/app-store";
 import { useSettingsStore } from "../../stores/settings-store";
 import MarkdownRenderer from "../MarkdownRenderer";
 import type { LinearScreen } from "./AppShell";
@@ -322,7 +322,9 @@ export default function ChatScreen({ onNavigate }: Props) {
   const thinkingKind: ThinkingCardKind | null = pendingPermission
     ? pendingPermission.promptKind === "question"
       ? "waiting-answer"
-      : "waiting-permission"
+      : isUnreadablePrompt(pendingPermission)
+        ? "unreadable"
+        : "waiting-permission"
     : isStreaming
       ? "thinking"
       : null;
@@ -503,24 +505,28 @@ export default function ChatScreen({ onNavigate }: Props) {
   );
 }
 
-type ThinkingCardKind = "thinking" | "waiting-permission" | "waiting-answer";
+type ThinkingCardKind = "thinking" | "waiting-permission" | "waiting-answer" | "unreadable";
 
 const THINKING_LABELS: Record<ThinkingCardKind, string> = {
   thinking: "Thinking",
   "waiting-permission": "Waiting for permission",
   "waiting-answer": "Waiting for your answer",
+  unreadable: "Can't read this prompt",
 };
 
 const THINKING_MODIFIERS: Record<ThinkingCardKind, string> = {
   thinking: "",
   "waiting-permission": "lin-thinking--waiting",
-  // Same treatment: both are the terminal waiting on this phone.
+  // Same treatment: each is the terminal waiting on this phone.
   "waiting-answer": "lin-thinking--waiting",
+  unreadable: "lin-thinking--waiting",
 };
 
 export function ThinkingCard({ kind = "thinking" }: { kind?: ThinkingCardKind }) {
   const safeKind: ThinkingCardKind =
-    kind === "waiting-permission" || kind === "waiting-answer" ? kind : "thinking";
+    kind === "waiting-permission" || kind === "waiting-answer" || kind === "unreadable"
+      ? kind
+      : "thinking";
   const modifier = THINKING_MODIFIERS[safeKind];
   const classes = modifier ? `lin-thinking ${modifier}` : "lin-thinking";
 
