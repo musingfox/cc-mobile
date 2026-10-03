@@ -100,10 +100,16 @@ export function ompComposerText(text: string): string | null {
   const lines = text.split("\n");
   for (let i = lines.length - 1; i >= 0; i -= 1) {
     const match = OMP_COMPOSER_LINE.exec(lines[i] ?? "");
-    if (match?.[1] !== undefined) return match[1].trim();
+    if (match?.[1] === undefined) continue;
+    // Typed text starts one space in from the left corner. Since omp 18.4 a key
+    // hint ("to change thinking effort") is drawn right-aligned in the same
+    // line, reached only across a run of padding — that alone is not typing.
+    return OMP_TYPED_START.test(match[1]) ? match[1].trim() : "";
   }
   return null;
 }
+
+const OMP_TYPED_START = /^\s?\S/;
 
 /**
  * True only when the composer positively shows typed text.

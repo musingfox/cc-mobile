@@ -120,6 +120,30 @@ describe("composerHasTypedText — omp", () => {
     expect(ompComposerText(ompScreen("half typed thing"))).toBe("half typed thing");
   });
 
+  // Verbatim omp 18.4.3 bottom border (live probe 2026-10-03): the key hint is
+  // drawn right-aligned inside the composer line, so the whole line between the
+  // corners read as typed text and every phone prompt was refused as busy.
+  const OMP_18_HINT_BORDER =
+    "╰─                                                                                        󰘶 󰌒 to change thinking effort ─╯";
+
+  test("omp's right-aligned key hint is not typed text", () => {
+    const screen = [
+      "╭── 󰵗  󰪣 DeepSeek V4 Flash 0731    ~/workspace/x ─0.7%──────1.3M───╮",
+      OMP_18_HINT_BORDER,
+      "SumVox: off",
+    ].join("\n");
+    expect(ompComposerText(screen)).toBe("");
+    expect(composerHasTypedText(screen)).toBe(false);
+  });
+
+  test("typed text next to the right-aligned hint is still typed-in", () => {
+    const screen = [
+      "╭── 󰵗  󰪣 DeepSeek V4 Flash 0731    ~/workspace/x ─0.7%──────1.3M───╮",
+      "╰─ half typed thing                                     󰘶 󰌒 to change thinking effort ─╯",
+    ].join("\n");
+    expect(composerHasTypedText(screen)).toBe(true);
+  });
+
   test("an omp screen with no status box at all reports nothing typed", () => {
     expect(ompComposerText("just some output\nand more")).toBeNull();
     expect(composerHasTypedText("just some output\nand more")).toBe(false);
