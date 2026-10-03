@@ -576,7 +576,13 @@ class WsService {
       case "permission_request":
         if (sessionId) {
           const pending = pendingFromPermissionRequest(msg);
+          // The server re-sends a still-pending prompt after every listing,
+          // under the same requestId; that refreshes the card (its deadline)
+          // but is not a new prompt to announce.
+          const alreadyHeld =
+            store.sessions.get(sessionId)?.pendingPermission?.requestId === pending.requestId;
           store.setPermission(sessionId, pending);
+          if (alreadyHeld) break;
           // Background notification when page is hidden
           const settingsStore = useSettingsStore.getState();
           const toolName = (msg.tool as { name: string }).name;

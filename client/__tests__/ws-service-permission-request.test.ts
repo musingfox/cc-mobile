@@ -308,4 +308,36 @@ describe("HiddenPageCopyMatchesTheCard", () => {
     expect(toasts).toEqual(["Permission requested: Bash"]);
     expect(notified).toEqual([["permission", "Bash", "p1", "/repo/proj"]]);
   });
+
+  test("a prompt re-sent under the same id refreshes the card without announcing it again", () => {
+    const frame = {
+      type: "permission_request",
+      sessionId: "p1",
+      requestId: "r3",
+      tool: { name: "Bash", parameters: { text: "touch x" } },
+      options: [{ id: "1", label: "Yes", keystroke: "1" }],
+      promptKind: "permission",
+      autoDenyMs: 90_000,
+    };
+    internal.handleMessage(frame);
+    internal.handleMessage({ ...frame, autoDenyMs: 30_000 });
+
+    expect(toasts).toEqual(["Permission requested: Bash"]);
+    expect(notified).toEqual([["permission", "Bash", "p1", "/repo/proj"]]);
+    expect(useAppStore.getState().sessions.get("p1")?.pendingPermission?.requestId).toBe("r3");
+  });
+
+  test("a new prompt on the same pane is announced", () => {
+    const frame = {
+      type: "permission_request",
+      sessionId: "p1",
+      tool: { name: "Bash", parameters: { text: "touch x" } },
+      options: [{ id: "1", label: "Yes", keystroke: "1" }],
+      promptKind: "permission",
+    };
+    internal.handleMessage({ ...frame, requestId: "r4" });
+    internal.handleMessage({ ...frame, requestId: "r5" });
+
+    expect(toasts).toEqual(["Permission requested: Bash", "Permission requested: Bash"]);
+  });
 });
