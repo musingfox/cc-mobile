@@ -34,3 +34,6 @@ blob-report/
 .obsidian.yaml
 .spiral/
 .cf-recovered/
+
+# Agent worktrees: each holds its own biome.json, which biome reads as a nested root
+.claude/worktrees/
