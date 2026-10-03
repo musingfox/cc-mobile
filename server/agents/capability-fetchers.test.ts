@@ -4,17 +4,17 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { capabilityFetcherFor } from "./capability-fetchers";
 import type { ProbeResult } from "../capabilities/claude-probe";
 import type { EnrichedCapability, PluginInfo } from "../capabilities/enrich";
+import { capabilityFetcherFor, createOmpFetcher } from "./capability-fetchers";
 
 describe("CapabilityFetcherRegistry", () => {
   test("T1: claude has a registered fetcher", () => {
     expect(capabilityFetcherFor("claude")).not.toBeUndefined();
   });
 
-  test("T2: omp has no fetcher this flow", () => {
-    expect(capabilityFetcherFor("omp")).toBeUndefined();
+  test("T2: omp has a registered fetcher", () => {
+    expect(capabilityFetcherFor("omp")).not.toBeUndefined();
   });
 
   test("T3: an undetected kind is never assumed to be claude", () => {
@@ -62,5 +62,26 @@ describe("CapabilityFetcherRegistry", () => {
 
     await expect(fetcher!.list({ cwd: "/repo", probe, enrich })).resolves.toEqual({ ok: false });
     expect(enrichCalls).toBe(0);
+  });
+});
+
+describe("OmpCapabilityFetcher", () => {
+  test("omp's own commands come back as they are, with no agents", async () => {
+    const fetcher = createOmpFetcher(async () => ({
+      ok: true,
+      commands: [{ name: "model", description: "Switch model", argumentHint: "<name>" }],
+    }));
+
+    await expect(fetcher.list({ cwd: "/repo" })).resolves.toEqual({
+      ok: true,
+      commands: [{ name: "model", description: "Switch model", argumentHint: "<name>" }],
+      agents: [],
+    });
+  });
+
+  test("a failed omp probe is unavailable, not a broken picker", async () => {
+    const fetcher = createOmpFetcher(async () => ({ ok: false, reason: "timeout" }));
+
+    await expect(fetcher.list({ cwd: "/repo" })).resolves.toEqual({ ok: false });
   });
 });
