@@ -224,7 +224,7 @@ describe("TranscriptTurnDelivery", () => {
       getSink: () => spy.sink,
       read: async () => {
         reads++;
-        return { records: [], cursor: { byteOffset: 0, lastUuid: null } };
+        return { records: [], offsets: [], cursor: { byteOffset: 0, lastUuid: null } };
       },
     });
 

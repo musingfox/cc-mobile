@@ -1,36 +1,54 @@
 import { describe, expect, it } from "bun:test";
 import { ClientMessage, ServerMessage } from "../protocol";
 
+/** Narrows a parsed union member by its `type`, failing the test when it is another member. */
+function ofType<T extends { type: string }, K extends T["type"]>(
+  message: T,
+  type: K,
+): Extract<T, { type: K }> {
+  expect(message.type).toBe(type);
+  return message as Extract<T, { type: K }>;
+}
+
 describe("Reconnect Protocol - Client Messages", () => {
   it("accepts valid reconnect message", () => {
-    const result = ClientMessage.parse({
-      type: "reconnect",
-      lastEventId: 42,
-      sessionIds: ["s1", "s2"],
-    });
+    const result = ofType(
+      ClientMessage.parse({
+        type: "reconnect",
+        lastEventId: 42,
+        sessionIds: ["s1", "s2"],
+      }),
+      "reconnect",
+    );
     expect(result.type).toBe("reconnect");
     expect(result.lastEventId).toBe(42);
     expect(result.sessionIds).toEqual(["s1", "s2"]);
   });
 
   it("accepts reconnect with null lastEventId", () => {
-    const result = ClientMessage.parse({
-      type: "reconnect",
-      lastEventId: null,
-      sessionIds: ["s1"],
-    });
+    const result = ofType(
+      ClientMessage.parse({
+        type: "reconnect",
+        lastEventId: null,
+        sessionIds: ["s1"],
+      }),
+      "reconnect",
+    );
     expect(result.type).toBe("reconnect");
     expect(result.lastEventId).toBe(null);
     expect(result.sessionIds).toEqual(["s1"]);
   });
 
   it("accepts reconnect with per-session lastEventIds", () => {
-    const result = ClientMessage.parse({
-      type: "reconnect",
-      lastEventId: null,
-      lastEventIds: { s1: 3, s2: 7 },
-      sessionIds: ["s1", "s2"],
-    });
+    const result = ofType(
+      ClientMessage.parse({
+        type: "reconnect",
+        lastEventId: null,
+        lastEventIds: { s1: 3, s2: 7 },
+        sessionIds: ["s1", "s2"],
+      }),
+      "reconnect",
+    );
     expect(result.type).toBe("reconnect");
     expect((result as { lastEventIds?: Record<string, number> }).lastEventIds).toEqual({
       s1: 3,
@@ -63,12 +81,15 @@ describe("Reconnect Protocol - Client Messages", () => {
 
 describe("Reconnect Protocol - Server Messages", () => {
   it("accepts valid event wrapper", () => {
-    const result = ServerMessage.parse({
-      type: "event",
-      eventId: 1,
-      sessionId: "s1",
-      payload: { type: "stream_end", sessionId: "s1" },
-    });
+    const result = ofType(
+      ServerMessage.parse({
+        type: "event",
+        eventId: 1,
+        sessionId: "s1",
+        payload: { type: "stream_end", sessionId: "s1" },
+      }),
+      "event",
+    );
     expect(result.type).toBe("event");
     expect(result.eventId).toBe(1);
     expect(result.sessionId).toBe("s1");
@@ -76,12 +97,15 @@ describe("Reconnect Protocol - Server Messages", () => {
   });
 
   it("accepts valid replay_complete", () => {
-    const result = ServerMessage.parse({
-      type: "replay_complete",
-      sessionId: "s1",
-      eventsReplayed: 5,
-      gapDetected: false,
-    });
+    const result = ofType(
+      ServerMessage.parse({
+        type: "replay_complete",
+        sessionId: "s1",
+        eventsReplayed: 5,
+        gapDetected: false,
+      }),
+      "replay_complete",
+    );
     expect(result.type).toBe("replay_complete");
     expect(result.sessionId).toBe("s1");
     expect(result.eventsReplayed).toBe(5);

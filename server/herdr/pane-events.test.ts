@@ -1228,10 +1228,14 @@ describe("pane events driving the real transcript delivery", () => {
       get size() {
         return records.length;
       },
-      read: async ({ cursor }: { path: string; cursor: { byteOffset: number } }) => ({
-        records: records.slice(cursor.byteOffset),
-        cursor: { byteOffset: records.length, lastUuid: null },
-      }),
+      read: async ({ cursor }: { path: string; cursor: { byteOffset: number } }) => {
+        const read = records.slice(cursor.byteOffset);
+        return {
+          records: read,
+          offsets: read.map((_, i) => cursor.byteOffset + i),
+          cursor: { byteOffset: records.length, lastUuid: null },
+        };
+      },
     };
   }
 

@@ -254,7 +254,7 @@ describe("Directory Listing Integration Tests", () => {
 
       const result = ServerMessage.safeParse(errorMsg);
       expect(result.success).toBe(true);
-      if (result.success) {
+      if (result.success && result.data.type === "error") {
         expect(result.data.code).toBe("invalid_path");
       }
     });
@@ -270,7 +270,7 @@ describe("Directory Listing Integration Tests", () => {
 
       const result = ServerMessage.safeParse(errorMsg);
       expect(result.success).toBe(true);
-      if (result.success) {
+      if (result.success && result.data.type === "error") {
         expect(result.data.code).toBe("path_not_allowed");
       }
     });
@@ -286,7 +286,7 @@ describe("Directory Listing Integration Tests", () => {
 
       const result = ServerMessage.safeParse(errorMsg);
       expect(result.success).toBe(true);
-      if (result.success) {
+      if (result.success && result.data.type === "error") {
         expect(result.data.code).toBe("permission_denied");
       }
     });

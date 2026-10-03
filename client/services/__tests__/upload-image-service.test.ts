@@ -31,8 +31,8 @@ describe("uploadImage service (mirror of uploadFile)", () => {
     const out = await uploadImage("s1", "AAAA", "image/png");
 
     expect(captured).not.toBeNull();
-    expect((captured as { url: string }).url).toContain("/api/upload-image");
-    expect((captured as { body: unknown }).body).toEqual({
+    expect((captured as unknown as { url: string }).url).toContain("/api/upload-image");
+    expect((captured as unknown as { body: unknown }).body).toEqual({
       sessionId: "s1",
       base64: "AAAA",
       mediaType: "image/png",
