@@ -20,8 +20,14 @@
 import type { ZodType } from "zod";
 import { z } from "zod";
 import { DEFAULT_AGENT_KIND, type LaunchableAgentKind } from "../agents/kinds";
+import { HerdrRpcError } from "./errors";
 import type { AgentGetFn } from "./readiness";
-import { waitForAvailableShell, waitForInteractiveReady } from "./readiness";
+import {
+  DEFAULT_SHELL_BUDGET_MS,
+  DEFAULT_SHELL_POLL_MS,
+  waitForAvailableShell,
+  waitForInteractiveReady,
+} from "./readiness";
 import { PaneProcessInfoResultSchema } from "./schema";
 
 // ── Wire schemas (local: these three RPCs have no typed client method) ────────
@@ -165,28 +171,44 @@ export function createHerdrRegistry(options: HerdrRegistryOptions) {
       workspaceId = created.workspace.workspace_id;
       const paneId = created.root_pane.pane_id;
 
-      await waitForAvailableShell({
-        processInfo: async (pane) =>
-          (await client.call("pane.process_info", { pane_id: pane }, PaneProcessInfoResultSchema))
-            .process_info,
-        paneId,
-        budgetMs: options.shellBudgetMs,
-        pollMs: options.shellPollMs,
-        sleep: options.sleep,
-        now: options.now,
-      });
-
-      // argv is passed through verbatim by the daemon.
-      await client.call(
-        "agent.start",
-        {
-          name: agentName,
-          kind: agentKind,
-          pane_id: paneId,
-          args: argvFor(agentKind, claudeUuid, input.profileArgs),
-        },
-        AgentStartedResultSchema,
-      );
+      const now = options.now ?? Date.now;
+      const sleep =
+        options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+      const shellPollMs = options.shellPollMs ?? DEFAULT_SHELL_POLL_MS;
+      const shellDeadline = now() + (options.shellBudgetMs ?? DEFAULT_SHELL_BUDGET_MS);
+      // The shell can start an rc child (fish's fzf, a prompt init) between the
+      // gate's sample and herdr's own check, so a refusal for exactly that
+      // reason sends the create back to the gate inside the same budget.
+      for (;;) {
+        await waitForAvailableShell({
+          processInfo: async (pane) =>
+            (await client.call("pane.process_info", { pane_id: pane }, PaneProcessInfoResultSchema))
+              .process_info,
+          paneId,
+          budgetMs: Math.max(0, shellDeadline - now()),
+          pollMs: shellPollMs,
+          sleep,
+          now,
+        });
+        try {
+          // argv is passed through verbatim by the daemon.
+          await client.call(
+            "agent.start",
+            {
+              name: agentName,
+              kind: agentKind,
+              pane_id: paneId,
+              args: argvFor(agentKind, claudeUuid, input.profileArgs),
+            },
+            AgentStartedResultSchema,
+          );
+          break;
+        } catch (err) {
+          const busy = err instanceof HerdrRpcError && err.code === "agent_pane_busy";
+          if (!busy || now() >= shellDeadline) throw err;
+          await sleep(shellPollMs);
+        }
+      }
 
       await waitForInteractiveReady({
         agentGet: client.agentGet,

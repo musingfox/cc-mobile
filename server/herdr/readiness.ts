@@ -81,10 +81,15 @@ export async function waitForAvailableShell(options: WaitForAvailableShellOption
   while (true) {
     const info = await processInfo(paneId);
     const shell = info.shell_pid;
+    const foreground = info.foreground_processes ?? [];
+    // An empty foreground is a pane herdr has not read yet, not an idle shell:
+    // measured 2026-10-03, a fresh fish pane's first sample can precede the
+    // rc child (fzf) that then makes agent.start refuse.
     if (
       typeof shell === "number" &&
       info.foreground_process_group_id === shell &&
-      (info.foreground_processes ?? []).every((process) => process.pid === shell)
+      foreground.length > 0 &&
+      foreground.every((process) => process.pid === shell)
     ) {
       return;
     }

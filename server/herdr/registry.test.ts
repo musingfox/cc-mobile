@@ -11,6 +11,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { HerdrRpcError } from "./errors";
 import { claudeUuidFromWorkspaceLabel, createHerdrRegistry, workspaceLabelFor } from "./registry";
 
 const UUID = "3f2a9b01-1111-4222-8333-444455556666";
@@ -334,6 +335,51 @@ describe("HerdrShellGate", () => {
       "agent.start",
     ]);
     expect(fake.calls[1]?.params).toEqual({ pane_id: "p1" });
+  });
+
+  test("an rc child starting after the gate's sample sends the create back to the gate", async () => {
+    let refusals = 1;
+    const fake = makeFakeClient({
+      "pane.process_info": async () => availableShell("p1"),
+      "agent.start": async () => {
+        if (refusals-- > 0) {
+          throw new HerdrRpcError(
+            "agent_pane_busy",
+            "agent target pane p1 is not an available shell",
+          );
+        }
+        return { type: "agent_started" };
+      },
+    });
+    const registry = makeRegistry(fake);
+
+    await registry.createSession({ claudeUuid: UUID, cwd: "/tmp" });
+
+    expect(fake.methods().filter((m) => m === "agent.start")).toHaveLength(2);
+    expect(fake.methods()).not.toContain("workspace.close");
+  });
+
+  test("a pane herdr has not read yet is not taken for an idle shell", async () => {
+    const readings = [
+      {
+        type: "pane_process_info",
+        process_info: {
+          pane_id: "p1",
+          shell_pid: 4100,
+          foreground_process_group_id: 4100,
+          foreground_processes: [],
+        },
+      },
+      availableShell("p1"),
+    ];
+    const fake = makeFakeClient({
+      "pane.process_info": async () => readings.shift() ?? availableShell("p1"),
+    });
+    const registry = makeRegistry(fake);
+
+    await registry.createSession({ claudeUuid: UUID, cwd: "/tmp" });
+
+    expect(fake.methods().filter((m) => m === "pane.process_info")).toHaveLength(2);
   });
 
   test("a shell that never comes up fails the create plainly and leaves no workspace", async () => {
