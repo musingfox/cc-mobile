@@ -95,8 +95,9 @@ const ALLOW_TOOL = /^\s*Allow tool:\s*(\S.*?)\s*$/;
 /**
  * The footer omp draws under the options. It bounds the option list, and its
  * presence is the second piece of evidence that this really is omp's prompt.
+ * omp 18.4 spells the keys `↑/↓` where 17.x wrote `up/down`.
  */
-const NAV_HINT = /^\s*up\/down\s+navigate\b/i;
+const NAV_HINT = /^\s*(?:up\/down|↑\/↓)\s+navigate\b/i;
 
 /**
  * The selection cursor. Matched as a range rather than as one character: it is

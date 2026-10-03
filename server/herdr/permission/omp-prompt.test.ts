@@ -218,3 +218,26 @@ describe("OmpBorderedPrompt", () => {
     expect(parseOmpPrompt({ text: notAPrompt })).toBeNull();
   });
 });
+
+/**
+ * omp 18.4.3 (live capture 2026-10-03, `--approval-mode always-ask`) keeps the
+ * box and the words, and draws the footer as `↑/↓ navigate  󰌑 select` instead
+ * of `up/down navigate`. The footer is the parser's second anchor, so the whole
+ * prompt read as an API failure: the phone got a notice and no card, and the
+ * live omp-permission e2e timed out on it.
+ */
+describe("OmpArrowFooterPrompt", () => {
+  const ARROWS = readFileSync(join(FIXTURES, "omp-arrow-footer-prompt.txt"), "utf8");
+
+  test("parses the prompt whose footer draws arrows instead of up/down", () => {
+    const parsed = parseOmpPrompt({ text: ARROWS });
+    expect(parsed?.toolLabel).toBe("bash");
+    expect(parsed?.options.map((option) => option.label)).toEqual(["Approve", "Deny"]);
+    expect(parsed?.selectedIndex).toBe(0);
+  });
+
+  test("keeps the footer out of the option list", () => {
+    const labels = parseOmpPrompt({ text: ARROWS })?.options.map((option) => option.label);
+    expect(labels?.some((label) => label.includes("navigate"))).toBe(false);
+  });
+});
