@@ -165,6 +165,12 @@ export type SessionState = {
   terminal?: { ready: boolean };
   /** Server-supplied capability flags; absent until the session has been listed. */
   descriptor?: SessionDescriptorFlags;
+  /**
+   * The agent kind this phone asked for when it started the session — a fact,
+   * not a guess, so it can name the agent until herdr's own detection
+   * (`descriptor.agent`, read only at listing time) catches up.
+   */
+  launchedKind?: string;
   /** Current transcript file identity (from epochOf). */
   epoch?: string;
   /** Retired epochs (replays ignored). */
@@ -249,7 +255,12 @@ interface AppState {
   sessions: Map<string, SessionState>;
   activeSessionId: string | null;
 
-  addSession: (sessionId: string, cwd: string, terminal?: { ready: boolean }) => void;
+  addSession: (
+    sessionId: string,
+    cwd: string,
+    terminal?: { ready: boolean },
+    launchedKind?: string,
+  ) => void;
   /**
    * Moves an optimistic card onto the session id the server assigned. Idempotent:
    * a replayed `terminal_created` finds no card under the old key and does
@@ -373,7 +384,7 @@ export const useAppStore = create<AppState>((set) => ({
   sessions: new Map(),
   activeSessionId: null,
 
-  addSession: (sessionId, cwd, terminal) =>
+  addSession: (sessionId, cwd, terminal, launchedKind) =>
     set((state) => {
       const next = new Map(state.sessions);
       next.set(sessionId, {
@@ -386,6 +397,7 @@ export const useAppStore = create<AppState>((set) => ({
         agentState: null,
         receivedAuthoritativeState: false,
         terminal,
+        ...(launchedKind ? { launchedKind } : {}),
       });
       return {
         sessions: next,
@@ -404,7 +416,13 @@ export const useAppStore = create<AppState>((set) => ({
       const existing = next.get(toId);
       next.set(
         toId,
-        existing ? { ...existing, cwd: existing.cwd || session.cwd } : { ...session, id: toId },
+        existing
+          ? {
+              ...existing,
+              cwd: existing.cwd || session.cwd,
+              launchedKind: existing.launchedKind ?? session.launchedKind,
+            }
+          : { ...session, id: toId },
       );
       const draft = loadDraft(fromId);
       if (draft) saveDraft(toId, draft);

@@ -83,9 +83,10 @@ export default function ChatScreen({ onNavigate }: Props) {
   // becomes readable then. Nothing pushes the change, so the affordance follows
   // whatever the most recent listing said.
   const historyReadable = session?.descriptor?.readable === true;
-  // herdr's own label for the pane's agent; never guessed, so an undetected
-  // agent is named generically rather than called claude.
-  const agentLabel = session?.descriptor?.agent?.toUpperCase() || "AGENT";
+  // herdr's own label for the pane's agent, else the kind this phone launched;
+  // never guessed, so an agent known by neither is named generically.
+  const agentLabel =
+    (session?.descriptor?.agent || session?.launchedKind)?.toUpperCase() || "AGENT";
   // The blank screen this ticket exists to kill. A pane whose kind has no
   // reader shows nothing and never will, which reads as a broken app rather
   // than as a missing capability; one that is merely unwritten wants the

@@ -853,7 +853,8 @@ class WsService {
     if (!this.ws) return null;
 
     const claudeUuid = randomUuid();
-    useAppStore.getState().addSession(claudeUuid, cwd, { ready: false });
+    // The server starts claude when agentKind is absent (#31).
+    useAppStore.getState().addSession(claudeUuid, cwd, { ready: false }, agentKind ?? "claude");
     this.pendingTerminalCreates.add(claudeUuid);
     // Omitted rather than sent as undefined: the server reads an absent
     // agentKind as claude (#31), which is also what an older bundle sends.
@@ -882,7 +883,9 @@ class WsService {
     if (!this.ws) return null;
 
     const claudeUuid = randomUuid();
-    useAppStore.getState().addSession(claudeUuid, cwd, { ready: false });
+    const store = useAppStore.getState();
+    const kind = store.agentProfiles.find((profile) => profile.id === profileId)?.kind;
+    store.addSession(claudeUuid, cwd, { ready: false }, kind);
     this.pendingTerminalCreates.add(claudeUuid);
     this.sendMessage({ type: "terminal_create", claudeUuid, cwd, profileId });
 

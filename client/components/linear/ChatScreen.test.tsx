@@ -56,6 +56,16 @@ describe("ChatScreen", () => {
     expect(container.querySelector(".lin-msg--claude .lin-msg-label")?.textContent).toBe(label);
   });
 
+  test("a session this phone launched is named by the kind it asked for before herdr detects it", () => {
+    const store = useAppStore.getState();
+    store.addSession("s1", "/tmp/project", { ready: true }, "omp");
+    store.setActiveSession("s1");
+    store.addMessage("s1", { id: "m2", role: "assistant", content: "hello", timestamp: 1 });
+
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    expect(container.querySelector(".lin-msg--claude .lin-msg-label")?.textContent).toBe("OMP");
+  });
+
   test("renders user messages as right-aligned bubbles", () => {
     const store = useAppStore.getState();
     store.addSession("s1", "/tmp/project");
