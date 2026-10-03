@@ -176,9 +176,10 @@ class WsService {
   }
 
   /**
-   * The server freezes every auto-deny countdown when a connection closes and
-   * restarts it only when a prompt is raised again, so a deadline does not
-   * outlive the socket that delivered it.
+   * The server freezes every auto-deny countdown once its last connection
+   * closes, and restarts it when the next socket's session listing re-sends
+   * the prompt with the time left — so a deadline does not outlive the
+   * socket that delivered it.
    */
   private dropDeadlines() {
     const store = useAppStore.getState();
