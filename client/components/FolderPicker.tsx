@@ -77,13 +77,16 @@ export default function FolderPicker({
 
   const breadcrumbs = getBreadcrumbs();
 
+  // Subscribed, not read through getState() in the dependency list: that read
+  // never re-renders this component, so an error set while the picker was
+  // already open waited for some unrelated render to be shown.
+  const globalError = useAppStore((s) => s.globalError);
   useEffect(() => {
-    const globalError = useAppStore.getState().globalError;
     if (globalError && open) {
       toastService.error(globalError);
       useAppStore.getState().setGlobalError(null);
     }
-  }, [useAppStore.getState().globalError, open]);
+  }, [globalError, open]);
 
   const pickerContent = (
     <div className="lin-folder">
