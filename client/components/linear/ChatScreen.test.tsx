@@ -28,8 +28,32 @@ describe("ChatScreen", () => {
 
     const { container, getByText } = render(<ChatScreen onNavigate={() => {}} />);
     expect(getByText("YOU")).not.toBeNull();
-    expect(getByText("CLAUDE")).not.toBeNull();
+    expect(getByText("AGENT")).not.toBeNull();
     expect(container.querySelector(".lin-msg--user .lin-msg-label")?.textContent).toBe("YOU");
+  });
+
+  test.each([
+    ["claude", "CLAUDE"],
+    ["omp", "OMP"],
+  ])("an assistant reply is labelled with herdr's agent name: %s", (agent, label) => {
+    const store = useAppStore.getState();
+    store.addSession("s1", "/tmp/project");
+    store.setActiveSession("s1");
+    useAppStore.setState((state) => {
+      const sessions = new Map(state.sessions);
+      const current = sessions.get("s1");
+      if (current) {
+        sessions.set("s1", {
+          ...current,
+          descriptor: { origin: "self", drivable: true, readable: true, gated: true, agent },
+        });
+      }
+      return { sessions };
+    });
+    store.addMessage("s1", { id: "m2", role: "assistant", content: "hello", timestamp: 1 });
+
+    const { container } = render(<ChatScreen onNavigate={() => {}} />);
+    expect(container.querySelector(".lin-msg--claude .lin-msg-label")?.textContent).toBe(label);
   });
 
   test("renders user messages as right-aligned bubbles", () => {

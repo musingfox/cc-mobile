@@ -83,6 +83,9 @@ export default function ChatScreen({ onNavigate }: Props) {
   // becomes readable then. Nothing pushes the change, so the affordance follows
   // whatever the most recent listing said.
   const historyReadable = session?.descriptor?.readable === true;
+  // herdr's own label for the pane's agent; never guessed, so an undetected
+  // agent is named generically rather than called claude.
+  const agentLabel = session?.descriptor?.agent?.toUpperCase() || "AGENT";
   // The blank screen this ticket exists to kill. A pane whose kind has no
   // reader shows nothing and never will, which reads as a broken app rather
   // than as a missing capability; one that is merely unwritten wants the
@@ -431,7 +434,7 @@ export default function ChatScreen({ onNavigate }: Props) {
           return (
             <div key={m.id} className="lin-msg lin-msg--claude">
               <div className="lin-msg-head">
-                <div className="lin-msg-label">CLAUDE</div>
+                <div className="lin-msg-label">{agentLabel}</div>
                 {canCopy && (
                   <button
                     type="button"
