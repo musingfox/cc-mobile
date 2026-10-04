@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { emptyAgentProfileSource } from "../agents/profiles";
+import { EventBuffer } from "../event-buffer";
 import { createLaunchPlugin } from "../launch";
 import { testServerConfig } from "./ws-harness";
 
@@ -13,6 +14,7 @@ function setup(opts: { token?: string | null; createError?: string; sendFails?: 
       return { name: "t", paneRef: "w1:p2" };
     },
     teardown: async () => ({ killed: false }),
+    registerClient: () => {},
     send: async ({ claudeUuid, content }: { claudeUuid: string; content: string }) => {
       calls.push(`send:${claudeUuid}:${content}`);
       if (opts.sendFails) throw new Error("boom");
@@ -22,6 +24,7 @@ function setup(opts: { token?: string | null; createError?: string; sendFails?: 
     config: { ...testServerConfig, launchToken: opts.token === undefined ? "s3cret" : opts.token },
     backend,
     agentProfiles: emptyAgentProfileSource(),
+    eventBuffer: new EventBuffer(10),
     auditLog: { append: async (r: Record<string, unknown>) => void audits.push(r) } as never,
   });
   const post = (body: unknown, auth: string | null = "Bearer s3cret") =>
@@ -112,8 +115,10 @@ describe("POST /api/launch", () => {
         createSession: async () => ({ name: "", paneRef: "" }),
         teardown: async () => ({ killed: false }),
         send: async () => {},
+        registerClient: () => {},
       },
       agentProfiles: emptyAgentProfileSource(),
+      eventBuffer: new EventBuffer(10),
     });
     const r = await app.handle(
       new Request("http://localhost/api/launch", {

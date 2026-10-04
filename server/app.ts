@@ -312,7 +312,9 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
     .use(createUploadPlugin(serverConfig))
     .use(createUploadImagePlugin(serverConfig))
     .use(createPushPlugin({ store: pushStore, config: serverConfig }))
-    .use(createLaunchPlugin({ config: serverConfig, backend, agentProfiles, auditLog }))
+    .use(
+      createLaunchPlugin({ config: serverConfig, backend, agentProfiles, auditLog, eventBuffer }),
+    )
     .get("*", async ({ request }) => {
       // Skip if dist/ doesn't exist (dev mode)
       if (!existsSync(distDir)) {

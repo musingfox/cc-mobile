@@ -193,15 +193,22 @@ export async function sendPrompt(
   backend: { send(params: { claudeUuid: string; content: string }): Promise<void> },
   audit: (record: AuditRecordInput) => Promise<void>,
   p: { claudeUuid: string; content: string; ip: string | null; device: string | null },
+  /**
+   * The error code the routing reported to the pane's sink during this send,
+   * if any. Routing reports a refusal there instead of throwing, so without it
+   * a prompt that was never typed would be audited as dispatched.
+   */
+  reportedError: () => string | undefined = () => undefined,
 ): Promise<void> {
   const identity = { ip: p.ip, device: p.device };
   try {
     await backend.send({ claudeUuid: p.claudeUuid, content: p.content });
+    const code = reportedError();
     await audit({
       action: "prompt_send",
       paneId: p.claudeUuid,
       ...identity,
-      outcome: "dispatched",
+      outcome: code === undefined ? "dispatched" : code === "session_busy" ? "rejected" : "failed",
     });
   } catch (error) {
     await audit({ action: "prompt_send", paneId: p.claudeUuid, ...identity, outcome: "failed" });
