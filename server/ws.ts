@@ -19,6 +19,22 @@ import {
 } from "./terminal-control";
 import type { PageCursor, TranscriptPage } from "./transcript/page";
 
+/**
+ * Appends a session event to the replay buffer, the one every sink writes
+ * through. A rotation notice starts the session's conversation over:
+ * everything buffered before it belongs to the file the terminal just cleared,
+ * and a reconnect must not replay it. Buffered first so the event survives a
+ * dead socket; a reconnecting client recovers it via per-session replay.
+ */
+export function bufferSessionEvent(
+  eventBuffer: EventBuffer,
+  sessionId: string,
+  message: Record<string, unknown>,
+): number {
+  if (message.type === "transcript_rotated") eventBuffer.clear(sessionId);
+  return eventBuffer.append(sessionId, message);
+}
+
 /** The terminal backend surface the WS transport drives. */
 export interface WsBackend extends TerminalControlBackend {
   /** claudeUuids with a session this process launched and still routes for. */
@@ -210,14 +226,7 @@ export function createWsPlugin(
 
   // Helper to send buffered messages
   function sendBuffered(ws: any, sessionId: string, message: Record<string, unknown>) {
-    // A rotation notice starts the session's conversation over: everything
-    // buffered before it belongs to the file the terminal just cleared, and a
-    // reconnect must not replay it. The notice itself becomes the first event.
-    if (message.type === "transcript_rotated") eventBuffer.clear(sessionId);
-    // Append to the buffer FIRST so the event survives a dead/mid-close socket:
-    // a reconnecting client recovers it via per-session replay even if the live
-    // ws.send below fails.
-    const eventId = eventBuffer.append(sessionId, message);
+    const eventId = bufferSessionEvent(eventBuffer, sessionId, message);
     try {
       ws.send({ type: "event", eventId, sessionId, payload: message });
     } catch {
