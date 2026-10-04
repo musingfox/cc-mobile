@@ -13,6 +13,7 @@
 
 import type { LaunchableAgentKind } from "./agents/kinds";
 import type { AgentProfileSource } from "./agents/profiles";
+import type { AuditRecordInput } from "./audit/audit-log";
 import { expandPath, validateAllowedPath, validateCwd } from "./path-utils";
 import type { CreateSessionInput } from "./terminal-backend";
 
@@ -179,5 +180,31 @@ export async function handleTerminalTeardown(
       code: "terminal_error",
       message: error instanceof Error ? error.message : String(error),
     });
+  }
+}
+
+/**
+ * Delivers a prompt into a pane and audits it as `prompt_send`. Shared by the
+ * WS `terminal_send` handler and `POST /api/launch`, so both go through
+ * `backend.send` — the call that fires `onPromptSent` (phone-driven push scope).
+ * Rethrows a failed send after auditing it.
+ */
+export async function sendPrompt(
+  backend: { send(params: { claudeUuid: string; content: string }): Promise<void> },
+  audit: (record: AuditRecordInput) => Promise<void>,
+  p: { claudeUuid: string; content: string; ip: string | null; device: string | null },
+): Promise<void> {
+  const identity = { ip: p.ip, device: p.device };
+  try {
+    await backend.send({ claudeUuid: p.claudeUuid, content: p.content });
+    await audit({
+      action: "prompt_send",
+      paneId: p.claudeUuid,
+      ...identity,
+      outcome: "dispatched",
+    });
+  } catch (error) {
+    await audit({ action: "prompt_send", paneId: p.claudeUuid, ...identity, outcome: "failed" });
+    throw error;
   }
 }

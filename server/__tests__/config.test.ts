@@ -25,6 +25,7 @@ describe("parseServerConfig", () => {
       basePath: "",
       pushScope: "phone-last",
       hangarSession: null,
+      launchToken: null,
     });
     cleanup();
   });
@@ -50,6 +51,7 @@ describe("parseServerConfig", () => {
       basePath: "",
       pushScope: "phone-last",
       hangarSession: null,
+      launchToken: null,
     });
     cleanup();
   });
