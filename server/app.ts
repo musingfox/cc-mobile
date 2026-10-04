@@ -28,6 +28,7 @@ import { createHerdrClient, type HerdrClient } from "./herdr/client";
 import { createSidedBackend } from "./herdr/sided-backend";
 import { hangarKey, resolveHerdrSides, routeSessionKey, type Side } from "./herdr/sides";
 import { createSocketWatch, type SocketWatchOptions } from "./herdr/socket-watch";
+import { createLaunchPlugin } from "./launch";
 import { stripBasePath } from "./path-utils";
 import { createAttemptLog } from "./push/attempt-log";
 import { createForegroundTracker } from "./push/foreground";
@@ -276,6 +277,7 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
     });
   }
 
+  const agentProfiles = deps.agentProfiles ?? createAgentProfileSource();
   const backend: AppBackend = deps.backend ?? buildSidedBackend();
 
   if (deps.backendRef) deps.backendRef.current = backend;
@@ -303,13 +305,14 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
         eventBuffer,
         clientSink,
         auditLog,
-        agentProfiles: deps.agentProfiles ?? createAgentProfileSource(),
+        agentProfiles,
         foreground,
       }),
     )
     .use(createUploadPlugin(serverConfig))
     .use(createUploadImagePlugin(serverConfig))
     .use(createPushPlugin({ store: pushStore, config: serverConfig }))
+    .use(createLaunchPlugin({ config: serverConfig, backend, agentProfiles, auditLog }))
     .get("*", async ({ request }) => {
       // Skip if dist/ doesn't exist (dev mode)
       if (!existsSync(distDir)) {

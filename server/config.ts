@@ -11,6 +11,8 @@ export interface ServerConfig {
   pushScope: "phone-last" | "all";
   /** herdr session name of the optional second socket; null when unset. See `parseHangarSession`. */
   hangarSession?: string | null;
+  /** Bearer token for `POST /api/launch`; null (unset/blank) disables the route. */
+  launchToken?: string | null;
 }
 
 /**
@@ -46,6 +48,7 @@ export function parseServerConfig(argv: string[]): ServerConfig {
     basePath: parseBasePath(process.env.BASE_PATH),
     pushScope: parsePushScope(),
     hangarSession: parseHangarSession(),
+    launchToken: process.env.CC_MOBILE_LAUNCH_TOKEN?.trim() || null,
   };
 
   for (let i = 0; i < argv.length; i++) {

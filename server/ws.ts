@@ -14,6 +14,7 @@ import type { SessionManager } from "./session-manager";
 import {
   handleTerminalCreate,
   handleTerminalTeardown,
+  sendPrompt,
   type TerminalControlBackend,
 } from "./terminal-control";
 import type { PageCursor, TranscriptPage } from "./transcript/page";
@@ -553,23 +554,7 @@ export function createWsPlugin(
               (msg: Record<string, unknown>) => sendBuffered(ws, claudeUuid, msg),
               ownerOf(ws),
             );
-            try {
-              await backend.send({ claudeUuid, content });
-              await audit({
-                action: "prompt_send",
-                paneId: claudeUuid,
-                ...identity,
-                outcome: "dispatched",
-              });
-            } catch (error) {
-              await audit({
-                action: "prompt_send",
-                paneId: claudeUuid,
-                ...identity,
-                outcome: "failed",
-              });
-              throw error;
-            }
+            await sendPrompt(backend, audit, { claudeUuid, content, ...identity });
             break;
           }
 
