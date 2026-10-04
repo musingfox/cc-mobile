@@ -5,6 +5,7 @@ class FakeVisualViewport extends EventTarget {
   constructor(
     public height: number,
     public scale = 1,
+    public offsetTop = 0,
   ) {
     super();
   }
@@ -19,6 +20,7 @@ function fakeWindow(vv: FakeVisualViewport | null) {
 }
 
 const appHeight = (root: HTMLElement) => root.style.getPropertyValue("--app-height");
+const appTop = (root: HTMLElement) => root.style.getPropertyValue("--app-top");
 
 describe("bindVisualViewport", () => {
   test("publishes the visible height as soon as it binds", () => {
@@ -63,6 +65,33 @@ describe("bindVisualViewport", () => {
     expect(appHeight(root)).toBe("844px");
   });
 
+  test("follows iOS's pan: with the keyboard up the app sits where the visible area starts", () => {
+    const vv = new FakeVisualViewport(844);
+    const { win, root } = fakeWindow(vv);
+    bindVisualViewport(win);
+    expect(appTop(root)).toBe("0px");
+
+    vv.height = 500;
+    vv.offsetTop = 300;
+    vv.dispatchEvent(new Event("scroll"));
+
+    expect(appTop(root)).toBe("300px");
+    expect(appHeight(root)).toBe("500px");
+  });
+
+  test("a pinch-zoom pan does not drag the app along", () => {
+    const vv = new FakeVisualViewport(844);
+    const { win, root } = fakeWindow(vv);
+    bindVisualViewport(win);
+
+    vv.height = 422;
+    vv.scale = 2;
+    vv.offsetTop = 200;
+    vv.dispatchEvent(new Event("scroll"));
+
+    expect(appTop(root)).toBe("0px");
+  });
+
   test("unbinding stops following and hands the height back to CSS", () => {
     const vv = new FakeVisualViewport(844);
     const { win, root } = fakeWindow(vv);
@@ -73,6 +102,7 @@ describe("bindVisualViewport", () => {
     vv.dispatchEvent(new Event("resize"));
 
     expect(appHeight(root)).toBe("");
+    expect(appTop(root)).toBe("");
   });
 
   test("without visualViewport it does nothing and leaves CSS's fallback in place", () => {

@@ -386,6 +386,9 @@ button {
 .app {
   display: flex;
   flex-direction: column;
+  position: fixed;
+  top: var(--app-top, 0px);
+  left: 0;
   height: var(--app-height, 100vh);
   width: 100%;
 }
