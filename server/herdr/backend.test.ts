@@ -452,6 +452,93 @@ describe("TranscriptPathRetryBackoff wiring", () => {
   });
 });
 
+describe("BackendStartsWatchingOnCall", () => {
+  function countingClient(options: { rejectSubscribe?: boolean; pane?: Record<string, unknown> }) {
+    const counts = { subscribeEvents: 0, sessionSnapshot: 0, agentList: 0 };
+    const client = {
+      call: async () => ({ type: "ok" }),
+      agentGet: async () => ({}),
+      agentList: async () => {
+        counts.agentList += 1;
+        return [];
+      },
+      paneRead: async () => ({ text: "" }),
+      paneSendText: async () => {},
+      paneSendKeys: async () => {},
+      subscribeEvents: async () => {
+        counts.subscribeEvents += 1;
+        if (options.rejectSubscribe) throw new HerdrTransportError("connect failed");
+        return { stop: () => {} };
+      },
+      sessionSnapshot: async () => {
+        counts.sessionSnapshot += 1;
+        return {
+          workspaces: [],
+          panes: options.pane ? [options.pane] : [],
+          agents: options.pane ? [{ ...options.pane, state_change_seq: 1 }] : [],
+        };
+      },
+    } as unknown as NonNullable<HerdrBackendOptions["client"]>;
+    return { client, counts };
+  }
+
+  test("construction alone contacts no daemon", () => {
+    const { client, counts } = countingClient({});
+    createHerdrBackend({ client });
+    expect(counts.subscribeEvents).toBe(0);
+    expect(counts.sessionSnapshot).toBe(0);
+  });
+
+  test("a second start while running subscribes once", async () => {
+    const { client, counts } = countingClient({});
+    const backend = createHerdrBackend({ client, statusPollIntervalMs: 1000 });
+    try {
+      await backend.start();
+      expect(counts.subscribeEvents).toBe(1);
+      await backend.start();
+      expect(counts.subscribeEvents).toBe(1);
+    } finally {
+      await backend.teardownAll();
+    }
+  });
+
+  test("a failed subscription still arms the poll, and push hears the status without a phone listing", async () => {
+    const pane = {
+      pane_id: "w1:p1",
+      workspace_id: "w1",
+      agent: "claude",
+      agent_status: "blocked",
+    };
+    const { client, counts } = countingClient({ rejectSubscribe: true, pane });
+    const seen: Array<[string, string]> = [];
+    const errors = spyOn(console, "warn").mockImplementation(() => {});
+    const backend = createHerdrBackend({
+      client,
+      statusPollIntervalMs: 5,
+      push: { onAgentStatus: (id, status) => void seen.push([id, status]) },
+    });
+    try {
+      await backend.start();
+      const deadline = Date.now() + 200;
+      while (seen.length === 0 && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+      expect(seen[0]).toEqual(["w1:p1", "blocked"]);
+    } finally {
+      await backend.teardownAll();
+      errors.mockRestore();
+    }
+  });
+
+  test("start after teardownAll does nothing", async () => {
+    const { client, counts } = countingClient({});
+    const backend = createHerdrBackend({ client });
+    await backend.teardownAll();
+    await backend.start();
+    expect(counts.subscribeEvents).toBe(0);
+  });
+});
+
 describe("HerdrStartupGate", () => {
   test("rejects when the daemon speaks a different protocol", async () => {
     const client = createHerdrClient({
