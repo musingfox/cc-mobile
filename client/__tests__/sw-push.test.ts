@@ -185,6 +185,51 @@ describe("SwPushAlwaysShowsNotification", () => {
     });
   });
 
+  test("T9: a hangar_offline payload shows its own copy under its own tag", async () => {
+    let waited: Promise<unknown> | undefined;
+    const waitUntil = mock((p: Promise<unknown>) => {
+      waited = p;
+      return p;
+    });
+    pushHandler({
+      data: {
+        json: () =>
+          Promise.resolve({
+            kind: "hangar_offline",
+            title: "CCMobile",
+            body: "Hangar offline",
+            tag: "cc-mobile-push-hangar-offline",
+          }),
+      },
+      waitUntil,
+    });
+    if (waited) await waited;
+    expect(showNotification).toHaveBeenCalledTimes(1);
+    expect(showNotification).toHaveBeenCalledWith("CCMobile", {
+      body: "Hangar offline",
+      tag: "cc-mobile-push-hangar-offline",
+      renotify: true,
+    });
+  });
+
+  test("T10: an unknown kind keeps the fallback copy and tag", async () => {
+    let waited: Promise<unknown> | undefined;
+    const waitUntil = mock((p: Promise<unknown>) => {
+      waited = p;
+      return p;
+    });
+    pushHandler({
+      data: { json: () => Promise.resolve({ kind: "bogus", body: "x", tag: "y" }) },
+      waitUntil,
+    });
+    if (waited) await waited;
+    expect(showNotification).toHaveBeenCalledWith("CCMobile", {
+      body: "Something needs you",
+      tag: "cc-mobile-push",
+      renotify: true,
+    });
+  });
+
   test("T7: the fallback tag is the generic one, and an unparseable payload is warned about", async () => {
     const originalWarn = console.warn;
     const warnings: unknown[][] = [];

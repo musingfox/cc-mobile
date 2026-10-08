@@ -146,10 +146,10 @@ self.addEventListener("push", (event) => {
           console.warn("[sw] push payload could not be parsed:", err);
         }
       }
-      // Both kinds carry their own copy and their own tag, so a permission
-      // banner never coalesces over a turn banner (and vice versa).
+      // Every kind carries its own copy and its own tag, so a permission
+      // banner never coalesces over a turn or hangar-offline banner.
       const kind = payload && typeof payload === "object" ? payload.kind : null;
-      if (kind === "turn" || kind === "permission") {
+      if (kind === "turn" || kind === "permission" || kind === "hangar_offline") {
         title = payload.title || title;
         body = payload.body || body;
         tag = payload.tag || tag;
