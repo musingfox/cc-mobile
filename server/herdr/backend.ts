@@ -100,6 +100,12 @@ export interface HerdrBackendOptions {
  */
 export interface HerdrTerminalBackend extends TerminalBackend {
   /**
+   * Opens the event stream and arms the status poll without anyone listing
+   * sessions. Never rejects; a second call while running is a no-op and a call
+   * after `teardownAll()` does nothing.
+   */
+  start(): Promise<void>;
+  /**
    * Every claude the daemon reports, with identity and capability flags.
    * Never rejects: an unreachable daemon answers `[]`.
    */
@@ -444,6 +450,7 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
   }
 
   return {
+    start: ensureEvents,
     async createSession(input): Promise<TerminalSessionInfo> {
       const info = await registry.createSession(input);
       // Non-fatal by construction: start() never rejects.
