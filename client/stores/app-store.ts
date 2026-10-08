@@ -106,6 +106,8 @@ export type SessionDescriptorFlags = {
    * an empty screen that is waiting for you and one that will stay empty.
    */
   unreadableReason?: "pending" | "unsupported";
+  /** Which herdr daemon owns the pane; absent from an older server. */
+  side?: "cockpit" | "hangar";
   gated: boolean;
   /**
    * Which agent runs in that pane, in herdr's own wording. Absent when herdr
@@ -244,12 +246,19 @@ export type AgentProfile = {
   kind: string;
 };
 
+export type HerdrStatus = {
+  cockpit: { online: boolean };
+  hangar?: { name: string; online: boolean };
+};
+
 export type ScreenName = "sessions" | "agents" | "chat" | "commands" | "settings";
 
 interface AppState {
   // Connection
   connectionState: ConnectionState;
   setConnectionState: (state: ConnectionState) => void;
+  herdrStatus: HerdrStatus | null;
+  setHerdrStatus: (status: HerdrStatus | null) => void;
 
   // Sessions
   sessions: Map<string, SessionState>;
@@ -380,6 +389,8 @@ function updateSession(
 export const useAppStore = create<AppState>((set) => ({
   connectionState: "connecting",
   setConnectionState: (connectionState) => set({ connectionState }),
+  herdrStatus: null,
+  setHerdrStatus: (herdrStatus) => set({ herdrStatus }),
 
   sessions: new Map(),
   activeSessionId: null,

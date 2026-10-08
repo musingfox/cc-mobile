@@ -4,6 +4,7 @@ import {
   type AgentInfo,
   type AgentProfile,
   type CommandInfo,
+  type HerdrStatus,
   isUnreadablePrompt,
   type Message,
   type PendingPermission,
@@ -19,6 +20,39 @@ import { saveProject } from "./projects";
 import { describeServerError } from "./server-error-text";
 import { toastService } from "./toast-service";
 import { messagesFromProjectedChunk } from "./transcript-projection";
+
+/** Anything but the documented shape counts as absent: an old server sends none. */
+function parseHerdrStatus(raw: unknown): HerdrStatus | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const { cockpit, hangar } = raw as Record<string, unknown>;
+  const online = (side: unknown) =>
+    typeof side === "object" &&
+    side !== null &&
+    typeof (side as { online?: unknown }).online === "boolean"
+      ? (side as { online: boolean }).online
+      : null;
+  const cockpitOnline = online(cockpit);
+  if (cockpitOnline === null) return null;
+  const status: HerdrStatus = { cockpit: { online: cockpitOnline } };
+  const hangarOnline = online(hangar);
+  const name = (hangar as { name?: unknown } | undefined)?.name;
+  if (hangarOnline !== null && typeof name === "string") {
+    status.hangar = { name, online: hangarOnline };
+  }
+  return status;
+}
+
+/** A card missing from the listing is only gone when the daemon that owns it answered. */
+function sideIsOnline(
+  herdr: HerdrStatus | null,
+  side: "cockpit" | "hangar" | undefined,
+  id: string,
+): boolean {
+  if (!herdr) return true;
+  const owner =
+    side ?? (herdr.hangar && id.startsWith(`${herdr.hangar.name}@`) ? "hangar" : "cockpit");
+  return owner === "hangar" ? (herdr.hangar?.online ?? true) : herdr.cockpit.online;
+}
 
 /** Server probe budget is 30s; 45s is that ceiling plus margin for a dropped reply. */
 export const CAPABILITIES_REQUEST_TIMEOUT_MS = 45_000;
@@ -415,6 +449,8 @@ class WsService {
             typeof entry === "object" && entry !== null && typeof entry.sessionId === "string",
         );
         const live = new Set(descriptors.map((entry) => entry.sessionId as string));
+        const herdr = parseHerdrStatus(msg.herdr);
+        store.setHerdrStatus(herdr);
 
         // Every listed session gets a card, including ones the user started in
         // their own terminal and this browser has never seen — that is the
@@ -430,6 +466,7 @@ class WsService {
             ...(entry.unreadableReason === "pending" || entry.unreadableReason === "unsupported"
               ? { unreadableReason: entry.unreadableReason }
               : {}),
+            ...(entry.side === "cockpit" || entry.side === "hangar" ? { side: entry.side } : {}),
             gated: entry.gated !== false,
             agent: typeof entry.agent === "string" ? entry.agent : undefined,
             ...(typeof entry.title === "string" && entry.title ? { title: entry.title } : {}),
@@ -463,7 +500,10 @@ class WsService {
         // Anything not in the list is gone. Materialise before mutating:
         // removeSession replaces the sessions Map.
         const dead = [...store.sessions.keys()].filter(
-          (id) => !live.has(id) && !this.pendingTerminalCreates.has(id),
+          (id) =>
+            !live.has(id) &&
+            !this.pendingTerminalCreates.has(id) &&
+            sideIsOnline(herdr, store.sessions.get(id)?.descriptor?.side, id),
         );
         for (const id of dead) {
           store.removeSession(id);
