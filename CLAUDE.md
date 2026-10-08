@@ -31,7 +31,8 @@ machine before running the server.
 
 `CC_MOBILE_HANGAR_SESSION=<name>` names a second herdr session — the hangar —
 whose socket is `~/.config/herdr/sessions/<name>/herdr.sock`. Unset, there is no
-hangar and cc-mobile behaves as it did with one socket. Set, one process serves
+hangar and cc-mobile behaves as it did with one socket, except that
+`POST /api/launch` answers `503 hangar_unavailable`. Set, one process serves
 both daemons' panes: a hangar pane's session key is `<name>@<pane_id>`, a
 cockpit pane's key is unchanged.
 
@@ -512,11 +513,15 @@ unset, `503 launch_disabled`), and every call must carry
 order: no hangar session configured is `503 hangar_unavailable`; no
 `CC_MOBILE_VAULT_ROOT` (blank counts as unset) is `503 vault_unconfigured`; a
 malformed body is `400 invalid_body`; a `vault` that is not the root's basename
-is `400 vault_mismatch`; a `cardPath` that is absolute, contains `..` or does
-not end in `.md` is `400 invalid_card_path`; a card that cannot be resolved or
-read is `404 card_not_found`; a card whose real path (symlinks followed) leaves
-the vault root is `403 card_not_allowed`. Session-creation refusals keep the
-terminal codes (`invalid_cwd`, `path_not_allowed`, `unknown_profile`).
+is `400 vault_mismatch`; a `cardPath` that is absolute, has a `..` path segment
+(`a..b.md` is fine) or does not end in `.md` is `400 invalid_card_path`; a card
+path that does not resolve is `404 card_not_found`; one whose resolved path
+(symlinks followed without opening the target) leaves the vault root is
+`403 card_not_allowed` — even when the outside file is unreadable; one inside the
+root that then cannot be read (a directory, mode 000) is `404 card_not_found`; a
+profile of a non-claude kind is `400 unsupported_kind`. Session-creation
+refusals follow, keeping the terminal codes (`invalid_cwd`, `path_not_allowed`,
+`unknown_profile`).
 
 Before anything is typed the server writes a binding file,
 `~/.claude-mobile/launches/<claudeUuid>.json`, holding exactly

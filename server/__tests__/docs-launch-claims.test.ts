@@ -30,4 +30,14 @@ describe("CLAUDE.md launch docs", () => {
       expect(doc).toContain(term);
     }
   });
+
+  test("states the check order and the hangar-less exception as built", () => {
+    const flat = doc.replace(/\s+/g, " ");
+    expect(flat).not.toContain("contains `..`");
+    expect(flat).toContain("has a `..` path segment");
+    expect(flat.indexOf("`403 card_not_allowed`")).toBeLessThan(
+      flat.indexOf("that then cannot be read"),
+    );
+    expect(flat).toContain("except that `POST /api/launch` answers `503 hangar_unavailable`");
+  });
 });
