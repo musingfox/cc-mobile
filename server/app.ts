@@ -24,6 +24,7 @@ import { createAuditLog } from "./audit/audit-log";
 import type { ServerConfig } from "./config";
 import { EventBuffer } from "./event-buffer";
 import { createHerdrBackend } from "./herdr/backend";
+import { createSidedBackend } from "./herdr/sided-backend";
 import { stripBasePath } from "./path-utils";
 import { createAttemptLog } from "./push/attempt-log";
 import { createForegroundTracker } from "./push/foreground";
@@ -52,6 +53,8 @@ export interface AppBackend extends WsBackend {
   hasSession(claudeUuid: string): { present: boolean; paneRef?: string };
   getClient(claudeUuid: string): ((msg: Record<string, unknown>) => void) | undefined;
   teardownAll(): Promise<void>;
+  /** Opens the event streams and watches without waiting for a phone. */
+  start?(): void;
   /**
    * How many phones are registered for background push, read through the
    * backend rather than off the store directly — that is what proves the
@@ -170,8 +173,7 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
   // herdr is the only default backend (ADR-015 / plan D1). Its transport
   // connects lazily, so constructing the app here contacts no daemon —
   // index.ts gates on daemon reachability before it listens.
-  const backend: AppBackend =
-    deps.backend ??
+  const cockpitBackend = () =>
     createHerdrBackend({
       ...(deps.herdrClient ? { client: deps.herdrClient } : {}),
       ...(deps.suppressSessionLabel ? { suppressSessionLabel: deps.suppressSessionLabel } : {}),
@@ -195,6 +197,8 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
           outcome,
         }),
     });
+  const backend: AppBackend =
+    deps.backend ?? createSidedBackend({ cockpit: { backend: cockpitBackend() } });
 
   if (deps.backendRef) deps.backendRef.current = backend;
 

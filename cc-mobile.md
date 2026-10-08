@@ -110,9 +110,11 @@ a page reload.
               cwd: string, origin: "self" | "foreign", drivable: boolean,
               readable: boolean, unreadableReason?: "pending" | "unsupported",
               gated: boolean,
-              state?: "idle" | "running" | "requires_action" }[],
+              state?: "idle" | "running" | "requires_action",
+              side?: "cockpit" | "hangar" }[],  // hangar keys are "<name>@<pane_id>"
   claudeUuids: string[],
-  states?: Record<string, "idle" | "running" | "requires_action"> }
+  states?: Record<string, "idle" | "running" | "requires_action">,
+  herdr?: { cockpit: { online: boolean }, hangar?: { name: string, online: boolean } } }
 { type: "session_state", sessionId: string, state: "idle" | "running" | "requires_action" }
 { type: "error", code: string, message: string, sessionId?: string } // agent_blocked_notice: fenced blocked-screen words; agent_attention_notice: claude trust dialog while herdr says idle — read-only, never sends a key
 { type: "server_config", config: { allowedRoots?: string[] | null, homeDirectory?: string,

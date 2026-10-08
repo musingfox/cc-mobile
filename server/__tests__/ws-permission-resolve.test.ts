@@ -125,9 +125,9 @@ describe("PermissionAnswerKeySend — transport dispatch", () => {
   });
 
   test("a listing whose socket closed before it finished re-raises nothing", async () => {
-    const listing = Promise.withResolvers<[]>();
+    const listing = Promise.withResolvers<{ sessions: [] }>();
     const { backend, counts } = backendWithPermissions();
-    harness = await startWsHarness({ ...backend, listSessionDescriptors: () => listing.promise });
+    harness = await startWsHarness({ ...backend, listSessions: () => listing.promise });
 
     harness.send({ type: "list_terminal_sessions" });
     await settle();
@@ -136,7 +136,7 @@ describe("PermissionAnswerKeySend — transport dispatch", () => {
     while (counts().paused === 0 && Date.now() < deadline) await settle();
     expect(counts().paused).toBe(1);
 
-    listing.resolve([]);
+    listing.resolve({ sessions: [] });
     await settle();
 
     // Re-raising here would restart the countdowns that close just froze,
