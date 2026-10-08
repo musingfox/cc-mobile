@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { HerdrTerminalBackend } from "./backend";
-import { createSidedBackend, type SocketWatch } from "./sided-backend";
+import { createSidedBackend } from "./sided-backend";
+import type { SocketWatch } from "./socket-watch";
 
 type Calls = Record<string, unknown[][]>;
 

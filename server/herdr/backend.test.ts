@@ -526,6 +526,7 @@ describe("BackendStartsWatchingOnCall", () => {
     });
     try {
       await backend.start();
+      expect(counts.agentList).toBe(0);
       const deadline = Date.now() + 200;
       while (seen.length === 0 && Date.now() < deadline) {
         await new Promise((resolve) => setTimeout(resolve, 5));
