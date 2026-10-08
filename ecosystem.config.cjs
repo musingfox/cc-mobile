@@ -1,3 +1,17 @@
+const { readFileSync } = require("node:fs");
+const { homedir } = require("node:os");
+const { join } = require("node:path");
+
+// The launch token is a secret, so it lives in a 0600 file outside the repo;
+// a missing file leaves it unset and /api/launch answers 503.
+function readLaunchToken() {
+  try {
+    return readFileSync(join(homedir(), ".claude-mobile", "launch-token"), "utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
 module.exports = {
   apps: [
     {
@@ -32,6 +46,8 @@ module.exports = {
       env: {
         NODE_ENV: "production",
         CC_MOBILE_HANGAR_SESSION: "fleet",
+        CC_MOBILE_VAULT_ROOT: join(homedir(), "Documents", "obsidian"),
+        CC_MOBILE_LAUNCH_TOKEN: readLaunchToken(),
       },
     },
   ],
