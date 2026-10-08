@@ -11,6 +11,7 @@
  */
 
 import type { LaunchableAgentKind } from "./agents/kinds";
+import type { Side } from "./herdr/sides";
 
 // ── Port ─────────────────────────────────────────────────────────────────────
 
@@ -24,6 +25,8 @@ export interface CreateSessionInput {
   agentKind?: LaunchableAgentKind;
   /** Operator-configured argv from a server-owned launch profile. */
   profileArgs?: string[];
+  /** Which daemon holds the new pane; read only by the sided backend, which strips it. */
+  side?: Side;
 }
 
 export interface TeardownResult {

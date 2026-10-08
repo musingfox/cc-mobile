@@ -139,8 +139,12 @@ export function createSidedBackend(options: SidedBackendOptions) {
       return merged;
     },
 
-    createSession(input: CreateSessionInput): Promise<TerminalSessionInfo> {
-      return cockpit.backend.createSession(input);
+    async createSession(input: CreateSessionInput): Promise<TerminalSessionInfo> {
+      const { side, ...rest } = input;
+      if (side !== "hangar") return cockpit.backend.createSession(rest);
+      if (!hangar) throw new Error("no hangar session is configured");
+      const info = await hangar.backend.createSession(rest);
+      return { ...info, paneRef: prefix(info.paneRef) };
     },
     integrationStates: () => cockpit.backend.integrationStates(),
     pushSubscriberCount: () => cockpit.backend.pushSubscriberCount(),

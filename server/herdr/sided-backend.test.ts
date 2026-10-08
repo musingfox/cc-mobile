@@ -1,4 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { emptyAgentProfileSource } from "../agents/profiles";
+import { ClientMessage } from "../protocol";
+import { handleTerminalCreate } from "../terminal-control";
 import type { HerdrTerminalBackend } from "./backend";
 import { createSidedBackend } from "./sided-backend";
 import type { SocketWatch } from "./socket-watch";
@@ -194,6 +200,30 @@ describe("KeyedCallsRouteBySide", () => {
     expect(cockpit.calls.createSession.length).toBe(1);
     expect(hangar.calls.createSession).toBeUndefined();
     expect(r.paneRef).toBe("w9:p1");
+  });
+  test("T9b a hangar create is routed to the hangar and prefixed", async () => {
+    const { sided, cockpit, hangar } = make();
+    const r = await sided.createSession({ claudeUuid: "u1", cwd: "/r", side: "hangar" });
+    expect(r).toEqual({ name: "n", paneRef: "fleet@w9:p1" });
+    expect(hangar.calls.createSession).toEqual([[{ claudeUuid: "u1", cwd: "/r" }]]);
+    expect(cockpit.calls.createSession).toBeUndefined();
+  });
+  test("T9c a hangar create with no hangar configured rejects and calls nothing", async () => {
+    const { sided, cockpit } = make({}, null);
+    await expect(
+      sided.createSession({ claudeUuid: "u1", cwd: "/r", side: "hangar" }),
+    ).rejects.toThrow(/hangar/);
+    expect(cockpit.calls.createSession).toBeUndefined();
+  });
+  test("T9d an offline hangar's rejection propagates and the cockpit is not tried", async () => {
+    const { sided, cockpit } = make(
+      {},
+      { createSession: () => Promise.reject(new Error("connect ENOENT")) },
+    );
+    await expect(
+      sided.createSession({ claudeUuid: "u1", cwd: "/r", side: "hangar" }),
+    ).rejects.toThrow("connect ENOENT");
+    expect(cockpit.calls.createSession).toBeUndefined();
   });
   test("T10 integrationStates cockpit only", async () => {
     const { sided, hangar } = make();
@@ -431,5 +461,34 @@ describe("SidesStartInBackground", () => {
     expect(() => sided.start()).not.toThrow();
     await new Promise((r) => setTimeout(r, 0));
     expect(warns.some((w) => /boom/.test(w))).toBe(true);
+  });
+});
+
+describe("WsCannotNameHangar", () => {
+  test("T5 handleTerminalCreate does not forward a side", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "sided-create-"));
+    const inputs: unknown[] = [];
+    await handleTerminalCreate({ claudeUuid: "u1", cwd: dir, side: "hangar" } as never, {
+      backend: {
+        createSession: async (input) => {
+          inputs.push(input);
+          return { name: "n", paneRef: "p" };
+        },
+        teardown: async () => ({ killed: false }),
+      },
+      allowedRoots: null,
+      send: () => {},
+      agentProfiles: emptyAgentProfileSource(),
+    });
+    expect(inputs).toEqual([{ claudeUuid: "u1", cwd: dir }]);
+  });
+  test("T6 the wire schema drops a side", () => {
+    const parsed = ClientMessage.parse({
+      type: "terminal_create",
+      claudeUuid: "u",
+      cwd: "/tmp",
+      side: "hangar",
+    });
+    expect("side" in parsed).toBe(false);
   });
 });
