@@ -496,17 +496,42 @@ that can refuse a keystroke is a worse failure than a missing line.
 
 ## Launch API
 
-`POST /api/launch` (`server/launch.ts`) opens a session and types its first
-prompt without a phone: `{cwd, prompt, profileId?}` → `201 {sessionId}`. It is
-the same `terminal_create` + `terminal_send` path the WS uses, so
-`CC_MOBILE_ALLOWED_ROOTS` and the profile menu apply unchanged. It opens on the
-cockpit; there is no way to name the hangar yet.
+`POST /api/launch` (`server/launch.ts`) dispatches an Obsidian task card onto
+the **hangar** without a phone: `{cwd, cardPath, vault, project, profileId?}` →
+`201 {sessionId, claudeUuid}`. `cardPath` is relative to the vault, `vault` must
+equal the basename of `CC_MOBILE_VAULT_ROOT`, and `project` matches
+`[A-Za-z0-9._-]+` without a leading dot. It is the same `terminal_create` +
+`terminal_send` path the WS uses, so `CC_MOBILE_ALLOWED_ROOTS` and the profile
+menu apply unchanged; the pane is always created on the hangar socket. Only
+claude can be launched: a profile of another kind is `400 unsupported_kind`,
+because the binding below is keyed by claude's session id.
 
 The route exists only while `CC_MOBILE_LAUNCH_TOKEN` is set (blank counts as
 unset, `503 launch_disabled`), and every call must carry
-`Authorization: Bearer <token>` (`401 unauthorized`). A prompt that was never
-typed is `502 prompt_failed` with the `sessionId`, because the session itself
-was already created.
+`Authorization: Bearer <token>` (`401 unauthorized`). Checks then run in this
+order: no hangar session configured is `503 hangar_unavailable`; no
+`CC_MOBILE_VAULT_ROOT` (blank counts as unset) is `503 vault_unconfigured`; a
+malformed body is `400 invalid_body`; a `vault` that is not the root's basename
+is `400 vault_mismatch`; a `cardPath` that is absolute, contains `..` or does
+not end in `.md` is `400 invalid_card_path`; a card that cannot be resolved or
+read is `404 card_not_found`; a card whose real path (symlinks followed) leaves
+the vault root is `403 card_not_allowed`. Session-creation refusals keep the
+terminal codes (`invalid_cwd`, `path_not_allowed`, `unknown_profile`).
+
+Before anything is typed the server writes a binding file,
+`~/.claude-mobile/launches/<claudeUuid>.json`, holding exactly
+`{cardPath, vault, project, paneId, createdAt}` (directory 0700, file 0600,
+created exclusively so a session id binds to one card, once). The obw writeback
+hook reads it. If the write fails the pane is torn down and the reply is
+`500 binding_failed` with `sessionId` and `claudeUuid`. A prompt that was never
+typed is `502 prompt_failed` with `sessionId` and `claudeUuid`; the binding stays
+in place, because the session itself was already created.
+
+The prompt typed is a fixed template followed by the card's content. The
+template tells the agent three rules: never use AskUserQuestion (write the
+question in the final reply and end the turn), never run `/clear` (it changes
+the session id and voids the binding), and open every final reply with exactly
+one of `結果：完成`, `結果：需要你` or `結果：失敗`.
 
 With no phone connected, routing has no sink to type through or to report a
 refusal to, and the prompt was dropped silently. So the route binds its own sink
@@ -545,7 +570,9 @@ a phone that connects later replays the turn. Its audit line has
   "fixing" it.
 - `POST /api/launch` is a second entrance that can start an agent and type into it, so it is
   off unless `CC_MOBILE_LAUNCH_TOKEN` is set and every call presents that token — see
-  **Launch API** above. The root gate still runs in front of it.
+  **Launch API** above. It reads only a card under `CC_MOBILE_VAULT_ROOT` (lexical and
+  symlink-resolved containment), launches only claude, and only on the hangar. The root gate
+  still runs in front of it.
 - Every write is recorded — see **Write Audit** above. The log names the device and the
   outcome, never the text; it is evidence of what was done, not a copy of it.
 - If exposing via Cloudflare Tunnel, auth must be added
