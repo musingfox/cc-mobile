@@ -33,3 +33,13 @@ export class HerdrRpcError extends Error {
     this.code = code;
   }
 }
+
+/**
+ * What a failed startup probe means. Only a connection-level failure is
+ * `unreachable` (the daemon may simply not be up yet); everything else —
+ * a protocol mismatch, a reply that fails its schema, an RPC error — means a
+ * daemon is there and speaks something this client cannot drive.
+ */
+export function classifyHerdrFailure(error: unknown): "unreachable" | "incompatible" {
+  return error instanceof HerdrTransportError ? "unreachable" : "incompatible";
+}
