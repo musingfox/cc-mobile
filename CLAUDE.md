@@ -494,6 +494,26 @@ Writing is **inert on failure**: a full disk or a bad mode never blocks a prompt
 or a permission answer — it warns once and the dispatch proceeds. An audit log
 that can refuse a keystroke is a worse failure than a missing line.
 
+## Launch API
+
+`POST /api/launch` (`server/launch.ts`) opens a session and types its first
+prompt without a phone: `{cwd, prompt, profileId?}` → `201 {sessionId}`. It is
+the same `terminal_create` + `terminal_send` path the WS uses, so
+`CC_MOBILE_ALLOWED_ROOTS` and the profile menu apply unchanged. It opens on the
+cockpit; there is no way to name the hangar yet.
+
+The route exists only while `CC_MOBILE_LAUNCH_TOKEN` is set (blank counts as
+unset, `503 launch_disabled`), and every call must carry
+`Authorization: Bearer <token>` (`401 unauthorized`). A prompt that was never
+typed is `502 prompt_failed` with the `sessionId`, because the session itself
+was already created.
+
+With no phone connected, routing has no sink to type through or to report a
+refusal to, and the prompt was dropped silently. So the route binds its own sink
+on the new pane before sending, writing into the same replay buffer the WS uses:
+a phone that connects later replays the turn. Its audit line has
+`device: "launch-api"`.
+
 ## Security Constraints
 
 - cc-mobile generates no agent settings of its own: the argv it builds carries no
@@ -523,6 +543,9 @@ that can refuse a keystroke is a worse failure than a missing line.
   `CC_MOBILE_ALLOWED_ORIGINS` (comma-separated) accepts listed origins regardless. Refusals are
   `403 forbidden: origin`. Trusting `Host` is deliberate — see the module docstring before
   "fixing" it.
+- `POST /api/launch` is a second entrance that can start an agent and type into it, so it is
+  off unless `CC_MOBILE_LAUNCH_TOKEN` is set and every call presents that token — see
+  **Launch API** above. The root gate still runs in front of it.
 - Every write is recorded — see **Write Audit** above. The log names the device and the
   outcome, never the text; it is evidence of what was done, not a copy of it.
 - If exposing via Cloudflare Tunnel, auth must be added
