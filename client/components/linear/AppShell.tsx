@@ -19,6 +19,26 @@ function ConnectionBanner({ state }: { state: string }) {
   return <div className="lin-connection-banner">{msg}</div>;
 }
 
+function HerdrOfflineBanner() {
+  const status = useAppStore((s) => s.herdrStatus);
+  if (!status) return null;
+  const cockpitDown = !status.cockpit.online;
+  const hangarDown = status.hangar ? !status.hangar.online : false;
+  if (!cockpitDown && !hangarDown) return null;
+  const msg = !status.hangar
+    ? "herdr offline"
+    : cockpitDown && hangarDown
+      ? "Cockpit and hangar offline"
+      : cockpitDown
+        ? "Cockpit offline"
+        : "Hangar offline";
+  return (
+    <div className="lin-herdr-offline-banner" role="status">
+      {msg}
+    </div>
+  );
+}
+
 export default function AppShell() {
   const connectionState = useAppStore((s) => s.connectionState);
   const activeSessionId = useAppStore((s) => s.activeSessionId);
@@ -80,6 +100,7 @@ export default function AppShell() {
   return (
     <div className="lin-shell">
       <ConnectionBanner state={connectionState} />
+      {connectionState !== "disconnected" && <HerdrOfflineBanner />}
       <div className="lin-shell-content">
         {screen === "projects" && (
           <ProjectsScreen
