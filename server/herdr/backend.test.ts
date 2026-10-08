@@ -539,6 +539,120 @@ describe("BackendStartsWatchingOnCall", () => {
   });
 });
 
+describe("InnerListingReportsFailure", () => {
+  const row = {
+    pane_id: "w1:p1",
+    workspace_id: "w1",
+    agent: "claude",
+    agent_status: "idle",
+    cwd: "/tmp",
+    agent_session: { kind: "id", value: "abc" },
+  };
+
+  function listingClient(agentList?: () => Promise<unknown>) {
+    return {
+      call: async () => ({
+        type: "pane_process_info",
+        process_info: { pane_id: "w1:p1", foreground_processes: [] },
+      }),
+      agentGet: async () => row,
+      ...(agentList ? { agentList } : {}),
+      paneRead: async () => ({ text: "" }),
+      paneSendText: async () => {},
+      paneSendKeys: async () => {},
+      subscribeEvents: async () => ({ stop: () => {} }),
+      sessionSnapshot: async () => ({ workspaces: [], panes: [], agents: [] }),
+    } as unknown as NonNullable<HerdrBackendOptions["client"]>;
+  }
+
+  async function quietly<T>(run: () => Promise<T>): Promise<T> {
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      return await run();
+    } finally {
+      warn.mockRestore();
+    }
+  }
+
+  test("a daemon that cannot be asked is reported with its error", async () => {
+    const backend = createHerdrBackend({
+      client: listingClient(async () => {
+        throw new HerdrTransportError("connect failed");
+      }),
+      statusPollIntervalMs: 1000,
+    });
+    try {
+      const outcome = await quietly(() => backend.listSessionsOutcome());
+      expect(outcome.ok).toBe(false);
+      if (!outcome.ok) expect(outcome.error).toBeInstanceOf(HerdrTransportError);
+    } finally {
+      await backend.teardownAll();
+    }
+  });
+
+  test("an empty daemon is ok with no sessions", async () => {
+    const backend = createHerdrBackend({ client: listingClient(async () => []) });
+    try {
+      expect(await backend.listSessionsOutcome()).toEqual({ ok: true, sessions: [] });
+    } finally {
+      await backend.teardownAll();
+    }
+  });
+
+  test("one agent is listed as an ok outcome", async () => {
+    const backend = createHerdrBackend({ client: listingClient(async () => [row]) });
+    try {
+      const outcome = await backend.listSessionsOutcome();
+      expect(outcome.ok).toBe(true);
+      if (outcome.ok) expect(outcome.sessions.map((s) => s.sessionId)).toEqual(["w1:p1"]);
+    } finally {
+      await backend.teardownAll();
+    }
+  });
+
+  test("listSessionDescriptors still answers [] on that failure", async () => {
+    const backend = createHerdrBackend({
+      client: listingClient(async () => {
+        throw new HerdrTransportError("connect failed");
+      }),
+    });
+    try {
+      expect(await quietly(() => backend.listSessionDescriptors())).toEqual([]);
+    } finally {
+      await backend.teardownAll();
+    }
+  });
+
+  test("a client without agentList answers ok with no sessions", async () => {
+    const backend = createHerdrBackend({ client: listingClient() });
+    try {
+      expect(await backend.listSessionsOutcome()).toEqual({ ok: true, sessions: [] });
+    } finally {
+      await backend.teardownAll();
+    }
+  });
+
+  test("the send fallback still reports terminal_send_failed when the listing fails", async () => {
+    const backend = createHerdrBackend({
+      client: listingClient(async () => {
+        throw new HerdrTransportError("connect failed");
+      }),
+    });
+    const sent: Record<string, unknown>[] = [];
+    try {
+      backend.registerClient("w1:p1", (msg) => sent.push(msg), {});
+      await quietly(() => backend.send({ claudeUuid: "w1:p1", content: "x" }));
+      expect(sent[0]).toMatchObject({
+        type: "error",
+        code: "terminal_send_failed",
+        sessionId: "w1:p1",
+      });
+    } finally {
+      await backend.teardownAll();
+    }
+  });
+});
+
 describe("HerdrStartupGate", () => {
   test("rejects when the daemon speaks a different protocol", async () => {
     const client = createHerdrClient({
