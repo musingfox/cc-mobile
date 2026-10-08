@@ -11,7 +11,7 @@
 import webpush from "web-push";
 import type { AttemptLog } from "./attempt-log";
 import { createAttemptLog } from "./attempt-log";
-import { buildPayload, type PushAbout } from "./payload";
+import { buildPayload, type PushAbout, type PushKind } from "./payload";
 
 export interface PushSubscription {
   endpoint: string;
@@ -76,7 +76,7 @@ export function createPushSender(opts: PushSenderOptions = {}) {
   let warnedMissingVapid = false;
 
   async function dispatch(
-    kind: "turn" | "permission",
+    kind: PushKind,
     subs: PushSubscription[],
     vapid?: VapidConfig,
     about?: PushAbout,
@@ -93,12 +93,13 @@ export function createPushSender(opts: PushSenderOptions = {}) {
     if (!subs || subs.length === 0) return { attempted: 0 };
 
     const payloadStr = JSON.stringify(buildPayload(kind, about));
-    const configured = kind === "permission" ? ttlConfig.permission : ttlConfig.turn;
+    const urgent = kind === "permission" || kind === "hangar_offline";
+    const configured = urgent ? ttlConfig.permission : ttlConfig.turn;
     const options: PushRequestOptions = {
       // A TTL of 0 means "deliver now or drop it", which for a phone that is
       // asleep — the whole point here — means drop it.
       TTL: Math.max(1, Math.floor(configured)),
-      urgency: kind === "permission" ? "high" : "normal",
+      urgency: urgent ? "high" : "normal",
       vapidDetails: {
         subject: vapid.subject ?? DEFAULT_VAPID_SUBJECT,
         publicKey: vapid.publicKey,
