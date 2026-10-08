@@ -40,8 +40,8 @@ probes both sockets before it listens and exits 1 only for a daemon that
 answered and cannot be driven (another protocol); an unreachable one is warned
 about, and `createApp(...)` then listens and `backend.start()` watches each
 socket in the background, so a daemon that comes up later is picked up with no
-restart. A hangar unreachable for 300 s sends one `hangar_offline` push per
-episode, none on recovery; the cockpit never pushes for being offline.
+restart. A hangar unusable for 300 s — unreachable, or answering another protocol —
+sends one `hangar_offline` push per episode, none on recovery; the cockpit never pushes for being offline.
 
 ## Commands
 
@@ -271,6 +271,10 @@ not be asked, not that it has no panes. A backend with no such listing sends no
 herdr reports none; the session row is named by it, keeping the pane id as
 secondary text, and falls back to the pane id alone.
 
+A hangar pane's key is `<name>@<pane_id>` (ADR-018), the one on the wire and
+in the Write Audit `paneId`; a cockpit pane's key stays the bare
+`pane_id`.
+
 Since #30 the listing is no longer filtered to claude: every entry herdr's
 `agent.list` returns is listed, and `agent` names the kind it detected
 ("claude", "omp", …) **verbatim** — no enum, no normalisation, since herdr's
@@ -377,7 +381,7 @@ Schemas defined in `server/protocol.ts`. Full spec in `cc-mobile.md`.
   `dist/client`, which is served to anyone and collected by `bun test`.
 
 ## Background Push (web push for iOS PWA)
-- Scope is `phone-last` (`server/push/notifier.ts`, `phone-driven.ts`): a pane triggers `dispatch` when the phone is behind its current turn — cc-mobile injected the prompt. The tracker is in-memory, so after a restart no pane is in scope until the phone speaks again. The exception is the hangar (ADR-018): a pane on the hangar socket (`isHangarPane`, routed by its `<name>@` key) is always in scope and skips the phone-last check — `blocked` pushes, and a `done` opens its window, with no phone send. Its first report after a restart only seeds what was seen, so a hangar pane already finished at boot stays silent; `backend.start()` opens the hangar subscription at boot, so this holds before any phone connects.
+- Scope is `phone-last` (`server/push/notifier.ts`, `phone-driven.ts`): a pane triggers `dispatch` when the phone is behind its current turn — cc-mobile injected the prompt. The tracker is in-memory, so after a restart no pane is in scope until the phone speaks again. The exception is the hangar (ADR-018): a pane on the hangar socket (`isHangarPane`, routed by its `<name>@` key) is always in scope and skips the phone-last check — `blocked` pushes, and a `done` opens its window, with no phone send. Its first report after a restart only seeds what was seen: a first `done` stays silent (that turn ended before cc-mobile was looking), while a first `blocked` still pushes because someone is still waiting; `backend.start()` opens the hangar subscription at boot, so this holds before any phone connects.
 - Timing reads herdr's `agent_status`, not a trigger of cc-mobile's own. `blocked`
   sends at once, once per blocked episode (the pane is polled; an episode is one
   question, not one per sample). A literal `done` — herdr's "idle and not yet
@@ -451,7 +455,8 @@ Every write cc-mobile causes is appended to `~/.claude-mobile/audit/audit.jsonl`
 one JSON object per line, exactly six fields:
 `{ts, action, paneId, ip, device, outcome}`. The file is created lazily — a
 server nobody has spoken to writes nothing — and one log is shared by the whole
-process.
+process. `paneId` is the session key as the phone knows it, so a hangar pane
+appears as `<name>@<pane_id>` and a cockpit pane as its bare `pane_id`.
 
 `action` is one of `prompt_send`, `permission_answer`, `permission_keys_send`,
 `auto_deny_keys_send`; `outcome` one of `dispatched`, `failed`, `owned`,
