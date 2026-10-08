@@ -31,6 +31,7 @@ module.exports = {
       cwd: __dirname,
       env: {
         NODE_ENV: "production",
+        CC_MOBILE_HANGAR_SESSION: "fleet",
       },
     },
   ],
