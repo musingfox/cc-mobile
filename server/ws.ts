@@ -8,7 +8,7 @@ import type { ServerConfig } from "./config";
 import { listDirectories } from "./directory-listing";
 import type { EventBuffer } from "./event-buffer";
 import { buildUrl } from "./path-utils";
-import { ClientMessage } from "./protocol";
+import { ClientMessage, type HerdrStatus, type WireSide } from "./protocol";
 import type { ForegroundTracker } from "./push/foreground";
 import type { SessionManager } from "./session-manager";
 import {
@@ -44,13 +44,10 @@ export interface WsBackend extends TerminalControlBackend {
       gated: boolean;
       state?: "idle" | "running" | "requires_action";
       /** Which herdr daemon the pane lives on; absent from a backend with one daemon. */
-      side?: "cockpit" | "hangar";
+      side?: WireSide;
     }[];
     /** Per-daemon reachability; passed to the phone verbatim. */
-    herdr?: {
-      cockpit: { online: boolean };
-      hangar?: { name: string; online: boolean };
-    };
+    herdr?: HerdrStatus;
   }>;
   /**
    * Per-uuid agent state for the live sessions. Optional: only a backend with

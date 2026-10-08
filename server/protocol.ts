@@ -344,6 +344,9 @@ const SessionStateMessage = z.object({
  * the agent runs there with no permission gate. `gated` is a warning, never a
  * lock: such panes stay drivable by the owner's own ruling (Decision H4).
  */
+export const SideSchema = z.enum(["cockpit", "hangar"]);
+export type WireSide = z.infer<typeof SideSchema>;
+
 const TerminalSessionDescriptor = z.object({
   sessionId: z.string(),
   /**
@@ -403,8 +406,14 @@ const TerminalSessionDescriptor = z.object({
    * Which herdr daemon the pane lives on. Absent from a frame built before the
    * hangar socket existed; a client reads absent as the cockpit.
    */
-  side: z.enum(["cockpit", "hangar"]).optional(),
+  side: SideSchema.optional(),
 });
+
+export const HerdrStatusSchema = z.object({
+  cockpit: z.object({ online: z.boolean() }),
+  hangar: z.object({ name: z.string(), online: z.boolean() }).optional(),
+});
+export type HerdrStatus = z.infer<typeof HerdrStatusSchema>;
 
 /**
  * Reply to list_terminal_sessions. An empty list means "none live" only for a
@@ -441,12 +450,7 @@ const TerminalSessionsMessage = z.object({
    * when the server has a hangar session configured (ADR-018). Absent on a
    * server that predates it; a client then treats the cockpit as online.
    */
-  herdr: z
-    .object({
-      cockpit: z.object({ online: z.boolean() }),
-      hangar: z.object({ name: z.string(), online: z.boolean() }).optional(),
-    })
-    .optional(),
+  herdr: HerdrStatusSchema.optional(),
 });
 
 /**
