@@ -453,3 +453,29 @@ describe("HangarOfflinePushReachesTransport", () => {
     expect(r.sends).toHaveLength(0);
   });
 });
+
+describe("HangarWatchedFromBoot", () => {
+  test("T1: start() alone opens the hangar subscription and a first blocked report pushes", async () => {
+    const r = rig({ hangarSession: "fleet" });
+    await r.subscribe();
+    r.backendRef.current?.start?.();
+    await until(() => r.hangar.counts.subscribe === 1, "the hangar subscription");
+
+    expect(r.hangar.counts.agentList).toBe(0);
+    r.hangar.status("blocked");
+    await until(() => r.sends.length > 0, "the permission push");
+    expect(r.sends[0].payload.body).toBe("Permission needed in hangarproj");
+  });
+
+  test("T2: a first report of done arms no turn window", async () => {
+    const r = rig({ hangarSession: "fleet" });
+    await r.subscribe();
+    r.backendRef.current?.start?.();
+    await until(() => r.hangar.counts.subscribe === 1, "the hangar subscription");
+    r.hangar.status("done");
+    await Bun.sleep(100);
+
+    expect(r.handle.fire).toBeUndefined();
+    expect(r.sends).toHaveLength(0);
+  });
+});
