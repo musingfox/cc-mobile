@@ -267,7 +267,11 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
           client: hangarClient,
           ...hooksFor((paneId) => hangarKey(name, paneId)),
         }),
-        watch: watchFor("hangar", hangarSocket.socketPath, hangarClient),
+        watch: watchFor("hangar", hangarSocket.socketPath, hangarClient, {
+          afterMs: HANGAR_OFFLINE_ALARM_MS,
+          onAlarm: () =>
+            sender.dispatch("hangar_offline", pushStore.list(), loadVapidKeys() ?? undefined),
+        }),
       },
     });
   }
