@@ -26,7 +26,7 @@ import { EventBuffer } from "./event-buffer";
 import { createHerdrBackend } from "./herdr/backend";
 import { createHerdrClient, type HerdrClient } from "./herdr/client";
 import { createSidedBackend } from "./herdr/sided-backend";
-import { hangarKey, resolveHerdrSides, routeSessionKey } from "./herdr/sides";
+import { hangarKey, resolveHerdrSides, routeSessionKey, type Side } from "./herdr/sides";
 import { createSocketWatch, type SocketWatchOptions } from "./herdr/socket-watch";
 import { stripBasePath } from "./path-utils";
 import { createAttemptLog } from "./push/attempt-log";
@@ -229,7 +229,7 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
   });
 
   const watchFor = (
-    side: "cockpit" | "hangar",
+    side: Side,
     socketPath: string,
     client: WatchableClient,
     offlineAlarm?: SocketWatchOptions["offlineAlarm"],

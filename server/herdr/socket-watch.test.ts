@@ -67,6 +67,21 @@ describe("SocketWatchTracksReachability", () => {
     expect(r.warns[0]).toContain("hangar");
     expect(r.warns[0]).toContain(PATH);
   });
+  test("a change from unreachable to incompatible warns again, naming the incompatibility", async () => {
+    let incompatible = false;
+    const r = rig(() =>
+      incompatible
+        ? Promise.reject(new HerdrProtocolError("v9"))
+        : Promise.reject(new HerdrTransportError("ENOENT")),
+    );
+    await r.start();
+    expect(r.warns).toHaveLength(1);
+    expect(r.warns[0]).toContain("unreachable");
+    incompatible = true;
+    await r.at(10_000);
+    expect(r.warns).toHaveLength(2);
+    expect(r.warns[1]).toContain("incompatible protocol");
+  });
   test("T4 protocol error is incompatible", async () => {
     const r = rig(() => Promise.reject(new HerdrProtocolError("v9")));
     await r.start();
@@ -114,7 +129,7 @@ describe("SocketWatchTracksReachability", () => {
     await r.start();
     expect(r.setCalls()).toBe(1);
   });
-  test("production interval is unref'd and stoppable", async () => {
+  test("production interval starts and stops without throwing", async () => {
     const watch = createSocketWatch({
       side: "hangar",
       socketPath: PATH,

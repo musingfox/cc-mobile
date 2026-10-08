@@ -16,9 +16,7 @@ import type { AgentState } from "./agent-state";
 import type { HerdrTerminalBackend } from "./backend";
 import type { SessionDescriptor } from "./sessions";
 import { hangarKey, routeSessionKey, type Side } from "./sides";
-import type { createSocketWatch } from "./socket-watch";
-
-export type SocketWatch = ReturnType<typeof createSocketWatch>;
+import type { SocketWatch } from "./socket-watch";
 
 export interface HerdrStatus {
   cockpit: { online: boolean };
@@ -98,19 +96,11 @@ export function createSidedBackend(options: SidedBackendOptions) {
       if (started) return;
       started = true;
       if (hangar) {
-        try {
-          hangar.backend
-            .start()
-            .catch((error: unknown) =>
-              warn(
-                `[herdr] ${hangar.name} start: ${error instanceof Error ? error.message : String(error)}`,
-              ),
-            );
-        } catch (error) {
+        new Promise<void>((resolve) => resolve(hangar.backend.start())).catch((error: unknown) =>
           warn(
             `[herdr] ${hangar.name} start: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
+          ),
+        );
       }
       for (const watch of watches) watch.start();
     },

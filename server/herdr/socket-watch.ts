@@ -1,12 +1,13 @@
 import { classifyHerdrFailure } from "./errors";
 import type { TimerHandle } from "./pane-events";
+import type { Side } from "./sides";
 
 const DEFAULT_INTERVAL_MS = 10_000;
 
 export type SocketStatus = "unknown" | "online" | "unreachable" | "incompatible";
 
 export interface SocketWatchOptions {
-  side: string;
+  side: Side;
   socketPath: string;
   probe: () => Promise<unknown>;
   intervalMs?: number;
@@ -51,7 +52,7 @@ export function createSocketWatch(options: SocketWatchOptions) {
   }
 
   function onOnline(): void {
-    if (warnedDown) safely(() => warn(`[herdr] ${side} socket ${socketPath} recovered`), "warn");
+    if (warnedDown) warn(`[herdr] ${side} socket ${socketPath} recovered`);
     status = "online";
     warnedDown = false;
     episodeStart = undefined;
@@ -59,15 +60,16 @@ export function createSocketWatch(options: SocketWatchOptions) {
   }
 
   function onFailure(error: unknown): void {
+    const previous = status;
     status = classifyHerdrFailure(error);
-    if (!warnedDown) {
+    if (!warnedDown || status !== previous) {
       warnedDown = true;
       const reason = error instanceof Error ? error.message : String(error);
       const kind =
         status === "incompatible"
           ? `speaks an incompatible protocol (${reason})`
           : `is unreachable (${reason})`;
-      safely(() => warn(`[herdr] ${side} socket ${socketPath} ${kind}`), "warn");
+      warn(`[herdr] ${side} socket ${socketPath} ${kind}`);
     }
     const t = now();
     episodeStart ??= t;
@@ -105,3 +107,5 @@ export function createSocketWatch(options: SocketWatchOptions) {
     status: (): SocketStatus => status,
   };
 }
+
+export type SocketWatch = ReturnType<typeof createSocketWatch>;
