@@ -1,4 +1,6 @@
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
+import { readFile, realpath } from "node:fs/promises";
+import { basename, isAbsolute, join } from "node:path";
 import { Elysia } from "elysia";
 import { z } from "zod";
 import type { AgentProfileSource } from "./agents/profiles";
@@ -6,12 +8,20 @@ import type { AuditLog } from "./audit/audit-log";
 import { captureClientIdentity } from "./audit/client-identity";
 import type { ServerConfig } from "./config";
 import type { EventBuffer } from "./event-buffer";
+import { writeLaunchBinding } from "./launch-binding";
+import { composeLaunchPrompt } from "./launch-prompt";
+import { validateAllowedPath } from "./path-utils";
 import { handleTerminalCreate, sendPrompt, type TerminalControlBackend } from "./terminal-control";
 import { bufferSessionEvent } from "./ws";
 
 const LaunchBody = z.object({
   cwd: z.string().min(1),
-  prompt: z.string().min(1),
+  cardPath: z.string().min(1),
+  vault: z.string().min(1),
+  project: z
+    .string()
+    .regex(/^[A-Za-z0-9._-]+$/)
+    .regex(/^[^.]/),
   profileId: z.string().optional(),
 });
 
@@ -42,6 +52,8 @@ export function createLaunchPlugin(opts: {
   /** The WS transport's replay buffer, so a phone that connects later replays this pane's turn. */
   eventBuffer: EventBuffer;
   agentProfiles: AgentProfileSource;
+  /** Where the writeback hook reads card bindings from. */
+  launchesDir: string;
   auditLog?: AuditLog;
 }) {
   const audit = async (record: Parameters<AuditLog["append"]>[0]) => {
@@ -62,16 +74,66 @@ export function createLaunchPlugin(opts: {
         set.status = 401;
         return { error: "unauthorized" };
       }
+      if (opts.config.hangarSession === null || opts.config.hangarSession === undefined) {
+        set.status = 503;
+        return { error: "hangar_unavailable" };
+      }
+      const vaultRoot = opts.config.vaultRoot;
+      if (!vaultRoot) {
+        set.status = 503;
+        return { error: "vault_unconfigured" };
+      }
       const parsed = LaunchBody.safeParse(body);
       if (!parsed.success) {
         set.status = 400;
         return { error: "invalid_body" };
       }
+      const { cwd, cardPath, vault, project, profileId } = parsed.data;
+      if (vault !== basename(vaultRoot)) {
+        set.status = 400;
+        return { error: "vault_mismatch" };
+      }
+      if (isAbsolute(cardPath) || cardPath.split("/").includes("..") || !cardPath.endsWith(".md")) {
+        set.status = 400;
+        return { error: "invalid_card_path" };
+      }
+      // Resolve before checking containment: validateAllowedPath compares a
+      // path it cannot realpath lexically, which mismatches a symlinked root.
+      let cardFile: string;
+      try {
+        cardFile = await realpath(join(vaultRoot, cardPath));
+      } catch {
+        set.status = 404;
+        return { error: "card_not_found" };
+      }
+      if (!validateAllowedPath(cardFile, [vaultRoot])) {
+        set.status = 403;
+        return { error: "card_not_allowed" };
+      }
+      let card: string;
+      try {
+        card = await readFile(cardFile, "utf8");
+      } catch {
+        set.status = 404;
+        return { error: "card_not_found" };
+      }
+      // A binding is keyed by claude's session id, which no other kind reports.
+      const profile = profileId
+        ? opts.agentProfiles.list().find(({ id }) => id === profileId)
+        : undefined;
+      if (profile && profile.kind !== "claude") {
+        set.status = 400;
+        return { error: "unsupported_kind" };
+      }
+      const claudeUuid = randomUUID();
       let reply: Record<string, unknown> = {};
       await handleTerminalCreate(
-        { claudeUuid: randomUUID(), cwd: parsed.data.cwd, profileId: parsed.data.profileId },
+        { claudeUuid, cwd, profileId },
         {
-          backend: opts.backend,
+          backend: {
+            createSession: (input) => opts.backend.createSession({ ...input, side: "hangar" }),
+            teardown: (key) => opts.backend.teardown(key),
+          },
           allowedRoots: opts.config.allowedRoots,
           agentProfiles: opts.agentProfiles,
           send: (msg) => {
@@ -85,6 +147,19 @@ export function createLaunchPlugin(opts: {
         return { error: code, message: reply.message };
       }
       const sessionId = String(reply.sessionId);
+      try {
+        await writeLaunchBinding(opts.launchesDir, claudeUuid, {
+          cardPath,
+          vault,
+          project,
+          paneId: sessionId,
+          createdAt: new Date().toISOString(),
+        });
+      } catch {
+        await opts.backend.teardown(sessionId).catch(() => {});
+        set.status = 500;
+        return { error: "binding_failed", sessionId, claudeUuid };
+      }
       const { ip } = captureClientIdentity({
         headers: request.headers,
         remoteAddress: server?.requestIP(request)?.address,
@@ -106,19 +181,19 @@ export function createLaunchPlugin(opts: {
         await sendPrompt(
           opts.backend,
           audit,
-          { claudeUuid: sessionId, content: parsed.data.prompt, ip, device: "launch-api" },
+          { claudeUuid: sessionId, content: composeLaunchPrompt(card), ip, device: "launch-api" },
           () => reportedError,
         );
       } catch {
         set.status = 502;
-        return { error: "prompt_failed", sessionId };
+        return { error: "prompt_failed", sessionId, claudeUuid };
       }
       if (reportedError !== undefined) {
         set.status = 502;
-        return { error: "prompt_failed", code: reportedError, sessionId };
+        return { error: "prompt_failed", code: reportedError, sessionId, claudeUuid };
       }
       set.status = 201;
-      return { sessionId };
+      return { sessionId, claudeUuid };
     },
   );
 }

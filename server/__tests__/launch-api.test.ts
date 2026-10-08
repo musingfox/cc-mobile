@@ -1,30 +1,97 @@
-import { describe, expect, test } from "bun:test";
-import { emptyAgentProfileSource } from "../agents/profiles";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { type AgentProfile, emptyAgentProfileSource } from "../agents/profiles";
 import { EventBuffer } from "../event-buffer";
 import { createLaunchPlugin } from "../launch";
+import { composeLaunchPrompt } from "../launch-prompt";
+import type { CreateSessionInput } from "../terminal-backend";
 import { testServerConfig } from "./ws-harness";
 
-function setup(opts: { token?: string | null; createError?: string; sendFails?: boolean } = {}) {
+const CARD = "# Task\nCARD-BODY do the thing\n";
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+let tmp: string;
+let vault: string;
+beforeEach(() => {
+  tmp = mkdtempSync(join(tmpdir(), "launch-api-"));
+  vault = join(tmp, "obsidian");
+  mkdirSync(join(vault, "pm", "cc-mobile", "tasks"), { recursive: true });
+  writeFileSync(join(vault, "pm", "cc-mobile", "tasks", "card.md"), CARD);
+});
+afterEach(() => rmSync(tmp, { recursive: true, force: true }));
+
+const claudeAuto: AgentProfile = {
+  id: "claude-auto",
+  label: "auto",
+  kind: "claude",
+  args: ["--permission-mode", "auto"],
+};
+
+interface SetupOptions {
+  token?: string | null;
+  hangarSession?: string | null;
+  vaultRoot?: string | null;
+  allowedRoots?: string[] | null;
+  createError?: string;
+  sendFails?: boolean;
+  teardownFails?: boolean;
+  launchesDir?: string;
+  profiles?: AgentProfile[];
+}
+
+function setup(opts: SetupOptions = {}) {
   const calls: string[] = [];
+  const creates: CreateSessionInput[] = [];
+  const sends: { claudeUuid: string; content: string }[] = [];
   const audits: Record<string, unknown>[] = [];
+  const launchesDir = opts.launchesDir ?? join(tmp, "launches");
+  const bindingAtSend: { text: string | null }[] = [];
   const backend = {
-    createSession: async ({ cwd }: { cwd: string }) => {
-      calls.push(`create:${cwd}`);
+    createSession: async (input: CreateSessionInput) => {
+      calls.push(`create:${input.cwd}`);
+      creates.push(input);
       if (opts.createError) throw new Error(opts.createError);
-      return { name: "t", paneRef: "w1:p2" };
+      return { name: "t", paneRef: "fleet@w1:p2" };
     },
-    teardown: async () => ({ killed: false }),
+    teardown: async (key: string) => {
+      calls.push(`teardown:${key}`);
+      if (opts.teardownFails) throw new Error("teardown boom");
+      return { killed: true };
+    },
     registerClient: () => {},
-    send: async ({ claudeUuid, content }: { claudeUuid: string; content: string }) => {
-      calls.push(`send:${claudeUuid}:${content}`);
+    send: async (params: { claudeUuid: string; content: string }) => {
+      calls.push(`send:${params.claudeUuid}`);
+      sends.push(params);
+      const file = join(launchesDir, `${creates[0]?.claudeUuid}.json`);
+      bindingAtSend.push({ text: existsSync(file) ? readFileSync(file, "utf8") : null });
       if (opts.sendFails) throw new Error("boom");
     },
   };
   const app = createLaunchPlugin({
-    config: { ...testServerConfig, launchToken: opts.token === undefined ? "s3cret" : opts.token },
+    config: {
+      ...testServerConfig,
+      launchToken: opts.token === undefined ? "s3cret" : opts.token,
+      hangarSession: opts.hangarSession === undefined ? "fleet" : opts.hangarSession,
+      vaultRoot: opts.vaultRoot === undefined ? vault : opts.vaultRoot,
+      ...(opts.allowedRoots !== undefined ? { allowedRoots: opts.allowedRoots } : {}),
+    },
     backend,
-    agentProfiles: emptyAgentProfileSource(),
+    agentProfiles: opts.profiles
+      ? { list: () => opts.profiles as AgentProfile[] }
+      : emptyAgentProfileSource(),
     eventBuffer: new EventBuffer(10),
+    launchesDir,
     auditLog: { append: async (r: Record<string, unknown>) => void audits.push(r) } as never,
   });
   const post = (body: unknown, auth: string | null = "Bearer s3cret") =>
@@ -39,96 +106,358 @@ function setup(opts: { token?: string | null; createError?: string; sendFails?: 
         body: JSON.stringify(body),
       }),
     );
-  return { calls, audits, post };
+  const launches = () => (existsSync(launchesDir) ? readdirSync(launchesDir) : []);
+  return { calls, creates, sends, audits, post, launchesDir, launches, bindingAtSend };
 }
 
-const good = { cwd: "/tmp", prompt: "hello" };
+const good = {
+  cwd: "/tmp",
+  cardPath: "pm/cc-mobile/tasks/card.md",
+  vault: "obsidian",
+  project: "cc-mobile",
+};
 
-describe("POST /api/launch", () => {
-  test("token unset → 503, nothing called", async () => {
-    const s = setup({ token: null });
-    const r = await s.post(good);
-    expect(r.status).toBe(503);
-    expect(await r.json()).toEqual({ error: "launch_disabled" });
-    expect(s.calls).toEqual([]);
-  });
-  test("missing or wrong token → 401", async () => {
+function nothingHappened(s: ReturnType<typeof setup>) {
+  expect(s.calls).toEqual([]);
+  expect(s.launches()).toEqual([]);
+  expect(s.audits).toEqual([]);
+}
+
+describe("LaunchUnauthenticatedHasNoEffect", () => {
+  test("T1-T3 a missing, wrong or prefix-less token is refused with no effect", async () => {
     for (const auth of [null, "Bearer nope", "s3cret"]) {
       const s = setup();
       const r = await s.post(good, auth);
       expect(r.status).toBe(401);
-      expect(s.calls).toEqual([]);
+      expect(await r.json()).toEqual({ error: "unauthorized" });
+      nothingHappened(s);
     }
   });
-  test("bad body → 400", async () => {
-    for (const body of [
-      {},
-      { cwd: "", prompt: "x" },
-      { cwd: "/tmp" },
-      { cwd: "/tmp", prompt: "" },
-    ]) {
+  test("T4 authentication precedes the hangar and vault checks", async () => {
+    const s = setup({ hangarSession: null, vaultRoot: null });
+    expect((await s.post(good, null)).status).toBe(401);
+  });
+  test("T5 no configured token is launch_disabled", async () => {
+    const s = setup({ token: null });
+    const r = await s.post(good);
+    expect(r.status).toBe(503);
+    expect(await r.json()).toEqual({ error: "launch_disabled" });
+    nothingHappened(s);
+  });
+});
+
+describe("LaunchRequiresHangar", () => {
+  test("T1 no hangar session is refused", async () => {
+    const s = setup({ hangarSession: null });
+    const r = await s.post(good);
+    expect(r.status).toBe(503);
+    expect(await r.json()).toEqual({ error: "hangar_unavailable" });
+    nothingHappened(s);
+  });
+  test("T2 the check precedes body validation", async () => {
+    const r = await setup({ hangarSession: null }).post({});
+    expect(r.status).toBe(503);
+    expect(await r.json()).toEqual({ error: "hangar_unavailable" });
+  });
+});
+
+describe("LaunchRequiresVaultRoot", () => {
+  test("T1 no vault root is refused", async () => {
+    const s = setup({ vaultRoot: null });
+    const r = await s.post(good);
+    expect(r.status).toBe(503);
+    expect(await r.json()).toEqual({ error: "vault_unconfigured" });
+    nothingHappened(s);
+  });
+  test("T2 the hangar check runs first", async () => {
+    const r = await setup({ vaultRoot: null, hangarSession: null }).post(good);
+    expect(await r.json()).toEqual({ error: "hangar_unavailable" });
+  });
+});
+
+describe("LaunchBodyShape", () => {
+  test("T1 the old prompt shape is refused", async () => {
+    const s = setup();
+    const r = await s.post({ cwd: "/tmp", prompt: "hello" });
+    expect(r.status).toBe(400);
+    expect(await r.json()).toEqual({ error: "invalid_body" });
+    nothingHappened(s);
+  });
+  test("T2 an unsafe project name is refused", async () => {
+    for (const project of [".hidden", "..", "a/b", "my proj", ""]) {
+      const s = setup();
+      const r = await s.post({ ...good, project });
+      expect(r.status).toBe(400);
+      expect(await r.json()).toEqual({ error: "invalid_body" });
+      nothingHappened(s);
+    }
+  });
+  test("T3 a missing vault, a missing cardPath or an empty cwd is refused", async () => {
+    const { vault: _v, ...noVault } = good;
+    const { cardPath: _c, ...noCard } = good;
+    for (const body of [noVault, noCard, { ...good, cwd: "" }]) {
       const r = await setup().post(body);
       expect(r.status).toBe(400);
       expect(await r.json()).toEqual({ error: "invalid_body" });
     }
   });
-  test("success → create then send to the pane, 201", async () => {
+  test("T4 a prompt key is ignored", async () => {
+    const s = setup();
+    const r = await s.post({ ...good, prompt: "IGNORED-TEXT" });
+    expect(r.status).toBe(201);
+    expect(s.sends).toHaveLength(1);
+    expect(s.sends[0].content).not.toContain("IGNORED-TEXT");
+  });
+});
+
+describe("LaunchVaultNameMatch", () => {
+  test("T1-T2 a different or differently-cased vault name is refused", async () => {
+    for (const name of ["other", "Obsidian"]) {
+      const s = setup();
+      const r = await s.post({ ...good, vault: name });
+      expect(r.status).toBe(400);
+      expect(await r.json()).toEqual({ error: "vault_mismatch" });
+      nothingHappened(s);
+    }
+  });
+  test("T3 the matching vault launches", async () => {
+    expect((await setup().post(good)).status).toBe(201);
+  });
+});
+
+describe("CardPathLexicalRefusal", () => {
+  test("T1 an absolute path is refused", async () => {
+    const s = setup();
+    const r = await s.post({ ...good, cardPath: join(vault, good.cardPath) });
+    expect(r.status).toBe(400);
+    expect(await r.json()).toEqual({ error: "invalid_card_path" });
+    nothingHappened(s);
+  });
+  test("T2 a .. segment is refused although it resolves inside", async () => {
+    const s = setup();
+    const r = await s.post({ ...good, cardPath: "pm/../pm/cc-mobile/tasks/card.md" });
+    expect(r.status).toBe(400);
+    expect(await r.json()).toEqual({ error: "invalid_card_path" });
+    nothingHappened(s);
+  });
+  test("T3 a non-Markdown file is refused", async () => {
+    writeFileSync(join(vault, "pm", "cc-mobile", "tasks", "notes.txt"), "x");
+    const s = setup();
+    const r = await s.post({ ...good, cardPath: "pm/cc-mobile/tasks/notes.txt" });
+    expect(r.status).toBe(400);
+    expect(await r.json()).toEqual({ error: "invalid_card_path" });
+    nothingHappened(s);
+  });
+});
+
+describe("CardPathContainment", () => {
+  test("T1 a symlink out of the vault is refused and never read", async () => {
+    mkdirSync(join(tmp, "outside"));
+    writeFileSync(join(tmp, "outside", "secret.md"), "SENTINEL-OUTSIDE");
+    symlinkSync(join(tmp, "outside", "secret.md"), join(vault, "pm", "evil.md"));
+    const s = setup();
+    const r = await s.post({ ...good, cardPath: "pm/evil.md" });
+    expect(r.status).toBe(403);
+    expect(await r.json()).toEqual({ error: "card_not_allowed" });
+    nothingHappened(s);
+    expect(JSON.stringify(s.sends)).not.toContain("SENTINEL-OUTSIDE");
+  });
+  test("T2 a vault root that is itself a symlink still launches", async () => {
+    mkdirSync(join(tmp, "link"));
+    symlinkSync(vault, join(tmp, "link", "obsidian"));
+    const s = setup({ vaultRoot: join(tmp, "link", "obsidian") });
+    expect((await s.post(good)).status).toBe(201);
+  });
+});
+
+describe("CardReadFailure", () => {
+  test("T1 a missing card is 404", async () => {
+    const s = setup();
+    const r = await s.post({ ...good, cardPath: "pm/cc-mobile/tasks/missing.md" });
+    expect(r.status).toBe(404);
+    expect(await r.json()).toEqual({ error: "card_not_found" });
+    nothingHappened(s);
+  });
+  test("T2 a directory is 404", async () => {
+    mkdirSync(join(vault, "pm", "dir.md"));
+    const s = setup();
+    const r = await s.post({ ...good, cardPath: "pm/dir.md" });
+    expect(r.status).toBe(404);
+    expect(await r.json()).toEqual({ error: "card_not_found" });
+    nothingHappened(s);
+  });
+});
+
+describe("LaunchRefusesNonClaudeKind", () => {
+  const omp: AgentProfile = { id: "omp-x", label: "o", kind: "omp", args: [] };
+  test("T1 a non-claude profile is refused with no effect", async () => {
+    const s = setup({ profiles: [omp] });
+    const r = await s.post({ ...good, profileId: "omp-x" });
+    expect(r.status).toBe(400);
+    expect(await r.json()).toEqual({ error: "unsupported_kind" });
+    nothingHappened(s);
+  });
+  test("T2 the kind check precedes the cwd checks", async () => {
+    const r = await setup({ profiles: [omp] }).post({
+      ...good,
+      cwd: "/definitely/not/here",
+      profileId: "omp-x",
+    });
+    expect((await r.json()).error).toBe("unsupported_kind");
+  });
+  test("T3 an unknown profile falls through to unknown_profile", async () => {
+    const r = await setup().post({ ...good, profileId: "ghost" });
+    expect(r.status).toBe(400);
+    expect((await r.json()).error).toBe("unknown_profile");
+  });
+  test("T4 a claude profile launches", async () => {
+    const r = await setup({ profiles: [claudeAuto] }).post({ ...good, profileId: "claude-auto" });
+    expect(r.status).toBe(201);
+  });
+});
+
+describe("LaunchCreatesOnHangar", () => {
+  test("T1 create gets a fresh v4 uuid, the cwd and side hangar", async () => {
+    const s = setup();
+    await s.post(good);
+    expect(s.creates).toHaveLength(1);
+    const { claudeUuid, ...rest } = s.creates[0];
+    expect(claudeUuid).toMatch(UUID_V4);
+    expect(rest).toEqual({ cwd: "/tmp", side: "hangar" });
+  });
+  test("T2 a claude profile adds its kind and args", async () => {
+    const s = setup({ profiles: [claudeAuto] });
+    await s.post({ ...good, profileId: "claude-auto" });
+    const { claudeUuid, ...rest } = s.creates[0];
+    expect(claudeUuid).toMatch(UUID_V4);
+    expect(rest).toEqual({
+      cwd: "/tmp",
+      agentKind: "claude",
+      profileArgs: ["--permission-mode", "auto"],
+      side: "hangar",
+    });
+  });
+  test("T3 a rejecting create is terminal_error with no binding and nothing typed", async () => {
+    const s = setup({ createError: "connect ENOENT" });
+    const r = await s.post(good);
+    expect(r.status).toBe(500);
+    expect(await r.json()).toEqual({ error: "terminal_error", message: "connect ENOENT" });
+    expect(s.launches()).toEqual([]);
+    expect(s.sends).toEqual([]);
+  });
+  test("T4 a bad cwd or a disallowed root creates nothing", async () => {
+    const bad = setup();
+    const r1 = await bad.post({ ...good, cwd: "/definitely/not/here" });
+    expect(r1.status).toBe(400);
+    expect((await r1.json()).error).toBe("invalid_cwd");
+    expect(bad.creates).toEqual([]);
+    const roots = setup({ allowedRoots: ["/nonexistent-root"] });
+    const r2 = await roots.post(good);
+    expect(r2.status).toBe(403);
+    expect((await r2.json()).error).toBe("path_not_allowed");
+    expect(roots.creates).toEqual([]);
+  });
+});
+
+describe("LaunchReturnsClaudeUuid", () => {
+  test("T1 the response names the session and the uuid given to create", async () => {
     const s = setup();
     const r = await s.post(good);
     expect(r.status).toBe(201);
-    expect(await r.json()).toEqual({ sessionId: "w1:p2" });
-    expect(s.calls).toEqual(["create:/tmp", "send:w1:p2:hello"]);
+    expect(await r.json()).toEqual({
+      sessionId: "fleet@w1:p2",
+      claudeUuid: s.creates[0].claudeUuid,
+    });
+  });
+  test("T2 two launches get different uuids", async () => {
+    const s = setup();
+    const a = await (await s.post(good)).json();
+    const b = await (await s.post(good)).json();
+    expect(a.claudeUuid).not.toBe(b.claudeUuid);
+  });
+  test("T3 a failing send is 502 carrying the uuid", async () => {
+    const s = setup({ sendFails: true });
+    const r = await s.post(good);
+    expect(r.status).toBe(502);
+    expect(await r.json()).toEqual({
+      error: "prompt_failed",
+      sessionId: "fleet@w1:p2",
+      claudeUuid: s.creates[0].claudeUuid,
+    });
+  });
+});
+
+describe("LaunchTypesComposedPrompt", () => {
+  test("T1 exactly one send of the template plus the card as read", async () => {
+    const s = setup();
+    await s.post(good);
+    expect(s.sends).toEqual([{ claudeUuid: "fleet@w1:p2", content: composeLaunchPrompt(CARD) }]);
+  });
+  test("T2 the audit line carries only the six fields, no card text", async () => {
+    const s = setup();
+    await s.post(good);
     expect(s.audits).toEqual([
       {
         action: "prompt_send",
-        paneId: "w1:p2",
+        paneId: "fleet@w1:p2",
         ip: "100.1.2.3",
         device: "launch-api",
         outcome: "dispatched",
       },
     ]);
+    expect(JSON.stringify(s.audits)).not.toContain("CARD-BODY");
   });
-  test("delivery failure → 502 with sessionId", async () => {
-    const r = await setup({ sendFails: true }).post(good);
-    expect(r.status).toBe(502);
-    expect(await r.json()).toEqual({ error: "prompt_failed", sessionId: "w1:p2" });
-  });
-  test("create error codes map to statuses", async () => {
-    const cases: [unknown, number, string][] = [
-      [{ cwd: "/definitely/not/here", prompt: "x" }, 400, "invalid_cwd"],
-      [{ cwd: "/tmp", prompt: "x", profileId: "ghost" }, 400, "unknown_profile"],
-    ];
-    for (const [body, status, code] of cases) {
-      const r = await setup().post(body);
-      expect(r.status).toBe(status);
-      expect((await r.json()).error).toBe(code);
-    }
-    const r = await setup({ createError: "herdr down" }).post(good);
-    expect(r.status).toBe(500);
-    expect(await r.json()).toEqual({ error: "terminal_error", message: "herdr down" });
-  });
-  test("path outside allowed roots → 403", async () => {
+});
+
+describe("LaunchBindingBeforePrompt", () => {
+  test("T1-T2 the binding exists when send is first called, with an ISO timestamp", async () => {
     const s = setup();
-    const app = createLaunchPlugin({
-      config: { ...testServerConfig, launchToken: "s3cret", allowedRoots: ["/nonexistent-root"] },
-      backend: {
-        createSession: async () => ({ name: "", paneRef: "" }),
-        teardown: async () => ({ killed: false }),
-        send: async () => {},
-        registerClient: () => {},
-      },
-      agentProfiles: emptyAgentProfileSource(),
-      eventBuffer: new EventBuffer(10),
+    await s.post(good);
+    const text = s.bindingAtSend[0].text;
+    expect(text).not.toBeNull();
+    const binding = JSON.parse(text as string);
+    expect(binding).toEqual({
+      cardPath: "pm/cc-mobile/tasks/card.md",
+      vault: "obsidian",
+      project: "cc-mobile",
+      paneId: "fleet@w1:p2",
+      createdAt: binding.createdAt,
     });
-    const r = await app.handle(
-      new Request("http://localhost/api/launch", {
-        method: "POST",
-        headers: { "content-type": "application/json", authorization: "Bearer s3cret" },
-        body: JSON.stringify(good),
-      }),
-    );
-    expect(r.status).toBe(403);
-    expect((await r.json()).error).toBe("path_not_allowed");
-    expect(s.calls).toEqual([]);
+    expect(new Date(binding.createdAt).toISOString()).toBe(binding.createdAt);
+  });
+  test("T3 a failed prompt leaves the binding in place", async () => {
+    const s = setup({ sendFails: true });
+    const r = await s.post(good);
+    expect(r.status).toBe(502);
+    expect(s.launches()).toEqual([`${s.creates[0].claudeUuid}.json`]);
+  });
+});
+
+describe("LaunchBindingFailureAborts", () => {
+  function blocked(teardownFails: boolean) {
+    writeFileSync(join(tmp, "afile"), "x");
+    return setup({ launchesDir: join(tmp, "afile", "sub"), teardownFails });
+  }
+  test("T1 a binding that cannot be written tears the pane down and types nothing", async () => {
+    const s = blocked(false);
+    const r = await s.post(good);
+    expect(r.status).toBe(500);
+    expect(await r.json()).toEqual({
+      error: "binding_failed",
+      sessionId: "fleet@w1:p2",
+      claudeUuid: s.creates[0].claudeUuid,
+    });
+    expect(s.calls).toEqual(["create:/tmp", "teardown:fleet@w1:p2"]);
+    expect(s.audits).toEqual([]);
+  });
+  test("T2 a rejecting teardown does not change the response", async () => {
+    const s = blocked(true);
+    const r = await s.post(good);
+    expect(r.status).toBe(500);
+    expect(await r.json()).toEqual({
+      error: "binding_failed",
+      sessionId: "fleet@w1:p2",
+      claudeUuid: s.creates[0].claudeUuid,
+    });
   });
 });

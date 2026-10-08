@@ -1,13 +1,16 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AppBackend, createApp } from "../app";
 import { EventBuffer } from "../event-buffer";
 import { createHerdrBackend } from "../herdr/backend";
+import { composeLaunchPrompt } from "../launch-prompt";
 import { testServerConfig } from "./ws-harness";
 
 const PANE = "w3V:p1";
+const CARD = "# Task\nCARD-BODY do the thing\n";
+const CARD_PATH = "pm/cc-mobile/tasks/card.md";
 
 /** A daemon reporting one idle, drivable claude pane, recording what is typed into it. */
 function fakeHerdr(status = "idle") {
@@ -56,13 +59,19 @@ function launchApp(status?: string) {
   // Only the workspace creation is stood in for; send-routing below is the real one.
   backend.createSession = async () => ({ name: "claude", paneRef: PANE });
   const eventBuffer = new EventBuffer(500);
+  const dir = mkdtempSync(join(tmpdir(), "launch-audit-"));
+  const vault = join(dir, "obsidian");
+  mkdirSync(join(vault, "pm", "cc-mobile", "tasks"), { recursive: true });
+  writeFileSync(join(vault, CARD_PATH), CARD);
+  const launchesDir = join(dir, "launches");
   const app = createApp(
-    { ...testServerConfig, launchToken: "tok" },
+    { ...testServerConfig, launchToken: "tok", hangarSession: "fleet", vaultRoot: vault },
     {
       backend,
       eventBuffer,
       gateEnv: {},
-      auditLogPath: join(mkdtempSync(join(tmpdir(), "launch-audit-")), "a.jsonl"),
+      auditLogPath: join(dir, "a.jsonl"),
+      launchesDir,
     },
   );
   const post = () =>
@@ -70,24 +79,36 @@ function launchApp(status?: string) {
       new Request("http://localhost/api/launch", {
         method: "POST",
         headers: { "content-type": "application/json", authorization: "Bearer tok" },
-        body: JSON.stringify({ cwd: "/tmp", prompt: "hello" }),
+        body: JSON.stringify({
+          cwd: "/tmp",
+          cardPath: CARD_PATH,
+          vault: "obsidian",
+          project: "cc-mobile",
+        }),
       }),
     );
-  return { post, typed, eventBuffer };
+  return { post, typed, eventBuffer, launchesDir };
 }
 
-test("an HTTP launch with no WebSocket client types the prompt and presses Enter", async () => {
-  const { post, typed } = launchApp();
+test("an HTTP launch with no WebSocket client types the template and card, presses Enter, and binds the session", async () => {
+  const { post, typed, launchesDir } = launchApp();
   const r = await post();
   expect(r.status).toBe(201);
-  expect(typed).toEqual(["text:hello", "keys:Enter"]);
+  const { claudeUuid } = await r.json();
+  expect(typed).toEqual(["text:" + composeLaunchPrompt(CARD), "keys:Enter"]);
+  expect(existsSync(join(launchesDir, `${claudeUuid}.json`))).toBe(true);
 });
 
 test("a busy pane answers 502 with the routing's code, and nothing is typed", async () => {
   const { post, typed, eventBuffer } = launchApp("working");
   const r = await post();
   expect(r.status).toBe(502);
-  expect(await r.json()).toEqual({ error: "prompt_failed", code: "session_busy", sessionId: PANE });
+  expect(await r.json()).toEqual({
+    error: "prompt_failed",
+    code: "session_busy",
+    sessionId: PANE,
+    claudeUuid: expect.stringMatching(/^[0-9a-f-]{36}$/),
+  });
   expect(typed).toEqual([]);
   expect(eventBuffer.replay(PANE, -1).map((e) => e.message.code)).toEqual(["session_busy"]);
 });

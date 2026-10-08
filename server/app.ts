@@ -29,6 +29,7 @@ import { createSidedBackend } from "./herdr/sided-backend";
 import { hangarKey, resolveHerdrSides, routeSessionKey, type Side } from "./herdr/sides";
 import { createSocketWatch, type SocketWatchOptions } from "./herdr/socket-watch";
 import { createLaunchPlugin } from "./launch";
+import { defaultLaunchesDir } from "./launch-binding";
 import { stripBasePath } from "./path-utils";
 import { createAttemptLog } from "./push/attempt-log";
 import { createForegroundTracker } from "./push/foreground";
@@ -134,6 +135,8 @@ export interface AppTestDeps {
    */
   gateEnv?: Record<string, string | undefined>;
   agentProfiles?: AgentProfileSource;
+  /** Where launch bindings are written; production uses the writeback hook's default. */
+  launchesDir?: string;
   /** The built client to serve; production serves `DIST_DIR`. */
   distDir?: string;
   /**
@@ -313,7 +316,14 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
     .use(createUploadImagePlugin(serverConfig))
     .use(createPushPlugin({ store: pushStore, config: serverConfig }))
     .use(
-      createLaunchPlugin({ config: serverConfig, backend, agentProfiles, auditLog, eventBuffer }),
+      createLaunchPlugin({
+        config: serverConfig,
+        backend,
+        agentProfiles,
+        auditLog,
+        eventBuffer,
+        launchesDir: deps.launchesDir ?? defaultLaunchesDir(),
+      }),
     )
     .get("*", async ({ request }) => {
       // Skip if dist/ doesn't exist (dev mode)
