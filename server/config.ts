@@ -13,6 +13,8 @@ export interface ServerConfig {
   hangarSession?: string | null;
   /** Bearer token for `POST /api/launch`; null (unset/blank) disables the route. */
   launchToken?: string | null;
+  /** Absolute Obsidian vault root for `/api/launch` cards; null (unset/blank) means none. */
+  vaultRoot?: string | null;
 }
 
 /**
@@ -49,6 +51,7 @@ export function parseServerConfig(argv: string[]): ServerConfig {
     pushScope: parsePushScope(),
     hangarSession: parseHangarSession(),
     launchToken: process.env.CC_MOBILE_LAUNCH_TOKEN?.trim() || null,
+    vaultRoot: parseVaultRoot(),
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -113,6 +116,11 @@ function parseHangarSession(): string | null {
     throw new Error(`CC_MOBILE_HANGAR_SESSION is not a valid herdr session name, got "${value}"`);
   }
   return value;
+}
+
+function parseVaultRoot(): string | null {
+  const value = process.env.CC_MOBILE_VAULT_ROOT?.trim();
+  return value ? expandPath(value) : null;
 }
 
 function parseAllowedRoots(): string[] | null {

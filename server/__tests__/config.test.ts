@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { parseServerConfig } from "../config";
 
 describe("parseServerConfig", () => {
@@ -16,6 +18,7 @@ describe("parseServerConfig", () => {
   test("defaults", () => {
     delete process.env.CC_MOBILE_ALLOWED_ROOTS;
     delete process.env.BASE_PATH;
+    delete process.env.CC_MOBILE_VAULT_ROOT;
     const result = parseServerConfig(["node", "index.ts"]);
     expect(result).toEqual({
       port: 3001,
@@ -26,6 +29,7 @@ describe("parseServerConfig", () => {
       pushScope: "phone-last",
       hangarSession: null,
       launchToken: null,
+      vaultRoot: null,
     });
     cleanup();
   });
@@ -33,6 +37,7 @@ describe("parseServerConfig", () => {
   test("all flags", () => {
     delete process.env.CC_MOBILE_ALLOWED_ROOTS;
     delete process.env.BASE_PATH;
+    delete process.env.CC_MOBILE_VAULT_ROOT;
     const result = parseServerConfig([
       "node",
       "index.ts",
@@ -52,6 +57,7 @@ describe("parseServerConfig", () => {
       pushScope: "phone-last",
       hangarSession: null,
       launchToken: null,
+      vaultRoot: null,
     });
     cleanup();
   });
@@ -60,6 +66,36 @@ describe("parseServerConfig", () => {
     expect(() => {
       parseServerConfig(["node", "index.ts", "--port", "abc"]);
     }).toThrow("Port must be a valid number");
+  });
+
+  describe("CC_MOBILE_VAULT_ROOT", () => {
+    const original = process.env.CC_MOBILE_VAULT_ROOT;
+    const parse = (v: string | undefined) => {
+      if (v === undefined) delete process.env.CC_MOBILE_VAULT_ROOT;
+      else process.env.CC_MOBILE_VAULT_ROOT = v;
+      return parseServerConfig(["node", "index.ts"]).vaultRoot;
+    };
+
+    afterEach(() => {
+      if (original === undefined) delete process.env.CC_MOBILE_VAULT_ROOT;
+      else process.env.CC_MOBILE_VAULT_ROOT = original;
+    });
+
+    test("unset is null", () => {
+      expect(parse(undefined)).toBeNull();
+    });
+    test("whitespace-only is null", () => {
+      expect(parse("   ")).toBeNull();
+    });
+    test("value is trimmed", () => {
+      expect(parse(" /Users/x/Documents/obsidian ")).toBe("/Users/x/Documents/obsidian");
+    });
+    test("leading ~ expands to home", () => {
+      expect(parse("~/vault")).toBe(join(homedir(), "vault"));
+    });
+    test("trailing slash is dropped", () => {
+      expect(parse("/x/obsidian/")).toBe("/x/obsidian");
+    });
   });
 
   describe("CC_MOBILE_HANGAR_SESSION", () => {
