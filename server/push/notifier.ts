@@ -21,6 +21,12 @@
  * and a pane you are typing into at the desk is not. `all` notifies about every
  * pane on the machine.
  *
+ * A hangar pane (`isHangarPane`) skips the phone-last check: nothing at the
+ * hangar's desk could have typed into it, so who asked for the work is not a
+ * question there. It still shares the one merge window. A hangar pane that is
+ * already `done` the first time it is reported is silent, because that turn
+ * ended before cc-mobile was looking; a first `blocked` still sends.
+ *
  * The scope verdict is taken when the turn ends, never when the timer fires.
  * Read 45 seconds later it would be a verdict another turn has since spent,
  * and this module decides *when* to send, never *to whom*.
@@ -71,6 +77,8 @@ export interface NotifierOptions extends NotifierTimers {
    */
   cwdOf?: (paneId: string) => Promise<string | null>;
   warn?: (message: string) => void;
+  /** True for a pane on the hangar socket; such panes are always in scope. */
+  isHangarPane?: (paneKey: string) => boolean;
 }
 
 export function createPushNotifier(opts: NotifierOptions) {
@@ -84,6 +92,9 @@ export function createPushNotifier(opts: NotifierOptions) {
   const clearTimeoutFn =
     opts.clearTimeoutFn ?? ((handle) => clearTimeout(handle as ReturnType<typeof setTimeout>));
 
+  const isHangarPane = opts.isHangarPane ?? (() => false);
+  /** Hangar panes already reported once; the first report only seeds this. */
+  const seen = new Set<string>();
   let warnedNoTracker = false;
   /** Panes whose finished turn is waiting out its window. */
   const pending = new Map<string, { timer: TimerHandle }>();
@@ -95,6 +106,7 @@ export function createPushNotifier(opts: NotifierOptions) {
    * install that simply has nothing to report.
    */
   function inScope(paneId: string): boolean {
+    if (isHangarPane(paneId)) return true;
     if (scope === "all") return true;
     if (!phoneDriven) {
       if (!warnedNoTracker) {
@@ -162,6 +174,12 @@ export function createPushNotifier(opts: NotifierOptions) {
   }
 
   async function onAgentStatus(paneId: string, status: string): Promise<void> {
+    let firstSight = false;
+    if (isHangarPane(paneId) && !seen.has(paneId)) {
+      seen.add(paneId);
+      firstSight = true;
+    }
+
     // `idle` neither opens a window nor closes one; see the header.
     if (status === "idle") return;
 
@@ -172,6 +190,7 @@ export function createPushNotifier(opts: NotifierOptions) {
     drop(paneId);
 
     if (status === "done") {
+      if (firstSight) return;
       const subs = admit(paneId);
       if (!subs) return;
       pending.set(paneId, { timer: setTimeoutFn(flush, TURN_PUSH_WINDOW_MS) });
@@ -191,6 +210,7 @@ export function createPushNotifier(opts: NotifierOptions) {
   /** The pane is gone; discard anything queued for it. */
   function forget(paneId: string): void {
     drop(paneId);
+    seen.delete(paneId);
   }
 
   return { onAgentStatus, forget };
