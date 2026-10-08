@@ -24,7 +24,10 @@ import { createAuditLog } from "./audit/audit-log";
 import type { ServerConfig } from "./config";
 import { EventBuffer } from "./event-buffer";
 import { createHerdrBackend } from "./herdr/backend";
+import { createHerdrClient, type HerdrClient } from "./herdr/client";
 import { createSidedBackend } from "./herdr/sided-backend";
+import { resolveHerdrSides } from "./herdr/sides";
+import { createSocketWatch, type SocketWatchOptions } from "./herdr/socket-watch";
 import { stripBasePath } from "./path-utils";
 import { createAttemptLog } from "./push/attempt-log";
 import { createForegroundTracker } from "./push/foreground";
@@ -41,6 +44,13 @@ import { createUploadImagePlugin } from "./upload-image";
 import { type ClientSink, createWsPlugin, type WsBackend } from "./ws";
 
 export const WS_IDLE_TIMEOUT_SECONDS = 240;
+
+/** How long the hangar socket stays unreachable before the phone is told (ADR-018). */
+export const HANGAR_OFFLINE_ALARM_MS = 300_000;
+
+type HerdrBackendClient = NonNullable<Parameters<typeof createHerdrBackend>[0]>["client"];
+type WatchableClient = NonNullable<HerdrBackendClient> &
+  Partial<Pick<HerdrClient, "assertCompatible">>;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const DIST_DIR = join(__dirname, "..", "dist", "client");
@@ -85,7 +95,14 @@ export interface AppTestDeps {
    * assembled chain — pane event → poll → notifier → sender — off a fake
    * daemon without stubbing anything above it.
    */
-  herdrClient?: NonNullable<Parameters<typeof createHerdrBackend>[0]>["client"];
+  herdrClient?: HerdrBackendClient;
+  /** The same seam for the hangar socket; read only when `hangarSession` is set. */
+  hangarHerdrClient?: HerdrBackendClient;
+  /** Timing seams for the per-socket reachability watches. */
+  socketWatchTimers?: Pick<
+    SocketWatchOptions,
+    "now" | "setIntervalFn" | "clearIntervalFn" | "intervalMs"
+  >;
   /** 讓活體 e2e 的 pane 保留在預設 backend 組裝出的事件管線中。 */
   suppressSessionLabel?: NonNullable<
     Parameters<typeof createHerdrBackend>[0]
@@ -127,6 +144,7 @@ export interface AppTestDeps {
 
 /** Builds the whole server. The returned app has not been listened on. */
 export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
+  const hangarSession = serverConfig.hangarSession ?? null;
   const sessionManager = deps.sessionManager ?? new SessionManager();
   const distDir = deps.distDir ?? DIST_DIR;
   // WebSocket 入口與原生 pane 送鍵共用同一支延遲寫入器；
@@ -170,35 +188,90 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
     ...deps.pushTimers,
   });
 
-  // herdr is the only default backend (ADR-015 / plan D1). Its transport
-  // connects lazily, so constructing the app here contacts no daemon —
-  // index.ts gates on daemon reachability before it listens.
-  const cockpitBackend = () =>
-    createHerdrBackend({
-      ...(deps.herdrClient ? { client: deps.herdrClient } : {}),
-      ...(deps.suppressSessionLabel ? { suppressSessionLabel: deps.suppressSessionLabel } : {}),
-      push: {
-        onPromptSent: (paneId) => phoneDriven.markSent(paneId),
-        onTurnStart: (paneId) => phoneDriven.onTurnStart(paneId),
-        onTurnSettled: (paneId) => phoneDriven.onTurnSettled(paneId),
-        onAgentStatus: (paneId, status) => notifier.onAgentStatus(paneId, status),
-        forget: (paneId) => {
-          notifier.forget(paneId);
-          phoneDriven.forget(paneId);
-        },
-        subscriberCount: () => pushStore.count(),
+  // herdr is the only default backend (ADR-015 / plan D1). Each client's
+  // transport connects lazily, so constructing the app here contacts no
+  // daemon; an unreachable one is watched and retried once `start()` runs
+  // (ADR-018). index.ts exits before listening only for a daemon that answered
+  // and cannot be driven.
+  const sockets = resolveHerdrSides(hangarSession);
+  const cockpitSocket = sockets[0];
+  const hangarSocket = sockets.find((side) => side.side === "hangar");
+
+  // The one factory both backends take their hooks from: a hangar pane's key
+  // is prefixed on the way out, so a cockpit pane with the same id is never
+  // the one a push or an audit line names.
+  const hooksFor = (keyOf: (paneId: string) => string) => ({
+    push: {
+      onPromptSent: (paneId: string) => phoneDriven.markSent(keyOf(paneId)),
+      onTurnStart: (paneId: string) => phoneDriven.onTurnStart(keyOf(paneId)),
+      onTurnSettled: (paneId: string) => phoneDriven.onTurnSettled(keyOf(paneId)),
+      onAgentStatus: (paneId: string, status: string) =>
+        notifier.onAgentStatus(keyOf(paneId), status),
+      forget: (paneId: string) => {
+        notifier.forget(keyOf(paneId));
+        phoneDriven.forget(keyOf(paneId));
       },
-      onKeysSent: (paneId, source, outcome) =>
-        auditLog.append({
-          action: source === "auto_deny" ? "auto_deny_keys_send" : "permission_keys_send",
-          paneId,
-          ip: null,
-          device: null,
-          outcome,
+      subscriberCount: () => pushStore.count(),
+    },
+    onKeysSent: (
+      paneId: string,
+      source: "permission_answer" | "auto_deny",
+      outcome: "sent" | "failed",
+    ) =>
+      auditLog.append({
+        action: source === "auto_deny" ? "auto_deny_keys_send" : "permission_keys_send",
+        paneId: keyOf(paneId),
+        ip: null,
+        device: null,
+        outcome,
+      }),
+  });
+
+  const watchFor = (
+    side: "cockpit" | "hangar",
+    socketPath: string,
+    client: WatchableClient,
+    offlineAlarm?: SocketWatchOptions["offlineAlarm"],
+  ) =>
+    client.assertCompatible
+      ? createSocketWatch({
+          side,
+          socketPath,
+          probe: () => client.assertCompatible?.() ?? Promise.resolve(),
+          ...(offlineAlarm ? { offlineAlarm } : {}),
+          ...deps.socketWatchTimers,
+        })
+      : undefined;
+
+  function buildSidedBackend() {
+    const cockpitClient: WatchableClient =
+      deps.herdrClient ?? createHerdrClient({ socketPath: cockpitSocket.socketPath });
+    const cockpit = {
+      backend: createHerdrBackend({
+        client: cockpitClient,
+        ...(deps.suppressSessionLabel ? { suppressSessionLabel: deps.suppressSessionLabel } : {}),
+        ...hooksFor((paneId) => paneId),
+      }),
+      watch: watchFor("cockpit", cockpitSocket.socketPath, cockpitClient),
+    };
+    if (!hangarSocket || hangarSocket.side !== "hangar") return createSidedBackend({ cockpit });
+    const name = hangarSocket.name;
+    const hangarClient: WatchableClient =
+      deps.hangarHerdrClient ?? createHerdrClient({ socketPath: hangarSocket.socketPath });
+    return createSidedBackend({
+      cockpit,
+      hangar: {
+        name,
+        backend: createHerdrBackend({
+          client: hangarClient,
+          ...hooksFor((paneId) => paneId),
         }),
+        watch: watchFor("hangar", hangarSocket.socketPath, hangarClient),
+      },
     });
-  const backend: AppBackend =
-    deps.backend ?? createSidedBackend({ cockpit: { backend: cockpitBackend() } });
+  }
+
+  const backend: AppBackend = deps.backend ?? buildSidedBackend();
 
   if (deps.backendRef) deps.backendRef.current = backend;
 
