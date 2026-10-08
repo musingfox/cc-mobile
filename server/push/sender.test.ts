@@ -479,3 +479,90 @@ describe("PushCopyReachesTheWire", () => {
     ]);
   });
 });
+
+describe("hangar_offline dispatch", () => {
+  const VAPID_H = { publicKey: "p", privateKey: "r" };
+  const APPLE = "https://web.push.apple.com/h";
+  function lines() {
+    return readFileSync(logPath, "utf8")
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l));
+  }
+
+  test("T1: sends at TTL 90 and high urgency, logs kind hangar_offline", async () => {
+    const calls: { p: string; o: any }[] = [];
+    const sender = createPushSender({
+      attemptLog: createAttemptLog({ path: logPath }),
+      send: async (_s, p, o) => {
+        calls.push({ p, o });
+        return { statusCode: 201 };
+      },
+    });
+    await sender.dispatch("hangar_offline", [{ endpoint: APPLE, keys: {} }], VAPID_H);
+    expect(calls[0].o.TTL).toBe(90);
+    expect(calls[0].o.urgency).toBe("high");
+    expect(JSON.parse(calls[0].p).kind).toBe("hangar_offline");
+    expect(lines()).toEqual([
+      {
+        ts: expect.any(String),
+        kind: "hangar_offline",
+        host: "web.push.apple.com",
+        status: 201,
+        reason: null,
+      },
+    ]);
+  });
+
+  test("T2: a foreground device is skipped with a skip line", async () => {
+    const sent: string[] = [];
+    const sender = createPushSender({
+      attemptLog: createAttemptLog({ path: logPath }),
+      send: async (s) => {
+        sent.push(s.endpoint);
+        return { statusCode: 201 };
+      },
+      isForeground: (d) => d === "phone-a",
+    });
+    await sender.dispatch(
+      "hangar_offline",
+      [{ endpoint: APPLE, keys: {}, device: "phone-a" }],
+      VAPID_H,
+    );
+    expect(sent).toEqual([]);
+    expect(lines()).toEqual([
+      {
+        ts: expect.any(String),
+        kind: "hangar_offline",
+        host: "web.push.apple.com",
+        status: null,
+        reason: "foreground",
+        skipped: true,
+      },
+    ]);
+  });
+
+  test("T3: no VAPID -> attempted 0 and no line", async () => {
+    const sender = createPushSender({
+      attemptLog: createAttemptLog({ path: logPath }),
+      send: async () => ({ statusCode: 201 }),
+      warn: () => {},
+    });
+    const result = await sender.dispatch("hangar_offline", [{ endpoint: APPLE, keys: {} }]);
+    expect(result).toEqual({ attempted: 0 });
+    expect(existsSync(logPath)).toBe(false);
+  });
+
+  test("T4: permission TTL 0 clamps to 1", async () => {
+    const calls: any[] = [];
+    const sender = createPushSender({
+      attemptLog: createAttemptLog({ path: logPath }),
+      send: async (_s, _p, o) => {
+        calls.push(o);
+      },
+      ttl: { permission: 0, turn: 300 },
+    });
+    await sender.dispatch("hangar_offline", [{ endpoint: APPLE, keys: {} }], VAPID_H);
+    expect(calls[0].TTL).toBe(1);
+  });
+});

@@ -110,4 +110,15 @@ describe("PushAttemptLog", () => {
     expect(warnings.length).toBe(1);
     expect(warnings[0]).toContain("push attempt log");
   });
+
+  test("T5: a hangar_offline attempt keeps its kind on the written line", async () => {
+    const log = createAttemptLog({ path: logPath });
+    await log.append({
+      kind: "hangar_offline",
+      endpoint: "https://web.push.apple.com/x",
+      status: 201,
+    });
+    const lines = readFileSync(logPath, "utf8").trim().split("\n");
+    expect(JSON.parse(lines[lines.length - 1]).kind).toBe("hangar_offline");
+  });
 });

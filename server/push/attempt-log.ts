@@ -20,13 +20,15 @@ import {
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
+import type { PushKind } from "./payload";
+
 const DEFAULT_DIR = join(homedir(), ".claude-mobile");
 const DEFAULT_PATH = join(DEFAULT_DIR, "push-attempts.jsonl");
 const MAX_BYTES = 256 * 1024;
 
 export interface AttemptRecord {
   ts: string;
-  kind: "turn" | "permission";
+  kind: PushKind;
   host: string;
   status: number | null;
   reason: string | null;
@@ -38,7 +40,7 @@ export interface AttemptRecord {
 }
 
 export interface AttemptInput {
-  kind: "turn" | "permission";
+  kind: PushKind;
   endpoint: string;
   status?: number | null;
   reason?: string | null;
