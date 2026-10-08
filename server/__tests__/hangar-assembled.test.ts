@@ -391,3 +391,65 @@ describe("HangarCallbacksCarryPrefixedKey", () => {
     );
   });
 });
+
+describe("HangarOfflinePushReachesTransport", () => {
+  async function runTo(r: ReturnType<typeof rig>, from: number, to: number) {
+    for (let t = from; t <= to; t += 10_000) await r.clock.tick(t);
+  }
+
+  test("T1: one Hangar offline push at 300 s, none earlier, none repeated", async () => {
+    const r = rig({ hangarSession: "fleet" });
+    r.hangar.behaviour.compatibleFails = true;
+    await r.subscribe();
+    r.backendRef.current?.start?.();
+    await flush();
+
+    await runTo(r, 10_000, 290_000);
+    expect(r.sends).toHaveLength(0);
+    await r.clock.tick(300_000);
+    await until(() => r.sends.length === 1, "the offline push");
+    expect(r.sends[0].payload).toEqual({
+      kind: "hangar_offline",
+      title: "CCMobile",
+      body: "Hangar offline",
+      tag: "cc-mobile-push-hangar-offline",
+    });
+    expect(r.sends[0].opts).toMatchObject({ TTL: 90, urgency: "high" });
+    await until(() => existsSync(r.paths.pushAttemptLogPath), "the attempt log");
+    const line = JSON.parse(
+      readFileSync(r.paths.pushAttemptLogPath, "utf8").trim().split("\n").pop() as string,
+    );
+    expect(line.kind).toBe("hangar_offline");
+
+    await runTo(r, 310_000, 900_000);
+    expect(r.sends).toHaveLength(1);
+  });
+
+  test("T2: recovery sends nothing more", async () => {
+    const r = rig({ hangarSession: "fleet" });
+    r.hangar.behaviour.compatibleFails = true;
+    await r.subscribe();
+    r.backendRef.current?.start?.();
+    await flush();
+
+    await runTo(r, 10_000, 300_000);
+    await until(() => r.sends.length === 1, "the offline push");
+    r.hangar.behaviour.compatibleFails = false;
+    await runTo(r, 310_000, 900_000);
+
+    expect(r.sends).toHaveLength(1);
+  });
+
+  test("T3: a cockpit that stays unreachable never pushes", async () => {
+    const r = rig({ hangarSession: null });
+    r.cockpit.behaviour.compatibleFails = true;
+    await r.subscribe();
+    r.backendRef.current?.start?.();
+    await flush();
+
+    await runTo(r, 10_000, 900_000);
+
+    expect(r.cockpit.counts.assertCompatible).toBeGreaterThan(1);
+    expect(r.sends).toHaveLength(0);
+  });
+});
