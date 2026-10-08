@@ -18,9 +18,17 @@ function build(
     scope?: "phone-last" | "all";
     tracker?: boolean;
     cwdOf?: (paneId: string) => Promise<string | null>;
+    isHangarPane?: (paneKey: string) => boolean;
   } = {},
 ) {
-  const { driven = true, subs = [SUB], scope, tracker: withTracker = true, cwdOf } = options;
+  const {
+    driven = true,
+    subs = [SUB],
+    scope,
+    tracker: withTracker = true,
+    cwdOf,
+    isHangarPane,
+  } = options;
 
   let now = 0;
   let nextId = 0;
@@ -36,6 +44,7 @@ function build(
     ...(withTracker ? { phoneDriven: tracker } : {}),
     ...(scope ? { scope } : {}),
     ...(cwdOf ? { cwdOf } : {}),
+    ...(isHangarPane ? { isHangarPane } : {}),
     getSubscriptions: () => subs as never[],
     dispatch: async (kind, _subs, _vapid, about) => {
       kinds.push(kind);
@@ -64,7 +73,7 @@ function build(
     await Promise.resolve();
   };
 
-  return { notifier, kinds, abouts, warnings, tracker, advance };
+  return { notifier, kinds, abouts, warnings, tracker, advance, timers };
 }
 
 /** Lets the flush's own awaits (the cwd lookup, then dispatch) run out. */
@@ -341,5 +350,118 @@ describe("PushCopyNamesOnePane", () => {
     await drain();
     expect(lookups).toEqual(["p1", "p2"]);
     expect(h.abouts).toEqual([{ cwd: "/srv/one" }, { cwd: "/srv/two" }]);
+  });
+});
+
+describe("PushScopeBySide", () => {
+  const hangar = (k: string) => k.startsWith("fleet@");
+  const cwdOf = async (k: string) => `/work/${k}`;
+
+  test("a hangar pane's finished turn pushes with an empty tracker", async () => {
+    const h = build({ driven: false, isHangarPane: hangar, cwdOf });
+    await h.notifier.onAgentStatus("fleet@w1:p1", "working");
+    await h.notifier.onAgentStatus("fleet@w1:p1", "done");
+    await h.advance(TURN_PUSH_WINDOW_MS);
+    await drain();
+    expect(h.kinds).toEqual(["turn"]);
+    expect(h.abouts).toEqual([{ cwd: "/work/fleet@w1:p1" }]);
+  });
+
+  test("a cockpit pane stays out of scope when the tracker never saw it", async () => {
+    const h = build({ driven: false, isHangarPane: hangar });
+    await h.notifier.onAgentStatus("w1:p1", "working");
+    await h.notifier.onAgentStatus("w1:p1", "done");
+    expect(h.timers.size).toBe(0);
+    await h.advance(TURN_PUSH_WINDOW_MS);
+    await drain();
+    expect(h.kinds).toEqual([]);
+  });
+
+  test("a hangar pane's blocked dispatches at once", async () => {
+    const h = build({ driven: false, isHangarPane: hangar });
+    await h.notifier.onAgentStatus("fleet@w1:p1", "working");
+    await h.notifier.onAgentStatus("fleet@w1:p1", "blocked");
+    expect(h.kinds).toEqual(["permission"]);
+  });
+
+  test("cockpit and hangar turns finishing together merge into one push", async () => {
+    const h = build({ driven: false, isHangarPane: hangar });
+    h.tracker.markSent("w1:p1");
+    h.tracker.onTurnStart("w1:p1");
+    await h.notifier.onAgentStatus("w1:p1", "working");
+    await h.notifier.onAgentStatus("fleet@w2:p1", "working");
+    await h.notifier.onAgentStatus("w1:p1", "done");
+    await h.notifier.onAgentStatus("fleet@w2:p1", "done");
+    await h.advance(TURN_PUSH_WINDOW_MS);
+    await drain();
+    expect(h.kinds).toEqual(["turn"]);
+    expect(h.abouts).toEqual([{ count: 2 }]);
+  });
+
+  test("without isHangarPane, scope all still pushes a cockpit turn", async () => {
+    const h = build({ driven: false, scope: "all" });
+    await h.notifier.onAgentStatus("w1:p1", "working");
+    await h.notifier.onAgentStatus("w1:p1", "done");
+    await h.advance(TURN_PUSH_WINDOW_MS);
+    await drain();
+    expect(h.kinds).toEqual(["turn"]);
+  });
+
+  test("a hangar pane with no subscriptions dispatches nothing", async () => {
+    const h = build({ subs: [], isHangarPane: hangar });
+    await h.notifier.onAgentStatus("fleet@w1:p1", "working");
+    await h.notifier.onAgentStatus("fleet@w1:p1", "done");
+    await h.notifier.onAgentStatus("fleet@w1:p1", "blocked");
+    await h.advance(TURN_PUSH_WINDOW_MS);
+    await drain();
+    expect(h.kinds).toEqual([]);
+  });
+});
+
+describe("HangarFirstSightDoneSilent", () => {
+  const hangar = (k: string) => k.startsWith("fleet@");
+  const K = "fleet@w1:p1";
+
+  test("a hangar pane first seen as done arms nothing", async () => {
+    const h = build({ driven: false, isHangarPane: hangar });
+    await h.notifier.onAgentStatus(K, "done");
+    expect(h.timers.size).toBe(0);
+    expect(h.kinds).toEqual([]);
+  });
+
+  test("a hangar pane first seen as blocked dispatches", async () => {
+    const h = build({ driven: false, isHangarPane: hangar });
+    await h.notifier.onAgentStatus(K, "blocked");
+    expect(h.kinds).toEqual(["permission"]);
+  });
+
+  test("idle, working, done arms the window", async () => {
+    const h = build({ driven: false, isHangarPane: hangar });
+    await h.notifier.onAgentStatus(K, "idle");
+    await h.notifier.onAgentStatus(K, "working");
+    await h.notifier.onAgentStatus(K, "done");
+    expect(h.timers.size).toBe(1);
+  });
+
+  test("a silent first done does not silence the next done", async () => {
+    const h = build({ driven: false, isHangarPane: hangar });
+    await h.notifier.onAgentStatus(K, "done");
+    await h.notifier.onAgentStatus(K, "working");
+    await h.notifier.onAgentStatus(K, "done");
+    expect(h.timers.size).toBe(1);
+  });
+
+  test("forget makes the next report a first report again", async () => {
+    const h = build({ driven: false, isHangarPane: hangar });
+    await h.notifier.onAgentStatus(K, "done");
+    h.notifier.forget(K);
+    await h.notifier.onAgentStatus(K, "done");
+    expect(h.timers.size).toBe(0);
+  });
+
+  test("a cockpit pane's first done still arms under scope all", async () => {
+    const h = build({ driven: false, scope: "all", isHangarPane: hangar });
+    await h.notifier.onAgentStatus("w1:p1", "done");
+    expect(h.timers.size).toBe(1);
   });
 });
