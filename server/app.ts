@@ -26,7 +26,7 @@ import { EventBuffer } from "./event-buffer";
 import { createHerdrBackend } from "./herdr/backend";
 import { createHerdrClient, type HerdrClient } from "./herdr/client";
 import { createSidedBackend } from "./herdr/sided-backend";
-import { resolveHerdrSides } from "./herdr/sides";
+import { hangarKey, resolveHerdrSides, routeSessionKey } from "./herdr/sides";
 import { createSocketWatch, type SocketWatchOptions } from "./herdr/socket-watch";
 import { stripBasePath } from "./path-utils";
 import { createAttemptLog } from "./push/attempt-log";
@@ -183,6 +183,7 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
     // Late-bound: the backend is built below, and this runs only once a pane
     // has a push to send.
     cwdOf: (paneId) => backend.paneCwd?.(paneId) ?? Promise.resolve(null),
+    isHangarPane: (key) => routeSessionKey(key, hangarSession).side === "hangar",
     scope: serverConfig.pushScope,
     phoneDriven,
     ...deps.pushTimers,
@@ -264,7 +265,7 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
         name,
         backend: createHerdrBackend({
           client: hangarClient,
-          ...hooksFor((paneId) => paneId),
+          ...hooksFor((paneId) => hangarKey(name, paneId)),
         }),
         watch: watchFor("hangar", hangarSocket.socketPath, hangarClient),
       },

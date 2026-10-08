@@ -6,7 +6,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebSocket as WsClient } from "ws";
@@ -312,5 +312,82 @@ describe("AppServesBothSockets", () => {
       expect(daemon.counts.subscribe).toBe(0);
       expect(daemon.counts.assertCompatible).toBe(0);
     }
+  });
+});
+
+describe("HangarCallbacksCarryPrefixedKey", () => {
+  test("T1: a hangar pane blocking pushes with the hangar project, with no phone send", async () => {
+    const r = rig({ hangarSession: "fleet" });
+    await r.subscribe();
+    r.backendRef.current?.start?.();
+    await until(() => r.hangar.counts.subscribe === 1, "the hangar subscription");
+    r.hangar.status("working");
+    r.hangar.status("blocked");
+
+    await until(() => r.sends.length > 0, "the permission push");
+    expect(r.sends).toHaveLength(1);
+    expect(r.sends[0].payload.body).toBe("Permission needed in hangarproj");
+  });
+
+  test("T2: a cockpit pane blocking without a phone send stays silent", async () => {
+    const r = rig({ hangarSession: "fleet" });
+    await r.subscribe();
+    r.backendRef.current?.start?.();
+    await r.backendRef.current?.listSessions?.();
+    r.cockpit.status("working");
+    r.cockpit.status("blocked");
+    await Bun.sleep(100);
+
+    expect(r.sends).toHaveLength(0);
+  });
+
+  test("T3: a hangar turn finishing pushes the hangar project when the window fires", async () => {
+    const r = rig({ hangarSession: "fleet" });
+    await r.subscribe();
+    r.backendRef.current?.start?.();
+    await until(() => r.hangar.counts.subscribe === 1, "the hangar subscription");
+    r.hangar.status("working");
+    r.hangar.status("done");
+    await until(() => r.handle.fire !== undefined, "the turn window");
+    r.handle.fire?.();
+
+    await until(() => r.sends.length > 0, "the turn push");
+    expect(r.sends[0].payload.body).toBe("A turn finished in hangarproj");
+  });
+
+  test("T4: answering a hangar card audits the prefixed pane key", async () => {
+    const r = rig({ hangarSession: "fleet" });
+    const phone = await r.phone();
+    await phone.list();
+    r.hangar.status("blocked");
+    const card = await phone.waitFor(
+      (f) => f.payload?.type === "permission_request",
+      "the hangar card",
+    );
+    phone.socket.send(
+      JSON.stringify({
+        type: "permission",
+        requestId: card.payload?.requestId,
+        optionId: "cancel",
+      }),
+    );
+
+    const lines = () =>
+      existsSync(r.paths.auditLogPath)
+        ? readFileSync(r.paths.auditLogPath, "utf8")
+            .trim()
+            .split("\n")
+            .map((line) => JSON.parse(line))
+        : [];
+    await until(
+      () => lines().some((l) => l.action === "permission_keys_send"),
+      "the keys audit line",
+    );
+    expect(lines()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ action: "permission_answer", paneId: HANGAR_KEY }),
+        expect.objectContaining({ action: "permission_keys_send", paneId: HANGAR_KEY }),
+      ]),
+    );
   });
 });
