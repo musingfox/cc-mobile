@@ -24,6 +24,7 @@ describe("parseServerConfig", () => {
       allowedRoots: null,
       basePath: "",
       pushScope: "phone-last",
+      hangarSession: null,
     });
     cleanup();
   });
@@ -48,6 +49,7 @@ describe("parseServerConfig", () => {
       allowedRoots: null,
       basePath: "",
       pushScope: "phone-last",
+      hangarSession: null,
     });
     cleanup();
   });
@@ -56,6 +58,40 @@ describe("parseServerConfig", () => {
     expect(() => {
       parseServerConfig(["node", "index.ts", "--port", "abc"]);
     }).toThrow("Port must be a valid number");
+  });
+
+  describe("CC_MOBILE_HANGAR_SESSION", () => {
+    const original = process.env.CC_MOBILE_HANGAR_SESSION;
+    const parse = (v: string | undefined) => {
+      if (v === undefined) delete process.env.CC_MOBILE_HANGAR_SESSION;
+      else process.env.CC_MOBILE_HANGAR_SESSION = v;
+      return parseServerConfig(["node", "index.ts"]).hangarSession;
+    };
+
+    afterEach(() => {
+      if (original === undefined) delete process.env.CC_MOBILE_HANGAR_SESSION;
+      else process.env.CC_MOBILE_HANGAR_SESSION = original;
+    });
+
+    test("unset is null, not undefined", () => {
+      expect(parse(undefined)).toBeNull();
+    });
+    test("whitespace-only is null", () => {
+      expect(parse("   ")).toBeNull();
+    });
+    test("name is trimmed", () => {
+      expect(parse(" fleet ")).toBe("fleet");
+    });
+    test("plain name passes", () => {
+      expect(parse("fleet-2_x")).toBe("fleet-2_x");
+    });
+    test("@ throws naming the var and value", () => {
+      expect(() => parse("fl@eet")).toThrow(/CC_MOBILE_HANGAR_SESSION/);
+      expect(() => parse("fl@eet")).toThrow(/fl@eet/);
+    });
+    test.each(["a:b", "a/b", "a\\b", "my fleet", "a\tb", ".", ".."])("%j throws", (v) => {
+      expect(() => parse(v)).toThrow(/CC_MOBILE_HANGAR_SESSION/);
+    });
   });
 
   describe("CC_MOBILE_PUSH_SCOPE", () => {

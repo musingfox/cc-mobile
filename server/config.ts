@@ -9,6 +9,8 @@ export interface ServerConfig {
   basePath: string;
   /** Which panes may buzz a phone. See `parsePushScope`. */
   pushScope: "phone-last" | "all";
+  /** herdr session name of the optional second socket; null when unset. See `parseHangarSession`. */
+  hangarSession?: string | null;
 }
 
 /**
@@ -43,6 +45,7 @@ export function parseServerConfig(argv: string[]): ServerConfig {
     allowedRoots: parseAllowedRoots(),
     basePath: parseBasePath(process.env.BASE_PATH),
     pushScope: parsePushScope(),
+    hangarSession: parseHangarSession(),
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -93,6 +96,20 @@ function parsePushScope(): "phone-last" | "all" {
   if (!value) return "phone-last";
   if (value === "phone-last" || value === "all") return value;
   throw new Error(`CC_MOBILE_PUSH_SCOPE must be "phone-last" or "all", got "${value}"`);
+}
+
+/**
+ * The hangar's herdr session name. It becomes part of a socket path and of the
+ * `<name>@<pane_id>` composite key, so anything that could split either throws
+ * rather than being sanitised into a different session than the operator named.
+ */
+function parseHangarSession(): string | null {
+  const value = process.env.CC_MOBILE_HANGAR_SESSION?.trim();
+  if (!value) return null;
+  if (/[@:/\\\s]/.test(value) || value === "." || value === "..") {
+    throw new Error(`CC_MOBILE_HANGAR_SESSION is not a valid herdr session name, got "${value}"`);
+  }
+  return value;
 }
 
 function parseAllowedRoots(): string[] | null {
