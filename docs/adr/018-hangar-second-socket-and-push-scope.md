@@ -119,3 +119,9 @@ cc-mobile 重啟後，第一次看到某個機庫 pane 的 `done`，只記下「
 決定一說 `/` 不能當分隔字元，是因為鍵會被當成上傳目錄名稱。這個理由不對。上傳檢查 `server/upload-manager.ts:6`（`/^[A-Za-z0-9_-]+$/`）已經擋掉任何含 `:` 的鍵，所以機庫的鍵根本到不了建立目錄那一步。
 
 `/` 仍然不用。鍵日後只要出現在任何檔案路徑或網址裡，`/` 都會被讀成一層目錄。`:` 不能用的理由不變：pane id 裡已經有。
+
+## 2026-10-09 增修：卡片綁定已經實作
+
+決定三說範圍跟著 socket 走，理由之一是「卡片和 session 的綁定還沒有實作（`launch-into-hangar`）」。這個前提已經不成立：`POST /api/launch` 只在機庫開 session，並在送出第一則提示前寫好綁定檔 `~/.claude-mobile/launches/<claudeUuid>.json`（見 CLAUDE.md 的 Launch API 一節）。
+
+決定本身不變，推播範圍仍然跟著 socket 走。這次沒有改成跟著卡片，也沒有重新權衡這個選擇；由 `/api/launch` 開出的機庫 session 都有綁定檔，不是它開的機庫 pane 則沒有，照決定三一樣推播。
