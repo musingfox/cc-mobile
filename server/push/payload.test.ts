@@ -111,3 +111,20 @@ describe("PushNamesTheProjectNeverTheWork", () => {
     expect(buildPayload("turn", { cwd: `/srv/${name}` }).body).toBe(`A turn finished in ${name}`);
   });
 });
+
+describe("HangarOfflinePayload", () => {
+  test("says only that the hangar is offline", () => {
+    expect(buildPayload("hangar_offline")).toEqual({
+      kind: "hangar_offline",
+      title: "CCMobile",
+      body: "Hangar offline",
+      tag: "cc-mobile-push-hangar-offline",
+    });
+  });
+
+  test("never names a project", () => {
+    expect(buildPayload("hangar_offline", { cwd: "/work/secret-project" }).body).toBe(
+      "Hangar offline",
+    );
+  });
+});

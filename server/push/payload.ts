@@ -1,6 +1,6 @@
 import { basename } from "node:path";
 
-export type PushKind = "turn" | "permission";
+export type PushKind = "turn" | "permission" | "hangar_offline";
 
 export interface PushPayload {
   kind: PushKind;
@@ -37,6 +37,14 @@ function projectOf(about: PushAbout | undefined): string | null {
 }
 
 export function buildPayload(kind: PushKind, about?: PushAbout): PushPayload {
+  if (kind === "hangar_offline") {
+    return {
+      kind,
+      title: "CCMobile",
+      body: "Hangar offline",
+      tag: "cc-mobile-push-hangar-offline",
+    };
+  }
   const project = projectOf(about);
   if (kind === "permission") {
     return {
