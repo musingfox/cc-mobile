@@ -1,7 +1,7 @@
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import type { Stats } from "node:fs";
 import { lstat, readFile, readlink } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, sep } from "node:path";
+import { basename, dirname, isAbsolute, join } from "node:path";
 import { Elysia } from "elysia";
 import { z } from "zod";
 import type { AgentProfileSource } from "./agents/profiles";
@@ -11,6 +11,7 @@ import type { ServerConfig } from "./config";
 import type { EventBuffer } from "./event-buffer";
 import { writeLaunchBinding } from "./launch-binding";
 import { composeLaunchPrompt } from "./launch-prompt";
+import { isWithinRoot } from "./path-utils";
 import { handleTerminalCreate, sendPrompt, type TerminalControlBackend } from "./terminal-control";
 import { bufferSessionEvent } from "./ws";
 
@@ -144,8 +145,7 @@ export function createLaunchPlugin(opts: {
         set.status = 404;
         return { error: "card_not_found" };
       }
-      const rootPrefix = root.endsWith(sep) ? root : root + sep;
-      if (card.path !== root && !card.path.startsWith(rootPrefix)) {
+      if (!isWithinRoot(card.path, root)) {
         set.status = 403;
         return { error: "card_not_allowed" };
       }

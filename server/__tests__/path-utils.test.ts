@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildUrl, stripBasePath } from "../path-utils";
+import { buildUrl, isWithinRoot, stripBasePath } from "../path-utils";
 
 describe("buildUrl (Contract 2)", () => {
   test('empty basePath + "/ws" → "/ws"', () => {
@@ -38,5 +38,19 @@ describe("stripBasePath (Contract 3)", () => {
 
   test('"/cc-mobile" with "/cc" → "/cc-mobile" (boundary check)', () => {
     expect(stripBasePath("/cc-mobile", "/cc")).toBe("/cc-mobile");
+  });
+});
+
+describe("isWithinRoot", () => {
+  test("equal path is within", () => {
+    expect(isWithinRoot("/v/obsidian", "/v/obsidian")).toBe(true);
+  });
+
+  test("child is within", () => {
+    expect(isWithinRoot("/v/obsidian/pm/a.md", "/v/obsidian")).toBe(true);
+  });
+
+  test("sibling sharing the name prefix is not within", () => {
+    expect(isWithinRoot("/v/obsidian-evil/a.md", "/v/obsidian")).toBe(false);
   });
 });

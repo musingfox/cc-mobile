@@ -44,6 +44,11 @@ export function validateCwd(cwd: string): string | null {
   return null;
 }
 
+/** Pure string check: `path` equals `root` or lies under `root` plus a separator. */
+export function isWithinRoot(path: string, root: string): boolean {
+  return path === root || path.startsWith(root.endsWith(sep) ? root : root + sep);
+}
+
 /** True when `cwd` resolves inside one of `allowedRoots`; `null` roots allow everything. */
 export function validateAllowedPath(cwd: string, allowedRoots: string[] | null): boolean {
   if (allowedRoots === null) {
@@ -57,8 +62,6 @@ export function validateAllowedPath(cwd: string, allowedRoots: string[] | null):
     normalizedCwd = resolve(cwd);
   }
 
-  const ensureTrailingSep = (p: string) => (p.endsWith(sep) ? p : p + sep);
-
   for (const root of allowedRoots) {
     let normalizedRoot: string;
     try {
@@ -67,10 +70,7 @@ export function validateAllowedPath(cwd: string, allowedRoots: string[] | null):
       normalizedRoot = resolve(root);
     }
 
-    if (
-      normalizedCwd === normalizedRoot ||
-      normalizedCwd.startsWith(ensureTrailingSep(normalizedRoot))
-    ) {
+    if (isWithinRoot(normalizedCwd, normalizedRoot)) {
       return true;
     }
   }
