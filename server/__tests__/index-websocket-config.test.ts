@@ -27,11 +27,27 @@ describe("server websocket keep-alive config", () => {
   it("runs no startup rediscovery scan, only the daemon gate, before listening", () => {
     // The session list is a live `agent.list` query (Decision M12), so startup
     // has nothing to rebuild — and no scan a reconnecting client could race.
-    const verifyAt = indexSource.indexOf("verifyHerdrStartup");
+    const verifyAt = indexSource.indexOf("verifyHerdrSides(");
     const listenAt = indexSource.indexOf("app.listen(");
+    const startAt = indexSource.indexOf(".start(");
     expect(indexSource).not.toContain("remountLiveSessions");
     expect(verifyAt).toBeGreaterThan(-1);
     expect(listenAt).toBeGreaterThan(-1);
+    expect(startAt).toBeGreaterThan(-1);
     expect(verifyAt).toBeLessThan(listenAt);
+    expect(listenAt).toBeLessThan(startAt);
+  });
+
+  it("probes the sockets resolved from the configured hangar session", () => {
+    expect(indexSource).toContain("resolveHerdrSides(serverConfig.hangarSession");
+  });
+
+  it("exits only from the catch that follows the daemon probe", () => {
+    const verifyAt = indexSource.indexOf("verifyHerdrSides(");
+    const catchAt = indexSource.indexOf("catch", verifyAt);
+    const exits = indexSource.split("process.exit(").length - 1;
+    expect(exits).toBe(1);
+    expect(catchAt).toBeGreaterThan(verifyAt);
+    expect(indexSource.indexOf("process.exit(")).toBeGreaterThan(catchAt);
   });
 });
