@@ -11,7 +11,7 @@ CCMobile — a touch-optimized PWA for interacting with Claude Code from phones/
 - **Runtime**: Bun
 - **Backend**: Elysia (Bun-native server with native WebSocket support)
 - **Frontend**: React + Vite (root: `client/`)
-- **Claude integration**: herdr socket API (JSON-RPC over unix socket, ~/.config/herdr/herdr.sock; see ADR-015) — the only path; the SDK `query()` driver was removed in #25
+- **Claude integration**: herdr socket API (JSON-RPC over unix socket, ~/.config/herdr/herdr.sock, plus the optional hangar session's socket; see ADR-015, ADR-018) — the only path; the SDK `query()` driver was removed in #25
 - **Validation**: Zod for WebSocket message schemas (see ADR-001)
 - **No additional API keys needed** — herdr drives the local `claude` CLI binary
 
@@ -26,6 +26,22 @@ depends on knowing what claude is doing: permission prompts are never seen
 (`blocked` never arrives), replies are never read back (they are triggered by the
 turn settling), and the session list shows no activity. Install it once per
 machine before running the server.
+
+### Optional hangar socket (ADR-018)
+
+`CC_MOBILE_HANGAR_SESSION=<name>` names a second herdr session — the hangar —
+whose socket is `~/.config/herdr/sessions/<name>/herdr.sock`. Unset, there is no
+hangar and cc-mobile behaves as it did with one socket. Set, one process serves
+both daemons' panes: a hangar pane's session key is `<name>@<pane_id>`, a
+cockpit pane's key is unchanged.
+
+An unreachable daemon, either side, no longer stops the server. `index.ts`
+probes both sockets before it listens and exits 1 only for a daemon that
+answered and cannot be driven (another protocol); an unreachable one is warned
+about, and `createApp(...)` then listens and `backend.start()` watches each
+socket in the background, so a daemon that comes up later is picked up with no
+restart. A hangar unreachable for 300 s sends one `hangar_offline` push per
+episode, none on recovery; the cockpit never pushes for being offline.
 
 ## Commands
 
@@ -71,7 +87,8 @@ drafts, session persistence) is per-origin, so the https origin starts empty.
 ```
 Mobile Browser (PWA) ←──WebSocket──→ Elysia Server (dev :3001 / prod :7701)
                                        ├─ WS Plugin (ws.ts) — Zod-validated messages
-                                       ├─ Herdr Socket Main Trunk — JSON-RPC over unix socket (ADR-015)
+                                       ├─ Herdr Socket Main Trunk — JSON-RPC over unix socket (ADR-015);
+                                       │    cockpit + optional hangar socket behind one backend (ADR-018)
                                        ├─ Pane Events — one global pane.updated subscription
                                        ├─ Transcript Readback — ~/.claude/projects/**.jsonl tail
                                        ├─ Native Permission — blocked → screen parse → send_keys
@@ -84,7 +101,7 @@ Mobile Browser (PWA) ←──WebSocket──→ Elysia Server (dev :3001 / prod
 
 All recorded in `docs/adr/`. Key decisions:
 
-- **Herdr terminal layer** (ADR-015): herdr socket is the only trunk; C-hybrid concepts carried; the SDK query() path was removed in #25 (see ADR-011's "#25 後現況" section).
+- **Herdr terminal layer** (ADR-015): herdr sockets are the only trunk (the cockpit's, plus the hangar's when configured — ADR-018); C-hybrid concepts carried; the SDK query() path was removed in #25 (see ADR-011's "#25 後現況" section).
 - **herdr-native model** (ADR-015 §2026-08-02, #29): the self-built hook pipeline is gone. Replies are read from claude's transcript file and permissions from the pane's own screen, so a session the user started in their own terminal behaves exactly like one cc-mobile launched.
 - **Permission flow** (ADR-015 §2026-08-02): herdr reports `blocked` → the server parses the prompt off `pane.read --source detection` → the phone shows the terminal's own options → `pane.send_keys` presses the chosen key. Unanswered after 90s → `esc`, but only on panes cc-mobile launched, and only if a fresh `agent_status` + prompt-fingerprint re-read still match. A prompt that parsed as a **question** (`promptKind === "question"`) is exempt from that countdown and waits indefinitely: `esc` at claude's AskUserQuestion screen cancels the question, and a question has no safe default to decay to. The exemption needs a successful parse — a screen nobody could read keeps the countdown it has today.
 - **Push reads the raw status** (ADR-017): the `blocked` push no longer waits for a permission card, so screens #33 leaves uncarded still buzz the phone. The card rules themselves are unchanged — only what triggers a notification.
@@ -243,7 +260,13 @@ Since #29 the session key on the wire is herdr's `pane_id`, not a claude uuid: i
 exists for every pane and survives a `/clear`. `terminal_sessions` carries
 `sessions[]` — one descriptor per **agent** running **anywhere on the machine**,
 including ones the user started in their own terminal — with
-`{sessionId, agent?, title?, agentSessionValue, cwd, origin, drivable, readable, unreadableReason?, gated, state?}`.
+`{sessionId, agent?, title?, agentSessionValue, cwd, origin, drivable, readable, unreadableReason?, gated, state?, side?}`.
+`side` (`"cockpit"` | `"hangar"`) says which daemon holds the pane. The reply
+also carries `herdr` — `{cockpit:{online}, hangar?:{name,online}}`, copied
+verbatim from the backend, with `hangar` present only when a hangar session is
+configured — because an empty `sessions` on an offline side means the side could
+not be asked, not that it has no panes. A backend with no such listing sends no
+`herdr` key.
 `title` is the pane's own title (herdr's `terminal_title_stripped`), absent when
 herdr reports none; the session row is named by it, keeping the pane id as
 secondary text, and falls back to the pane id alone.
@@ -354,7 +377,7 @@ Schemas defined in `server/protocol.ts`. Full spec in `cc-mobile.md`.
   `dist/client`, which is served to anyone and collected by `bun test`.
 
 ## Background Push (web push for iOS PWA)
-- Scope is `phone-last` (`server/push/notifier.ts`, `phone-driven.ts`): a pane triggers `dispatch` when the phone is behind its current turn — cc-mobile injected the prompt. The tracker is in-memory, so after a restart no pane is in scope until the phone speaks again.
+- Scope is `phone-last` (`server/push/notifier.ts`, `phone-driven.ts`): a pane triggers `dispatch` when the phone is behind its current turn — cc-mobile injected the prompt. The tracker is in-memory, so after a restart no pane is in scope until the phone speaks again. The exception is the hangar (ADR-018): a pane on the hangar socket (`isHangarPane`, routed by its `<name>@` key) is always in scope and skips the phone-last check — `blocked` pushes, and a `done` opens its window, with no phone send. Its first report after a restart only seeds what was seen, so a hangar pane already finished at boot stays silent; `backend.start()` opens the hangar subscription at boot, so this holds before any phone connects.
 - Timing reads herdr's `agent_status`, not a trigger of cc-mobile's own. `blocked`
   sends at once, once per blocked episode (the pane is polled; an episode is one
   question, not one per sample). A literal `done` — herdr's "idle and not yet
@@ -393,7 +416,7 @@ Schemas defined in `server/protocol.ts`. Full spec in `cc-mobile.md`.
 - The device name is user-editable (Settings). Two devices given the same name
   suppress each other's pushes; a rename leaves the subscription on the old
   name until the next app open re-uploads it, and the mismatch sends.
-- Every send attempt is logged to ~/.claude-mobile/push-attempts.jsonl with {ts,kind,host,status,reason} (PushAttemptLog).
+- Every send attempt is logged to ~/.claude-mobile/push-attempts.jsonl with {ts,kind,host,status,reason} (PushAttemptLog); `kind` is `turn`, `permission` or `hangar_offline`.
   A push suppressed for a foreground device is one line per subscription with
   `status: null`, `reason: "foreground"` and `skipped: true` — the field a sent
   or failed line never carries, so a skip cannot be read as either.
@@ -412,6 +435,10 @@ Schemas defined in `server/protocol.ts`. Full spec in `cc-mobile.md`.
   exact generic copy (`A turn finished` / `Permission needed`) — never a blank,
   never a guess. The project name is cut at 64 code points with `…`, so the
   payload stays far under APNs' 4 KB whatever the directory is called.
+- `hangar_offline` is the third kind: copy `Hangar offline`, tag
+  `cc-mobile-push-hangar-offline`, the permission kind's TTL and `high` urgency.
+  It is about no pane, so it carries no project name, and it goes through the
+  same sender, so foreground suppression and the attempt log apply.
 - The tag stays one per kind, so a later push replaces an earlier one of the
   same kind on the lock screen: a turn in project B replaces the one that
   named project A. Accepted, for the same reason the window merges turns.
