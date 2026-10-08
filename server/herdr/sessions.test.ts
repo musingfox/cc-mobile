@@ -9,7 +9,12 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { listClaudeSessions, type SessionListingClient } from "./sessions";
+import { HerdrTransportError } from "./errors";
+import {
+  listClaudeSessions,
+  listClaudeSessionsOutcome,
+  type SessionListingClient,
+} from "./sessions";
 
 const SELF_UUID = "3f2a9b01-1111-4222-8333-444455556666";
 const VALUE = "a21273d4-77e6-43dc-b9cb-3647561d1192";
@@ -536,6 +541,24 @@ describe("GlobalClaudeSessionListing", () => {
 
     expect(sessions).toEqual([]);
     expect(warnings.join(" ")).toContain("agent.list failed");
+  });
+
+  test("the outcome form reports an agent.list failure instead of an empty list", async () => {
+    const { client } = fakeClient({ agentListError: new HerdrTransportError("connect failed") });
+
+    const outcome = await listClaudeSessionsOutcome({ client, warn: () => {} });
+
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) expect(outcome.error).toBeInstanceOf(HerdrTransportError);
+  });
+
+  test("the outcome form answers ok with an empty list when nothing is running", async () => {
+    const { client } = fakeClient({ agents: [] });
+
+    expect(await listClaudeSessionsOutcome({ client, warn: () => {} })).toEqual({
+      ok: true,
+      sessions: [],
+    });
   });
 
   test("carries the pane's stripped title", async () => {

@@ -27,7 +27,12 @@ import { createHerdrPaneEvents } from "./pane-events";
 import { createNativePermission } from "./permission/native-permission";
 import { createHerdrRegistry } from "./registry";
 import { createHerdrSendRouting } from "./send-routing";
-import { listClaudeSessions, type SessionDescriptor, type SessionListingClient } from "./sessions";
+import {
+  listClaudeSessionsOutcome,
+  type SessionDescriptor,
+  type SessionListingClient,
+  type SessionListingOutcome,
+} from "./sessions";
 import { resolveSocketPath } from "./transport";
 
 export type CapabilitiesReadResult =
@@ -110,6 +115,12 @@ export interface HerdrTerminalBackend extends TerminalBackend {
    * Never rejects: an unreachable daemon answers `[]`.
    */
   listSessionDescriptors(): Promise<SessionDescriptor[]>;
+  /**
+   * The same listing, but a daemon that could not be asked is `{ok:false}`
+   * instead of `[]`. Opens the event stream first, like `listSessionDescriptors`.
+   * Never rejects.
+   */
+  listSessionsOutcome(): Promise<SessionListingOutcome>;
   /**
    * What every live session is doing right now, from one daemon call. The
    * status subscription only fires on change, so this is the only way a client
@@ -248,12 +259,17 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
     beforeInject: (paneId) => delivery.attach(paneId),
   });
 
-  async function listSessionDescriptors(): Promise<SessionDescriptor[]> {
-    if (typeof client.agentList !== "function") return [];
-    return listClaudeSessions({
+  async function listOutcome(): Promise<SessionListingOutcome> {
+    if (typeof client.agentList !== "function") return { ok: true, sessions: [] };
+    return listClaudeSessionsOutcome({
       client: client as SessionListingClient,
       suppressLabel: options.suppressSessionLabel,
     });
+  }
+
+  async function listSessionDescriptors(): Promise<SessionDescriptor[]> {
+    const outcome = await listOutcome();
+    return outcome.ok ? outcome.sessions : [];
   }
 
   // Once per run of failures rather than once per process: a daemon that
@@ -478,6 +494,10 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
       // "what is running" is the earliest moment a daemon connection is wanted.
       await ensureEvents();
       return listSessionDescriptors();
+    },
+    async listSessionsOutcome() {
+      await ensureEvents();
+      return listOutcome();
     },
     /**
      * One RPC regardless of session count — the join happens locally, so N live

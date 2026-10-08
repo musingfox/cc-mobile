@@ -207,18 +207,32 @@ async function unreadableReasonFor(input: {
   return (await exists(agentSessionValue)) ? undefined : "pending";
 }
 
+export type SessionListingOutcome =
+  | { ok: true; sessions: SessionDescriptor[] }
+  | { ok: false; error: Error };
+
 /**
  * Every agent pane the daemon knows about, newest listing wins. No kind is
  * filtered out: `agent.list` decides what exists, and this decides nothing.
  *
  * Never rejects. One pane that cannot be inspected (its claude exited between
- * the list and the get — herdr answers `agent_not_found`) is omitted; a daemon
- * that cannot be reached at all yields an empty list, which the client already
- * reads as "nothing is running", not as "delete every card".
+ * the list and the get — herdr answers `agent_not_found`) is omitted. A daemon
+ * that cannot be reached at all yields an empty list here, which is what the
+ * internal lookups (send fallback, transcript path, origin, teardown) want; a
+ * caller that must tell "nothing is running" from "could not ask" uses
+ * `listClaudeSessionsOutcome`.
  */
 export async function listClaudeSessions(
   options: SessionListingOptions,
 ): Promise<SessionDescriptor[]> {
+  const outcome = await listClaudeSessionsOutcome(options);
+  return outcome.ok ? outcome.sessions : [];
+}
+
+/** Same listing, but an `agent.list` failure is reported instead of read as empty. */
+export async function listClaudeSessionsOutcome(
+  options: SessionListingOptions,
+): Promise<SessionListingOutcome> {
   const { client } = options;
   const suppressLabel =
     options.suppressLabel ?? ((label: string) => label.startsWith(E2E_LABEL_PREFIX));
@@ -230,7 +244,7 @@ export async function listClaudeSessions(
     agents = await client.agentList();
   } catch (error) {
     warn(`agent.list failed: ${describe(error)}`);
-    return [];
+    return { ok: false, error: error instanceof Error ? error : new Error(String(error)) };
   }
 
   // Labels and pane cwds live in the snapshot, not in agent.list. Losing it
@@ -310,7 +324,12 @@ export async function listClaudeSessions(
     }),
   );
 
-  return descriptors.filter((descriptor): descriptor is SessionDescriptor => descriptor !== null);
+  return {
+    ok: true,
+    sessions: descriptors.filter(
+      (descriptor): descriptor is SessionDescriptor => descriptor !== null,
+    ),
+  };
 }
 
 /**
