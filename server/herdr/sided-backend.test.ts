@@ -1,10 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { emptyAgentProfileSource } from "../agents/profiles";
-import { ClientMessage } from "../protocol";
-import { handleTerminalCreate } from "../terminal-control";
 import type { HerdrTerminalBackend } from "./backend";
 import { createSidedBackend } from "./sided-backend";
 import type { SocketWatch } from "./socket-watch";
@@ -461,34 +456,5 @@ describe("SidesStartInBackground", () => {
     expect(() => sided.start()).not.toThrow();
     await new Promise((r) => setTimeout(r, 0));
     expect(warns.some((w) => /boom/.test(w))).toBe(true);
-  });
-});
-
-describe("WsCannotNameHangar", () => {
-  test("T5 handleTerminalCreate does not forward a side", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "sided-create-"));
-    const inputs: unknown[] = [];
-    await handleTerminalCreate({ claudeUuid: "u1", cwd: dir, side: "hangar" } as never, {
-      backend: {
-        createSession: async (input) => {
-          inputs.push(input);
-          return { name: "n", paneRef: "p" };
-        },
-        teardown: async () => ({ killed: false }),
-      },
-      allowedRoots: null,
-      send: () => {},
-      agentProfiles: emptyAgentProfileSource(),
-    });
-    expect(inputs).toEqual([{ claudeUuid: "u1", cwd: dir }]);
-  });
-  test("T6 the wire schema drops a side", () => {
-    const parsed = ClientMessage.parse({
-      type: "terminal_create",
-      claudeUuid: "u",
-      cwd: "/tmp",
-      side: "hangar",
-    });
-    expect("side" in parsed).toBe(false);
   });
 });

@@ -57,7 +57,11 @@ function launchApp(status?: string) {
   const { client, typed } = fakeHerdr(status);
   const backend = createHerdrBackend({ client: client as never }) as AppBackend;
   // Only the workspace creation is stood in for; send-routing below is the real one.
-  backend.createSession = async () => ({ name: "claude", paneRef: PANE });
+  const created: string[] = [];
+  backend.createSession = async (input) => {
+    created.push(input.claudeUuid);
+    return { name: "claude", paneRef: PANE };
+  };
   const eventBuffer = new EventBuffer(500);
   const dir = mkdtempSync(join(tmpdir(), "launch-audit-"));
   const vault = join(dir, "obsidian");
@@ -87,7 +91,7 @@ function launchApp(status?: string) {
         }),
       }),
     );
-  return { post, typed, eventBuffer, launchesDir };
+  return { post, typed, eventBuffer, launchesDir, created };
 }
 
 test("an HTTP launch with no WebSocket client types the template and card, presses Enter, and binds the session", async () => {
@@ -100,14 +104,14 @@ test("an HTTP launch with no WebSocket client types the template and card, press
 });
 
 test("a busy pane answers 502 with the routing's code, and nothing is typed", async () => {
-  const { post, typed, eventBuffer } = launchApp("working");
+  const { post, typed, eventBuffer, created } = launchApp("working");
   const r = await post();
   expect(r.status).toBe(502);
   expect(await r.json()).toEqual({
     error: "prompt_failed",
     code: "session_busy",
     sessionId: PANE,
-    claudeUuid: expect.stringMatching(/^[0-9a-f-]{36}$/),
+    claudeUuid: created[0],
   });
   expect(typed).toEqual([]);
   expect(eventBuffer.replay(PANE, -1).map((e) => e.message.code)).toEqual(["session_busy"]);

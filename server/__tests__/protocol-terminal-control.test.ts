@@ -170,3 +170,15 @@ describe("ClientMessage — terminal_teardown", () => {
     );
   });
 });
+
+describe("WsCannotNameHangar", () => {
+  it("T6 the wire schema drops a side", () => {
+    const parsed = ClientMessage.parse({
+      type: "terminal_create",
+      claudeUuid: "u",
+      cwd: "/tmp",
+      side: "hangar",
+    });
+    expect("side" in parsed).toBe(false);
+  });
+});

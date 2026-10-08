@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -262,6 +263,17 @@ describe("CardPathContainment", () => {
     nothingHappened(s);
     expect(JSON.stringify(s.sends)).not.toContain("SENTINEL-OUTSIDE");
   });
+  test("R1 a symlink to an outside file this process cannot read is still 403", async () => {
+    mkdirSync(join(tmp, "outside"));
+    writeFileSync(join(tmp, "outside", "locked.md"), "SENTINEL-OUTSIDE");
+    chmodSync(join(tmp, "outside", "locked.md"), 0);
+    symlinkSync(join(tmp, "outside", "locked.md"), join(vault, "pm", "evil.md"));
+    const s = setup();
+    const r = await s.post({ ...good, cardPath: "pm/evil.md" });
+    expect(r.status).toBe(403);
+    expect(await r.json()).toEqual({ error: "card_not_allowed" });
+    nothingHappened(s);
+  });
   test("T2 a vault root that is itself a symlink still launches", async () => {
     mkdirSync(join(tmp, "link"));
     symlinkSync(vault, join(tmp, "link", "obsidian"));
@@ -434,12 +446,12 @@ describe("LaunchBindingBeforePrompt", () => {
 });
 
 describe("LaunchBindingFailureAborts", () => {
-  function blocked(teardownFails: boolean) {
+  function unwritableLaunchesDir(teardownFails: boolean) {
     writeFileSync(join(tmp, "afile"), "x");
     return setup({ launchesDir: join(tmp, "afile", "sub"), teardownFails });
   }
   test("T1 a binding that cannot be written tears the pane down and types nothing", async () => {
-    const s = blocked(false);
+    const s = unwritableLaunchesDir(false);
     const r = await s.post(good);
     expect(r.status).toBe(500);
     expect(await r.json()).toEqual({
@@ -451,7 +463,7 @@ describe("LaunchBindingFailureAborts", () => {
     expect(s.audits).toEqual([]);
   });
   test("T2 a rejecting teardown does not change the response", async () => {
-    const s = blocked(true);
+    const s = unwritableLaunchesDir(true);
     const r = await s.post(good);
     expect(r.status).toBe(500);
     expect(await r.json()).toEqual({

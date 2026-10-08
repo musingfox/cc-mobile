@@ -442,3 +442,17 @@ describe("handleTerminalTeardown", () => {
     expect(sent).toEqual([{ type: "error", code: "terminal_error", message: "kill failed" }]);
   });
 });
+
+describe("WsCannotNameHangar", () => {
+  it("T5 handleTerminalCreate does not forward a side", async () => {
+    const dir = mkdtempSync(join(testRoot, "side-"));
+    const { backend, createSessionCalls } = makeFakeBackend();
+    await handleTerminalCreate({ claudeUuid: "u1", cwd: dir, side: "hangar" } as never, {
+      backend,
+      allowedRoots: null,
+      send: () => {},
+      agentProfiles: emptyAgentProfileSource(),
+    });
+    expect(createSessionCalls).toEqual([{ claudeUuid: "u1", cwd: dir }]);
+  });
+});

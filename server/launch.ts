@@ -1,6 +1,6 @@
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
-import { readFile, realpath } from "node:fs/promises";
-import { basename, isAbsolute, join } from "node:path";
+import { lstat, readFile, readlink, realpath } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { Elysia } from "elysia";
 import { z } from "zod";
 import type { AgentProfileSource } from "./agents/profiles";
@@ -32,6 +32,21 @@ const STATUS: Record<string, number> = {
   invalid_message: 400,
   terminal_error: 500,
 };
+
+/**
+ * The card's real path without opening it: `realpath` opens its target, so a
+ * link to an outside file this process cannot read would fail as "not found"
+ * instead of resolving to a path containment can refuse.
+ */
+async function resolveWithoutOpening(path: string): Promise<string> {
+  let current = path;
+  for (let hops = 0; hops < 40; hops++) {
+    const resolved = join(await realpath(dirname(current)), basename(current));
+    if (!(await lstat(resolved)).isSymbolicLink()) return resolved;
+    current = resolve(dirname(resolved), await readlink(resolved));
+  }
+  throw new Error("too many symbolic links");
+}
 
 /** Hashing first makes the comparison length-independent as well as constant-time. */
 function tokenMatches(presented: string, expected: string): boolean {
@@ -101,7 +116,7 @@ export function createLaunchPlugin(opts: {
       // path it cannot realpath lexically, which mismatches a symlinked root.
       let cardFile: string;
       try {
-        cardFile = await realpath(join(vaultRoot, cardPath));
+        cardFile = await resolveWithoutOpening(join(vaultRoot, cardPath));
       } catch {
         set.status = 404;
         return { error: "card_not_found" };
@@ -118,9 +133,8 @@ export function createLaunchPlugin(opts: {
         return { error: "card_not_found" };
       }
       // A binding is keyed by claude's session id, which no other kind reports.
-      const profile = profileId
-        ? opts.agentProfiles.list().find(({ id }) => id === profileId)
-        : undefined;
+      const snapshot = opts.agentProfiles.list();
+      const profile = profileId ? snapshot.find(({ id }) => id === profileId) : undefined;
       if (profile && profile.kind !== "claude") {
         set.status = 400;
         return { error: "unsupported_kind" };
@@ -135,7 +149,7 @@ export function createLaunchPlugin(opts: {
             teardown: (key) => opts.backend.teardown(key),
           },
           allowedRoots: opts.config.allowedRoots,
-          agentProfiles: opts.agentProfiles,
+          agentProfiles: { list: () => snapshot },
           send: (msg) => {
             reply = msg;
           },
