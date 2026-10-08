@@ -760,6 +760,17 @@ describe("HerdrStartupGate", () => {
     expect(warnings.some((m) => m.includes("hangar") && m.includes("/h.sock"))).toBe(true);
   });
 
+  test("an incompatible hangar's hint names CC_MOBILE_HANGAR_SESSION, not HERDR_SOCKET_PATH", async () => {
+    const rejection = verifyHerdrStartup(pongClient(16), "/h.sock", "hangar");
+    await expect(rejection).rejects.toThrow(/CC_MOBILE_HANGAR_SESSION/);
+    await expect(verifyHerdrStartup(pongClient(16), "/h.sock", "hangar")).rejects.not.toThrow(
+      /HERDR_SOCKET_PATH/,
+    );
+    await expect(verifyHerdrStartup(pongClient(16), "/c.sock")).rejects.toThrow(
+      /HERDR_SOCKET_PATH/,
+    );
+  });
+
   test("verifyHerdrSides rejects when any side is incompatible", async () => {
     await expect(
       verifyHerdrSides([

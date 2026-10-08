@@ -35,6 +35,7 @@ import {
   type SessionListingClient,
   type SessionListingOutcome,
 } from "./sessions";
+import type { Side } from "./sides";
 import { resolveSocketPath } from "./transport";
 
 export type CapabilitiesReadResult =
@@ -599,6 +600,7 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
 export async function verifyHerdrStartup(
   client?: Pick<HerdrClient, "assertCompatible">,
   socketPath?: string,
+  side: Side = "cockpit",
 ): Promise<"reachable" | "unreachable"> {
   const resolvedSocketPath = resolveSocketPath(socketPath);
   const target = client ?? createHerdrClient({ socketPath: resolvedSocketPath });
@@ -612,7 +614,7 @@ export async function verifyHerdrStartup(
     throw new Error(
       `herdr daemon unusable at ${resolvedSocketPath}: ${detail}. ` +
         `cc-mobile drives terminal sessions through herdr (protocol ${SUPPORTED_PROTOCOL}); ` +
-        `start the daemon or set HERDR_SOCKET_PATH.`,
+        `start the daemon or set ${side === "hangar" ? "CC_MOBILE_HANGAR_SESSION" : "HERDR_SOCKET_PATH"}.`,
     );
   }
 }
@@ -623,7 +625,7 @@ export async function verifyHerdrStartup(
  */
 export async function verifyHerdrSides(
   sides: Array<{
-    side: "cockpit" | "hangar";
+    side: Side;
     socketPath: string;
     client?: Pick<HerdrClient, "assertCompatible">;
   }>,
@@ -634,7 +636,7 @@ export async function verifyHerdrSides(
     sides.map(async ({ side, socketPath, client }) => ({
       side,
       socketPath,
-      status: await verifyHerdrStartup(client, socketPath),
+      status: await verifyHerdrStartup(client, socketPath, side),
     })),
   );
   for (const { side, socketPath, status } of results) {
