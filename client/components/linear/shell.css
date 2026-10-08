@@ -35,6 +35,16 @@
   text-align: center;
 }
 
+.lin-herdr-offline-banner {
+  background: rgba(196, 138, 138, 0.12);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  color: #d49898;
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  padding: 6px 16px;
+  text-align: center;
+}
+
 /* Reusable bare-button reset for tappable elements */
 .lin-btn {
   background: transparent;
