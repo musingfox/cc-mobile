@@ -1,6 +1,7 @@
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
-import { lstat, readFile, readlink, realpath } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import type { Stats } from "node:fs";
+import { lstat, readFile, readlink } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, sep } from "node:path";
 import { Elysia } from "elysia";
 import { z } from "zod";
 import type { AgentProfileSource } from "./agents/profiles";
@@ -10,7 +11,6 @@ import type { ServerConfig } from "./config";
 import type { EventBuffer } from "./event-buffer";
 import { writeLaunchBinding } from "./launch-binding";
 import { composeLaunchPrompt } from "./launch-prompt";
-import { validateAllowedPath } from "./path-utils";
 import { handleTerminalCreate, sendPrompt, type TerminalControlBackend } from "./terminal-control";
 import { bufferSessionEvent } from "./ws";
 
@@ -25,6 +25,8 @@ const LaunchBody = z.object({
   profileId: z.string().optional(),
 });
 
+const MAX_SYMLINKS = 40;
+
 const STATUS: Record<string, number> = {
   invalid_cwd: 400,
   path_not_allowed: 403,
@@ -34,18 +36,39 @@ const STATUS: Record<string, number> = {
 };
 
 /**
- * The card's real path without opening it: `realpath` opens its target, so a
- * link to an outside file this process cannot read would fail as "not found"
- * instead of resolving to a path containment can refuse.
+ * Resolves `path` one component at a time with `lstat` and `readlink` only.
+ * `realpath` opens what it resolves, so an outside target this process cannot
+ * open or list would fail as "not found" instead of resolving to a path
+ * containment can refuse. Search permission on each directory crossed is enough.
+ * Throws when the path does not resolve.
  */
-async function resolveWithoutOpening(path: string): Promise<string> {
-  let current = path;
-  for (let hops = 0; hops < 40; hops++) {
-    const resolved = join(await realpath(dirname(current)), basename(current));
-    if (!(await lstat(resolved)).isSymbolicLink()) return resolved;
-    current = resolve(dirname(resolved), await readlink(resolved));
+async function resolveByLstat(path: string): Promise<{ path: string; stats: Stats }> {
+  const pending = path.split("/").filter(Boolean);
+  let resolved = "/";
+  let stats = await lstat(resolved);
+  let links = 0;
+  while (pending.length > 0) {
+    const name = pending.shift() as string;
+    if (name === ".") continue;
+    if (name === "..") {
+      resolved = dirname(resolved);
+      stats = await lstat(resolved);
+      continue;
+    }
+    const next = join(resolved, name);
+    const entry = await lstat(next);
+    if (entry.isSymbolicLink()) {
+      if (++links > MAX_SYMLINKS) throw new Error("too many symbolic links");
+      const target = await readlink(next);
+      if (isAbsolute(target)) resolved = "/";
+      pending.unshift(...target.split("/").filter(Boolean));
+      continue;
+    }
+    if (pending.length > 0 && !entry.isDirectory()) throw new Error("not a directory");
+    resolved = next;
+    stats = entry;
   }
-  throw new Error("too many symbolic links");
+  return { path: resolved, stats };
 }
 
 /** Hashing first makes the comparison length-independent as well as constant-time. */
@@ -112,22 +135,24 @@ export function createLaunchPlugin(opts: {
         set.status = 400;
         return { error: "invalid_card_path" };
       }
-      // Resolve before checking containment: validateAllowedPath compares a
-      // path it cannot realpath lexically, which mismatches a symlinked root.
-      let cardFile: string;
+      let card: { path: string; stats: Stats };
+      let root: string;
       try {
-        cardFile = await resolveWithoutOpening(join(vaultRoot, cardPath));
+        root = (await resolveByLstat(vaultRoot)).path;
+        card = await resolveByLstat(join(vaultRoot, cardPath));
       } catch {
         set.status = 404;
         return { error: "card_not_found" };
       }
-      if (!validateAllowedPath(cardFile, [vaultRoot])) {
+      const rootPrefix = root.endsWith(sep) ? root : root + sep;
+      if (card.path !== root && !card.path.startsWith(rootPrefix)) {
         set.status = 403;
         return { error: "card_not_allowed" };
       }
-      let card: string;
+      let cardText: string;
       try {
-        card = await readFile(cardFile, "utf8");
+        if (!card.stats.isFile()) throw new Error("not a regular file");
+        cardText = await readFile(card.path, "utf8");
       } catch {
         set.status = 404;
         return { error: "card_not_found" };
@@ -195,7 +220,7 @@ export function createLaunchPlugin(opts: {
         await sendPrompt(
           opts.backend,
           audit,
-          { claudeUuid: sessionId, content: composeLaunchPrompt(card), ip, device: "launch-api" },
+          { sessionId, content: composeLaunchPrompt(cardText), ip, device: "launch-api" },
           () => reportedError,
         );
       } catch {

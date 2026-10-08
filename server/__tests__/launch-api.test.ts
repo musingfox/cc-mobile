@@ -1,3 +1,4 @@
+import { dlopen, FFIType, ptr } from "bun:ffi";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   chmodSync,
@@ -18,6 +19,19 @@ import { createLaunchPlugin } from "../launch";
 import { composeLaunchPrompt } from "../launch-prompt";
 import type { CreateSessionInput } from "../terminal-backend";
 import { testServerConfig } from "./ws-harness";
+
+/** The unit tier may not spawn a process, so the FIFO comes from libc directly. */
+function mkfifo(path: string): number {
+  const lib = process.platform === "darwin" ? "libSystem.B.dylib" : "libc.so.6";
+  const { symbols, close } = dlopen(lib, {
+    mkfifo: { args: [FFIType.ptr, FFIType.u16], returns: FFIType.i32 },
+  });
+  try {
+    return symbols.mkfifo(ptr(Buffer.from(`${path}\0`)), 0o600);
+  } finally {
+    close();
+  }
+}
 
 const CARD = "# Task\nCARD-BODY do the thing\n";
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -280,6 +294,79 @@ describe("CardPathContainment", () => {
     const s = setup({ vaultRoot: join(tmp, "link", "obsidian") });
     expect((await s.post(good)).status).toBe(201);
   });
+  const sentinel = () => {
+    mkdirSync(join(tmp, "outside"), { recursive: true });
+    writeFileSync(join(tmp, "outside", "secret.md"), "SENTINEL-OUTSIDE");
+  };
+  const refused = async (cardPath: string) => {
+    const s = setup();
+    const r = await s.post({ ...good, cardPath });
+    expect(r.status).toBe(403);
+    expect(await r.json()).toEqual({ error: "card_not_allowed" });
+    nothingHappened(s);
+    expect(JSON.stringify(s.sends)).not.toContain("SENTINEL-OUTSIDE");
+  };
+  test("T3 a link to a readable file in an execute-only outside directory is 403", async () => {
+    const xdir = join(tmp, "outside", "xdir");
+    mkdirSync(xdir, { recursive: true });
+    writeFileSync(join(xdir, "secret.md"), "SENTINEL-OUTSIDE");
+    chmodSync(xdir, 0o111);
+    try {
+      symlinkSync(join(xdir, "secret.md"), join(vault, "pm", "evil.md"));
+      await refused("pm/evil.md");
+    } finally {
+      chmodSync(xdir, 0o755);
+    }
+  });
+  test("T4 a link to an execute-only outside directory is 403", async () => {
+    const xdir = join(tmp, "outside", "xdir");
+    mkdirSync(xdir, { recursive: true });
+    writeFileSync(join(xdir, "secret.md"), "SENTINEL-OUTSIDE");
+    chmodSync(xdir, 0o111);
+    try {
+      symlinkSync(xdir, join(vault, "pm", "linkdir"));
+      await refused("pm/linkdir/secret.md");
+    } finally {
+      chmodSync(xdir, 0o755);
+    }
+  });
+  test("T5 a relative link out of the vault is 403", async () => {
+    sentinel();
+    symlinkSync("../../outside/secret.md", join(vault, "pm", "rel.md"));
+    await refused("pm/rel.md");
+  });
+  test("T6 a sibling directory sharing the vault's name prefix is 403", async () => {
+    mkdirSync(join(tmp, "obsidian-evil"));
+    writeFileSync(join(tmp, "obsidian-evil", "secret.md"), "SENTINEL-OUTSIDE");
+    symlinkSync(join(tmp, "obsidian-evil", "secret.md"), join(vault, "pm", "sib.md"));
+    await refused("pm/sib.md");
+  });
+  test("T7 a link out of the vault and back to a card inside launches", async () => {
+    mkdirSync(join(tmp, "outside"));
+    symlinkSync(
+      join(vault, "pm", "cc-mobile", "tasks", "card.md"),
+      join(tmp, "outside", "back.md"),
+    );
+    symlinkSync(join(tmp, "outside"), join(vault, "pm", "out"));
+    const s = setup();
+    expect((await s.post({ ...good, cardPath: "pm/out/back.md" })).status).toBe(201);
+    expect(s.sends).toHaveLength(1);
+    expect(s.sends[0]?.content).toBe(composeLaunchPrompt(CARD));
+  });
+  test("T8 a card under an execute-only directory inside the vault launches", async () => {
+    const dir = join(vault, "pm", "x111");
+    mkdirSync(dir);
+    writeFileSync(join(dir, "card.md"), CARD);
+    chmodSync(dir, 0o111);
+    try {
+      const s = setup();
+      expect((await s.post({ ...good, cardPath: "pm/x111/card.md" })).status).toBe(201);
+      expect(s.sends).toHaveLength(1);
+      expect(s.sends[0]?.content).toBe(composeLaunchPrompt(CARD));
+    } finally {
+      chmodSync(dir, 0o755);
+    }
+  });
 });
 
 describe("CardReadFailure", () => {
@@ -297,6 +384,56 @@ describe("CardReadFailure", () => {
     expect(r.status).toBe(404);
     expect(await r.json()).toEqual({ error: "card_not_found" });
     nothingHappened(s);
+  });
+  const settlesNotFound = async (s: ReturnType<typeof setup>, cardPath: string) => {
+    const timeout = new Promise<"timeout">((r) => setTimeout(() => r("timeout"), 2000));
+    const r = await Promise.race([s.post({ ...good, cardPath }), timeout]);
+    expect(r).not.toBe("timeout");
+    const res = r as Response;
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "card_not_found" });
+    nothingHappened(s);
+  };
+  test("T3 a card the server cannot read is 404", async () => {
+    const file = join(vault, "pm", "locked.md");
+    writeFileSync(file, CARD);
+    chmodSync(file, 0);
+    try {
+      await settlesNotFound(setup(), "pm/locked.md");
+    } finally {
+      chmodSync(file, 0o600);
+    }
+  });
+  test("T4 a FIFO with no writer settles as 404 instead of blocking", async () => {
+    const fifo = join(vault, "pm", "fifo.md");
+    expect(mkfifo(fifo)).toBe(0);
+    await settlesNotFound(setup(), "pm/fifo.md");
+  });
+  test("T5 a vault root that does not exist is 404", async () => {
+    const s = setup({ vaultRoot: join(tmp, "nope") });
+    const r = await s.post({ ...good, vault: "nope" });
+    expect(r.status).toBe(404);
+    expect(await r.json()).toEqual({ error: "card_not_found" });
+    nothingHappened(s);
+  });
+  test("T6 a dangling link, a link loop and a file used as a directory settle as 404", async () => {
+    symlinkSync(join(tmp, "nowhere.md"), join(vault, "pm", "dangling.md"));
+    symlinkSync("loop.md", join(vault, "pm", "loop.md"));
+    await settlesNotFound(setup(), "pm/dangling.md");
+    await settlesNotFound(setup(), "pm/loop.md");
+    await settlesNotFound(setup(), "pm/cc-mobile/tasks/card.md/x.md");
+  });
+  test("T7 a link into an outside directory that cannot be searched is 404", async () => {
+    const zdir = join(tmp, "outside", "zdir");
+    mkdirSync(zdir, { recursive: true });
+    writeFileSync(join(zdir, "secret.md"), "SENTINEL-OUTSIDE");
+    chmodSync(zdir, 0);
+    try {
+      symlinkSync(zdir, join(vault, "pm", "lock"));
+      await settlesNotFound(setup(), "pm/lock/secret.md");
+    } finally {
+      chmodSync(zdir, 0o755);
+    }
   });
 });
 

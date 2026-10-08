@@ -563,7 +563,7 @@ export function createWsPlugin(
               (msg: Record<string, unknown>) => sendBuffered(ws, claudeUuid, msg),
               ownerOf(ws),
             );
-            await sendPrompt(backend, audit, { claudeUuid, content, ...identity });
+            await sendPrompt(backend, audit, { sessionId: claudeUuid, content, ...identity });
             break;
           }
 

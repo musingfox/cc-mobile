@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { join } from "node:path";
 import type { HerdrTerminalBackend } from "./backend";
 import { createSidedBackend } from "./sided-backend";
 import type { SocketWatch } from "./socket-watch";
