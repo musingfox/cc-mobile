@@ -2,6 +2,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { resolveSocketPath } from "./transport";
 
+export type Side = "cockpit" | "hangar";
+
 export type HerdrSideSocket =
   | { side: "cockpit"; socketPath: string }
   | { side: "hangar"; name: string; socketPath: string };
@@ -19,4 +21,21 @@ export function resolveHerdrSides(
     });
   }
   return sides;
+}
+
+export function hangarKey(name: string, paneId: string): string {
+  return `${name}@${paneId}`;
+}
+
+export function routeSessionKey(
+  key: string,
+  hangarName: string | null,
+): { side: Side; paneId: string } {
+  if (hangarName !== null) {
+    const prefix = `${hangarName}@`;
+    if (key.startsWith(prefix) && key.length > prefix.length) {
+      return { side: "hangar", paneId: key.slice(prefix.length) };
+    }
+  }
+  return { side: "cockpit", paneId: key };
 }
