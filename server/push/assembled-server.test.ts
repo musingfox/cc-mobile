@@ -166,7 +166,7 @@ describe("the assembled server can actually transmit a push", () => {
     //    is what puts the pane in scope under `phone-last`: the rule is "notify
     //    me about the work I asked for from here", and driving it any other way
     //    would test a pane nobody asked anything of.
-    await backendRef.current?.listSessionDescriptors?.();
+    await backendRef.current?.listSessions?.();
     await backendRef.current?.send({ claudeUuid: PANE, content: "do the thing" });
 
     // 4. The pane runs that turn and settles.
@@ -216,7 +216,7 @@ describe("the assembled server can actually transmit a push", () => {
       reason: null,
     });
     expect(Number.isNaN(Date.parse(line.ts))).toBe(false);
-    // Closes the 1 s status poll `listSessionDescriptors` armed; one test
+    // Closes the 1 s status poll `listSessions` armed; one test
     // process is shared by every file in the suite.
     await backendRef.current?.teardownAll?.();
   });
@@ -246,7 +246,7 @@ describe("the assembled server can actually transmit a push", () => {
     expect(
       (await post(app, { endpoint: APPLE_ENDPOINT, keys: { p256dh: "BN", auth: "k1" } })).status,
     ).toBe(201);
-    await backendRef.current?.listSessionDescriptors?.();
+    await backendRef.current?.listSessions?.();
 
     // The prompt the phone sent is what this permission question belongs to:
     // under `phone-last` a prompt is announced to whoever asked for the turn
@@ -324,7 +324,7 @@ describe("the assembled server can actually transmit a push", () => {
     });
 
     await post(app, { endpoint: APPLE_ENDPOINT, keys: { p256dh: "BN", auth: "k1" } });
-    await backendRef.current?.listSessionDescriptors?.();
+    await backendRef.current?.listSessions?.();
     // Drive the pane from the phone, or the scope gate is what stops the send
     // and this test proves nothing about VAPID.
     await backendRef.current?.send({ claudeUuid: PANE, content: "do the thing" });
@@ -347,7 +347,7 @@ describe("the assembled server can actually transmit a push", () => {
     // The old else-branch wrote a 201 here — an unconfigured install was
     // indistinguishable from a working one.
     expect(existsSync(logPath)).toBe(false);
-    // Closes the 1 s status poll `listSessionDescriptors` armed; one test
+    // Closes the 1 s status poll `listSessions` armed; one test
     // process is shared by every file in the suite.
     await backendRef.current?.teardownAll?.();
   });
@@ -403,7 +403,7 @@ describe("the assembled server can actually transmit a push", () => {
     });
 
     await post(app, { endpoint: APPLE_ENDPOINT, keys: { p256dh: "BN", auth: "k1" } });
-    await backendRef.current?.listSessionDescriptors?.();
+    await backendRef.current?.listSessions?.();
     await backendRef.current?.send({ claudeUuid: PANE, content: "do the thing" });
     emitter.emit?.({
       event: "pane_updated",
@@ -459,7 +459,7 @@ describe("the assembled server can actually transmit a push", () => {
     });
 
     await post(app, { endpoint: APPLE_ENDPOINT, keys: { p256dh: "BN", auth: "k1" } });
-    await backendRef.current?.listSessionDescriptors?.();
+    await backendRef.current?.listSessions?.();
     emitter.emit?.({
       event: "pane_updated",
       data: { pane: { pane_id: PANE, agent_status: "working" } },
@@ -475,7 +475,7 @@ describe("the assembled server can actually transmit a push", () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(sent).toBe(0);
-    // Closes the 1 s status poll `listSessionDescriptors` armed; one test
+    // Closes the 1 s status poll `listSessions` armed; one test
     // process is shared by every file in the suite.
     await backendRef.current?.teardownAll?.();
   });
@@ -531,7 +531,7 @@ describe("a phone that is looking at the app is not buzzed", () => {
       socket.onerror = () => reject(new Error("the phone could not connect"));
     });
 
-    await backendRef.current?.listSessionDescriptors?.();
+    await backendRef.current?.listSessions?.();
     await backendRef.current?.send({ claudeUuid: PANE, content: "do the thing" });
 
     const lines = () =>

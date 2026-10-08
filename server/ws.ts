@@ -27,8 +27,8 @@ export interface WsBackend extends TerminalControlBackend {
    * reconnecting client reconciles against. Optional: only a backend that can
    * enumerate the machine (herdr) has one, and its absence answers "none".
    */
-  listSessionDescriptors?(): Promise<
-    {
+  listSessions?(): Promise<{
+    sessions: {
       sessionId: string;
       /** The kind herdr detected; absent when it has not detected one. */
       agent?: string;
@@ -43,8 +43,15 @@ export interface WsBackend extends TerminalControlBackend {
       unreadableReason?: "pending" | "unsupported";
       gated: boolean;
       state?: "idle" | "running" | "requires_action";
-    }[]
-  >;
+      /** Which herdr daemon the pane lives on; absent from a backend with one daemon. */
+      side?: "cockpit" | "hangar";
+    }[];
+    /** Per-daemon reachability; passed to the phone verbatim. */
+    herdr?: {
+      cockpit: { online: boolean };
+      hangar?: { name: string; online: boolean };
+    };
+  }>;
   /**
    * Per-uuid agent state for the live sessions. Optional: only a backend with
    * a status source has any, and its absence costs the client its dot, not its
@@ -390,11 +397,15 @@ export function createWsPlugin(
             // something happens to move. A lookup failure degrades to {} rather
             // than withholding the liveness answer the reconcile depends on;
             // each descriptor also carries its own state.
-            let sessions: NonNullable<
-              Awaited<ReturnType<NonNullable<typeof backend.listSessionDescriptors>>>
-            > = [];
+            type Listing = NonNullable<
+              Awaited<ReturnType<NonNullable<typeof backend.listSessions>>>
+            >;
+            let sessions: Listing["sessions"] = [];
+            let herdr: Listing["herdr"];
             try {
-              sessions = (await backend.listSessionDescriptors?.()) ?? [];
+              const listing = await backend.listSessions?.();
+              sessions = listing?.sessions ?? [];
+              herdr = listing?.herdr;
             } catch (error) {
               console.warn(
                 `[ws] session listing unavailable: ${error instanceof Error ? error.message : String(error)}`,
@@ -457,9 +468,11 @@ export function createWsPlugin(
                 ...(session.unreadableReason ? { unreadableReason: session.unreadableReason } : {}),
                 gated: session.gated,
                 ...(session.state ? { state: session.state } : {}),
+                ...(session.side ? { side: session.side } : {}),
               })),
               claudeUuids: sessions.map((session) => session.sessionId),
               states,
+              ...(herdr ? { herdr } : {}),
             });
 
             // Every open lists, so this is where a returning phone gets the

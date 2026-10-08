@@ -399,9 +399,18 @@ const TerminalSessionDescriptor = z.object({
   unreadableReason: z.enum(["pending", "unsupported"]).optional(),
   gated: z.boolean(),
   state: z.enum(["idle", "running", "requires_action"]).optional(),
+  /**
+   * Which herdr daemon the pane lives on. Absent from a frame built before the
+   * hangar socket existed; a client reads absent as the cockpit.
+   */
+  side: z.enum(["cockpit", "hangar"]).optional(),
 });
 
-/** Reply to list_terminal_sessions. Empty list means "none live", not "unknown". */
+/**
+ * Reply to list_terminal_sessions. An empty list means "none live" only for a
+ * daemon `herdr` reports online; an offline side contributes no sessions
+ * because it could not be asked, not because it has none.
+ */
 const TerminalSessionsMessage = z.object({
   type: z.literal("terminal_sessions"),
   /**
@@ -427,6 +436,17 @@ const TerminalSessionsMessage = z.object({
    * absent from the map is "no claim", never "idle".
    */
   states: z.record(z.enum(["idle", "running", "requires_action"])).optional(),
+  /**
+   * Whether each herdr daemon answered this listing. `hangar` is present only
+   * when the server has a hangar session configured (ADR-018). Absent on a
+   * server that predates it; a client then treats the cockpit as online.
+   */
+  herdr: z
+    .object({
+      cockpit: z.object({ online: z.boolean() }),
+      hangar: z.object({ name: z.string(), online: z.boolean() }).optional(),
+    })
+    .optional(),
 });
 
 /**

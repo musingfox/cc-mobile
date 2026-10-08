@@ -36,7 +36,7 @@ function backendListing(sessions: ReturnType<typeof descriptor>[]) {
     createSession: async () => ({ name: "n", paneRef: "p1" }),
     teardown: async () => ({ killed: false }),
     listLive: () => [],
-    listSessionDescriptors: async () => sessions,
+    listSessions: async () => ({ sessions }),
     send: async () => {},
     registerClient: () => {},
     cleanupByOwner: () => {},
@@ -243,7 +243,7 @@ describe("TerminalSessionsPayload — handler", () => {
   test("a listing failure answers an empty list rather than an error frame", async () => {
     harness = await startWsHarness({
       ...backendListing([]),
-      listSessionDescriptors: async () => {
+      listSessions: async () => {
         throw new Error("socket closed");
       },
     });
@@ -261,7 +261,7 @@ describe("TerminalSessionsPayload — handler", () => {
     let live: ReturnType<typeof descriptor>[] = [];
     harness = await startWsHarness({
       ...backendListing([]),
-      listSessionDescriptors: async () => live,
+      listSessions: async () => ({ sessions: live }),
     });
 
     harness.send({ type: "list_terminal_sessions" });
@@ -296,5 +296,86 @@ describe("TerminalSessionsPayload — handler", () => {
     // Foreign sessions included: without a sink they would get no status, no
     // transcript readback and no permission prompt.
     expect(bound.sort()).toEqual(["w3V:p1", "w9:p1"]);
+  });
+
+  describe("sides", () => {
+    const herdrOnline = {
+      cockpit: { online: true },
+      hangar: { name: "fleet", online: true },
+    };
+    const sided = (herdr: {
+      cockpit: { online: boolean };
+      hangar?: { name: string; online: boolean };
+    }) => ({
+      ...backendListing([]),
+      listSessions: async () => ({
+        sessions: [
+          descriptor({ sessionId: "w1:p1", side: "cockpit" }),
+          descriptor({ sessionId: "fleet@w1:p1", side: "hangar" }),
+        ],
+        herdr,
+      }),
+    });
+
+    test("the reply carries each session's side and the herdr status verbatim", async () => {
+      harness = await startWsHarness(sided(herdrOnline));
+      harness.send({ type: "list_terminal_sessions" });
+      const reply = await harness.waitFor((msg) => msg.type === "terminal_sessions");
+
+      expect((reply.sessions as { side: string }[]).map((s) => s.side)).toEqual([
+        "cockpit",
+        "hangar",
+      ]);
+      expect(reply.claudeUuids).toEqual(["w1:p1", "fleet@w1:p1"]);
+      expect(reply.herdr).toEqual(herdrOnline);
+    });
+
+    test("an offline side is reported as offline", async () => {
+      const offline = { cockpit: { online: true }, hangar: { name: "fleet", online: false } };
+      harness = await startWsHarness(sided(offline));
+      harness.send({ type: "list_terminal_sessions" });
+      const reply = await harness.waitFor((msg) => msg.type === "terminal_sessions");
+
+      expect(reply.herdr).toEqual(offline);
+    });
+
+    test("binds this socket for a hangar key too", async () => {
+      const bound: string[] = [];
+      harness = await startWsHarness({
+        ...sided(herdrOnline),
+        registerClient: (sessionId: string) => {
+          bound.push(sessionId);
+        },
+      });
+      harness.send({ type: "list_terminal_sessions" });
+      await harness.waitFor((msg) => msg.type === "terminal_sessions");
+
+      expect(bound).toContain("fleet@w1:p1");
+    });
+
+    test("the sided reply and a side-less frame both parse", async () => {
+      harness = await startWsHarness(sided(herdrOnline));
+      harness.send({ type: "list_terminal_sessions" });
+      const reply = await harness.waitFor((msg) => msg.type === "terminal_sessions");
+
+      expect(ServerMessage.safeParse(reply).success).toBe(true);
+      expect(
+        ServerMessage.safeParse({
+          type: "terminal_sessions",
+          sessions: [descriptor()],
+          claudeUuids: ["w3V:p1"],
+        }).success,
+      ).toBe(true);
+    });
+
+    test("a backend without listSessions answers no sessions and no herdr key", async () => {
+      const { listSessions: _omitted, ...bare } = backendListing([]);
+      harness = await startWsHarness(bare);
+      harness.send({ type: "list_terminal_sessions" });
+      const reply = await harness.waitFor((msg) => msg.type === "terminal_sessions");
+
+      expect(reply.sessions).toEqual([]);
+      expect("herdr" in reply).toBe(false);
+    });
   });
 });
