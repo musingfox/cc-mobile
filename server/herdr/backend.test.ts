@@ -17,10 +17,17 @@ import {
   createHerdrBackend,
   type HerdrBackendOptions,
   permissionAppliesTo,
+  verifyHerdrSides,
   verifyHerdrStartup,
 } from "./backend";
 import { createHerdrClient } from "./client";
-import { HerdrTransportError } from "./errors";
+import {
+  classifyHerdrFailure,
+  HerdrProtocolError,
+  HerdrRpcError,
+  HerdrTransportError,
+} from "./errors";
+import { PongResultSchema } from "./schema";
 
 const UUID = "3f2a9b01-1111-4222-8333-444455556666";
 
@@ -653,6 +660,33 @@ describe("InnerListingReportsFailure", () => {
   });
 });
 
+function pongClient(protocol: number) {
+  return createHerdrClient({
+    transport: {
+      request: async () => ({ type: "pong", version: "0.9.0", protocol, capabilities: {} }),
+    },
+  });
+}
+
+function unreachableClient() {
+  return createHerdrClient({
+    transport: {
+      request: async () => {
+        throw new HerdrTransportError("connect failed: ENOENT");
+      },
+    },
+  });
+}
+
+function rejectionOf(run: () => unknown): unknown {
+  try {
+    run();
+  } catch (error) {
+    return error;
+  }
+  throw new Error("expected a throw");
+}
+
 describe("HerdrStartupGate", () => {
   test("rejects when the daemon speaks a different protocol", async () => {
     const client = createHerdrClient({
@@ -669,7 +703,7 @@ describe("HerdrStartupGate", () => {
     await expect(verifyHerdrStartup(client)).rejects.toThrow(/protocol 22/);
   });
 
-  test("rejects naming the socket path when the daemon is unreachable", async () => {
+  test("resolves unreachable, not rejects, when the daemon cannot be connected to", async () => {
     const client = createHerdrClient({
       transport: {
         request: async () => {
@@ -678,9 +712,61 @@ describe("HerdrStartupGate", () => {
       },
     });
 
-    await expect(verifyHerdrStartup(client, "/tmp/no-such-herdr.sock")).rejects.toThrow(
-      /\/tmp\/no-such-herdr\.sock/,
+    await expect(verifyHerdrStartup(client, "/tmp/no-such-herdr.sock")).resolves.toBe(
+      "unreachable",
     );
+  });
+
+  test("a real connect failure on an empty socket path resolves unreachable", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "vg-"));
+    const path = join(dir, "none.sock");
+    try {
+      await expect(verifyHerdrStartup(createHerdrClient({ socketPath: path }), path)).resolves.toBe(
+        "unreachable",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a protocol mismatch rejects naming the socket path", async () => {
+    const client = pongClient(16);
+    const rejection = verifyHerdrStartup(client, "/tmp/x.sock");
+    await expect(rejection).rejects.toThrow(/protocol 22/);
+    await expect(verifyHerdrStartup(client, "/tmp/x.sock")).rejects.toThrow(/\/tmp\/x\.sock/);
+  });
+
+  test("classifyHerdrFailure separates a missing daemon from an unusable one", () => {
+    expect(classifyHerdrFailure(new HerdrTransportError("connect failed"))).toBe("unreachable");
+    expect(classifyHerdrFailure(new HerdrProtocolError("p16"))).toBe("incompatible");
+    expect(classifyHerdrFailure(rejectionOf(() => PongResultSchema.parse({})))).toBe(
+      "incompatible",
+    );
+    expect(classifyHerdrFailure(new HerdrRpcError("internal", "x"))).toBe("incompatible");
+    expect(classifyHerdrFailure(new TypeError("x"))).toBe("incompatible");
+  });
+
+  test("verifyHerdrSides warns once per unreachable side and resolves", async () => {
+    const warnings: string[] = [];
+    await verifyHerdrSides(
+      [
+        { side: "cockpit", socketPath: "/c.sock", client: unreachableClient() },
+        { side: "hangar", socketPath: "/h.sock", client: unreachableClient() },
+      ],
+      { warn: (message) => warnings.push(message) },
+    );
+    expect(warnings).toHaveLength(2);
+    expect(warnings.some((m) => m.includes("cockpit") && m.includes("/c.sock"))).toBe(true);
+    expect(warnings.some((m) => m.includes("hangar") && m.includes("/h.sock"))).toBe(true);
+  });
+
+  test("verifyHerdrSides rejects when any side is incompatible", async () => {
+    await expect(
+      verifyHerdrSides([
+        { side: "cockpit", socketPath: "/c.sock", client: pongClient(22) },
+        { side: "hangar", socketPath: "/h.sock", client: pongClient(16) },
+      ]),
+    ).rejects.toThrow(/\/h\.sock/);
   });
 
   test("resolves when the daemon speaks the supported protocol", async () => {
@@ -695,7 +781,7 @@ describe("HerdrStartupGate", () => {
       },
     });
 
-    await expect(verifyHerdrStartup(client)).resolves.toBeUndefined();
+    await expect(verifyHerdrStartup(client)).resolves.toBe("reachable");
   });
 
   test("createApp and the default backend construct without contacting a daemon", () => {

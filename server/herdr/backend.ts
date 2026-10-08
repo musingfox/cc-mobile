@@ -5,9 +5,10 @@
  * layer speaks: registry (lifecycle), send-routing (prompt in, reply out),
  * status-events (activity indicator).
  *
- * herdr is the sole default backend with no runtime fallback (plan D1): a missing
- * or incompatible daemon is a deploy-time failure via verifyHerdrStartup, not a
- * surprise on the user's first tap.
+ * herdr is the sole default backend with no runtime fallback (plan D1): an
+ * incompatible daemon is a deploy-time failure via verifyHerdrStartup, not a
+ * surprise on the user's first tap. An unreachable one is not fatal — the
+ * server starts and the daemon is retried by the status poll and each listing.
  */
 
 import {
@@ -22,6 +23,7 @@ import { createTranscriptDelivery } from "../transcript/delivery";
 import { type PageCursor, readTranscriptPage, type TranscriptPage } from "../transcript/page";
 import { type AgentState, statesFromSnapshot } from "./agent-state";
 import { createHerdrClient, type HerdrClient, SUPPORTED_PROTOCOL } from "./client";
+import { classifyHerdrFailure } from "./errors";
 import { createAgentNotice } from "./notice/agent-notice";
 import { createHerdrPaneEvents } from "./pane-events";
 import { createNativePermission } from "./permission/native-permission";
@@ -588,25 +590,56 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
 }
 
 /**
- * Fails loudly when no protocol-compatible herdr daemon is reachable. Called
- * before `listen` so a misconfigured daemon is a deploy-time error rather than
- * a broken first tap — herdr has no runtime fallback (plan D1).
+ * Probes the daemon at boot. Resolves `reachable` or `unreachable`: a socket
+ * nobody is listening on yet is not fatal, since the server retries it on every
+ * listing and status poll. Rejects only when a daemon answered and cannot be
+ * driven (another protocol, a reply that fails its schema, an RPC error), named
+ * with the socket path — herdr has no runtime fallback (plan D1).
  */
 export async function verifyHerdrStartup(
   client?: Pick<HerdrClient, "assertCompatible">,
   socketPath?: string,
-): Promise<void> {
+): Promise<"reachable" | "unreachable"> {
   const resolvedSocketPath = resolveSocketPath(socketPath);
   const target = client ?? createHerdrClient({ socketPath: resolvedSocketPath });
 
   try {
     await target.assertCompatible();
+    return "reachable";
   } catch (error) {
+    if (classifyHerdrFailure(error) === "unreachable") return "unreachable";
     const detail = error instanceof Error ? error.message : String(error);
     throw new Error(
       `herdr daemon unusable at ${resolvedSocketPath}: ${detail}. ` +
         `cc-mobile drives terminal sessions through herdr (protocol ${SUPPORTED_PROTOCOL}); ` +
         `start the daemon or set HERDR_SOCKET_PATH.`,
     );
+  }
+}
+
+/**
+ * Probes every side in parallel. An unreachable side is warned about once,
+ * naming the side and its socket; an incompatible one rejects.
+ */
+export async function verifyHerdrSides(
+  sides: Array<{
+    side: "cockpit" | "hangar";
+    socketPath: string;
+    client?: Pick<HerdrClient, "assertCompatible">;
+  }>,
+  options: { warn?: (message: string) => void } = {},
+): Promise<void> {
+  const warn = options.warn ?? ((message: string) => console.warn(`[herdr] ${message}`));
+  const results = await Promise.all(
+    sides.map(async ({ side, socketPath, client }) => ({
+      side,
+      socketPath,
+      status: await verifyHerdrStartup(client, socketPath),
+    })),
+  );
+  for (const { side, socketPath, status } of results) {
+    if (status === "unreachable") {
+      warn(`${side} herdr daemon unreachable at ${socketPath}; starting anyway and retrying.`);
+    }
   }
 }
