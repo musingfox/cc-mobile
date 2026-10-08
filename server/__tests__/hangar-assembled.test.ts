@@ -6,12 +6,14 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebSocket as WsClient } from "ws";
+import type { AgentProfileSource } from "../agents/profiles";
 import { type AppBackend, createApp } from "../app";
 import { HerdrTransportError } from "../herdr/errors";
+import { composeLaunchPrompt } from "../launch-prompt";
 import { createSubscriptionStore } from "../push/subscription-store";
 import { testServerConfig } from "./ws-harness";
 
@@ -34,6 +36,9 @@ type Frame = {
 function fakeDaemon(cwd: string) {
   const emitter: { emit?: (event: PaneEvent) => void } = {};
   const counts = { subscribe: 0, assertCompatible: 0, agentList: 0 };
+  const calls: Array<{ method: string; params: Record<string, unknown> }> = [];
+  const typed: Array<{ pane: string; text?: string; keys?: string[] }> = [];
+  let shellOnly = false;
   const behaviour = { listFails: false, compatibleFails: false };
   const agent = {
     terminal_id: "t1",
@@ -58,7 +63,7 @@ function fakeDaemon(cwd: string) {
       if (behaviour.listFails) throw new HerdrTransportError("connect ENOENT");
       return [agent];
     },
-    agentGet: async () => agent,
+    agentGet: async () => ({ ...agent, interactive_ready: true }),
     sessionSnapshot: async () => ({
       version: "0.7.5",
       protocol: 22,
@@ -67,15 +72,35 @@ function fakeDaemon(cwd: string) {
       agents: [],
     }),
     paneRead: async () => ({ text: "", revision: 1 }),
-    paneSendText: async () => {},
-    paneSendKeys: async () => {},
-    call: async (_method: string, params: unknown) => ({
-      type: "pane_process_info",
-      process_info: {
-        pane_id: (params as { pane_id: string }).pane_id,
-        foreground_processes: [{ pid: 1, argv0: "claude", argv: ["claude"] }],
-      },
-    }),
+    paneSendText: async (pane: string, text: string) => void typed.push({ pane, text }),
+    paneSendKeys: async (pane: string, keys: string[]) => void typed.push({ pane, keys }),
+    call: async (method: string, params: unknown) => {
+      calls.push({ method, params: params as Record<string, unknown> });
+      if (method === "workspace.create") {
+        shellOnly = true;
+        return {
+          type: "workspace_created",
+          workspace: { workspace_id: "w3V" },
+          root_pane: { pane_id: PANE },
+        };
+      }
+      if (method === "agent.start") {
+        shellOnly = false;
+        return { type: "agent_started" };
+      }
+      const process_info = shellOnly
+        ? {
+            pane_id: PANE,
+            shell_pid: 4100,
+            foreground_process_group_id: 4100,
+            foreground_processes: [{ pid: 4100, name: "zsh" }],
+          }
+        : {
+            pane_id: (params as { pane_id: string }).pane_id,
+            foreground_processes: [{ pid: 1, argv0: "claude", argv: ["claude"] }],
+          };
+      return { type: "pane_process_info", process_info };
+    },
     subscribeEvents: async (options: { onEvent?: (event: PaneEvent) => void }) => {
       counts.subscribe++;
       emitter.emit = options.onEvent;
@@ -89,7 +114,7 @@ function fakeDaemon(cwd: string) {
       data: { pane: { pane_id: PANE, agent_status, agent: "claude" } },
     });
   };
-  return { client, emitter, counts, behaviour, status };
+  return { client, emitter, counts, behaviour, status, calls, typed };
 }
 
 let tmp: string;
@@ -154,6 +179,10 @@ function rig(options: {
   cockpit?: ReturnType<typeof fakeDaemon>;
   hangar?: ReturnType<typeof fakeDaemon>;
   clock?: ReturnType<typeof manualClock>;
+  vaultRoot?: string;
+  launchToken?: string;
+  launchesDir?: string;
+  agentProfiles?: AgentProfileSource;
 }) {
   const cockpit = options.cockpit ?? fakeDaemon("/tmp/cockpitproj");
   const hangar = options.hangar ?? fakeDaemon("/tmp/hangarproj");
@@ -166,8 +195,15 @@ function rig(options: {
     pushAttemptLogPath: join(tmp, "attempts.jsonl"),
   };
   const app = createApp(
-    { ...testServerConfig, hangarSession: options.hangarSession },
     {
+      ...testServerConfig,
+      hangarSession: options.hangarSession,
+      ...(options.launchToken ? { launchToken: options.launchToken } : {}),
+      ...(options.vaultRoot ? { vaultRoot: options.vaultRoot } : {}),
+    },
+    {
+      ...(options.launchesDir ? { launchesDir: options.launchesDir } : {}),
+      ...(options.agentProfiles ? { agentProfiles: options.agentProfiles } : {}),
       pushStore: createSubscriptionStore({ path: join(tmp, "subs.json") }),
       ...paths,
       herdrClient: cockpit.client as never,
@@ -190,6 +226,14 @@ function rig(options: {
       },
     },
   );
+  const launch = (body: unknown) =>
+    app.handle(
+      new Request("http://localhost/api/launch", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: "Bearer tok" },
+        body: JSON.stringify(body),
+      }),
+    );
   const subscribe = () =>
     app.handle(
       new Request("http://localhost/api/push/subscribe", {
@@ -243,6 +287,7 @@ function rig(options: {
     backendRef,
     handle,
     paths,
+    launch,
     subscribe,
     phone,
   };
@@ -477,5 +522,77 @@ describe("HangarWatchedFromBoot", () => {
 
     expect(r.handle.fire).toBeUndefined();
     expect(r.sends).toHaveLength(0);
+  });
+});
+
+describe("AssembledLaunchOnHangarDaemon", () => {
+  const CARD = "# Task\nCARD-BODY do the thing\n";
+  const body = {
+    cwd: "/tmp",
+    cardPath: "pm/cc-mobile/tasks/card.md",
+    vault: "obsidian",
+    project: "cc-mobile",
+    profileId: "claude-auto",
+  };
+  const claudeAuto = {
+    id: "claude-auto",
+    label: "auto",
+    kind: "claude" as const,
+    args: ["--permission-mode", "auto"],
+  };
+
+  function launchRig(hangarSession: string | null) {
+    const vault = join(tmp, "obsidian");
+    mkdirSync(join(vault, "pm", "cc-mobile", "tasks"), { recursive: true });
+    writeFileSync(join(vault, body.cardPath), CARD);
+    return rig({
+      hangarSession,
+      vaultRoot: vault,
+      launchToken: "tok",
+      launchesDir: join(tmp, "launches"),
+      agentProfiles: { list: () => [claudeAuto] },
+    });
+  }
+  const methods = (d: ReturnType<typeof fakeDaemon>) => d.calls.map((c) => c.method);
+
+  test("T1: the pane is created and started on the hangar daemon only", async () => {
+    const r = launchRig("fleet");
+    const res = await r.launch(body);
+    expect(res.status).toBe(201);
+    const { sessionId, claudeUuid } = await res.json();
+    expect(sessionId).toBe(HANGAR_KEY);
+    const create = r.hangar.calls.find((c) => c.method === "workspace.create");
+    expect(create?.params.label).toBe(`ccm-${claudeUuid}`);
+    const start = r.hangar.calls.find((c) => c.method === "agent.start");
+    expect(start?.params.args).toEqual(["--session-id", claudeUuid, "--permission-mode", "auto"]);
+    expect(methods(r.cockpit)).not.toContain("workspace.create");
+    expect(methods(r.cockpit)).not.toContain("agent.start");
+  });
+
+  test("T2: the template and card are typed into the hangar pane, then Enter", async () => {
+    const r = launchRig("fleet");
+    await r.launch(body);
+    expect(r.hangar.typed).toEqual([
+      { pane: PANE, text: composeLaunchPrompt(CARD) },
+      { pane: PANE, keys: ["Enter"] },
+    ]);
+    expect(r.cockpit.typed).toEqual([]);
+  });
+
+  test("T3: the binding names the hangar key", async () => {
+    const r = launchRig("fleet");
+    const { claudeUuid } = await (await r.launch(body)).json();
+    const file = join(tmp, "launches", `${claudeUuid}.json`);
+    expect(existsSync(file)).toBe(true);
+    expect(JSON.parse(readFileSync(file, "utf8")).paneId).toBe(HANGAR_KEY);
+  });
+
+  test("T4: with no hangar session the launch is refused and neither daemon creates", async () => {
+    const r = launchRig(null);
+    const res = await r.launch(body);
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: "hangar_unavailable" });
+    expect(methods(r.cockpit)).not.toContain("workspace.create");
+    expect(methods(r.hangar)).not.toContain("workspace.create");
   });
 });
