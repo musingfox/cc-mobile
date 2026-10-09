@@ -191,7 +191,9 @@ async function create({
       `${join(repo, ".claude", "worktrees")} resolves to ${parent}, outside the repo or the allowed roots`,
     );
   }
-  const prefix = (await git(at, ["rev-parse", "--show-prefix"])).out;
+  const shown = await git(at, ["rev-parse", "--show-prefix"]);
+  if (!shown.ok) return refused("worktree_failed", shown.err);
+  const prefix = shown.out;
   const branch = `fleet/${cardName}`;
   const path = join(repo, ".claude", "worktrees", cardName);
   if (!(await git(repo, ["check-ref-format", "--branch", branch])).ok) {
