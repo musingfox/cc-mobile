@@ -1,15 +1,6 @@
 import { constants, existsSync } from "node:fs";
-import {
-  appendFile,
-  copyFile,
-  lstat,
-  mkdir,
-  readdir,
-  readFile,
-  realpath,
-  rm,
-} from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { appendFile, copyFile, lstat, mkdir, readFile, realpath, rm } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { expandPath, isWithinRoot, validateAllowedPath } from "./path-utils";
 
 /** Where a card's worktree lives; also what `git worktree remove` is handed. */
@@ -115,14 +106,6 @@ async function ensureIgnored(repo: string, path: string): Promise<void> {
   await run;
 }
 
-const adminDir = async (repo: string) => {
-  const common = await git(repo, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
-  if (!common.ok) throw new Error(common.err);
-  return join(common.out, "worktrees");
-};
-const adminEntries = async (repo: string) =>
-  new Set(await readdir(await adminDir(repo)).catch(() => []));
-
 /** Undoes a checkout this launch completed: the path is its own beyond doubt. */
 async function discardCheckout(repo: string, path: string, branch: string) {
   try {
@@ -135,39 +118,17 @@ async function discardCheckout(repo: string, path: string, branch: string) {
 }
 
 /**
- * Undoes a `git worktree add` that failed after this launch's `git branch`.
- * Nothing at `path` is assumed to be this launch's: it removes only an admin
- * entry that appeared since `before` and either points at `path` or was never
- * finished (no `gitdir`, and no `locked` — git holds that while another add is
- * initializing), and the checkout only when its `.git` names such an entry.
- * Never `git worktree remove` or `git worktree prune`: both act on whatever is
- * registered, including the user's own worktree whose directory is merely
- * absent right now (an unmounted disk). The branch goes whatever else throws.
+ * After a failed `git worktree add`, deletes only the branch this launch's
+ * `git branch` made, and lets git refuse when a worktree has it checked out.
+ * Whatever else the add left — a directory, an admin entry — stays: three
+ * review rounds each found a way for "did this launch make it?" to be answered
+ * wrongly and delete the user's own worktree, so the question is not asked.
+ * Returns what may be left, for a person or recycling to clear.
  */
-async function discardFailedAdd(repo: string, path: string, branch: string, before: Set<string>) {
-  try {
-    const admin = await adminDir(repo);
-    const fresh = [...(await adminEntries(repo))].filter((id) => !before.has(id));
-    const entry = await lstat(path).catch(() => null);
-    const link = entry?.isDirectory()
-      ? await readFile(join(path, ".git"), "utf8").catch(() => "")
-      : "";
-    const linked = link.startsWith("gitdir: ") ? resolve(path, link.slice(8).trim()) : null;
-    if (linked !== null && fresh.some((id) => join(admin, id) === linked)) {
-      await rm(path, { recursive: true, force: true });
-    }
-    for (const id of fresh) {
-      const dir = join(admin, id);
-      const gitdir = await readFile(join(dir, "gitdir"), "utf8").catch(() => null);
-      const unfinished = gitdir === null && !existsSync(join(dir, "locked"));
-      if (unfinished || gitdir?.replace(/\n$/, "") === join(path, ".git")) {
-        await rm(dir, { recursive: true, force: true });
-      }
-    }
-  } catch {
-  } finally {
-    await git(repo, ["branch", "-D", branch]).catch(() => {});
-  }
+async function abandonFailedAdd(repo: string, path: string, branch: string): Promise<string> {
+  const deleted = await git(repo, ["branch", "-D", branch]).catch(() => null);
+  const kept = deleted?.ok ? "" : `; branch ${branch} kept (${deleted?.err ?? "git failed"})`;
+  return `May be left for recycling: ${path} and its entry under .git/worktrees${kept}`;
 }
 
 /**
@@ -264,21 +225,21 @@ async function create({
   // cc-mobile can have taken the path since, and it is never touched. Any
   // throw before the add (a parent it may not search, a git that fails)
   // drops the branch, which nothing else would.
-  let before: Set<string>;
   try {
     if (await occupied(repo, path)) {
       await git(repo, ["branch", "-D", branch]).catch(() => {});
       return refused("worktree_exists", `${path} already exists`);
     }
-    before = await adminEntries(repo);
   } catch (error) {
     await git(repo, ["branch", "-D", branch]).catch(() => {});
     return refused("worktree_failed", String(error));
   }
   const added = await git(repo, ["worktree", "add", path, branch]);
   if (!added.ok) {
-    await discardFailedAdd(repo, path, branch, before);
-    return refused("worktree_failed", added.err);
+    return refused(
+      "worktree_failed",
+      `${added.err}\n${await abandonFailedAdd(repo, path, branch)}`,
+    );
   }
   try {
     await ensureIgnored(repo, path);
