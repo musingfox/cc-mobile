@@ -939,3 +939,36 @@ describe("UnattendedDenyOff", () => {
     expect(h.keys).toEqual([{ pane: PANE, keys: ["esc"] }]);
   });
 });
+
+describe("CountdownAbsentWhenDenyOff", () => {
+  test("T1: the card carries no autoDenyMs key", async () => {
+    const { clock } = countingClock();
+    const h = harness({ origin: "self", clock, unattendedDeny: false });
+    await h.permission.onStatus(PANE, "blocked", "claude");
+    const frame = h.sent[0] as { type: string; requestId: string; options: unknown[] };
+    expect(frame.type).toBe("permission_request");
+    expect(frame.requestId).toBe("r1");
+    expect(frame.options.length).toBeGreaterThan(0);
+    expect("autoDenyMs" in frame).toBe(false);
+  });
+
+  test("T2: the reconnect lookup has no countdown to report", async () => {
+    const { clock } = countingClock();
+    const h = harness({ origin: "self", clock, unattendedDeny: false });
+    await h.permission.onStatus(PANE, "blocked", "claude");
+    await clock.advance(30_000);
+    expect(h.permission.autoDenyMsFor("r1")).toBeUndefined();
+  });
+
+  test("T3: a re-raise after pause and resume carries no autoDenyMs either", async () => {
+    const { clock } = countingClock();
+    const h = harness({ origin: "self", clock, unattendedDeny: false });
+    await h.permission.onStatus(PANE, "blocked", "claude");
+    h.permission.pause();
+    await h.permission.resume();
+    const frame = h.sent[1] as { type: string; requestId: string };
+    expect(frame.type).toBe("permission_request");
+    expect(frame.requestId).toBe("r1");
+    expect("autoDenyMs" in frame).toBe(false);
+  });
+});
