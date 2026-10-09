@@ -482,6 +482,29 @@ describe("PromptStartConfirmation retry Enter", () => {
     expect(pane.extraEnters()).toBe(0);
   });
 
+  test("a sample the window closes on unanswered presses nothing (review round 3, repro 1)", async () => {
+    const hang = () => new Promise<never>(() => {});
+    const cases: ((n: number) => Promise<{ agent_status?: string }>)[] = [
+      async (n) => (n === 1 ? { agent_status: "idle" } : hang()),
+      async (n) => (n === 2 ? hang() : { agent_status: "idle" }),
+    ];
+    for (const status of cases) {
+      let n = 0;
+      const pane = stalledPane(
+        fixture("fixtures", "claude-unsent-launch-prompt.txt"),
+        () => status(++n),
+        { startWindowMs: 100 },
+      );
+      expect(
+        await pane.send("你正在被無人值守地派工，操作者可能不在終端機前。請遵守三條規則："),
+      ).toEqual({
+        ok: false,
+        code: "prompt_not_started",
+      });
+      expect(pane.extraEnters()).toBe(0);
+    }
+  });
+
   test("an unknown or missing status presses nothing", async () => {
     for (const reported of [{ agent_status: "unknown" }, {}]) {
       const pane = stalledPane(
