@@ -19,7 +19,7 @@ cc-mobile 今天只連一個 socket，路徑由 `HERDR_SOCKET_PATH` 決定，未
 - **只有啟動那一刻會退出。** `server/index.ts:15-20` 在 `listen` 之前呼叫 `verifyHerdrStartup`，失敗就 `process.exit(1)`。pm2 沒有重啟延遲，所以 2026-09-09 到 09-12 以及 10-01 出現崩潰循環。pm2 log 記到 3,550,439 次結束碼 1，error log 最後一段全是 `herdr daemon unusable ... connect failed`（vault 背景文件，「第二階段」的查證段落）。
 - **啟動之後，事件訂閱失敗不會讓程序退出。** `pane-events.ts` 的 `start()` 不會 reject，訂閱失敗時仍然啟動輪詢（`server/herdr/pane-events.ts:466-505`）。執行期間 socket 整個消失時，其他請求路徑怎麼表現則**未驗證**。
 - **連不上和協定不相容是兩種失敗。** `assertCompatible` 先 `ping`，再比對 `protocol`，不符就丟 `HerdrProtocolError`（`server/herdr/client.ts:109-118`）。上游曾經改過協定號，結果開機就失敗。
-- **pane id 只在同一個伺服器內唯一。** 兩邊都可能有 `w1:p1`。伺服器和手機都把 session 鍵當成不透明字串，沒有任何地方解析它的結構。但手機用它當 localStorage 的鍵（`client/services/draft-persistence.ts:2`、`client/services/session-persistence.ts:98`），伺服器用它當上傳目錄名稱（`server/upload-manager.ts:13`）。
+- **pane id 只在同一個伺服器內唯一。** 兩邊都可能有 `w1:p1`。伺服器和手機都把 session 鍵當成不透明字串，沒有任何地方解析它的結構。但手機用它當 localStorage 的鍵（`client/services/draft-persistence.ts:2`、`client/services/session-persistence.ts:98`），伺服器用它當上傳目錄名稱（`server/upload-manager.ts:15`）。
 - **推播範圍今天是一個全域值。** `CC_MOBILE_PUSH_SCOPE` 只能是 `phone-last`（預設）或 `all`（`server/config.ts:91-96`）。`phone-last` 由 `server/push/phone-driven.ts` 判斷：只有最近一回合是 cc-mobile 送出提示的 pane 才推播。
 
 ## 決策
@@ -125,3 +125,17 @@ cc-mobile 重啟後，第一次看到某個機庫 pane 的 `done`，只記下「
 決定三說範圍跟著 socket 走，理由之一是「卡片和 session 的綁定還沒有實作（`launch-into-hangar`）」。這個前提已經不成立：`POST /api/launch` 只在機庫開 session，並在送出第一則提示前寫好綁定檔 `~/.claude-mobile/launches/<claudeUuid>.json`（見 CLAUDE.md 的 Launch API 一節）。
 
 決定本身不變，推播範圍仍然跟著 socket 走。這次沒有改成跟著卡片，也沒有重新權衡這個選擇；由 `/api/launch` 開出的機庫 session 都有綁定檔，不是它開的機庫 pane 則沒有，照決定三一樣推播。
+
+## 2026-10-09 增修：上傳目錄改用編碼後的鍵，機庫名稱收緊
+
+### 更正：上傳檢查不再擋掉含 `:` 的鍵
+
+2026-10-08 的「更正分隔字元的理由」說，上傳檢查 `/^[A-Za-z0-9_-]+$/` 會擋掉任何含 `:` 的鍵。vault 的卡 `upload-rejects-pane-session-keys` 修完之後，這句話已經不成立。那條規則早於 #29，它擋掉的不只是機庫的鍵，也包括每一個駕駛艙的鍵，所以手機上傳圖片一律失敗。
+
+現在上傳檢查接受 `[A-Za-z0-9_@:-]`（`server/upload-manager.ts:8`），也就是舊的字元集加上 pane id 和機庫鍵各自的分隔字元。通過檢查的鍵再用 percent-encoding（`encodeURIComponent`）轉成目錄名稱（`server/upload-manager.ts:15`）：`w1:p1` 變成 `w1%3Ap1`，`fleet@w1:p1` 變成 `fleet%40w1%3Ap1`。所以機庫的鍵現在會走到建立目錄這一步，但落地的目錄名稱不含 `:` 和 `@`。含 `.`、`/`、`\` 或空字串的鍵仍然被拒絕。
+
+那一節的結論不變：`/` 仍然不能當分隔字元，理由是那一節第二段寫的，與上傳檢查無關。
+
+### 機庫名稱只接受 `[A-Za-z0-9_-]+`
+
+機庫的鍵是 `<name>@<pane_id>`，名稱裡只要有上傳檢查字元集以外的字元，這個機庫的 pane 就無法上傳。`parseHangarSession` 原本只拒絕 `@`、`:`、`/`、`\`、空白、`.` 和 `..`，所以 `fleet.v2`、`機庫` 這類名稱會被接受，開出來的 pane 卻上傳不了。現在名稱只接受 `[A-Za-z0-9_-]+`（`server/config.ts` 的 `parseHangarSession`）。不合規的名稱和以前一樣在啟動時丟錯，錯誤訊息寫出變數名稱和值。目前使用的 `fleet` 不受影響。
