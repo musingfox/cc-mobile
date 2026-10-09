@@ -216,26 +216,70 @@ describe("LaunchCardWorktreeOnRealGit", () => {
     expect(userCheckout()).toEqual(before);
   });
 
-  test("a worktree add that fails after the branch exists leaves nothing behind", async () => {
+  // A failed checkout deletes only the branch it made, and never a directory
+  // or an admin entry: "did this launch make it?" was answered wrongly in
+  // three review rounds, each time at the user's expense.
+  const checkoutFailure = async (r: Response) => {
+    expect(r.status).toBe(500);
+    const body = await r.json();
+    expect(body.error).toBe("worktree_failed");
+    expect(body.message).toContain(
+      `May be left for recycling: ${join(repo, ".claude", "worktrees")}`,
+    );
+    return body.message as string;
+  };
+
+  test("a checkout git cannot finish deletes its branch and names what may remain", async () => {
     const s = setup();
     // `@` passes check-ref-format, then git cannot find the worktree it made.
-    const r = await s.post("@");
-    expect(r.status).toBe(500);
-    expect((await r.json()).error).toBe("worktree_failed");
-    leftNothing(s);
+    await checkoutFailure(await s.post("@"));
+    expect(fleetBranches()).toBe("");
+    expect(s.creates).toEqual([]);
     expect((await s.post("@")).status).toBe(500);
   });
 
-  test("a failing post-checkout hook leaves nothing behind, and a retry launches", async () => {
-    mkdirSync(join(repo, ".hooks"));
-    writeFileSync(join(repo, ".hooks", "post-checkout"), "#!/bin/sh\nexit 1\n");
-    chmodSync(join(repo, ".hooks", "post-checkout"), 0o755);
-    git(repo, "config", "core.hooksPath", ".hooks");
-    const s = setup();
-    expect((await s.post("card-a")).status).toBe(500);
-    leftNothing(s);
-    git(repo, "config", "--unset", "core.hooksPath");
-    expect((await s.post("card-a")).status).toBe(201);
+  for (const relative of [false, true]) {
+    test(`a failing post-checkout hook leaves the checkout and its branch, and says so${relative ? " (relative paths)" : ""}`, async () => {
+      if (relative) git(repo, "config", "worktree.useRelativePaths", "true");
+      mkdirSync(join(repo, ".hooks"));
+      writeFileSync(join(repo, ".hooks", "post-checkout"), "#!/bin/sh\nexit 1\n");
+      chmodSync(join(repo, ".hooks", "post-checkout"), 0o755);
+      git(repo, "config", "core.hooksPath", ".hooks");
+      const s = setup();
+      const message = await checkoutFailure(await s.post("card-a"));
+      // git refuses to delete a branch a worktree has checked out, and is not overridden.
+      expect(message).toContain("branch fleet/card-a kept");
+      const at = join(repo, ".claude", "worktrees", "card-a");
+      expect(worktreePaths()).toEqual([repo, at]);
+      expect(fleetBranches()).toBe("+ fleet/card-a");
+      expect(s.creates).toEqual([]);
+      git(repo, "config", "--unset", "core.hooksPath");
+      expect((await s.post("card-a")).status).toBe(409);
+    });
+  }
+
+  test("a worktree someone else makes at the card's path mid-checkout survives intact", async () => {
+    // A git shim on PATH plays the other actor, just before this launch's own add.
+    const real = Bun.which("git") as string;
+    const shim = join(tmp, "shim");
+    mkdirSync(shim);
+    writeFileSync(
+      join(shim, "git"),
+      `#!/bin/bash\nif [ "$3" = worktree ] && [ "$4" = add ] && [ "$6" = fleet/card-a ]; then "${real}" -C "$2" worktree add -q -b theirs "$5" main >/dev/null 2>&1; echo mine > "$5/staged.txt"; "${real}" -C "$5" add staged.txt; fi\nexec "${real}" "$@"\n`,
+    );
+    chmodSync(join(shim, "git"), 0o755);
+    const path = process.env.PATH;
+    process.env.PATH = `${shim}:${path}`;
+    try {
+      const s = setup();
+      await checkoutFailure(await s.post("card-a"));
+    } finally {
+      process.env.PATH = path;
+    }
+    const at = join(repo, ".claude", "worktrees", "card-a");
+    expect(git(at, "status", "--porcelain")).toBe("A  staged.txt\n");
+    expect(git(at, "branch", "--show-current").trim()).toBe("theirs");
+    expect(fleetBranches()).toBe("");
   });
 
   test("concurrent launches: one card wins once, and the exclude line is written once", async () => {
@@ -377,22 +421,6 @@ describe("LaunchCardWorktreeOnRealGit", () => {
       expect(adminEntries()).toEqual([]);
     } finally {
       chmodSync(parent, 0o755);
-    }
-  });
-
-  test("the branch goes even when cleaning the checkout throws", async () => {
-    // The hook makes the checkout's parent unsearchable, then fails the add.
-    mkdirSync(join(repo, ".hooks"));
-    writeFileSync(join(repo, ".hooks", "post-checkout"), "#!/bin/sh\nchmod 000 ..\nexit 1\n");
-    chmodSync(join(repo, ".hooks", "post-checkout"), 0o755);
-    git(repo, "config", "core.hooksPath", ".hooks");
-    try {
-      const s = setup();
-      expect((await s.post("card-a")).status).toBe(500);
-      expect(fleetBranches()).toBe("");
-      expect(adminEntries()).toEqual([]);
-    } finally {
-      chmodSync(join(repo, ".claude", "worktrees"), 0o755);
     }
   });
 

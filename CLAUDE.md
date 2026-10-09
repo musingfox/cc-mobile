@@ -564,12 +564,19 @@ reused, because two agents in one checkout is the collision this exists to
 prevent. A `cwd` that git reports is in no repo launches in place, as before.
 
 A refusal before git writes leaves the repo as it was. A failed checkout
-removes what that launch made — its branch, always, and the admin entry git left
-for it and the directory whose `.git` names that entry — but nothing else: not a
-branch a concurrent launch made first, and never through `git worktree remove`
-or `git worktree prune`, which act on whatever is registered, the user's own
-temporarily absent worktrees included. A session or binding failure after the worktree exists removes the
-worktree and its branch; a `prompt_failed` keeps both, as it keeps the binding.
+(`git worktree add`) deletes only the branch that launch's own `git branch`
+made, with `git branch -D`, and lets git refuse when a worktree has it checked
+out. It deletes no directory and no admin entry under `.git/worktrees`: whatever
+the add left stays, and the `500 worktree_failed` message names the path that
+may remain and any branch git kept, for a person or recycling to clear. Until
+then a re-dispatch of that card is `409 worktree_exists`. Deciding automatically
+whether a leftover was that launch's own was tried for three review rounds,
+and each round found a case where it deleted the user's own worktree (a
+registered one whose directory was absent, a dangling symlink, another actor's
+checkout made mid-add) — so it is not attempted. A session or binding failure
+after the checkout succeeded removes the worktree and its branch, since that
+path is the launch's beyond doubt; a `prompt_failed` keeps both, as it keeps
+the binding.
 Removing a finished card's worktree is recycling's job, not the launch's.
 
 Before anything is typed the server writes a binding file,
