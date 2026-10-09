@@ -2,12 +2,15 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   chmodSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -329,5 +332,96 @@ describe("LaunchCardWorktreeOnRealGit", () => {
     const inside = await s.post("card-b", join(repo, ".git"));
     expect(inside.status).toBe(500);
     expect(s.creates).toEqual([]);
+  });
+  describe("something the user owns at the card's path", () => {
+    const at = () => join(repo, ".claude", "worktrees", "card-a");
+    test("a registered worktree whose directory is absent is 409, and survives intact", async () => {
+      git(repo, "worktree", "add", "-q", "-b", "users-own", at(), "main");
+      writeFileSync(join(at(), "staged.txt"), "mine\n");
+      git(at(), "add", "staged.txt");
+      const away = join(tmp, "unmounted");
+      renameSync(at(), away);
+      const admin = adminEntries();
+      const s = setup();
+      const r = await s.post("card-a");
+      expect(r.status).toBe(409);
+      expect((await r.json()).error).toBe("worktree_exists");
+      expect(s.creates).toEqual([]);
+      expect(fleetBranches()).toBe("");
+      expect(adminEntries()).toEqual(admin);
+      renameSync(away, at());
+      expect(git(at(), "status", "--porcelain")).toBe("A  staged.txt\n");
+    });
+    test("a dangling symlink is 409, and is left in place", async () => {
+      mkdirSync(join(repo, ".claude", "worktrees"), { recursive: true });
+      symlinkSync(join(tmp, "absent-volume"), at());
+      const s = setup();
+      const r = await s.post("card-a");
+      expect(r.status).toBe(409);
+      expect(lstatSync(at()).isSymbolicLink()).toBe(true);
+      expect(fleetBranches()).toBe("");
+      expect(adminEntries()).toEqual([]);
+    });
+  });
+
+  test("a worktrees directory the server cannot search is 500 before git writes", async () => {
+    const parent = join(repo, ".claude", "worktrees");
+    mkdirSync(parent, { recursive: true });
+    chmodSync(parent, 0o000);
+    try {
+      const s = setup();
+      const r = await s.post("card-a");
+      expect(r.status).toBe(500);
+      expect((await r.json()).error).toBe("worktree_failed");
+      expect(fleetBranches()).toBe("");
+      expect(adminEntries()).toEqual([]);
+    } finally {
+      chmodSync(parent, 0o755);
+    }
+  });
+
+  test("the branch goes even when cleaning the checkout throws", async () => {
+    // The hook makes the checkout's parent unsearchable, then fails the add.
+    mkdirSync(join(repo, ".hooks"));
+    writeFileSync(join(repo, ".hooks", "post-checkout"), "#!/bin/sh\nchmod 000 ..\nexit 1\n");
+    chmodSync(join(repo, ".hooks", "post-checkout"), 0o755);
+    git(repo, "config", "core.hooksPath", ".hooks");
+    try {
+      const s = setup();
+      expect((await s.post("card-a")).status).toBe(500);
+      expect(fleetBranches()).toBe("");
+      expect(adminEntries()).toEqual([]);
+    } finally {
+      chmodSync(join(repo, ".claude", "worktrees"), 0o755);
+    }
+  });
+
+  test("a repo whose name ends in a space gets the worktree, not its namesake beside it", async () => {
+    const spaced = join(tmp, "demo ");
+    mkdirSync(spaced);
+    git(spaced, "init", "-q", "-b", "main");
+    writeFileSync(join(spaced, "f.txt"), "x\n");
+    git(spaced, "add", ".");
+    git(spaced, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "chore: init");
+    const s = setup();
+    expect((await s.post("card-a", spaced)).status).toBe(201);
+    expect(s.creates[0].cwd).toBe(join(spaced, ".claude", "worktrees", "card-a"));
+    expect(git(spaced, "branch", "--list", "fleet/*").trim()).toBe("+ fleet/card-a");
+    expect(fleetBranches()).toBe("");
+    expect(worktreePaths()).toEqual([repo]);
+  });
+
+  test("a symlinked worktrees directory pointing outside the allowed roots is 403", async () => {
+    const outside = join(tmp, "outside");
+    mkdirSync(outside);
+    mkdirSync(join(repo, ".claude"));
+    symlinkSync(outside, join(repo, ".claude", "worktrees"));
+    const s = setup({ allowedRoots: [repo] });
+    const r = await s.post("card-a");
+    expect(r.status).toBe(403);
+    expect((await r.json()).error).toBe("path_not_allowed");
+    expect(readdirSync(outside)).toEqual([]);
+    expect(fleetBranches()).toBe("");
+    expect(excludeLines()).toBe(0);
   });
 });

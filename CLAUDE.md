@@ -528,10 +528,14 @@ profile of a non-claude kind is `400 unsupported_kind`. The request's own
 `403 path_not_allowed`), then its profile (`400 unknown_profile`). When `cwd` is
 inside a git repo the worktree checks follow, all before git writes anything: a
 repo git refuses to read (dubious ownership, a broken `.git`) is
-`500 worktree_failed`; a repo top level outside every allowed root is
+`500 worktree_failed`; a repo top level outside every allowed root, or a
+`.claude/worktrees` that resolves (through a symlinked `.claude` or
+`.claude/worktrees`) outside the repo or the allowed roots, is
 `403 path_not_allowed`; a card name that is no valid branch is
-`400 invalid_branch_name`; an existing branch or worktree path is
-`409 worktree_exists`; no base branch is `400 no_base_branch`, naming the
+`400 invalid_branch_name`; an existing branch, or anything at the worktree path
+— an entry of any kind, a dangling symlink, or a registered worktree whose
+directory is absent — is `409 worktree_exists`, and a path the server cannot
+look at is `500 worktree_failed`; no base branch is `400 no_base_branch`, naming the
 branches tried; a `cwd` subdirectory the base branch does not have (untracked,
 ignored, or only on the user's branch) is `400 cwd_not_on_base`, quoting the
 `cwd` as sent. Only then does git write: a concurrent launch that took the
@@ -560,10 +564,11 @@ reused, because two agents in one checkout is the collision this exists to
 prevent. A `cwd` that git reports is in no repo launches in place, as before.
 
 A refusal before git writes leaves the repo as it was. A failed checkout
-removes what that launch made — its branch, its directory and the admin entry
-git left for it, but not a branch a concurrent launch made first, and not via
-`git worktree prune`, which would also drop the user's own temporarily absent
-worktrees. A session or binding failure after the worktree exists removes the
+removes what that launch made — its branch, always, and the admin entry git left
+for it and the directory whose `.git` names that entry — but nothing else: not a
+branch a concurrent launch made first, and never through `git worktree remove`
+or `git worktree prune`, which act on whatever is registered, the user's own
+temporarily absent worktrees included. A session or binding failure after the worktree exists removes the
 worktree and its branch; a `prompt_failed` keeps both, as it keeps the binding.
 Removing a finished card's worktree is recycling's job, not the launch's.
 
