@@ -127,7 +127,17 @@ describe("parseServerConfig", () => {
       expect(() => parse("fl@eet")).toThrow(/CC_MOBILE_HANGAR_SESSION/);
       expect(() => parse("fl@eet")).toThrow(/fl@eet/);
     });
-    test.each(["a:b", "a/b", "a\\b", "my fleet", "a\tb", ".", ".."])("%j throws", (v) => {
+    test.each([
+      "a:b",
+      "a/b",
+      "a\\b",
+      "my fleet",
+      "a\tb",
+      ".",
+      "..",
+      "fleet.v2",
+      "機庫",
+    ])("%j throws", (v) => {
       expect(() => parse(v)).toThrow(/CC_MOBILE_HANGAR_SESSION/);
     });
   });
