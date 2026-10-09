@@ -66,6 +66,8 @@ export interface HerdrBackendOptions {
   readinessPollMs?: number;
   /** Delay between samples while a launch confirms its prompt started. */
   startPollMs?: number;
+  /** How long each Enter of that confirmation is given, by the clock. */
+  startWindowMs?: number;
   /** The status poll's tick, so a test can watch a whole back-off tier go by. */
   statusPollIntervalMs?: number;
   /**
@@ -265,6 +267,7 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
     // (live 2026-10-02) — so the cursor is taken here, before the prompt lands.
     beforeInject: (paneId) => delivery.attach(paneId),
     startPollMs: options.startPollMs,
+    startWindowMs: options.startWindowMs,
   });
 
   async function listOutcome(): Promise<SessionListingOutcome> {

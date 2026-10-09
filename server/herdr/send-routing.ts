@@ -19,7 +19,7 @@
  */
 
 import type { TerminalSendOutcome } from "../terminal-backend";
-import { composerHasTypedText, promptBoxBody } from "./prompt-box";
+import { bottomComposerOpensWith, composerHasTypedText } from "./prompt-box";
 
 export type ClientSink = (msg: Record<string, unknown>) => void;
 
@@ -54,22 +54,41 @@ export interface HerdrSendRoutingOptions {
   beforeInject?: (paneId: string) => Promise<void>;
   /** Delay between `agent_status` samples while confirming a start (default 250ms). */
   startPollMs?: number;
+  /** How long each Enter is given to show a start, by the clock (default 5s). */
+  startWindowMs?: number;
 }
 
 /** Statuses in which claude is waiting for input rather than doing something. */
 const READY_STATUSES = new Set(["idle", "done"]);
 
 const DEFAULT_START_POLL_MS = 250;
-/** Samples taken after each Enter: 5s at the default poll, herdr's stall window. */
-const START_POLLS_PER_ENTER = 20;
+/** herdr's own stall window for `agent.prompt`. */
+const DEFAULT_START_WINDOW_MS = 5_000;
 /** A swallowed Enter takes two more to send: one strips it, the next submits. */
 const START_ENTER_RETRIES = 2;
+/** The cap on the screen read and on each extra Enter, so the total stays bounded. */
+const START_IO_TIMEOUT_MS = 1_000;
 /**
  * Rows read when looking for the unsent prompt. A card fills a composer taller
  * than the 40-row screen, so the box's top rule is only in the scrollback: the
  * detection read found no box at all (live 2026-10-09), `recent` found it.
  */
 const COMPOSER_READ_LINES = 400;
+
+/** `work`, or a rejection once `ms` has passed; the timer never outlives it. */
+async function within<T>(ms: number, work: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`no answer within ${ms}ms`)), ms);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export interface HerdrSendParams {
   claudeUuid: string;
@@ -82,6 +101,7 @@ export function createHerdrSendRouting(options: HerdrSendRoutingOptions) {
   const listDrivablePanes = options.listDrivablePanes ?? (async () => []);
   const beforeInject = options.beforeInject ?? (async () => {});
   const startPollMs = options.startPollMs ?? DEFAULT_START_POLL_MS;
+  const startWindowMs = options.startWindowMs ?? DEFAULT_START_WINDOW_MS;
 
   const clientSinks = new Map<string, ClientSink>();
   const ownerToUuids = new Map<unknown, Set<string>>();
@@ -170,33 +190,58 @@ export function createHerdrSendRouting(options: HerdrSendRoutingOptions) {
    *
    * Started is any move away from the status the pane had before the prompt,
    * `unknown` aside: a turn can run and settle to `done` between two samples.
-   * A failed sample proves nothing either way, so the next Enter is decided by
-   * the screen alone — pressed only while the composer still holds the text,
-   * never on a screen with no composer (a permission, trust or menu prompt,
-   * whose highlighted option it would pick). A composer the text has left is
-   * a submit whose status has not caught up.
+   * An extra Enter is pressed only on evidence that nothing started: every
+   * sample of the window answered, and answered that same status, and the
+   * bottom of the screen is claude's composer opening with this prompt's first
+   * line. A failed, `unknown` or missing sample, an unknown starting status, or
+   * any other screen (a question, permission, trust or menu dialog, whose
+   * highlighted option an Enter would pick) presses nothing and fails. A start
+   * seen later in the same window still counts.
+   *
+   * Each window is measured by the clock, and every call in it is cut off at
+   * its deadline, so a slow daemon cannot stretch the wait.
    */
-  async function confirmStarted(paneId: string, before: string): Promise<boolean> {
+  async function confirmStarted(
+    paneId: string,
+    before: string | undefined,
+    content: string,
+  ): Promise<boolean> {
+    const baseline = before ?? "idle";
     for (let enter = 0; ; enter += 1) {
-      for (let poll = 0; poll < START_POLLS_PER_ENTER; poll += 1) {
-        await new Promise((resolve) => setTimeout(resolve, startPollMs));
+      const deadline = Date.now() + startWindowMs;
+      let unchanged = before !== undefined;
+      let answered = 0;
+      for (;;) {
+        const left = deadline - Date.now();
+        if (left <= 0) break;
+        let status: unknown;
         try {
-          const status = (await client.agentGet(paneId)).agent_status;
-          if (typeof status === "string" && status !== before && status !== "unknown") return true;
-        } catch {}
+          status = (await within(left, client.agentGet(paneId))).agent_status;
+        } catch {
+          // Cut off by the window's own end: that is the window closing, not a failure.
+          if (Date.now() >= deadline) break;
+          status = undefined;
+        }
+        if (typeof status !== "string" || status === "unknown") unchanged = false;
+        else if (status !== baseline) return true;
+        else answered += 1;
+        const pause = Math.min(startPollMs, deadline - Date.now());
+        if (pause > 0) await new Promise((resolve) => setTimeout(resolve, pause));
       }
+      if (!unchanged || answered === 0 || enter === START_ENTER_RETRIES) return false;
       let screen: string;
       try {
-        screen = (
-          await client.paneRead({ pane_id: paneId, source: "recent", lines: COMPOSER_READ_LINES })
-        ).text;
+        const read = client.paneRead({
+          pane_id: paneId,
+          source: "recent",
+          lines: COMPOSER_READ_LINES,
+        });
+        screen = (await within(START_IO_TIMEOUT_MS, read)).text;
       } catch {
         return false;
       }
-      if (promptBoxBody(screen) === null) return false;
-      if (!composerHasTypedText(screen)) return true;
-      if (enter === START_ENTER_RETRIES) return false;
-      await client.paneSendKeys(paneId, ["Enter"]);
+      if (!bottomComposerOpensWith(screen, content.split("\n")[0] ?? "")) return false;
+      await within(START_IO_TIMEOUT_MS, client.paneSendKeys(paneId, ["Enter"]));
     }
   }
 
@@ -233,8 +278,7 @@ export function createHerdrSendRouting(options: HerdrSendRoutingOptions) {
       // Verbatim: newlines land in the composer, Enter submits one turn.
       await client.paneSendText(paneId, content);
       await client.paneSendKeys(paneId, ["Enter"]);
-      // A pane that answered no status is a fresh one, which comes up idle.
-      if (params.confirmStart && !(await confirmStarted(paneId, readiness?.status ?? "idle"))) {
+      if (params.confirmStart && !(await confirmStarted(paneId, readiness?.status, content))) {
         clientSinks.get(claudeUuid)?.({
           type: "error",
           sessionId: claudeUuid,
