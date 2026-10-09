@@ -423,16 +423,23 @@ describe("HangarCallbacksCarryPrefixedKey", () => {
       }),
     );
 
+    // Only newline-terminated lines: the file exists empty before its first
+    // append lands, and a line still being appended can be read half-written.
     const lines = () =>
       existsSync(r.paths.auditLogPath)
         ? readFileSync(r.paths.auditLogPath, "utf8")
-            .trim()
             .split("\n")
+            .slice(0, -1)
             .map((line) => JSON.parse(line))
         : [];
+    // The keys line is written while the answer is still being resolved, and
+    // the answer line only after, so waiting on the keys line alone races it.
     await until(
-      () => lines().some((l) => l.action === "permission_keys_send"),
-      "the keys audit line",
+      () =>
+        ["permission_answer", "permission_keys_send"].every((action) =>
+          lines().some((l) => l.action === action),
+        ),
+      "both audit lines",
     );
     expect(lines()).toEqual(
       expect.arrayContaining([
