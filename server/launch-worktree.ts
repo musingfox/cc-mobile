@@ -117,22 +117,26 @@ const adminEntries = async (repo: string) =>
  * Removes what one launch made: its branch, and — when `ownsPath` — its
  * checkout and the admin entry git left for it. Scoped to that entry rather
  * than `git worktree prune`, which would also drop the user's own worktrees
- * whose directory is merely absent right now (an unmounted disk). The entry is
- * one that appeared after `before` and either points at `path` or was never
- * finished (no `gitdir`, and no `locked` — git holds that while another add
- * is initializing).
+ * whose directory is merely absent right now (an unmounted disk). Only a
+ * failed checkout passes `before`, the entries that existed when it started:
+ * the scan then drops one that appeared since and either points at `path` or
+ * was never finished (no `gitdir`, and no `locked` — git holds that while
+ * another add is initializing). A finished checkout's entry goes with
+ * `worktree remove`, so without `before` nothing else is touched.
  */
 async function discard(
   repo: string,
   path: string,
   branch: string,
   ownsPath: boolean,
-  before: Set<string> = new Set(),
+  before?: Set<string>,
 ) {
   try {
     if (ownsPath) {
       await git(repo, ["worktree", "remove", "--force", path]);
       await rm(path, { recursive: true, force: true });
+    }
+    if (ownsPath && before) {
       const admin = await adminDir(repo);
       for (const id of await adminEntries(repo)) {
         if (before.has(id)) continue;

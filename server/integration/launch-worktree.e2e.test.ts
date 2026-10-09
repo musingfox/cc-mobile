@@ -186,10 +186,13 @@ describe("LaunchCardWorktreeOnRealGit", () => {
 
   test("a refused session removes the worktree and its branch", async () => {
     const before = userCheckout();
+    // Debris the user already had: no gitdir, no lock. It is not this launch's to drop.
+    mkdirSync(join(repo, ".git", "worktrees", "stale"), { recursive: true });
     const s = setup({ createError: "connect ENOENT" });
     expect((await s.post("card-a")).status).toBe(500);
     expect(worktreePaths()).toEqual([repo]);
     expect(git(repo, "branch", "--list", "fleet/*")).toBe("");
+    expect(adminEntries()).toEqual(["stale"]);
     expect(userCheckout()).toEqual(before);
   });
 
