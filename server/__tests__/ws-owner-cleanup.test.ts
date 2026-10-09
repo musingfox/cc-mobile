@@ -31,7 +31,7 @@ function ownerTrackingBackend(live: string[]) {
 
   const backend: Partial<WsBackend> = {
     listLive: () => live,
-    send: async () => {},
+    send: async () => ({ ok: true as const }),
     registerClient: (claudeUuid, sink, owner) => {
       owners.registered.push(owner);
       sinks.set(claudeUuid, sink);

@@ -44,7 +44,7 @@ function makeSpyBackend() {
     teardownAll: async () => {
       teardownAllCalls++;
     },
-    send: async () => {},
+    send: async () => ({ ok: true as const }),
     registerClient: () => {},
     getClient: () => undefined,
     cleanupByOwner: () => {},

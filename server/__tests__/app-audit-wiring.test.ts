@@ -32,7 +32,7 @@ function spyBackend(): AppBackend {
     listLive: () => [],
     teardown: async () => ({ killed: false }),
     teardownAll: async () => {},
-    send: async () => {},
+    send: async () => ({ ok: true as const }),
     registerClient: () => {},
     getClient: () => undefined,
     cleanupByOwner: () => {},

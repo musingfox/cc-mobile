@@ -122,7 +122,7 @@ export interface WsBackend extends TerminalControlBackend {
   /** Connection lifecycle for pending native prompts (see resolvePermission). */
   pausePermissions?(): void;
   resumePermissions?(): Promise<void> | void;
-  send(params: { claudeUuid: string; content: string }): Promise<TerminalSendOutcome | void>;
+  send(params: { claudeUuid: string; content: string }): Promise<TerminalSendOutcome>;
   registerClient(
     claudeUuid: string,
     sink: (msg: Record<string, unknown>) => void,

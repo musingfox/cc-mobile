@@ -75,14 +75,16 @@ const START_IO_TIMEOUT_MS = 1_000;
  */
 const COMPOSER_READ_LINES = 400;
 
-/** `work`, or a rejection once `ms` has passed; the timer never outlives it. */
+class StartWaitTimeout extends Error {}
+
+/** `work`, or a `StartWaitTimeout` once `ms` has passed; the timer never outlives it. */
 async function within<T>(ms: number, work: Promise<T>): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
       work,
       new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`no answer within ${ms}ms`)), ms);
+        timer = setTimeout(() => reject(new StartWaitTimeout(`no answer within ${ms}ms`)), ms);
       }),
     ]);
   } finally {
@@ -243,7 +245,13 @@ export function createHerdrSendRouting(options: HerdrSendRoutingOptions) {
         return false;
       }
       if (!bottomComposerOpensWith(screen, content.split("\n")[0] ?? "")) return false;
-      await within(START_IO_TIMEOUT_MS, client.paneSendKeys(paneId, ["Enter"]));
+      try {
+        await within(START_IO_TIMEOUT_MS, client.paneSendKeys(paneId, ["Enter"]));
+      } catch (error) {
+        // Unanswered is unconfirmed; a refused key is an unreachable pane.
+        if (error instanceof StartWaitTimeout) return false;
+        throw error;
+      }
     }
   }
 

@@ -198,7 +198,7 @@ export async function sendPrompt(
       claudeUuid: string;
       content: string;
       confirmStart?: boolean;
-    }): Promise<TerminalSendOutcome | void>;
+    }): Promise<TerminalSendOutcome>;
   },
   audit: (record: AuditRecordInput) => Promise<void>,
   p: {
@@ -208,16 +208,15 @@ export async function sendPrompt(
     device: string | null;
     confirmStart?: boolean;
   },
-): Promise<TerminalSendOutcome | undefined> {
+): Promise<TerminalSendOutcome> {
   const identity = { ip: p.ip, device: p.device };
   try {
-    const sent = await backend.send({
+    const outcome = await backend.send({
       claudeUuid: p.sessionId,
       content: p.content,
       confirmStart: p.confirmStart,
     });
-    const outcome = typeof sent === "object" ? sent : undefined;
-    const code = p.confirmStart && outcome?.ok === false ? outcome.code : undefined;
+    const code = p.confirmStart && !outcome.ok ? outcome.code : undefined;
     await audit({
       action: "prompt_send",
       paneId: p.sessionId,
