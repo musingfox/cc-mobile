@@ -261,19 +261,20 @@ async function create({
     return refused(code, branched.err);
   }
   // Checked again now that the branch is held: only something outside
-  // cc-mobile can have taken the path since, and it is never touched.
-  let taken: boolean;
+  // cc-mobile can have taken the path since, and it is never touched. Any
+  // throw before the add (a parent it may not search, a git that fails)
+  // drops the branch, which nothing else would.
+  let before: Set<string>;
   try {
-    taken = await occupied(repo, path);
+    if (await occupied(repo, path)) {
+      await git(repo, ["branch", "-D", branch]).catch(() => {});
+      return refused("worktree_exists", `${path} already exists`);
+    }
+    before = await adminEntries(repo);
   } catch (error) {
     await git(repo, ["branch", "-D", branch]).catch(() => {});
     return refused("worktree_failed", String(error));
   }
-  if (taken) {
-    await git(repo, ["branch", "-D", branch]).catch(() => {});
-    return refused("worktree_exists", `${path} already exists`);
-  }
-  const before = await adminEntries(repo);
   const added = await git(repo, ["worktree", "add", path, branch]);
   if (!added.ok) {
     await discardFailedAdd(repo, path, branch, before);
