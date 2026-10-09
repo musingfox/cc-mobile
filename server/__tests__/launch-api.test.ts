@@ -17,7 +17,7 @@ import { type AgentProfile, emptyAgentProfileSource } from "../agents/profiles";
 import { EventBuffer } from "../event-buffer";
 import { createLaunchPlugin } from "../launch";
 import { composeLaunchPrompt } from "../launch-prompt";
-import type { CardWorktreeResult } from "../launch-worktree";
+import type { CardWorktreeRequest, CardWorktreeResult } from "../launch-worktree";
 import type { CreateSessionInput } from "../terminal-backend";
 import { testServerConfig } from "./ws-harness";
 
@@ -69,6 +69,7 @@ interface SetupOptions {
 
 function setup(opts: SetupOptions = {}) {
   const calls: string[] = [];
+  const worktreeRequests: CardWorktreeRequest[] = [];
   const creates: CreateSessionInput[] = [];
   const sends: { claudeUuid: string; content: string }[] = [];
   const audits: Record<string, unknown>[] = [];
@@ -110,8 +111,9 @@ function setup(opts: SetupOptions = {}) {
     eventBuffer: new EventBuffer(10),
     launchesDir,
     worktrees: {
-      create: async (cwd: string, cardName: string) => {
-        calls.push(`worktree:${cwd}:${cardName}`);
+      create: async (request: CardWorktreeRequest) => {
+        worktreeRequests.push(request);
+        calls.push(`worktree:${request.cwd}:${request.cardName}`);
         return opts.worktree ?? { kind: "not_a_repo" };
       },
       remove: async (worktree: { path: string }) => {
@@ -133,7 +135,17 @@ function setup(opts: SetupOptions = {}) {
       }),
     );
   const launches = () => (existsSync(launchesDir) ? readdirSync(launchesDir) : []);
-  return { calls, creates, sends, audits, post, launchesDir, launches, bindingAtSend };
+  return {
+    calls,
+    worktreeRequests,
+    creates,
+    sends,
+    audits,
+    post,
+    launchesDir,
+    launches,
+    bindingAtSend,
+  };
 }
 
 const good = {
@@ -654,11 +666,27 @@ describe("LaunchCardWorktree", () => {
     expect(s.launches()).toEqual([]);
     expect(s.audits).toEqual([]);
   });
-  test("W4 an invalid branch name is 400 and any other git failure 500", async () => {
-    const name = setup({ worktree: { kind: "refused", code: "invalid_branch_name", message: "" } });
-    expect((await name.post(good)).status).toBe(400);
-    const failed = setup({ worktree: { kind: "refused", code: "worktree_failed", message: "" } });
-    expect((await failed.post(good)).status).toBe(500);
+  test("W4 each worktree refusal has its status, and nothing is created", async () => {
+    for (const [code, status] of [
+      ["path_not_allowed", 403],
+      ["invalid_branch_name", 400],
+      ["no_base_branch", 400],
+      ["cwd_not_on_base", 400],
+      ["worktree_failed", 500],
+    ] as const) {
+      const s = setup({ worktree: { kind: "refused", code, message: "m" } });
+      const r = await s.post(good);
+      expect([code, r.status]).toEqual([code, status]);
+      expect(await r.json()).toEqual({ error: code, message: "m" });
+      expect(s.creates).toEqual([]);
+    }
+  });
+  test("W9 the worktree is asked with the cwd as sent and the allowed roots", async () => {
+    const s = setup({ allowedRoots: ["/tmp", tmp] });
+    await s.post({ ...good, cwd: "/tmp/" });
+    expect(s.worktreeRequests).toEqual([
+      { cwd: "/tmp/", cardName: "card", allowedRoots: ["/tmp", tmp] },
+    ]);
   });
   test("W5 a refused session removes the worktree it was given", async () => {
     const s = setup({ worktree: created, createError: "connect ENOENT" });

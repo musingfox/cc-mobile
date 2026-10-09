@@ -37,6 +37,8 @@ const STATUS: Record<string, number> = {
   terminal_error: 500,
   invalid_branch_name: 400,
   worktree_exists: 409,
+  no_base_branch: 400,
+  cwd_not_on_base: 400,
   worktree_failed: 500,
 };
 
@@ -172,13 +174,13 @@ export function createLaunchPlugin(opts: {
       }
       // The terminal checks run again in handleTerminalCreate, but only after
       // the worktree exists; a refused cwd or profile must not leave one behind.
-      const repoCwd = expandPath(cwd);
-      const cwdError = validateCwd(repoCwd);
+      const expandedCwd = expandPath(cwd);
+      const cwdError = validateCwd(expandedCwd);
       if (cwdError) {
         set.status = 400;
         return { error: "invalid_cwd", message: cwdError };
       }
-      if (!validateAllowedPath(repoCwd, opts.config.allowedRoots)) {
+      if (!validateAllowedPath(expandedCwd, opts.config.allowedRoots)) {
         set.status = 403;
         return { error: "path_not_allowed", message: "Project path is not in the allowed roots" };
       }
@@ -186,7 +188,11 @@ export function createLaunchPlugin(opts: {
         set.status = 400;
         return { error: "unknown_profile", message: `Unknown agent profile: ${profileId}` };
       }
-      const worktree = await opts.worktrees.create(repoCwd, basename(cardPath, ".md"));
+      const worktree = await opts.worktrees.create({
+        cwd,
+        cardName: basename(cardPath, ".md"),
+        allowedRoots: opts.config.allowedRoots,
+      });
       if (worktree.kind === "refused") {
         set.status = STATUS[worktree.code];
         return { error: worktree.code, message: worktree.message };

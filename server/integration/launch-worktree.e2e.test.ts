@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
@@ -61,7 +63,7 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(tmp, { recursive: true, force: true }));
 
-function setup(opts: { createError?: string } = {}) {
+function setup(opts: { createError?: string; allowedRoots?: string[] } = {}) {
   const creates: CreateSessionInput[] = [];
   let pane = 0;
   const app = createLaunchPlugin({
@@ -69,7 +71,7 @@ function setup(opts: { createError?: string } = {}) {
       port: 0,
       hostname: "127.0.0.1",
       defaultCwd: null,
-      allowedRoots: [tmp],
+      allowedRoots: opts.allowedRoots ?? [tmp],
       pushScope: "phone-last",
       basePath: "",
       launchToken: "tok",
@@ -91,8 +93,9 @@ function setup(opts: { createError?: string } = {}) {
     launchesDir: join(tmp, "launches"),
     worktrees: gitCardWorktrees(),
   });
-  const post = (card: string, cwd = repo) =>
-    app.handle(
+  const post = (card: string, cwd = repo) => {
+    writeFileSync(join(vault, "pm", "demo", "tasks", `${card}.md`), `# ${card}\n`);
+    return app.handle(
       new Request("http://localhost/api/launch", {
         method: "POST",
         headers: { "content-type": "application/json", authorization: "Bearer tok" },
@@ -104,6 +107,7 @@ function setup(opts: { createError?: string } = {}) {
         }),
       }),
     );
+  };
   return { creates, post };
 }
 
@@ -112,6 +116,25 @@ const worktreePaths = () =>
     .split("\n")
     .filter((line) => line.startsWith("worktree "))
     .map((line) => line.slice("worktree ".length));
+
+const fleetBranches = () => git(repo, "branch", "--list", "fleet/*").trim();
+const excludeLines = () =>
+  readFileSync(join(repo, ".git", "info", "exclude"), "utf8")
+    .split("\n")
+    .filter((line) => line === "/.claude/worktrees/").length;
+const adminEntries = () =>
+  existsSync(join(repo, ".git", "worktrees")) ? readdirSync(join(repo, ".git", "worktrees")) : [];
+
+/** A refused launch: no session, no worktree, no branch, no admin entry, no exclude line. */
+function leftNothing(s: ReturnType<typeof setup>) {
+  expect(s.creates).toEqual([]);
+  expect(worktreePaths()).toEqual([repo]);
+  expect(fleetBranches()).toBe("");
+  expect(adminEntries()).toEqual([]);
+  const worktrees = join(repo, ".claude", "worktrees");
+  expect(existsSync(worktrees) ? readdirSync(worktrees) : []).toEqual([]);
+  expect(excludeLines()).toBe(0);
+}
 
 const userCheckout = () => ({
   status: git(repo, "status", "--porcelain=v1", "--untracked-files=all"),
@@ -142,6 +165,7 @@ describe("LaunchCardWorktreeOnRealGit", () => {
     expect(readFileSync(join(wa, ".obsidian.yaml"), "utf8")).toBe(OBW);
     expect(readFileSync(join(wb, ".obsidian.yaml"), "utf8")).toBe(OBW);
     expect(git(wa, "status", "--porcelain")).toBe("");
+    expect(excludeLines()).toBe(1);
   });
 
   test("dispatching a card twice is 409 and leaves one worktree", async () => {
@@ -175,5 +199,132 @@ describe("LaunchCardWorktreeOnRealGit", () => {
     const s = setup();
     expect((await s.post("card-a", plain)).status).toBe(201);
     expect(s.creates[0].cwd).toBe(plain);
+  });
+  test("an allowed root narrower than the repo is 403 before git writes anything", async () => {
+    const before = userCheckout();
+    const s = setup({ allowedRoots: [join(repo, "sub")] });
+    const r = await s.post("card-a", join(repo, "sub"));
+    expect(r.status).toBe(403);
+    expect((await r.json()).error).toBe("path_not_allowed");
+    leftNothing(s);
+    expect(userCheckout()).toEqual(before);
+  });
+
+  test("a worktree add that fails after the branch exists leaves nothing behind", async () => {
+    const s = setup();
+    // `@` passes check-ref-format, then git cannot find the worktree it made.
+    const r = await s.post("@");
+    expect(r.status).toBe(500);
+    expect((await r.json()).error).toBe("worktree_failed");
+    leftNothing(s);
+    expect((await s.post("@")).status).toBe(500);
+  });
+
+  test("a failing post-checkout hook leaves nothing behind, and a retry launches", async () => {
+    mkdirSync(join(repo, ".hooks"));
+    writeFileSync(join(repo, ".hooks", "post-checkout"), "#!/bin/sh\nexit 1\n");
+    chmodSync(join(repo, ".hooks", "post-checkout"), 0o755);
+    git(repo, "config", "core.hooksPath", ".hooks");
+    const s = setup();
+    expect((await s.post("card-a")).status).toBe(500);
+    leftNothing(s);
+    git(repo, "config", "--unset", "core.hooksPath");
+    expect((await s.post("card-a")).status).toBe(201);
+  });
+
+  test("concurrent launches: one card wins once, and the exclude line is written once", async () => {
+    const s = setup();
+    const statuses = (await Promise.all([s.post("card-a"), s.post("card-a"), s.post("card-b")]))
+      .map((r) => r.status)
+      .sort();
+    expect(statuses).toEqual([201, 201, 409]);
+    expect(worktreePaths()).toHaveLength(3);
+    expect(
+      fleetBranches()
+        .split("\n")
+        .map((b) => b.trim()),
+    ).toEqual(["+ fleet/card-a", "+ fleet/card-b"]);
+    expect(excludeLines()).toBe(1);
+  });
+
+  describe("the base branch", () => {
+    const commitOn = (branch: string) => {
+      git(repo, "branch", branch, "main");
+      const tree = git(repo, "rev-parse", "main^{tree}").trim();
+      const commit = git(
+        repo,
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@t",
+        "commit-tree",
+        tree,
+        "-p",
+        branch,
+        "-m",
+        "chore: x",
+      ).trim();
+      git(repo, "update-ref", `refs/heads/${branch}`, commit);
+      return commit;
+    };
+    const baseOf = async (s: ReturnType<typeof setup>) => {
+      expect((await s.post("card-a")).status).toBe(201);
+      return git(join(repo, ".claude", "worktrees", "card-a"), "rev-parse", "HEAD").trim();
+    };
+    test("is the local branch origin/HEAD names first", async () => {
+      const dev = commitOn("dev");
+      git(repo, "config", "init.defaultBranch", "main");
+      git(repo, "update-ref", "refs/remotes/origin/dev", dev);
+      git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/dev");
+      expect(await baseOf(setup())).toBe(dev);
+    });
+    test("then init.defaultBranch", async () => {
+      const dev = commitOn("dev");
+      git(repo, "config", "init.defaultBranch", "dev");
+      expect(await baseOf(setup())).toBe(dev);
+    });
+    test("then main, then master", async () => {
+      git(repo, "config", "init.defaultBranch", "nope");
+      git(repo, "branch", "-m", "main", "master");
+      expect(await baseOf(setup())).toBe(git(repo, "rev-parse", "master").trim());
+    });
+    test("none of them is a 400 naming what was tried", async () => {
+      git(repo, "config", "init.defaultBranch", "nope");
+      git(repo, "branch", "-m", "main", "trunk");
+      const s = setup();
+      const r = await s.post("card-a");
+      expect(r.status).toBe(400);
+      const body = await r.json();
+      expect(body.error).toBe("no_base_branch");
+      expect(body.message).toContain("nope, main, master");
+      leftNothing(s);
+    });
+  });
+
+  test("a cwd the base branch does not have is refused, quoting the cwd sent", async () => {
+    mkdirSync(join(repo, "newpkg"));
+    writeFileSync(join(repo, "newpkg", "x.txt"), "only on the user's disk\n");
+    const s = setup();
+    const cwd = join(repo, "newpkg");
+    const r = await s.post("card-a", cwd);
+    expect(r.status).toBe(400);
+    const body = await r.json();
+    expect(body.error).toBe("cwd_not_on_base");
+    expect(body.message).toContain(cwd);
+    expect(body.message).not.toContain(".claude/worktrees");
+    leftNothing(s);
+  });
+
+  test("a repo git refuses to read is worktree_failed, never a launch in place", async () => {
+    const broken = join(tmp, "broken");
+    mkdirSync(broken);
+    writeFileSync(join(broken, ".git"), "gitdir: /nonexistent\n");
+    const s = setup();
+    const r = await s.post("card-a", broken);
+    expect(r.status).toBe(500);
+    expect((await r.json()).error).toBe("worktree_failed");
+    const inside = await s.post("card-b", join(repo, ".git"));
+    expect(inside.status).toBe(500);
+    expect(s.creates).toEqual([]);
   });
 });
