@@ -611,11 +611,14 @@ The wait is bounded by the clock, not by a count of samples: each 5 s window
 cuts off a slow `agent.get` at its end, and the screen read and each extra Enter
 are cut off at 1 s. So from the first Enter a launch answers within one 250 ms
 sample of the turn starting, about 10 s later when it needed both extra Enters,
-and at most 19 s later when it fails (15 s when the daemon answers promptly).
-Before that Enter come the worktree and claude's startup: about 4 s on a live
-pane, bounded by the 10 s shell and 30 s readiness budgets. Four concurrent
-launches that each needed both Enters took 15–16 s end to end; a caller's
-timeout of 60 s covers every bound. The phone's `terminal_send` does not wait.
+and at most 19 s later when it fails. Nothing bounds the steps before that
+Enter as a whole: creating the worktree runs git with no timeout, so a slow
+`post-checkout` hook makes the launch take as long as the hook does, and
+claude's startup (about 4 s on a live pane) has its own 10 s shell and 30 s
+readiness budgets on top. Four concurrent launches that each needed both
+Enters took 15–16 s end to end. A caller's timeout has to allow for its repos'
+hooks; no total can be promised.
+The phone's `terminal_send` does not wait.
 
 The prompt typed is a fixed template followed by the card's content. The
 template tells the agent three rules: never use AskUserQuestion (write the

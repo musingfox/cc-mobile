@@ -193,7 +193,8 @@ export function createHerdrSendRouting(options: HerdrSendRoutingOptions) {
    * An extra Enter is pressed only on evidence that nothing started: every
    * sample of the window answered, and answered that same status, and the
    * bottom of the screen is claude's composer opening with this prompt's first
-   * line. A failed, `unknown` or missing sample, an unknown starting status, or
+   * line. A failed, `unknown` or missing sample (one the window closed on
+   * unanswered included), an unknown starting status, or
    * any other screen (a question, permission, trust or menu dialog, whose
    * highlighted option an Enter would pick) presses nothing and fails. A start
    * seen later in the same window still counts.
@@ -213,13 +214,14 @@ export function createHerdrSendRouting(options: HerdrSendRoutingOptions) {
       let answered = 0;
       for (;;) {
         const left = deadline - Date.now();
-        if (left <= 0) break;
+        // No sample is started that the window would cut off before a healthy
+        // daemon could answer it: the cut-off would read as a missing sample.
+        if (left <= 0 || left < startPollMs) break;
         let status: unknown;
         try {
           status = (await within(left, client.agentGet(paneId))).agent_status;
         } catch {
-          // Cut off by the window's own end: that is the window closing, not a failure.
-          if (Date.now() >= deadline) break;
+          // A sample still unanswered when the window closes is missing too.
           status = undefined;
         }
         if (typeof status !== "string" || status === "unknown") unchanged = false;
