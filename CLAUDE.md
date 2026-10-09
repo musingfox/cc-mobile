@@ -523,32 +523,49 @@ path that does not resolve is `404 card_not_found`; one whose resolved path
 (symlinks followed without opening the target) leaves the vault root is
 `403 card_not_allowed` — even when the outside file is unreadable; one inside the
 root that then cannot be read (a directory, mode 000) is `404 card_not_found`; a
-profile of a non-claude kind is `400 unsupported_kind`. Session-creation
-refusals follow, keeping the terminal codes (`invalid_cwd`, `path_not_allowed`,
-`unknown_profile`), and only then the worktree's: `409 worktree_exists`,
-`400 invalid_branch_name`, `500 worktree_failed`.
+profile of a non-claude kind is `400 unsupported_kind`. The request's own
+`cwd` is checked next, with the terminal codes (`400 invalid_cwd`,
+`403 path_not_allowed`), then its profile (`400 unknown_profile`). When `cwd` is
+inside a git repo the worktree checks follow, all before git writes anything: a
+repo git refuses to read (dubious ownership, a broken `.git`) is
+`500 worktree_failed`; a repo top level outside every allowed root is
+`403 path_not_allowed`; a card name that is no valid branch is
+`400 invalid_branch_name`; an existing branch or worktree path is
+`409 worktree_exists`; no base branch is `400 no_base_branch`, naming the
+branches tried; a `cwd` subdirectory the base branch does not have (untracked,
+ignored, or only on the user's branch) is `400 cwd_not_on_base`, quoting the
+`cwd` as sent. Only then does git write: a concurrent launch that took the
+branch first is `409 worktree_exists`, and any other git failure
+`500 worktree_failed`. Session creation comes last and may still refuse
+(`500 terminal_error`).
 
 Each card runs in its own git worktree (`server/launch-worktree.ts`), so cards
-on one repo never share a checkout and the user's own stays untouched. When
-`cwd` is inside a repo the server runs `git worktree add -b fleet/<card>
-<repo>/.claude/worktrees/<card> <base>`, where `<card>` is the card's file name
-without `.md` and `<base>` is the local branch `origin/HEAD` names, else `main`
-— never the branch the user has checked out, which may be mid-feature. The pane
-starts at the cwd's own subdirectory inside the worktree. A repo that does not
-already ignore `.claude/worktrees/` gets that line in `.git/info/exclude`, which
-leaves its `git status` as it was; the repo's `.obsidian.yaml`, usually ignored
-and so missing from a fresh checkout, is copied in because the obw skill reads
-it from the cwd. The worktree sits inside the repo on purpose: an allowed root
-that admits the repo admits it, the obw hook's walk up from the cwd still
-reaches the repo, and claude has been seen asking no workspace-trust question
-there (a path outside the repo is untested). An existing branch or path is
-refused, never reused, because two agents in one checkout is the collision this
-exists to prevent. A cwd in no repo launches in place, as before.
+on one repo never share a checkout and the user's own stays untouched. The
+server creates branch `fleet/<card>` from `<base>` and checks it out at
+`<repo>/.claude/worktrees/<card>`, where `<card>` is the card's file name
+without `.md`. `<base>` is the first local branch among the one `origin/HEAD`
+names, `init.defaultBranch`, `main` and `master` — never the branch the user
+has checked out, which may be mid-feature. The pane starts at the cwd's own
+subdirectory inside the worktree. Once the worktree exists, a repo that does
+not already ignore `.claude/worktrees/` gets that line in `.git/info/exclude`,
+once, which leaves its `git status` as it was; the repo's `.obsidian.yaml`,
+usually ignored and so missing from a fresh checkout, is copied in because the
+obw skill reads it from the cwd. The worktree sits inside the repo on purpose:
+the obw hook's walk up from the cwd still reaches the repo, and claude has been
+seen asking no workspace-trust question there (a path outside the repo is
+untested). An allowed root therefore has to cover the repo's top level for a
+card to be dispatched into it; a root narrower than the repo is refused rather
+than letting git write outside it. An existing branch or path is refused, never
+reused, because two agents in one checkout is the collision this exists to
+prevent. A `cwd` that git reports is in no repo launches in place, as before.
 
-The worktree is made after every check above, so a refused request leaves none.
-A session or binding failure after it removes the worktree and its branch; a
-`prompt_failed` keeps both, as it keeps the binding. Removing a finished card's
-worktree is recycling's job, not the launch's.
+A refusal before git writes leaves the repo as it was. A failed checkout
+removes what that launch made — its branch, its directory and the admin entry
+git left for it, but not a branch a concurrent launch made first, and not via
+`git worktree prune`, which would also drop the user's own temporarily absent
+worktrees. A session or binding failure after the worktree exists removes the
+worktree and its branch; a `prompt_failed` keeps both, as it keeps the binding.
+Removing a finished card's worktree is recycling's job, not the launch's.
 
 Before anything is typed the server writes a binding file,
 `~/.claude-mobile/launches/<claudeUuid>.json`, holding exactly
