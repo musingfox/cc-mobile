@@ -78,6 +78,7 @@ function harness(
     onUnparsedBlockedScreen: (sessionId: string, screen: string) => void;
     warn: (message: string) => void;
     clock: ReturnType<typeof makeFakeClock>;
+    unattendedDeny: boolean;
   }> = {},
 ): Harness {
   const sent: Record<string, unknown>[] = [];
@@ -102,6 +103,7 @@ function harness(
     newRequestId: () => `r${++counter}`,
     warn: overrides.warn ?? (() => {}),
     onUnparsedBlockedScreen: overrides.onUnparsedBlockedScreen,
+    ...(overrides.unattendedDeny !== undefined ? { unattendedDeny: overrides.unattendedDeny } : {}),
     ...(overrides.clock
       ? {
           setTimeoutFn: overrides.clock.setTimeoutFn,
@@ -871,5 +873,69 @@ describe("PromptKindOnWire", () => {
 
     expect(request).not.toHaveProperty("promptKind");
     expect(request.options).toEqual([{ id: "cancel", label: "Cancel", keystroke: "esc" }]);
+  });
+});
+
+function countingClock() {
+  const clock = makeFakeClock();
+  let calls = 0;
+  const inner = clock.setTimeoutFn;
+  return {
+    clock: {
+      ...clock,
+      setTimeoutFn: (fn: () => void, ms: number) => {
+        calls++;
+        return inner(fn, ms);
+      },
+    },
+    calls: () => calls,
+  };
+}
+
+describe("UnattendedDenyOff", () => {
+  test("T1: an unanswered prompt is never denied and stays pending", async () => {
+    const { clock } = countingClock();
+    const h = harness({ origin: "self", clock, unattendedDeny: false });
+    await h.permission.onStatus(PANE, "blocked", "claude");
+    await clock.advance(UNATTENDED_DENY_MS);
+    expect(h.keys).toEqual([]);
+    expect(h.permission.pendingFor(PANE)).toBeDefined();
+  });
+
+  test("T2: no timer is ever scheduled", async () => {
+    const { clock, calls } = countingClock();
+    const h = harness({ origin: "self", clock, unattendedDeny: false });
+    await h.permission.onStatus(PANE, "blocked", "claude");
+    await clock.advance(UNATTENDED_DENY_MS);
+    expect(calls()).toBe(0);
+  });
+
+  test("T3: resume re-raising the prompt starts no timer", async () => {
+    const { clock, calls } = countingClock();
+    const h = harness({ origin: "self", clock, unattendedDeny: false });
+    await h.permission.onStatus(PANE, "blocked", "claude");
+    h.permission.pause();
+    await clock.advance(600_000);
+    await h.permission.resume();
+    await clock.advance(UNATTENDED_DENY_MS);
+    expect(h.keys).toEqual([]);
+    expect(calls()).toBe(0);
+  });
+
+  test("T4: an unreadable screen is not denied either", async () => {
+    const { clock } = countingClock();
+    const h = harness({ origin: "self", clock, unattendedDeny: false });
+    h.screen.text = UNPARSEABLE;
+    await h.permission.onStatus(PANE, "blocked", "claude");
+    await clock.advance(UNATTENDED_DENY_MS);
+    expect(h.keys).toEqual([]);
+  });
+
+  test("T5: explicit true keeps today's esc after the timeout", async () => {
+    const { clock } = countingClock();
+    const h = harness({ origin: "self", clock, unattendedDeny: true });
+    await h.permission.onStatus(PANE, "blocked", "claude");
+    await clock.advance(UNATTENDED_DENY_MS);
+    expect(h.keys).toEqual([{ pane: PANE, keys: ["esc"] }]);
   });
 });

@@ -50,6 +50,11 @@ export interface NativePermissionOptions {
   newRequestId?: () => string;
   /** How long an unanswered prompt on a self-launched pane may hold a turn. */
   timeoutMs?: number;
+  /**
+   * `false` means no countdown is ever started on any pane this module handles:
+   * the prompt waits for a person (ADR-015 §2026-10-09). Default `true`.
+   */
+  unattendedDeny?: boolean;
   setTimeoutFn?: (fn: () => void, ms: number) => unknown;
   clearTimeoutFn?: (id: unknown) => void;
   now?: () => number;
@@ -104,7 +109,7 @@ export interface PendingNativePermission {
   paneRevision: number;
   origin: "self" | "foreign";
   options: PromptOption[];
-  /** Countdown bookkeeping for the unattended deny; absent on foreign panes. */
+  /** Countdown bookkeeping for the unattended deny; absent on foreign panes and where the deny is off. */
   timerId?: unknown;
   armedAt?: number;
   /** Countdown already spent, carried across a disconnect (the frozen countdown). */
@@ -120,6 +125,7 @@ export function createNativePermission(options: NativePermissionOptions) {
   const originOf = options.originOf ?? (() => "foreign" as const);
   const newRequestId = options.newRequestId ?? (() => `perm-${crypto.randomUUID()}`);
   const timeoutMs = options.timeoutMs ?? UNATTENDED_DENY_MS;
+  const unattendedDeny = options.unattendedDeny ?? true;
   const setTimeoutFn = options.setTimeoutFn ?? ((fn, ms) => setTimeout(fn, ms));
   const clearTimeoutFn =
     options.clearTimeoutFn ?? ((id: unknown) => clearTimeout(id as ReturnType<typeof setTimeout>));
@@ -270,8 +276,14 @@ export function createNativePermission(options: NativePermissionOptions) {
    * exemption is claimed only for a screen that parsed as one: an unreadable
    * screen keeps today's countdown, because the argument for exempting it would
    * be a guess about what it says.
+   *
+   * With `unattendedDeny` off this returns before anything else, so no timer
+   * exists and `timeLeft` stays undefined. The gate is here and not in emit
+   * because resume calls this directly. Raising `timeoutMs` to Infinity is not
+   * an off switch: it still schedules a timer and reports a countdown.
    */
   function armDeny(entry: PendingNativePermission): void {
+    if (!unattendedDeny) return;
     if (entry.origin !== "self" || paused) return;
     if (entry.promptKind === "question") return;
     const remaining = timeoutMs - entry.elapsedMs;
