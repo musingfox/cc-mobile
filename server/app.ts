@@ -31,6 +31,7 @@ import { hangarKey, resolveHerdrSides, routeSessionKey, type Side } from "./herd
 import { createSocketWatch, type SocketWatchOptions } from "./herdr/socket-watch";
 import { createLaunchPlugin } from "./launch";
 import { defaultLaunchesDir } from "./launch-binding";
+import { type CardWorktrees, gitCardWorktrees } from "./launch-worktree";
 import { stripBasePath } from "./path-utils";
 import { createAttemptLog } from "./push/attempt-log";
 import { createForegroundTracker } from "./push/foreground";
@@ -142,6 +143,8 @@ export interface AppTestDeps {
   workspaceRoot?: string;
   /** Obsidian's vault registry; production reads the app's own `obsidian.json`. */
   obsidianConfigPath?: string;
+  /** How a launched card gets its worktree; production runs `git`, which a unit test may not spawn. */
+  cardWorktrees?: CardWorktrees;
   /** The built client to serve; production serves `DIST_DIR`. */
   distDir?: string;
   /**
@@ -330,6 +333,7 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
         auditLog,
         eventBuffer,
         launchesDir: deps.launchesDir ?? defaultLaunchesDir(),
+        worktrees: deps.cardWorktrees ?? gitCardWorktrees(),
       }),
     )
     .use(

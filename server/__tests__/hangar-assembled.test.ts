@@ -209,6 +209,7 @@ function rig(options: {
     },
     {
       ...(options.launchesDir ? { launchesDir: options.launchesDir } : {}),
+      cardWorktrees: { create: async () => ({ kind: "not_a_repo" }), remove: async () => {} },
       ...(options.agentProfiles ? { agentProfiles: options.agentProfiles } : {}),
       pushStore: createSubscriptionStore({ path: join(tmp, "subs.json") }),
       ...paths,

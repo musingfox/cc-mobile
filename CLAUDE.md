@@ -506,7 +506,8 @@ the **hangar** without a phone: `{cwd, cardPath, vault, project, profileId?}` â†
 equal the basename of `CC_MOBILE_VAULT_ROOT`, and `project` matches
 `[A-Za-z0-9._-]+` without a leading dot. It is the same `terminal_create` +
 `terminal_send` path the WS uses, so `CC_MOBILE_ALLOWED_ROOTS` and the profile
-menu apply unchanged; the pane is always created on the hangar socket. Only
+menu apply unchanged; the pane is always created on the hangar socket, in the
+card's own worktree when `cwd` is in a git repo (below). Only
 claude can be launched: a profile of another kind is `400 unsupported_kind`,
 because the binding below is keyed by claude's session id.
 
@@ -524,7 +525,30 @@ path that does not resolve is `404 card_not_found`; one whose resolved path
 root that then cannot be read (a directory, mode 000) is `404 card_not_found`; a
 profile of a non-claude kind is `400 unsupported_kind`. Session-creation
 refusals follow, keeping the terminal codes (`invalid_cwd`, `path_not_allowed`,
-`unknown_profile`).
+`unknown_profile`), and only then the worktree's: `409 worktree_exists`,
+`400 invalid_branch_name`, `500 worktree_failed`.
+
+Each card runs in its own git worktree (`server/launch-worktree.ts`), so cards
+on one repo never share a checkout and the user's own stays untouched. When
+`cwd` is inside a repo the server runs `git worktree add -b fleet/<card>
+<repo>/.claude/worktrees/<card> <base>`, where `<card>` is the card's file name
+without `.md` and `<base>` is the local branch `origin/HEAD` names, else `main`
+â€” never the branch the user has checked out, which may be mid-feature. The pane
+starts at the cwd's own subdirectory inside the worktree. A repo that does not
+already ignore `.claude/worktrees/` gets that line in `.git/info/exclude`, which
+leaves its `git status` as it was; the repo's `.obsidian.yaml`, usually ignored
+and so missing from a fresh checkout, is copied in because the obw skill reads
+it from the cwd. The worktree sits inside the repo on purpose: an allowed root
+that admits the repo admits it, the obw hook's walk up from the cwd still
+reaches the repo, and claude has been seen asking no workspace-trust question
+there (a path outside the repo is untested). An existing branch or path is
+refused, never reused, because two agents in one checkout is the collision this
+exists to prevent. A cwd in no repo launches in place, as before.
+
+The worktree is made after every check above, so a refused request leaves none.
+A session or binding failure after it removes the worktree and its branch; a
+`prompt_failed` keeps both, as it keeps the binding. Removing a finished card's
+worktree is recycling's job, not the launch's.
 
 Before anything is typed the server writes a binding file,
 `~/.claude-mobile/launches/<claudeUuid>.json`, holding exactly

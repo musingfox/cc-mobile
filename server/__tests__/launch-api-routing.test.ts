@@ -76,6 +76,7 @@ function launchApp(status?: string) {
       gateEnv: {},
       auditLogPath: join(dir, "a.jsonl"),
       launchesDir,
+      cardWorktrees: { create: async () => ({ kind: "not_a_repo" }), remove: async () => {} },
     },
   );
   const post = () =>
