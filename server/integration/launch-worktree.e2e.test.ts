@@ -452,4 +452,31 @@ describe("LaunchCardWorktreeOnRealGit", () => {
     expect(fleetBranches()).toBe("");
     expect(excludeLines()).toBe(0);
   });
+  test("a cwd whose place in the repo git cannot report is worktree_failed, not the root", async () => {
+    // A git shim on PATH fails `rev-parse --show-prefix` alone.
+    const real = Bun.which("git") as string;
+    const shim = join(tmp, "shim");
+    mkdirSync(shim);
+    writeFileSync(
+      join(shim, "git"),
+      `#!/bin/bash\nif [ "$3" = rev-parse ] && [ "$4" = --show-prefix ]; then echo "fatal: prefix unavailable" >&2; exit 128; fi\nexec "${real}" "$@"\n`,
+    );
+    chmodSync(join(shim, "git"), 0o755);
+    const path = process.env.PATH;
+    process.env.PATH = `${shim}:${path}`;
+    try {
+      const s = setup();
+      const r = await s.post("card-a", join(repo, "sub"));
+      expect(r.status).toBe(500);
+      expect(await r.json()).toEqual({
+        error: "worktree_failed",
+        message: "fatal: prefix unavailable",
+      });
+      expect(s.creates).toEqual([]);
+    } finally {
+      process.env.PATH = path;
+    }
+    expect(fleetBranches()).toBe("");
+    expect(worktreePaths()).toEqual([repo]);
+  });
 });
