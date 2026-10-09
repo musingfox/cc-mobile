@@ -23,7 +23,7 @@ function backend(overrides: Record<string, unknown> = {}) {
     createSession: async () => ({ name: "ccm-u1", paneRef: "pn-1" }),
     teardown: async () => ({ killed: false }),
     listLive: () => [],
-    send: async () => {},
+    send: async () => ({ ok: true as const }),
     registerClient: () => {},
     cleanupByOwner: () => {},
     ...overrides,

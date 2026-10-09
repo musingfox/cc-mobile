@@ -92,7 +92,7 @@ export function createLaunchPlugin(opts: {
       claudeUuid: string;
       content: string;
       confirmStart?: boolean;
-    }): Promise<TerminalSendOutcome | void>;
+    }): Promise<TerminalSendOutcome>;
     registerClient(
       claudeUuid: string,
       sink: (msg: Record<string, unknown>) => void,

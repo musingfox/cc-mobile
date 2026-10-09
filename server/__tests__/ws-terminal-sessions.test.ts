@@ -37,7 +37,7 @@ function backendListing(sessions: ReturnType<typeof descriptor>[]) {
     teardown: async () => ({ killed: false }),
     listLive: () => [],
     listSessions: async () => ({ sessions }),
-    send: async () => {},
+    send: async () => ({ ok: true as const }),
     registerClient: () => {},
     cleanupByOwner: () => {},
   };

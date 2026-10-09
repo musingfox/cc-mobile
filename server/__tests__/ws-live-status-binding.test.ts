@@ -32,7 +32,7 @@ function recordingBackend(live: string[]) {
     createSession: async () => ({ name: "n", paneRef: "p1" }),
     teardown: async () => ({ killed: false }),
     listLive: () => live,
-    send: async () => {},
+    send: async () => ({ ok: true as const }),
     registerClient: (claudeUuid, sink, owner) => {
       sinks.set(claudeUuid, sink);
       owners.set(claudeUuid, owner);

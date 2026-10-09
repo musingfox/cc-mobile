@@ -9,6 +9,7 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { TerminalSendOutcome } from "../terminal-backend";
 import { createHerdrSendRouting } from "./send-routing";
 
 /** A composer box in herdr's own shape: body between the last two rules. */
@@ -502,6 +503,45 @@ describe("PromptStartConfirmation retry Enter", () => {
         code: "prompt_not_started",
       });
       expect(pane.extraEnters()).toBe(0);
+    }
+  });
+
+  test("an extra Enter that goes unanswered is unconfirmed; one the pane refuses is a failed send", async () => {
+    const first = "你正在被無人值守地派工，操作者可能不在終端機前。請遵守三條規則：";
+    const unsent = fixture("fixtures", "claude-unsent-launch-prompt.txt");
+    const cases: [() => Promise<void>, TerminalSendOutcome][] = [
+      [() => new Promise<void>(() => {}), { ok: false, code: "prompt_not_started" }],
+      [
+        async () => {
+          throw new Error("pane is gone");
+        },
+        { ok: false, code: "terminal_send_failed" },
+      ],
+    ];
+    for (const [extraEnter, expected] of cases) {
+      let typed = false;
+      let enters = 0;
+      const routing = createHerdrSendRouting({
+        client: {
+          paneSendText: async () => {
+            typed = true;
+          },
+          paneSendKeys: async () => {
+            enters += 1;
+            if (enters > 1) await extraEnter();
+          },
+          agentGet: async () => ({ agent_status: "idle" }),
+          paneRead: async () => ({ text: typed ? unsent : IDLE_BOX }),
+        },
+        resolvePane: () => "p1",
+        startPollMs: 1,
+        startWindowMs: 20,
+      });
+      routing.registerClient("u1", () => {});
+      expect(await routing.send({ claudeUuid: "u1", content: first, confirmStart: true })).toEqual(
+        expected,
+      );
+      expect(enters).toBe(2);
     }
   });
 

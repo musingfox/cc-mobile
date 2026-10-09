@@ -88,8 +88,8 @@ export interface TerminalBackend {
   /** Terminal removal: kills the session AND cancels its pending reply waiter. Idempotent. */
   teardown(claudeUuid: string): Promise<TeardownResult>;
   teardownAll(): Promise<void>;
-  /** Never throws: unregistered sink is a silent no-op, send failures are reported via the sink. */
-  send(params: TerminalSendParams): Promise<TerminalSendOutcome | void>;
+  /** Never throws: every outcome is returned, and a failure is also reported to the pane's sink. */
+  send(params: TerminalSendParams): Promise<TerminalSendOutcome>;
   registerClient(claudeUuid: string, sink: ClientSink, owner?: unknown): void;
   getClient(claudeUuid: string): ClientSink | undefined;
   /** Transient disconnect cleanup — drops the owner's sinks but keeps waiters armed. */

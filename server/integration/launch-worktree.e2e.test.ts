@@ -89,7 +89,7 @@ function setup(opts: { createError?: string; allowedRoots?: string[] } = {}) {
       },
       teardown: async () => ({ killed: true }),
       registerClient: () => {},
-      send: async () => {},
+      send: async () => ({ ok: true as const }),
     },
     agentProfiles: emptyAgentProfileSource(),
     eventBuffer: new EventBuffer(10),

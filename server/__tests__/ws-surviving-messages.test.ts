@@ -38,7 +38,7 @@ const backendStub = {
   createSession: async () => ({ name: "n", paneRef: "p1" }),
   teardown: async () => ({ killed: false }),
   listLive: () => [],
-  send: async () => {},
+  send: async () => ({ ok: true as const }),
   registerClient: () => {},
   cleanupByOwner: () => {},
 };
