@@ -517,3 +517,32 @@ handler、`SessionManager` 的 append 緩衝與 `stopTask`、client 的兩個 se
 `unknown` 通常代表 agent 已經不在 pane 裡，這時送出的 prompt 會被 `session_busy` 擋下，所以
 `idle` 的不精確不會讓任何東西被送進 shell。其他轉成 `unknown` 的情況照舊不送；`working` 變成
 `unknown` 會留下一個轉不停的狀態，是同一個機制，不在這次範圍。由 `pane-events.test.ts` 釘住。
+
+## 2026-10-09 增修：機庫 pane 成為 90 秒 `esc` 的第四個例外
+
+§2026-09-14 之前的條件是：只對 cc-mobile 自建的 pane、送鍵前重讀比對 fingerprint、提示不是問題。這一段加**第四個**條件：不是機庫的 pane。
+
+### 背景
+
+經 `POST /api/launch` 起的 pane 帶 `ccm-` 工作區標籤，所以 `origin` 是 `self`；`paused` 起始為 `false`，從沒有手機連線時倒數照跑。obw hook 已經把卡片標成「需要核准」，90 秒後 `esc` 卻落下，沒人看過。
+
+### 決定
+
+機庫的**每一個** pane 都不上膛，依 socket 判斷，不看 binding 檔，與 ADR-018 決定三一致。做法是機庫 backend 在建構時帶 `unattendedDeny: false`，駕駛艙 backend 不帶。`origin` 不變，仍由標籤決定；駕駛艙上自建的 pane 照舊 90 秒。機庫上每一種提示形狀（權限、問題、無法解析的 Cancel-only）都適用。
+
+### 理由
+
+1. `esc` 讓 agent 在沒有人做選擇的情況下繼續往下走。
+2. 等待正是「無 client = 全 deny + 行程暫停」裡的「行程暫停」那一半。
+3. obw hook 已經把卡片標成「需要核准」，人被明確告知要來處理。
+
+### 代價
+
+- #24 的預算在機庫上放棄：自建 pane 上沒人回答的畫面可以永久占住 turn。
+- 等待沒有上限，直到 accept-reject-and-reaper 那張卡。
+- 日後任何在機庫建立 `ccm-` pane 的路徑都繼承這個豁免。
+- `fleet@` 開頭的鍵不會出現 `auto_deny_keys_send` 稽核行。
+
+### 對本 ADR 上文的影響
+
+:93「原樣繼承，不放寬」與 :142 的「無 client = 全 deny」承接再收窄一次：機庫上的「全 deny」不再自動送出，只剩「行程暫停」。

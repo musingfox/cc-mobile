@@ -45,6 +45,8 @@ export type CapabilitiesReadResult =
 type CapabilityListing = Pick<SessionDescriptor, "sessionId" | "cwd"> & { agent?: string };
 
 export interface HerdrBackendOptions {
+  /** Forwarded to the permission module; off only for the hangar (ADR-015 §2026-10-09). */
+  unattendedDeny?: boolean;
   /**
    * Injectable client. Defaults to a real one whose transport connects lazily,
    * so constructing a backend never contacts the daemon.
@@ -357,6 +359,7 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
       return match?.origin ?? "foreign";
     },
     onKeysSent: options.onKeysSent,
+    ...(options.unattendedDeny !== undefined ? { unattendedDeny: options.unattendedDeny } : {}),
   });
 
   // Bound once: the poll below runs for the life of the process, and a client

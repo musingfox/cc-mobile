@@ -84,7 +84,7 @@ cc-mobile 今天只連一個 socket，路徑由 `HERDR_SOCKET_PATH` 決定，未
 
 ### ADR-015（herdr 取代 tmux 作為持久化終端層）
 
-延伸。ADR-015 讓 herdr socket 成為唯一的 trunk。這裡 trunk 仍然只有 herdr socket，只是從一條變成兩條，沒有引入其他通道。ADR-015 §2026-08-02 把 session 鍵定為 herdr 的 `pane_id`，這裡只對機庫加上伺服器前綴，駕駛艙的鍵不變。
+延伸。ADR-015 讓 herdr socket 成為唯一的 trunk。這裡 trunk 仍然只有 herdr socket，只是從一條變成兩條，沒有引入其他通道。ADR-015 §2026-08-02 把 session 鍵定為 herdr 的 `pane_id`，這裡只對機庫加上伺服器前綴，駕駛艙的鍵不變。2026-10-09 起機庫 pane 不上膛 90 秒無人看管 `esc`，決定記在 ADR-015 §2026-10-09 增修。
 
 ### ADR-017（推播讀 herdr 的原始狀態，不等權限卡片）
 

@@ -269,6 +269,8 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
         name,
         backend: createHerdrBackend({
           client: hangarClient,
+          // A hangar prompt waits for a human; no unattended esc (ADR-015 §2026-10-09).
+          unattendedDeny: false,
           ...hooksFor((paneId) => hangarKey(name, paneId)),
         }),
         watch: watchFor("hangar", hangarSocket.socketPath, hangarClient, {

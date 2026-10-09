@@ -135,7 +135,7 @@ AskUserQuestion screen, which only the user can answer. It is present only when
 the screen parsed: a Cancel-only fallback omits the key rather than claim a kind
 it could not read, and a bundle cached before the field ignores it. The kind also
 decides the unattended countdown: a permission prompt nobody answers is still
-`esc`'d after 90 s on a pane cc-mobile launched, while a `"question"` waits —
+`esc`'d after 90 s on a cockpit pane cc-mobile launched (never on a hangar pane), while a `"question"` waits —
 `esc` there cancels the question instead of declining a tool.
 `permission_request.autoDenyMs` is that countdown, as the time left when the
 frame was sent, and it is present only while the countdown runs; the card shows

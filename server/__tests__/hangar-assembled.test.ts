@@ -27,7 +27,13 @@ type PaneEvent = { event: string; data: unknown };
 type Frame = {
   type: string;
   sessionId?: string;
-  payload?: { type?: string; requestId?: string; sessionId?: string; state?: string };
+  payload?: {
+    type?: string;
+    requestId?: string;
+    sessionId?: string;
+    state?: string;
+    autoDenyMs?: number;
+  };
   sessions?: Array<{ sessionId: string; side?: string }>;
   herdr?: { cockpit: { online: boolean }; hangar?: { name: string; online: boolean } };
 };
@@ -433,6 +439,42 @@ describe("HangarCallbacksCarryPrefixedKey", () => {
         expect.objectContaining({ action: "permission_answer", paneId: HANGAR_KEY }),
         expect.objectContaining({ action: "permission_keys_send", paneId: HANGAR_KEY }),
       ]),
+    );
+  });
+});
+
+describe("HangarBackendDenyOff", () => {
+  test("T1: a hangar card carries no autoDenyMs", async () => {
+    const r = rig({ hangarSession: "fleet" });
+    const phone = await r.phone();
+    await phone.list();
+    r.hangar.status("blocked");
+    const card = await phone.waitFor(
+      (f) => f.payload?.type === "permission_request" && f.payload.sessionId === HANGAR_KEY,
+      "the hangar card",
+    );
+    expect("autoDenyMs" in (card.payload ?? {})).toBe(false);
+  });
+
+  test("T2: a cockpit card still carries the 90 s countdown", async () => {
+    const r = rig({ hangarSession: "fleet" });
+    const phone = await r.phone();
+    await phone.list();
+    r.cockpit.status("blocked");
+    const card = await phone.waitFor(
+      (f) => f.payload?.type === "permission_request" && f.payload.sessionId === PANE,
+      "the cockpit card",
+    );
+    expect(typeof card.payload?.autoDenyMs).toBe("number");
+    expect(card.payload?.autoDenyMs).toBeGreaterThan(0);
+    expect(card.payload?.autoDenyMs).toBeLessThanOrEqual(90_000);
+    // The armed timer outlives the test unless the card is answered.
+    phone.socket.send(
+      JSON.stringify({
+        type: "permission",
+        requestId: card.payload?.requestId,
+        optionId: "cancel",
+      }),
     );
   });
 });

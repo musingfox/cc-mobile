@@ -104,7 +104,7 @@ All recorded in `docs/adr/`. Key decisions:
 
 - **Herdr terminal layer** (ADR-015): herdr sockets are the only trunk (the cockpit's, plus the hangar's when configured — ADR-018); C-hybrid concepts carried; the SDK query() path was removed in #25 (see ADR-011's "#25 後現況" section).
 - **herdr-native model** (ADR-015 §2026-08-02, #29): the self-built hook pipeline is gone. Replies are read from claude's transcript file and permissions from the pane's own screen, so a session the user started in their own terminal behaves exactly like one cc-mobile launched.
-- **Permission flow** (ADR-015 §2026-08-02): herdr reports `blocked` → the server parses the prompt off `pane.read --source detection` → the phone shows the terminal's own options → `pane.send_keys` presses the chosen key. Unanswered after 90s → `esc`, but only on panes cc-mobile launched, and only if a fresh `agent_status` + prompt-fingerprint re-read still match. A prompt that parsed as a **question** (`promptKind === "question"`) is exempt from that countdown and waits indefinitely: `esc` at claude's AskUserQuestion screen cancels the question, and a question has no safe default to decay to. The exemption needs a successful parse — a screen nobody could read keeps the countdown it has today.
+- **Permission flow** (ADR-015 §2026-08-02): herdr reports `blocked` → the server parses the prompt off `pane.read --source detection` → the phone shows the terminal's own options → `pane.send_keys` presses the chosen key. Unanswered after 90s → `esc`, but only on cockpit panes cc-mobile launched (a hangar pane's prompt waits however long it takes, ADR-015 §2026-10-09), and only if a fresh `agent_status` + prompt-fingerprint re-read still match. A prompt that parsed as a **question** (`promptKind === "question"`) is exempt from that countdown and waits indefinitely: `esc` at claude's AskUserQuestion screen cancels the question, and a question has no safe default to decay to. The exemption needs a successful parse — a screen nobody could read keeps the countdown it has today.
 - **Push reads the raw status** (ADR-017): the `blocked` push no longer waits for a permission card, so screens #33 leaves uncarded still buzz the phone. The card rules themselves are unchanged — only what triggers a notification.
 - **Zod validation** (ADR-001): Runtime validation on WS messages, single source of truth for types.
 - **Zustand + WsService** (ADR-008): Per-session state isolation via Zustand store + WebSocket singleton service.
@@ -132,13 +132,13 @@ still answers with the first option until the phone reloads.
 call waiting on a gate) or `"question"` (claude's AskUserQuestion screen, which
 only the user can answer). It is sent **only when the screen parsed**: the
 Cancel-only fallback omits the key rather than claim a kind it could not read,
-and a bundle cached before the field ignores it. A `"question"` is also the one
-prompt exempt from the 90-second `esc`.
+and a bundle cached before the field ignores it. A `"question"` is also exempt from
+the 90-second `esc`, on either side.
 
 `permission_request` also carries an optional `autoDenyMs`: how long until the
 server presses `esc` on that prompt by itself, measured when the frame was sent.
 It is present **only while that countdown is running** — absent on a pane
-cc-mobile did not launch, on a question, and while the countdown is frozen —
+cc-mobile did not launch, on any hangar pane, on a question, and while the countdown is frozen —
 and the card shows a number only when it has one. It is a duration, not a
 timestamp, on purpose: the phone turns it into a deadline on its own clock, and
 the two machines' clocks need not agree. The last open socket closing freezes
@@ -537,6 +537,10 @@ template tells the agent three rules: never use AskUserQuestion (write the
 question in the final reply and end the turn), never run `/clear` (it changes
 the session id and voids the binding), and open every final reply with exactly
 one of `結果：完成`, `結果：需要你` or `結果：失敗`.
+
+No hangar pane runs the 90-second countdown, so a launched pane's permission
+prompt waits on its card until someone answers; the countdown never `esc`s it
+(ADR-015 §2026-10-09).
 
 With no phone connected, routing has no sink to type through or to report a
 refusal to, and the prompt was dropped silently. So the route binds its own sink
