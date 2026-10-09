@@ -102,7 +102,10 @@ describe("HerdrPromptInjection", () => {
     const seen: Record<string, unknown>[] = [];
     harness.routing.registerClient("u1", (msg) => seen.push(msg));
 
-    await expect(harness.routing.send({ claudeUuid: "u1", content: "x" })).resolves.toBeUndefined();
+    await expect(harness.routing.send({ claudeUuid: "u1", content: "x" })).resolves.toEqual({
+      ok: false,
+      code: "terminal_send_failed",
+    });
 
     expect(seen.length).toBe(1);
     expect(seen[0]).toMatchObject({
@@ -339,5 +342,34 @@ describe("PromptInjectionReadinessGate", () => {
 
     expect(keys).toEqual([["Enter"]]);
     expect(seen).toEqual([]);
+  });
+
+  test("a prompt taller than the screen is found in the scrollback and sent", async () => {
+    // Live 2026-10-09: a card's composer outgrows the 40-row screen, so only
+    // the scrollback still holds the box's top rule.
+    let enters = 0;
+    const routing = createHerdrSendRouting({
+      client: {
+        paneSendText: async () => {},
+        paneSendKeys: async () => {
+          enters += 1;
+        },
+        agentGet: async () => ({ agent_status: enters >= 2 ? "working" : "idle" }),
+        paneRead: async (params) => ({
+          text:
+            params.source === "recent" && enters > 0
+              ? readyScreen(" ❯ the card, still unsent")
+              : ["  ## Notes", RULE, "  status line"].join("\n"),
+        }),
+      },
+      resolvePane: () => "p1",
+      startPollMs: 1,
+    });
+    routing.registerClient("u1", () => {});
+
+    const outcome = await routing.send({ claudeUuid: "u1", content: "hi", confirmStart: true });
+
+    expect(outcome).toEqual({ ok: true });
+    expect(enters).toBe(2);
   });
 });

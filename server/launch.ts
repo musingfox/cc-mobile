@@ -13,6 +13,7 @@ import { writeLaunchBinding } from "./launch-binding";
 import { composeLaunchPrompt } from "./launch-prompt";
 import type { CardWorktrees } from "./launch-worktree";
 import { expandPath, isWithinRoot, validateAllowedPath, validateCwd } from "./path-utils";
+import type { TerminalSendOutcome } from "./terminal-backend";
 import { handleTerminalCreate, sendPrompt, type TerminalControlBackend } from "./terminal-control";
 import { bufferSessionEvent } from "./ws";
 
@@ -87,7 +88,11 @@ function tokenMatches(presented: string, expected: string): boolean {
 export function createLaunchPlugin(opts: {
   config: ServerConfig;
   backend: TerminalControlBackend & {
-    send(params: { claudeUuid: string; content: string; confirmStart?: boolean }): Promise<void>;
+    send(params: {
+      claudeUuid: string;
+      content: string;
+      confirmStart?: boolean;
+    }): Promise<TerminalSendOutcome | void>;
     registerClient(
       claudeUuid: string,
       sink: (msg: Record<string, unknown>) => void,
@@ -241,39 +246,30 @@ export function createLaunchPlugin(opts: {
         headers: request.headers,
         remoteAddress: server?.requestIP(request)?.address,
       });
-      // Routing types nothing into a pane with no sink, and reports refusals
-      // only to the sink — so bind one, owned by this launch alone.
-      let reportedError: string | undefined;
+      // Routing types nothing into a pane with no sink — so bind one, owned by
+      // this launch alone. What it hears is for a phone's replay only: the
+      // launch's answer is the send's own outcome.
       opts.backend.registerClient(
         sessionId,
-        (event) => {
-          if (event.type === "error" && reportedError === undefined) {
-            reportedError = String(event.code);
-          }
-          bufferSessionEvent(opts.eventBuffer, sessionId, event);
-        },
+        (event) => bufferSessionEvent(opts.eventBuffer, sessionId, event),
         {},
       );
+      let outcome: TerminalSendOutcome | undefined;
       try {
-        await sendPrompt(
-          opts.backend,
-          audit,
-          {
-            sessionId,
-            content: composeLaunchPrompt(cardText),
-            ip,
-            device: "launch-api",
-            confirmStart: true,
-          },
-          () => reportedError,
-        );
+        outcome = await sendPrompt(opts.backend, audit, {
+          sessionId,
+          content: composeLaunchPrompt(cardText),
+          ip,
+          device: "launch-api",
+          confirmStart: true,
+        });
       } catch {
         set.status = 502;
         return { error: "prompt_failed", sessionId, claudeUuid };
       }
-      if (reportedError !== undefined) {
+      if (outcome?.ok !== true) {
         set.status = 502;
-        return { error: "prompt_failed", code: reportedError, sessionId, claudeUuid };
+        return { error: "prompt_failed", code: outcome?.code, sessionId, claudeUuid };
       }
       set.status = 201;
       return { sessionId, claudeUuid };

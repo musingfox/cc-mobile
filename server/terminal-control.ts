@@ -15,7 +15,7 @@ import type { LaunchableAgentKind } from "./agents/kinds";
 import type { AgentProfileSource } from "./agents/profiles";
 import type { AuditRecordInput } from "./audit/audit-log";
 import { expandPath, validateAllowedPath, validateCwd } from "./path-utils";
-import type { CreateSessionInput } from "./terminal-backend";
+import type { CreateSessionInput, TerminalSendOutcome } from "./terminal-backend";
 
 /** The slice of the terminal backend these handlers need. */
 export interface TerminalControlBackend {
@@ -188,10 +188,17 @@ export async function handleTerminalTeardown(
  * WS `terminal_send` handler and `POST /api/launch`, so both go through
  * `backend.send` — the call that fires `onPromptSent` (phone-driven push scope).
  * Rethrows a failed send after auditing it.
+ *
+ * The backend's outcome decides the audit only for a send that asked for a
+ * start confirmation (`/api/launch`); the phone's send audits as it always has.
  */
 export async function sendPrompt(
   backend: {
-    send(params: { claudeUuid: string; content: string; confirmStart?: boolean }): Promise<void>;
+    send(params: {
+      claudeUuid: string;
+      content: string;
+      confirmStart?: boolean;
+    }): Promise<TerminalSendOutcome | void>;
   },
   audit: (record: AuditRecordInput) => Promise<void>,
   p: {
@@ -201,27 +208,23 @@ export async function sendPrompt(
     device: string | null;
     confirmStart?: boolean;
   },
-  /**
-   * The error code the routing reported to the pane's sink during this send,
-   * if any. Routing reports a refusal there instead of throwing, so without it
-   * a prompt that was never typed would be audited as dispatched.
-   */
-  reportedError: () => string | undefined = () => undefined,
-): Promise<void> {
+): Promise<TerminalSendOutcome | undefined> {
   const identity = { ip: p.ip, device: p.device };
   try {
-    await backend.send({
+    const sent = await backend.send({
       claudeUuid: p.sessionId,
       content: p.content,
       confirmStart: p.confirmStart,
     });
-    const code = reportedError();
+    const outcome = typeof sent === "object" ? sent : undefined;
+    const code = p.confirmStart && outcome?.ok === false ? outcome.code : undefined;
     await audit({
       action: "prompt_send",
       paneId: p.sessionId,
       ...identity,
       outcome: code === undefined ? "dispatched" : code === "session_busy" ? "rejected" : "failed",
     });
+    return outcome;
   } catch (error) {
     await audit({ action: "prompt_send", paneId: p.sessionId, ...identity, outcome: "failed" });
     throw error;

@@ -18,7 +18,8 @@
  * turn's `done`.
  */
 
-import { composerHasTypedText } from "./prompt-box";
+import type { TerminalSendOutcome } from "../terminal-backend";
+import { composerHasTypedText, promptBoxBody } from "./prompt-box";
 
 export type ClientSink = (msg: Record<string, unknown>) => void;
 
@@ -29,7 +30,11 @@ export interface HerdrSendClient {
   /** Readiness probe: what is this pane's claude doing right now? */
   agentGet(target: string): Promise<{ agent_status?: string }>;
   /** Readiness probe: what is on its screen right now? */
-  paneRead(params: { pane_id: string; source: "detection" }): Promise<{ text: string }>;
+  paneRead(params: {
+    pane_id: string;
+    source: "detection" | "recent";
+    lines?: number;
+  }): Promise<{ text: string }>;
 }
 
 export interface HerdrSendRoutingOptions {
@@ -54,17 +59,17 @@ export interface HerdrSendRoutingOptions {
 /** Statuses in which claude is waiting for input rather than doing something. */
 const READY_STATUSES = new Set(["idle", "done"]);
 
-/**
- * What a started turn shows. herdr's own `agent.prompt` uses the same rule for
- * its `agent_prompt_stalled`: a submit from rest must produce `working` or
- * `blocked`.
- */
-const STARTED_STATUSES = new Set(["working", "blocked"]);
 const DEFAULT_START_POLL_MS = 250;
 /** Samples taken after each Enter: 5s at the default poll, herdr's stall window. */
 const START_POLLS_PER_ENTER = 20;
 /** A swallowed Enter takes two more to send: one strips it, the next submits. */
 const START_ENTER_RETRIES = 2;
+/**
+ * Rows read when looking for the unsent prompt. A card fills a composer taller
+ * than the 40-row screen, so the box's top rule is only in the scrollback: the
+ * detection read found no box at all (live 2026-10-09), `recent` found it.
+ */
+const COMPOSER_READ_LINES = 400;
 
 export interface HerdrSendParams {
   claudeUuid: string;
@@ -135,18 +140,20 @@ export function createHerdrSendRouting(options: HerdrSendRoutingOptions) {
    * silently swallow the user's prompt, and the injection itself reports its own
    * failure.
    */
-  async function isReady(paneId: string): Promise<boolean> {
+  async function isReady(paneId: string): Promise<{ ready: boolean; status?: string }> {
+    let status: string | undefined;
     try {
-      const status = (await client.agentGet(paneId)).agent_status;
-      if (typeof status === "string" && !READY_STATUSES.has(status)) return false;
+      const reported = (await client.agentGet(paneId)).agent_status;
+      if (typeof reported === "string") status = reported;
+      if (status !== undefined && !READY_STATUSES.has(status)) return { ready: false, status };
     } catch {
-      return true;
+      return { ready: true };
     }
     try {
       const read = await client.paneRead({ pane_id: paneId, source: "detection" });
-      return !composerHasTypedText(read.text);
+      return { ready: !composerHasTypedText(read.text), status };
     } catch {
-      return true;
+      return { ready: true, status };
     }
   }
 
@@ -160,30 +167,44 @@ export function createHerdrSendRouting(options: HerdrSendRoutingOptions) {
    * review and press Enter to send"); the one after that sends. Probe
    * 2026-10-09: 6 of 8 claudes started four at a time took no turn, 0 of 2
    * started one at a time; the same text with `\r` appended reproduces it.
-   * An Enter that lands after the turn did start was seen only as an empty
-   * queue entry (transcripts of 2026-10-09), never as a second turn.
+   *
+   * Started is any move away from the status the pane had before the prompt,
+   * `unknown` aside: a turn can run and settle to `done` between two samples.
+   * A failed sample proves nothing either way, so the next Enter is decided by
+   * the screen alone — pressed only while the composer still holds the text,
+   * never on a screen with no composer (a permission, trust or menu prompt,
+   * whose highlighted option it would pick). A composer the text has left is
+   * a submit whose status has not caught up.
    */
-  async function confirmStarted(paneId: string): Promise<boolean> {
-    for (let enter = 0; enter <= START_ENTER_RETRIES; enter += 1) {
-      if (enter > 0) await client.paneSendKeys(paneId, ["Enter"]);
+  async function confirmStarted(paneId: string, before: string): Promise<boolean> {
+    for (let enter = 0; ; enter += 1) {
       for (let poll = 0; poll < START_POLLS_PER_ENTER; poll += 1) {
         await new Promise((resolve) => setTimeout(resolve, startPollMs));
         try {
           const status = (await client.agentGet(paneId)).agent_status;
-          if (typeof status === "string" && STARTED_STATUSES.has(status)) return true;
-        } catch {
-          // One failed sample is not a verdict; the window decides.
-        }
+          if (typeof status === "string" && status !== before && status !== "unknown") return true;
+        } catch {}
       }
+      let screen: string;
+      try {
+        screen = (
+          await client.paneRead({ pane_id: paneId, source: "recent", lines: COMPOSER_READ_LINES })
+        ).text;
+      } catch {
+        return false;
+      }
+      if (promptBoxBody(screen) === null) return false;
+      if (!composerHasTypedText(screen)) return true;
+      if (enter === START_ENTER_RETRIES) return false;
+      await client.paneSendKeys(paneId, ["Enter"]);
     }
-    return false;
   }
 
-  async function send(params: HerdrSendParams): Promise<void> {
+  async function send(params: HerdrSendParams): Promise<TerminalSendOutcome> {
     const { claudeUuid, content } = params;
     if (!clientSinks.has(claudeUuid)) {
       // Unregistered: no RPC, no waiter (the port's send never throws).
-      return;
+      return { ok: false, code: "terminal_send_failed" };
     }
 
     const paneId = await resolveTarget(claudeUuid);
@@ -191,7 +212,8 @@ export function createHerdrSendRouting(options: HerdrSendRoutingOptions) {
     // Readiness is decided BEFORE the waiter is armed: a refusal must leave no
     // trace at all — no injection, no pending turn, nothing for the UI to spin
     // on.
-    if (paneId !== undefined && !(await isReady(paneId))) {
+    const readiness = paneId === undefined ? undefined : await isReady(paneId);
+    if (readiness !== undefined && !readiness.ready) {
       clientSinks.get(claudeUuid)?.({
         type: "error",
         sessionId: claudeUuid,
@@ -199,7 +221,7 @@ export function createHerdrSendRouting(options: HerdrSendRoutingOptions) {
         message:
           "That session is busy — it is mid-turn or someone has started typing in the terminal. Nothing was sent.",
       });
-      return;
+      return { ok: false, code: "session_busy" };
     }
 
     if (paneId !== undefined) await beforeInject(paneId).catch(() => {});
@@ -211,15 +233,18 @@ export function createHerdrSendRouting(options: HerdrSendRoutingOptions) {
       // Verbatim: newlines land in the composer, Enter submits one turn.
       await client.paneSendText(paneId, content);
       await client.paneSendKeys(paneId, ["Enter"]);
-      if (params.confirmStart && !(await confirmStarted(paneId))) {
+      // A pane that answered no status is a fresh one, which comes up idle.
+      if (params.confirmStart && !(await confirmStarted(paneId, readiness?.status ?? "idle"))) {
         clientSinks.get(claudeUuid)?.({
           type: "error",
           sessionId: claudeUuid,
           code: "prompt_not_started",
           message:
-            "The prompt was typed but the agent never started the turn; it may still be sitting in the composer.",
+            "The prompt was typed but the agent was never seen starting the turn; it may still be sitting in the composer.",
         });
+        return { ok: false, code: "prompt_not_started" };
       }
+      return { ok: true };
     } catch (error) {
       // The pane is gone or unreachable: say so rather than leaving the phone
       // waiting for a turn that was never started.
@@ -232,6 +257,7 @@ export function createHerdrSendRouting(options: HerdrSendRoutingOptions) {
           error instanceof Error ? error.message : String(error)
         }). The paired terminal session may have closed.`,
       });
+      return { ok: false, code: "terminal_send_failed" };
     }
   }
 
