@@ -588,6 +588,15 @@ hook reads it. If the write fails the pane is torn down and the reply is
 typed is `502 prompt_failed` with `sessionId` and `claudeUuid`; the binding stays
 in place, because the session itself was already created.
 
+Typed is not started. `pane.send_text` is no bracketed paste, so a claude too
+busy to read between the text and the Enter takes the Enter as part of the paste
+and leaves the prompt in its composer (2026-10-09: 6 of 8 claudes started four
+at a time). So after the Enter the route waits up to 5 s for herdr to report the
+pane `working` or `blocked`, and presses Enter again when it does not, at most
+twice: the first extra Enter only strips the swallowed one, the second sends.
+A prompt that never starts is `502 prompt_failed` with `code: prompt_not_started`,
+audited `failed`, binding kept. The phone's `terminal_send` does not wait.
+
 The prompt typed is a fixed template followed by the card's content. The
 template tells the agent three rules: never use AskUserQuestion (write the
 question in the final reply and end the turn), never run `/clear` (it changes

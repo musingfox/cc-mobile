@@ -318,4 +318,26 @@ describe("PromptInjectionReadinessGate", () => {
 
     expect(harness.order).toContain('paneSendText(p1,"hi")');
   });
+
+  test("a turn that stops at a permission prompt counts as started", async () => {
+    const statuses = ["idle", "idle", "blocked"];
+    const keys: string[][] = [];
+    const seen: Record<string, unknown>[] = [];
+    const routing = createHerdrSendRouting({
+      client: {
+        paneSendText: async () => {},
+        paneSendKeys: async (_pane, k) => void keys.push(k),
+        agentGet: async () => ({ agent_status: statuses.shift() ?? "blocked" }),
+        paneRead: async () => ({ text: readyScreen() }),
+      },
+      resolvePane: () => "p1",
+      startPollMs: 1,
+    });
+    routing.registerClient("u1", (msg) => seen.push(msg));
+
+    await routing.send({ claudeUuid: "u1", content: "hi", confirmStart: true });
+
+    expect(keys).toEqual([["Enter"]]);
+    expect(seen).toEqual([]);
+  });
 });

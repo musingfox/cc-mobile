@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AppBackend, createApp } from "../app";
@@ -12,8 +12,13 @@ const PANE = "w3V:p1";
 const CARD = "# Task\nCARD-BODY do the thing\n";
 const CARD_PATH = "pm/cc-mobile/tasks/card.md";
 
-/** A daemon reporting one idle, drivable claude pane, recording what is typed into it. */
-function fakeHerdr(status = "idle") {
+/**
+ * A daemon reporting one drivable claude pane, recording what is typed into it.
+ * `startsAfterEnters` is how many Enters it takes before claude reports
+ * `working`; `Infinity` is a prompt left sitting in the composer.
+ */
+function fakeHerdr(status = "idle", startsAfterEnters = 1) {
+  let enters = 0;
   const typed: string[] = [];
   const agent = {
     terminal_id: "t1",
@@ -39,8 +44,10 @@ function fakeHerdr(status = "idle") {
     }),
     paneRead: async () => ({ text: "", revision: 1 }),
     paneSendText: async (_pane: string, text: string) => void typed.push(`text:${text}`),
-    paneSendKeys: async (_pane: string, keys: string[]) =>
-      void typed.push(`keys:${keys.join("+")}`),
+    paneSendKeys: async (_pane: string, keys: string[]) => {
+      typed.push(`keys:${keys.join("+")}`);
+      if (keys.includes("Enter") && ++enters >= startsAfterEnters) agent.agent_status = "working";
+    },
     call: async (_m: string, params: unknown) => ({
       type: "pane_process_info",
       process_info: {
@@ -53,9 +60,9 @@ function fakeHerdr(status = "idle") {
   return { client, typed };
 }
 
-function launchApp(status?: string) {
-  const { client, typed } = fakeHerdr(status);
-  const backend = createHerdrBackend({ client: client as never }) as AppBackend;
+function launchApp(status?: string, startsAfterEnters?: number) {
+  const { client, typed } = fakeHerdr(status, startsAfterEnters);
+  const backend = createHerdrBackend({ client: client as never, startPollMs: 1 }) as AppBackend;
   // Only the workspace creation is stood in for; send-routing below is the real one.
   const created: string[] = [];
   backend.createSession = async (input) => {
@@ -92,7 +99,7 @@ function launchApp(status?: string) {
         }),
       }),
     );
-  return { post, typed, eventBuffer, launchesDir, created };
+  return { post, typed, eventBuffer, launchesDir, created, auditPath: join(dir, "a.jsonl") };
 }
 
 test("an HTTP launch with no WebSocket client types the template and card, presses Enter, and binds the session", async () => {
@@ -116,4 +123,41 @@ test("a busy pane answers 502 with the routing's code, and nothing is typed", as
   });
   expect(typed).toEqual([]);
   expect(eventBuffer.replay(PANE, -1).map((e) => e.message.code)).toEqual(["session_busy"]);
+});
+
+test("a prompt claude swallowed is sent by pressing Enter again, and the launch succeeds", async () => {
+  const { post, typed } = launchApp("idle", 3);
+  const r = await post();
+  expect(r.status).toBe(201);
+  expect(typed).toEqual([
+    "text:" + composeLaunchPrompt(CARD),
+    "keys:Enter",
+    "keys:Enter",
+    "keys:Enter",
+  ]);
+});
+
+test("a prompt that never starts a turn answers 502, not 201, and keeps the binding", async () => {
+  const { post, typed, eventBuffer, launchesDir, created, auditPath } = launchApp("idle", Infinity);
+  const r = await post();
+  expect(r.status).toBe(502);
+  expect(await r.json()).toEqual({
+    error: "prompt_failed",
+    code: "prompt_not_started",
+    sessionId: PANE,
+    claudeUuid: created[0],
+  });
+  expect(typed).toEqual([
+    "text:" + composeLaunchPrompt(CARD),
+    "keys:Enter",
+    "keys:Enter",
+    "keys:Enter",
+  ]);
+  expect(existsSync(join(launchesDir, `${created[0]}.json`))).toBe(true);
+  expect(eventBuffer.replay(PANE, -1).map((e) => e.message.code)).toEqual(["prompt_not_started"]);
+  const audit = readFileSync(auditPath, "utf8")
+    .trim()
+    .split("\n")
+    .map((l) => JSON.parse(l));
+  expect(audit.map((a) => [a.action, a.outcome])).toEqual([["prompt_send", "failed"]]);
 });

@@ -43,6 +43,12 @@ export interface TeardownResult {
 export interface TerminalSendParams {
   claudeUuid: string;
   content: string;
+  /**
+   * Wait until the agent is seen starting the turn, and report
+   * `prompt_not_started` when it never does. Only `/api/launch` asks: nobody is
+   * watching a launched pane to notice a prompt left sitting in its composer.
+   */
+  confirmStart?: boolean;
 }
 
 export interface TerminalSessionInfo {

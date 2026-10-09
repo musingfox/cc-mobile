@@ -47,20 +47,36 @@ export interface HerdrSendRoutingOptions {
    * typed. A rejection is swallowed: whatever it prepares, the prompt still goes.
    */
   beforeInject?: (paneId: string) => Promise<void>;
+  /** Delay between `agent_status` samples while confirming a start (default 250ms). */
+  startPollMs?: number;
 }
 
 /** Statuses in which claude is waiting for input rather than doing something. */
 const READY_STATUSES = new Set(["idle", "done"]);
 
+/**
+ * What a started turn shows. herdr's own `agent.prompt` uses the same rule for
+ * its `agent_prompt_stalled`: a submit from rest must produce `working` or
+ * `blocked`.
+ */
+const STARTED_STATUSES = new Set(["working", "blocked"]);
+const DEFAULT_START_POLL_MS = 250;
+/** Samples taken after each Enter: 5s at the default poll, herdr's stall window. */
+const START_POLLS_PER_ENTER = 20;
+/** A swallowed Enter takes two more to send: one strips it, the next submits. */
+const START_ENTER_RETRIES = 2;
+
 export interface HerdrSendParams {
   claudeUuid: string;
   content: string;
+  confirmStart?: boolean;
 }
 
 export function createHerdrSendRouting(options: HerdrSendRoutingOptions) {
   const { client, resolvePane } = options;
   const listDrivablePanes = options.listDrivablePanes ?? (async () => []);
   const beforeInject = options.beforeInject ?? (async () => {});
+  const startPollMs = options.startPollMs ?? DEFAULT_START_POLL_MS;
 
   const clientSinks = new Map<string, ClientSink>();
   const ownerToUuids = new Map<unknown, Set<string>>();
@@ -134,6 +150,35 @@ export function createHerdrSendRouting(options: HerdrSendRoutingOptions) {
     }
   }
 
+  /**
+   * Whether claude took the Enter as a submit, pressing it again when not.
+   *
+   * `pane.send_text` is not a bracketed paste, so a claude too busy to read
+   * between the two writes gets the Enter in the same burst as the text. It
+   * keeps the Enter as part of the paste, and the text then sits in the
+   * composer. The next Enter only strips it ("Removed 1 invisible character ·
+   * review and press Enter to send"); the one after that sends. Probe
+   * 2026-10-09: 6 of 8 claudes started four at a time took no turn, 0 of 2
+   * started one at a time; the same text with `\r` appended reproduces it.
+   * An Enter that lands after the turn did start was seen only as an empty
+   * queue entry (transcripts of 2026-10-09), never as a second turn.
+   */
+  async function confirmStarted(paneId: string): Promise<boolean> {
+    for (let enter = 0; enter <= START_ENTER_RETRIES; enter += 1) {
+      if (enter > 0) await client.paneSendKeys(paneId, ["Enter"]);
+      for (let poll = 0; poll < START_POLLS_PER_ENTER; poll += 1) {
+        await new Promise((resolve) => setTimeout(resolve, startPollMs));
+        try {
+          const status = (await client.agentGet(paneId)).agent_status;
+          if (typeof status === "string" && STARTED_STATUSES.has(status)) return true;
+        } catch {
+          // One failed sample is not a verdict; the window decides.
+        }
+      }
+    }
+    return false;
+  }
+
   async function send(params: HerdrSendParams): Promise<void> {
     const { claudeUuid, content } = params;
     if (!clientSinks.has(claudeUuid)) {
@@ -166,6 +211,15 @@ export function createHerdrSendRouting(options: HerdrSendRoutingOptions) {
       // Verbatim: newlines land in the composer, Enter submits one turn.
       await client.paneSendText(paneId, content);
       await client.paneSendKeys(paneId, ["Enter"]);
+      if (params.confirmStart && !(await confirmStarted(paneId))) {
+        clientSinks.get(claudeUuid)?.({
+          type: "error",
+          sessionId: claudeUuid,
+          code: "prompt_not_started",
+          message:
+            "The prompt was typed but the agent never started the turn; it may still be sitting in the composer.",
+        });
+      }
     } catch (error) {
       // The pane is gone or unreachable: say so rather than leaving the phone
       // waiting for a turn that was never started.
