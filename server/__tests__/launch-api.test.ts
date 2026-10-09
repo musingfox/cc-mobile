@@ -94,6 +94,7 @@ function setup(opts: SetupOptions = {}) {
       const file = join(launchesDir, `${creates[0]?.claudeUuid}.json`);
       bindingAtSend.push({ text: existsSync(file) ? readFileSync(file, "utf8") : null });
       if (opts.sendFails) throw new Error("boom");
+      return { ok: true as const };
     },
   };
   const app = createLaunchPlugin({

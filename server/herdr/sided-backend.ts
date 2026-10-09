@@ -9,6 +9,7 @@ import type {
   CreateSessionInput,
   TeardownResult,
   TerminalHasSessionResult,
+  TerminalSendOutcome,
   TerminalSendParams,
   TerminalSessionInfo,
 } from "../terminal-backend";
@@ -149,7 +150,7 @@ export function createSidedBackend(options: SidedBackendOptions) {
     integrationStates: () => cockpit.backend.integrationStates(),
     pushSubscriberCount: () => cockpit.backend.pushSubscriberCount(),
 
-    send(params: TerminalSendParams): Promise<void> {
+    send(params: TerminalSendParams): Promise<TerminalSendOutcome | void> {
       const { backend, paneId } = route(params.claudeUuid);
       return backend.send({ ...params, claudeUuid: paneId });
     },

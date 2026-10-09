@@ -11,6 +11,7 @@ import { buildUrl } from "./path-utils";
 import { ClientMessage, type HerdrStatus, type WireSide } from "./protocol";
 import type { ForegroundTracker } from "./push/foreground";
 import type { SessionManager } from "./session-manager";
+import type { TerminalSendOutcome } from "./terminal-backend";
 import {
   handleTerminalCreate,
   handleTerminalTeardown,
@@ -121,7 +122,7 @@ export interface WsBackend extends TerminalControlBackend {
   /** Connection lifecycle for pending native prompts (see resolvePermission). */
   pausePermissions?(): void;
   resumePermissions?(): Promise<void> | void;
-  send(params: { claudeUuid: string; content: string }): Promise<void>;
+  send(params: { claudeUuid: string; content: string }): Promise<TerminalSendOutcome | void>;
   registerClient(
     claudeUuid: string,
     sink: (msg: Record<string, unknown>) => void,

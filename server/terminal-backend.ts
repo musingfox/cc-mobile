@@ -51,6 +51,15 @@ export interface TerminalSendParams {
   confirmStart?: boolean;
 }
 
+/**
+ * How a send ended, returned to the caller as well as reported to the pane's
+ * sink. A caller that must decide on it reads this, never the sink: a phone
+ * listing sessions rebinds the sink mid-send, and other notices share it.
+ */
+export type TerminalSendOutcome =
+  | { ok: true }
+  | { ok: false; code: "session_busy" | "terminal_send_failed" | "prompt_not_started" };
+
 export interface TerminalSessionInfo {
   /** Backend-native session name (herdr: the agent name). */
   name: string;
@@ -80,7 +89,7 @@ export interface TerminalBackend {
   teardown(claudeUuid: string): Promise<TeardownResult>;
   teardownAll(): Promise<void>;
   /** Never throws: unregistered sink is a silent no-op, send failures are reported via the sink. */
-  send(params: TerminalSendParams): Promise<void>;
+  send(params: TerminalSendParams): Promise<TerminalSendOutcome | void>;
   registerClient(claudeUuid: string, sink: ClientSink, owner?: unknown): void;
   getClient(claudeUuid: string): ClientSink | undefined;
   /** Transient disconnect cleanup — drops the owner's sinks but keeps waiters armed. */
