@@ -43,7 +43,7 @@ const STATUS: Record<string, number> = {
  * containment can refuse. Search permission on each directory crossed is enough.
  * Throws when the path does not resolve.
  */
-async function resolveByLstat(path: string): Promise<{ path: string; stats: Stats }> {
+export async function resolveByLstat(path: string): Promise<{ path: string; stats: Stats }> {
   const pending = path.split("/").filter(Boolean);
   let resolved = "/";
   let stats = await lstat(resolved);
