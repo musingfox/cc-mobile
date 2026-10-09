@@ -1,0 +1,67 @@
+ ▐▛███▛█   Claude Code v2.1.295
+▝▜██████▀  Opus 5.5 (1M context) with high effort · Claude Max
+ ▝▝   ▝▝   ~/workspace/cc-mobile/.claude/worktrees/launch-prompt-not-submitted
+
+  ⎿  SessionStart:startup says: Hindsight is tracking the decisions, conventions and history of this repo
+       ↳ memory bank “cc-mobile” · catching up on new commits
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 你正在被無人值守地派工，操作者可能不在終端機前。請遵守三條規則：
+
+  1. 不要使用 AskUserQuestion 工具。需要問問題時，把問題寫在最終回覆裡，然後結束這一輪。
+  2. 絕對不要執行 /clear。它會換掉 session id，使這張任務卡的綁定失效。
+  3. 每一輪最終回覆的第一行必須恰好是下列三者之一：
+  結果：完成
+  結果：需要你
+  結果：失敗
+
+  以下是任務卡：
+
+  ---
+  title: "讀卡片：掃描各 repo 的 .obsidian.yaml，唯讀讀取 obw 任務卡"
+  status: todo
+  priority: medium
+  project: cc-mobile
+  type: task
+  due:
+  tags: []
+  parent:
+  blocked_by: []
+  related: []
+  created: 2026-10-05
+  ---
+
+  # card-source-reader
+
+  ## Description
+
+  收件匣要知道有哪些卡。cc-mobile 掃描 `~/workspace/*/.obsidian.yaml`，讀出 `vault` 和 `pm.project`，再讀 vault 裡
+  `pm/<project>/tasks/*.md` 的 frontmatter。這台 Mac 的 vault 名稱是 obsidian，路徑是 `~/Documents/obsidian`。vault
+  名稱對路徑的對應要從 Obsidian 自己的設定讀，不要寫死。
+
+  cc-mobile 對 vault 只讀不寫。卡片的回寫由 obw 的 hook 負責，結案和封存由 obw 負責，因為封存前的依賴檢查規則寫在 obw
+  的 `skills/pm/SKILL.md`。
+
+  「可以派發」的定義是 `status: todo` 而且 `blocked_by` 是空的，和 obw 的 frontier
+  查詢一致（`skills/pm/SKILL.md:99`）。2026-10-05 決定，卡片進到 `todo`
+  就代表可以送審，不另外加待核准狀態。已經有綁定的卡（有 `session` 欄位或綁定檔）不算可以派發。
+
+  專案對 repo 不一定是一對一。2026-10 時有 13 個 repo 設了 pm 專案，其中 cyris 對到 `cyris` 和
+  `cyris-archive`，shikigami 對到 `shikigami` 和 `shikigami-bridge`。一對多時，回傳所有候選 repo，讓使用者在派發時選。
+
+  背景與完整設計見 [[手機-obsidian-開-claude-code-session-評估與原型結果]] 的「第二階段」一節。
+
+  ## Acceptance Criteria
+
+  - [ ] 新的唯讀 API（例如 `GET /api/cards`）回傳依專案分組的卡片，每張含
+  title、status、priority、blocked_by、檔案路徑和候選 repo。
+  - [ ] cc-plugins 專案回傳的「可以派發」清單，和在 Obsidian 執行 obw 的 frontier 查詢得到的清單相同。
+  - [ ] cyris 專案回傳兩個候選 repo。
+  - [ ] 有測試證明讀卡片的過程沒有寫入 vault 的任何檔案。
+
+  ## Notes
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  launch-prompt-not-submitted | Opus 5.5 (1M context) (high) | ░░░░░░░░░░░░░░░ 0% | (fleet/launch-prompt-not-submitte…
+  ⏵⏵ auto mode on (shift+tab to cycle)
+                                                                                                ctrl+g to edit in Nvim

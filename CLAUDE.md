@@ -591,23 +591,31 @@ in place, because the session itself was already created.
 Typed is not started. `pane.send_text` is no bracketed paste, so a claude too
 busy to read between the text and the Enter takes the Enter as part of the paste
 and leaves the prompt in its composer (2026-10-09: 6 of 8 claudes started four
-at a time). So after the Enter the route samples herdr for up to 5 s, and any
-move away from the pane's pre-prompt status other than `unknown` counts as
-started (`done` included: a turn can settle between two samples). With no move
-it reads the screen: a composer the text has left also counts as started; a
-composer still holding it gets another Enter, at most two (the first only strips
-the swallowed one, the second sends); a screen with no composer, or one it cannot
-read, gets no key at all, since an Enter there would answer a dialog. A prompt not
-seen starting is `502 prompt_failed` with `code: prompt_not_started`, audited
-`failed`, binding kept — "not confirmed" rather than proof nothing ran. The
-answer is the send's own return value, never what reaches the pane's sink, which
-a phone listing sessions may rebind mid-wait. Measured from the Enter, a
-launch answers within one 250 ms sample of the turn starting, about 10 s later
-when it needed both extra Enters, and about 15 s later when it fails; claude's
-own startup (about 4 s) and the worktree come before that. Four concurrent
-launches that each needed both Enters took 15–16 s end to end, so a failed one
-takes about 20 s and a caller's timeout needs 30 s or more. The phone's
-`terminal_send` does not wait.
+at a time). So after the Enter the route samples herdr for 5 s by the clock, and
+any move away from the pane's pre-prompt status other than `unknown` counts as
+started (`done` included: a turn can settle between two samples). Another Enter
+is pressed only on evidence that nothing started, at most twice (the first only
+strips the swallowed Enter, the second sends): every sample of the window
+answered, with that same status, and the bottom of the screen — read from the
+scrollback, since a card's composer outgrows it — is claude's composer, with no
+more than a short footer under it, opening with the prompt's first line. Anything
+else presses nothing and fails: a failed, `unknown` or missing sample, an empty
+composer, or a question, permission, trust or menu dialog, whose highlighted
+option an Enter would pick. A prompt not seen starting is `502 prompt_failed`
+with `code: prompt_not_started`, audited `failed`, binding kept — "not
+confirmed" rather than proof nothing ran. The answer is the send's own return
+value, never what reaches the pane's sink, which a phone listing sessions may
+rebind mid-wait.
+
+The wait is bounded by the clock, not by a count of samples: each 5 s window
+cuts off a slow `agent.get` at its end, and the screen read and each extra Enter
+are cut off at 1 s. So from the first Enter a launch answers within one 250 ms
+sample of the turn starting, about 10 s later when it needed both extra Enters,
+and at most 19 s later when it fails (15 s when the daemon answers promptly).
+Before that Enter come the worktree and claude's startup: about 4 s on a live
+pane, bounded by the 10 s shell and 30 s readiness budgets. Four concurrent
+launches that each needed both Enters took 15–16 s end to end; a caller's
+timeout of 60 s covers every bound. The phone's `terminal_send` does not wait.
 
 The prompt typed is a fixed template followed by the card's content. The
 template tells the agent three rules: never use AskUserQuestion (write the

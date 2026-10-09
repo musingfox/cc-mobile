@@ -7,6 +7,8 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { createHerdrSendRouting } from "./send-routing";
 
 /** A composer box in herdr's own shape: body between the last two rules. */
@@ -364,12 +366,161 @@ describe("PromptInjectionReadinessGate", () => {
       },
       resolvePane: () => "p1",
       startPollMs: 1,
+      startWindowMs: 20,
     });
     routing.registerClient("u1", () => {});
 
-    const outcome = await routing.send({ claudeUuid: "u1", content: "hi", confirmStart: true });
+    const outcome = await routing.send({
+      claudeUuid: "u1",
+      content: "the card, still unsent\nsecond line",
+      confirmStart: true,
+    });
 
     expect(outcome).toEqual({ ok: true });
     expect(enters).toBe(2);
+  });
+});
+
+const IDLE_BOX = ["", RULE, "❯ ", RULE].join("\n");
+
+/**
+ * A pane whose prompt is typed and then sits there: the Enters are counted,
+ * `status` answers each sample after the text, and `screen` is every read.
+ */
+function stalledPane(
+  screen: string,
+  status: () => Promise<{ agent_status?: string }>,
+  options: { startWindowMs?: number } = {},
+) {
+  let typed = false;
+  let enters = 0;
+  const routing = createHerdrSendRouting({
+    client: {
+      paneSendText: async () => {
+        typed = true;
+      },
+      paneSendKeys: async (_pane, keys) => {
+        if (keys.includes("Enter")) enters += 1;
+      },
+      agentGet: async () => (typed ? status() : { agent_status: "idle" }),
+      paneRead: async () => ({ text: typed ? screen : IDLE_BOX }),
+    },
+    resolvePane: () => "p1",
+    startPollMs: 1,
+    startWindowMs: options.startWindowMs ?? 20,
+  });
+  routing.registerClient("u1", () => {});
+  const send = (content: string) => routing.send({ claudeUuid: "u1", content, confirmStart: true });
+  return { send, extraEnters: () => enters - 1 };
+}
+
+const steadyIdle = async () => ({ agent_status: "idle" });
+const failing = async (): Promise<{ agent_status?: string }> => {
+  throw new Error("herdr agent.get: no response");
+};
+const fixture = (dir: string, name: string) =>
+  readFileSync(join(import.meta.dir, dir, name), "utf8");
+
+describe("PromptStartConfirmation retry Enter", () => {
+  test("presses again on the live capture of a launch prompt left in the composer", async () => {
+    const pane = stalledPane(fixture("fixtures", "claude-unsent-launch-prompt.txt"), steadyIdle);
+    const outcome = await pane.send(
+      "你正在被無人值守地派工，操作者可能不在終端機前。請遵守三條規則：\n\n1. …",
+    );
+    expect(outcome).toEqual({ ok: false, code: "prompt_not_started" });
+    expect(pane.extraEnters()).toBe(2);
+  });
+
+  const captures = readdirSync(join(import.meta.dir, "permission", "fixtures")).filter((f) =>
+    f.endsWith(".txt"),
+  );
+  for (const name of captures) {
+    test(`presses nothing on the dialog capture ${name}, though the status sits still`, async () => {
+      const screen = fixture(join("permission", "fixtures"), name);
+      // The worst case: what was sent is the very line the screen shows after a caret.
+      const caret = /^\s*[❯>]\s?(\S.*)$/m.exec(screen)?.[1]?.trim() ?? "# Task";
+      const pane = stalledPane(screen, steadyIdle);
+      expect(await pane.send(`${caret}\nmore`)).toEqual({ ok: false, code: "prompt_not_started" });
+      expect(pane.extraEnters()).toBe(0);
+    });
+  }
+
+  test("presses nothing on a question dialog while status samples fail (review repro 1)", async () => {
+    for (const name of [
+      "claude-ask-user-question.txt",
+      "claude-ask-multiselect.txt",
+      "claude-ask-stepper.txt",
+    ]) {
+      const pane = stalledPane(fixture(join("permission", "fixtures"), name), failing);
+      expect(await pane.send("# Task")).toEqual({ ok: false, code: "prompt_not_started" });
+      expect(pane.extraEnters()).toBe(0);
+    }
+  });
+
+  test("presses nothing on a permission dialog under an earlier empty composer (review repro 2)", async () => {
+    const screen = `${IDLE_BOX}\n${fixture(join("permission", "fixtures"), "blocked-bash-prompt.txt")}`;
+    for (const status of [failing, steadyIdle]) {
+      const pane = stalledPane(screen, status);
+      expect(await pane.send("# Task")).toEqual({ ok: false, code: "prompt_not_started" });
+      expect(pane.extraEnters()).toBe(0);
+    }
+  });
+
+  test("one failed sample in a window is enough to press nothing", async () => {
+    let calls = 0;
+    const pane = stalledPane(fixture("fixtures", "claude-unsent-launch-prompt.txt"), async () => {
+      calls += 1;
+      if (calls === 2) throw new Error("socket closed");
+      return { agent_status: "idle" };
+    });
+    expect(
+      await pane.send("你正在被無人值守地派工，操作者可能不在終端機前。請遵守三條規則："),
+    ).toEqual({
+      ok: false,
+      code: "prompt_not_started",
+    });
+    expect(pane.extraEnters()).toBe(0);
+  });
+
+  test("an unknown or missing status presses nothing", async () => {
+    for (const reported of [{ agent_status: "unknown" }, {}]) {
+      const pane = stalledPane(
+        fixture("fixtures", "claude-unsent-launch-prompt.txt"),
+        async () => reported,
+      );
+      expect(
+        await pane.send("你正在被無人值守地派工，操作者可能不在終端機前。請遵守三條規則："),
+      ).toEqual({
+        ok: false,
+        code: "prompt_not_started",
+      });
+      expect(pane.extraEnters()).toBe(0);
+    }
+  });
+
+  test("a composer opening with some other text presses nothing", async () => {
+    const pane = stalledPane(readyScreen(" ❯ something else entirely"), steadyIdle);
+    expect(await pane.send("the prompt we typed")).toEqual({
+      ok: false,
+      code: "prompt_not_started",
+    });
+    expect(pane.extraEnters()).toBe(0);
+  });
+
+  test("the wait is bounded by the clock, however slowly agent.get answers (review repro 3)", async () => {
+    const screen = readyScreen(" ❯ # Task");
+    for (const status of [
+      async () => {
+        await Bun.sleep(60);
+        return { agent_status: "idle" };
+      },
+      () => new Promise<{ agent_status?: string }>(() => {}),
+    ]) {
+      const pane = stalledPane(screen, status, { startWindowMs: 100 });
+      const started = performance.now();
+      expect(await pane.send("# Task")).toEqual({ ok: false, code: "prompt_not_started" });
+      // Three windows of 100 ms at most, plus two screen reads and two Enters that answer at once.
+      expect(performance.now() - started).toBeLessThan(450);
+    }
   });
 });

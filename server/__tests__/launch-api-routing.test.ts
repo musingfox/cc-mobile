@@ -72,7 +72,7 @@ function fakeHerdr(claude: Claude = {}) {
       if (screen === "dialog")
         return { text: "Do you want to proceed?\n❯ 1. Yes\n  2. No", revision: 2 };
       return {
-        text: ["", RULE, " ❯ # Task", "   CARD-BODY do the thing", RULE].join("\n"),
+        text: ["", RULE, `❯ ${composeLaunchPrompt(CARD).split("\n")[0]}`, "  …", RULE].join("\n"),
         revision: 2,
       };
     },
@@ -101,7 +101,11 @@ function fakeHerdr(claude: Claude = {}) {
 
 function launchApp(claude?: Claude) {
   const { client, typed, hooks } = fakeHerdr(claude);
-  const backend = createHerdrBackend({ client: client as never, startPollMs: 1 }) as AppBackend;
+  const backend = createHerdrBackend({
+    client: client as never,
+    startPollMs: 1,
+    startWindowMs: 20,
+  }) as AppBackend;
   // Only the workspace creation is stood in for; send-routing below is the real one.
   const created: string[] = [];
   backend.createSession = async (input) => {
@@ -238,9 +242,11 @@ test("a turn that already settled to done counts as started, with no extra Enter
   expect(typed).toEqual(PROMPT_THEN_ENTER);
 });
 
-test("a composer the prompt has left counts as started though the status lags", async () => {
+test("a status that never moves is not confirmed, even when the composer has emptied", async () => {
   const { post, typed } = launchApp({ startStatus: "idle" });
-  expect((await post()).status).toBe(201);
+  const r = await post();
+  expect(r.status).toBe(502);
+  expect((await r.json()).code).toBe("prompt_not_started");
   expect(typed).toEqual(PROMPT_THEN_ENTER);
 });
 
@@ -264,8 +270,10 @@ test("failed status samples and an unreadable screen press nothing more and repo
   expect(typed).toEqual(PROMPT_THEN_ENTER);
 });
 
-test("failed status samples alone still let the screen decide the next Enter", async () => {
+test("failed status samples press nothing, though the prompt is still in the composer", async () => {
   const { post, typed } = launchApp({ startsAfterEnters: 2, statusFailsAfterTyping: true });
-  expect((await post()).status).toBe(201);
-  expect(typed).toEqual([...PROMPT_THEN_ENTER, "keys:Enter"]);
+  const r = await post();
+  expect(r.status).toBe(502);
+  expect((await r.json()).code).toBe("prompt_not_started");
+  expect(typed).toEqual(PROMPT_THEN_ENTER);
 });

@@ -136,3 +136,48 @@ export function composerHasTypedText(text: string): boolean {
     return match !== null && match[1] !== undefined && match[1].trim().length > 0;
   });
 }
+
+/** Claude's status lines under its composer: three on a live pane (2026-10-09). */
+const MAX_FOOTER_LINES = 4;
+/** A line only a dialog draws: its selection caret or a numbered option. */
+const DIALOG_LINE = /❯|^\s*\d+\.\s/;
+
+/**
+ * True only when the bottom of the screen is claude's composer and its first
+ * line, after the caret, is exactly `firstLine`.
+ *
+ * The positive check an extra Enter needs, where `composerHasTypedText` is the
+ * fail-open one the readiness gate needs. Its box rule reads claude's own
+ * question and permission dialogs as a composer (they draw rules and a caret
+ * too), and an Enter there picks the highlighted option. So the box must be the
+ * last one on screen with nothing under it but a short footer that holds no
+ * dialog line, and its caret line must be this prompt's — a dialog's caret
+ * line is an option, never the prompt.
+ */
+export function bottomComposerOpensWith(text: string, firstLine: string): boolean {
+  const wanted = firstLine.trim();
+  if (wanted.length === 0) return false;
+  const lines = text.split("\n");
+  let bottom = -1;
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    if (isHorizontalRule(lines[i] ?? "")) {
+      bottom = i;
+      break;
+    }
+  }
+  if (bottom <= 0) return false;
+  const footer = lines.slice(bottom + 1).filter((line) => line.trim().length > 0);
+  if (footer.length > MAX_FOOTER_LINES || footer.some((line) => DIALOG_LINE.test(line))) {
+    return false;
+  }
+  let top = -1;
+  for (let i = bottom - 1; i >= 0; i -= 1) {
+    if (isHorizontalRule(lines[i] ?? "")) {
+      top = i;
+      break;
+    }
+  }
+  if (top === -1 || top + 1 >= bottom) return false;
+  const opening = CARET_LINE.exec(lines[top + 1] ?? "");
+  return opening?.[1]?.trim() === wanted;
+}
