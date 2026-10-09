@@ -256,7 +256,12 @@ function rig(options: {
   });
 
   async function phone() {
-    const server = app.listen(0).server as { port: number; stop(force?: boolean): void };
+    // Bound where the phone dials: a wildcard bind can be handed a port another
+    // process already holds on 127.0.0.1, and the dial then reaches that process.
+    const server = app.listen({ port: 0, hostname: "127.0.0.1" }).server as {
+      port: number;
+      stop(force?: boolean): void;
+    };
     const socket = new WsClient(`ws://127.0.0.1:${server.port}/ws?device=phone-a`);
     const frames: Frame[] = [];
     socket.onmessage = (event) => frames.push(JSON.parse(String(event.data)));
