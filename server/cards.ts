@@ -3,6 +3,8 @@ import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { Elysia } from "elysia";
 import type { ServerConfig } from "./config";
+import { resolveByLstat } from "./launch";
+import { isWithinRoot } from "./path-utils";
 
 export interface Card {
   /** Vault-relative, the form `POST /api/launch` takes as `cardPath`. */
@@ -24,7 +26,7 @@ export interface CardProject {
 
 export interface CardsReply {
   projects: CardProject[];
-  skipped: { repo: string; reason: "invalid_config" | "vault_not_found" }[];
+  skipped: { repo: string; reason: "invalid_config" | "vault_not_found" | "tasks_outside_vault" }[];
 }
 
 export interface CardSources {
@@ -105,23 +107,39 @@ async function boundCards(dir: string): Promise<Set<string>> {
 }
 
 function blockers(v: unknown): string[] {
-  if (v === null || v === undefined) return [];
-  return (Array.isArray(v) ? v : [v]).map(String);
+  return (Array.isArray(v) ? v : [v])
+    .filter((x) => x !== null && x !== undefined && x !== "")
+    .map(String);
+}
+
+/**
+ * The tasks folder's real path: `null` when it does not resolve, `"outside"`
+ * when a symlink anywhere above it leads out of the vault, where
+ * `/api/launch` would refuse every card with `card_not_allowed`.
+ */
+async function resolveTasksDir(vaultPath: string, root: string | null, project: string) {
+  if (root === null) return null;
+  try {
+    const tasks = (await resolveByLstat(join(vaultPath, "pm", project, "tasks"))).path;
+    return isWithinRoot(tasks, root) ? tasks : "outside";
+  } catch {
+    return null;
+  }
 }
 
 async function readProjectCards(
   vault: string,
-  vaultPath: string,
+  tasksDir: string,
   project: string,
   bound: Set<string>,
 ): Promise<Card[]> {
   const dir = join("pm", project, "tasks");
-  const entries = await readdir(join(vaultPath, dir), { withFileTypes: true }).catch(() => []);
+  const entries = await readdir(tasksDir, { withFileTypes: true }).catch(() => []);
   const cards: Card[] = [];
-  // Regular files only: no archive/ subfolder, and no symlink out of the vault.
+  // Regular files only: the archive/ subfolder and symlinked cards are not read.
   for (const entry of entries.filter((e) => e.isFile() && e.name.endsWith(".md"))) {
     const cardPath = join(dir, entry.name);
-    const fm = frontmatter((await readOrNull(join(vaultPath, cardPath))) ?? "");
+    const fm = frontmatter((await readOrNull(join(tasksDir, entry.name))) ?? "");
     const blockedBy = blockers(fm.blocked_by);
     const status = text(fm.status);
     cards.push({
@@ -130,12 +148,13 @@ async function readProjectCards(
       status,
       priority: text(fm.priority),
       blockedBy,
-      // obw's frontier also requires `type: task`. The template writes an empty
-      // `session:` on every card, so only a value counts as bound.
+      // obw's frontier requires `type: task` and counts a blocker only by a
+      // `[[` in its value. The template writes an empty `session:` on every
+      // card, so only a value counts as bound.
       dispatchable:
         fm.type === "task" &&
         status === "todo" &&
-        blockedBy.length === 0 &&
+        !blockedBy.some((b) => b.includes("[[")) &&
         text(fm.session) === null &&
         !bound.has(`${vault}\0${cardPath}`),
     });
@@ -185,16 +204,32 @@ export async function readCards(sources: CardSources): Promise<CardsReply> {
     groups.set(key, group);
   }
 
+  const roots = new Map<string, string | null>();
   const projects: CardProject[] = [];
   for (const { vault, vaultPath, project, repos } of groups.values()) {
+    if (!roots.has(vaultPath)) {
+      roots.set(
+        vaultPath,
+        await resolveByLstat(vaultPath).then(
+          (r) => r.path,
+          () => null,
+        ),
+      );
+    }
+    const tasksDir = await resolveTasksDir(vaultPath, roots.get(vaultPath) ?? null, project);
+    if (tasksDir === "outside") {
+      for (const repo of repos) skipped.push({ repo, reason: "tasks_outside_vault" });
+      continue;
+    }
     projects.push({
       vault,
       project,
       repos,
-      cards: await readProjectCards(vault, vaultPath, project, bound),
+      cards: tasksDir === null ? [] : await readProjectCards(vault, tasksDir, project, bound),
     });
   }
   projects.sort((a, b) => a.project.localeCompare(b.project) || a.vault.localeCompare(b.vault));
+  skipped.sort((a, b) => a.repo.localeCompare(b.repo));
   return { projects, skipped };
 }
 

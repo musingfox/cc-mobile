@@ -557,13 +557,17 @@ dispatch through `POST /api/launch`. It reads every `~/workspace/*/.obsidian.yam
 that has a `pm.project`, finds the vault's path by name in Obsidian's own
 `obsidian.json` (a vault's name is its folder's basename; nothing is hardcoded),
 and reads the frontmatter of `pm/<project>/tasks/*.md` — regular files only, so
-`archive/` and symlinks are not read. Projects are grouped by `(vault, project)`
+`archive/` and a symlinked card are not read. A symlink above the cards is
+followed the way `/api/launch` follows it (`resolveByLstat`), and a tasks folder
+that resolves outside the vault skips its project as `tasks_outside_vault`,
+since launch would refuse every card in it. Projects are grouped by `(vault, project)`
 and carry every repo that names them, because a project can map to several
 repos and the dispatcher picks one. A repo whose config cannot be followed is
 listed under `skipped` (`invalid_config`, or `vault_not_found` when its vault
 name is not one Obsidian knows) rather than dropped.
 
-`dispatchable` is `type: task`, `status: todo`, an empty `blocked_by`, and no
+`dispatchable` is `type: task`, `status: todo`, no `[[` link in any `blocked_by`
+value (an empty string or list item blocks nothing, as in obw), and no
 binding — neither a `session` value (the template writes an empty `session:`
 on every card, which does not count) nor a file in the launches directory
 naming the same `{vault, cardPath}`. That is obw's frontier query with

@@ -7,6 +7,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -152,6 +153,54 @@ describe("GET /api/cards", () => {
       "null-blocker.md": true,
       "session.md": false,
     });
+  });
+
+  test("only a [[link]] in blocked_by blocks, as in obw's frontier", async () => {
+    repo("p", "vault: obsidian\npm:\n  project: p\n");
+    card("p", "empty-string.md", 'type: task\nstatus: todo\nblocked_by: ""');
+    card("p", "empty-item.md", "type: task\nstatus: todo\nblocked_by:\n  -");
+    card("p", "blank-item.md", 'type: task\nstatus: todo\nblocked_by:\n  - ""');
+    card("p", "plain-text.md", 'type: task\nstatus: todo\nblocked_by: ["see notes"]');
+    card("p", "link-string.md", 'type: task\nstatus: todo\nblocked_by: "[[x]]"');
+    card("p", "link-among.md", 'type: task\nstatus: todo\nblocked_by: ["", "[[x]]"]');
+    const { body } = await get();
+    expect(
+      Object.fromEntries(
+        body.projects[0].cards.map((c) => [c.cardPath.split("/").pop(), c.dispatchable]),
+      ),
+    ).toEqual({
+      "blank-item.md": true,
+      "empty-item.md": true,
+      "empty-string.md": true,
+      "link-among.md": false,
+      "link-string.md": false,
+      "plain-text.md": true,
+    });
+  });
+
+  test("a symlink leading the cards out of the vault skips the project", async () => {
+    const outside = join(tmp, "outside");
+    write(join(outside, "tasks", "secret.md"), "---\ntype: task\nstatus: todo\n---\n");
+    repo("via-tasks", "vault: obsidian\npm:\n  project: symtasks\n");
+    mkdirSync(join(vault, "pm", "symtasks"), { recursive: true });
+    symlinkSync(join(outside, "tasks"), join(vault, "pm", "symtasks", "tasks"));
+    repo("via-project", "vault: obsidian\npm:\n  project: symproject\n");
+    symlinkSync(outside, join(vault, "pm", "symproject"));
+    // A symlink that stays inside the vault is followed, as /api/launch follows it.
+    repo("inside", "vault: obsidian\npm:\n  project: inside\n");
+    card("real", "kept.md", "type: task\nstatus: todo");
+    symlinkSync(join(vault, "pm", "real"), join(vault, "pm", "inside"));
+    // A symlinked card is never read, wherever it points.
+    symlinkSync(join(outside, "tasks", "secret.md"), join(vault, "pm", "real", "tasks", "link.md"));
+
+    const { body } = await get();
+    expect(body.projects.map((p) => [p.project, p.cards.map((c) => c.cardPath)])).toEqual([
+      ["inside", ["pm/inside/tasks/kept.md"]],
+    ]);
+    expect(body.skipped).toEqual([
+      { repo: join(workspace, "via-project"), reason: "tasks_outside_vault" },
+      { repo: join(workspace, "via-tasks"), reason: "tasks_outside_vault" },
+    ]);
   });
 
   test("vault paths come from Obsidian's own config, not the vault name", async () => {
