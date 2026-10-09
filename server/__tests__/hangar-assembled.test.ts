@@ -486,9 +486,10 @@ describe("HangarBackendDenyOff", () => {
     await until(
       () =>
         existsSync(r.paths.auditLogPath) &&
+        // Only newline-terminated lines, for the same reason as T4's reader.
         readFileSync(r.paths.auditLogPath, "utf8")
-          .trim()
           .split("\n")
+          .slice(0, -1)
           .some((line) => {
             const l = JSON.parse(line);
             return l.action === "permission_keys_send" && l.paneId === PANE;
