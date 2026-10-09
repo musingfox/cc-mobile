@@ -1,7 +1,16 @@
 import { constants, existsSync } from "node:fs";
-import { appendFile, copyFile, mkdir, readdir, readFile, rm } from "node:fs/promises";
-import { join } from "node:path";
-import { expandPath, validateAllowedPath } from "./path-utils";
+import {
+  appendFile,
+  copyFile,
+  lstat,
+  mkdir,
+  readdir,
+  readFile,
+  realpath,
+  rm,
+} from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
+import { expandPath, isWithinRoot, validateAllowedPath } from "./path-utils";
 
 /** Where a card's worktree lives; also what `git worktree remove` is handed. */
 export interface CardWorktree {
@@ -55,7 +64,8 @@ async function git(
     new Response(proc.stderr).text(),
     proc.exited,
   ]);
-  return { ok: code === 0, out: out.trim(), err: err.trim() };
+  // Only the newline: a path git prints may itself end in a space.
+  return { ok: code === 0, out: out.replace(/\n$/, ""), err: err.trim() };
 }
 
 const branchExists = async (repo: string, name: string) =>
@@ -113,43 +123,78 @@ const adminDir = async (repo: string) => {
 const adminEntries = async (repo: string) =>
   new Set(await readdir(await adminDir(repo)).catch(() => []));
 
-/**
- * Removes what one launch made: its branch, and — when `ownsPath` — its
- * checkout and the admin entry git left for it. Scoped to that entry rather
- * than `git worktree prune`, which would also drop the user's own worktrees
- * whose directory is merely absent right now (an unmounted disk). Only a
- * failed checkout passes `before`, the entries that existed when it started:
- * the scan then drops one that appeared since and either points at `path` or
- * was never finished (no `gitdir`, and no `locked` — git holds that while
- * another add is initializing). A finished checkout's entry goes with
- * `worktree remove`, so without `before` nothing else is touched.
- */
-async function discard(
-  repo: string,
-  path: string,
-  branch: string,
-  ownsPath: boolean,
-  before?: Set<string>,
-) {
+/** Undoes a checkout this launch completed: the path is its own beyond doubt. */
+async function discardCheckout(repo: string, path: string, branch: string) {
   try {
-    if (ownsPath) {
-      await git(repo, ["worktree", "remove", "--force", path]);
+    await git(repo, ["worktree", "remove", "--force", path]);
+    await rm(path, { recursive: true, force: true });
+  } catch {
+  } finally {
+    await git(repo, ["branch", "-D", branch]).catch(() => {});
+  }
+}
+
+/**
+ * Undoes a `git worktree add` that failed after this launch's `git branch`.
+ * Nothing at `path` is assumed to be this launch's: it removes only an admin
+ * entry that appeared since `before` and either points at `path` or was never
+ * finished (no `gitdir`, and no `locked` — git holds that while another add is
+ * initializing), and the checkout only when its `.git` names such an entry.
+ * Never `git worktree remove` or `git worktree prune`: both act on whatever is
+ * registered, including the user's own worktree whose directory is merely
+ * absent right now (an unmounted disk). The branch goes whatever else throws.
+ */
+async function discardFailedAdd(repo: string, path: string, branch: string, before: Set<string>) {
+  try {
+    const admin = await adminDir(repo);
+    const fresh = [...(await adminEntries(repo))].filter((id) => !before.has(id));
+    const entry = await lstat(path).catch(() => null);
+    const link = entry?.isDirectory()
+      ? await readFile(join(path, ".git"), "utf8").catch(() => "")
+      : "";
+    const linked = link.startsWith("gitdir: ") ? resolve(path, link.slice(8).trim()) : null;
+    if (linked !== null && fresh.some((id) => join(admin, id) === linked)) {
       await rm(path, { recursive: true, force: true });
     }
-    if (ownsPath && before) {
-      const admin = await adminDir(repo);
-      for (const id of await adminEntries(repo)) {
-        if (before.has(id)) continue;
-        const entry = join(admin, id);
-        const gitdir = await readFile(join(entry, "gitdir"), "utf8").catch(() => null);
-        const unfinished = gitdir === null && !existsSync(join(entry, "locked"));
-        if (unfinished || gitdir?.trim() === join(path, ".git")) {
-          await rm(entry, { recursive: true, force: true });
-        }
+    for (const id of fresh) {
+      const dir = join(admin, id);
+      const gitdir = await readFile(join(dir, "gitdir"), "utf8").catch(() => null);
+      const unfinished = gitdir === null && !existsSync(join(dir, "locked"));
+      if (unfinished || gitdir?.replace(/\n$/, "") === join(path, ".git")) {
+        await rm(dir, { recursive: true, force: true });
       }
     }
-    await git(repo, ["branch", "-D", branch]);
-  } catch {}
+  } catch {
+  } finally {
+    await git(repo, ["branch", "-D", branch]).catch(() => {});
+  }
+}
+
+/**
+ * Whether anything holds `path`: an entry of any kind, a dangling symlink
+ * included (`lstat`, not `existsSync`), or a registered worktree whose
+ * directory is absent. Throws when it cannot tell (a parent it may not search).
+ */
+async function occupied(repo: string, path: string): Promise<boolean> {
+  try {
+    await lstat(path);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  const list = await git(repo, ["worktree", "list", "--porcelain"]);
+  if (!list.ok) throw new Error(list.err);
+  return list.out.split("\n").includes(`worktree ${path}`);
+}
+
+/** `path` with symlinks resolved as far as it exists; the missing tail is appended as is. */
+async function resolveExisting(path: string): Promise<string> {
+  try {
+    return await realpath(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT" || dirname(path) === path) throw error;
+    return join(await resolveExisting(dirname(path)), path.slice(dirname(path).length));
+  }
 }
 
 async function create({
@@ -177,13 +222,21 @@ async function create({
       `The repo ${repo} that ${cwd} belongs to is not in the allowed roots`,
     );
   }
+  // A symlinked `.claude` or `.claude/worktrees` would have git write wherever it points.
+  const parent = await resolveExisting(join(repo, ".claude", "worktrees"));
+  if (!isWithinRoot(parent, repo) || !validateAllowedPath(parent, allowedRoots)) {
+    return refused(
+      "path_not_allowed",
+      `${join(repo, ".claude", "worktrees")} resolves to ${parent}, outside the repo or the allowed roots`,
+    );
+  }
   const prefix = (await git(at, ["rev-parse", "--show-prefix"])).out;
   const branch = `fleet/${cardName}`;
   const path = join(repo, ".claude", "worktrees", cardName);
   if (!(await git(repo, ["check-ref-format", "--branch", branch])).ok) {
     return refused("invalid_branch_name", `Not a valid branch name: ${branch}`);
   }
-  if ((await branchExists(repo, branch)) || existsSync(path)) {
+  if ((await branchExists(repo, branch)) || (await occupied(repo, path))) {
     return refused("worktree_exists", `${branch} or ${path} already exists`);
   }
   const base = await baseBranch(repo);
@@ -207,12 +260,24 @@ async function create({
     const code = branched.err.includes("already exists") ? "worktree_exists" : "worktree_failed";
     return refused(code, branched.err);
   }
-  const pathTaken = existsSync(path);
+  // Checked again now that the branch is held: only something outside
+  // cc-mobile can have taken the path since, and it is never touched.
+  let taken: boolean;
+  try {
+    taken = await occupied(repo, path);
+  } catch (error) {
+    await git(repo, ["branch", "-D", branch]).catch(() => {});
+    return refused("worktree_failed", String(error));
+  }
+  if (taken) {
+    await git(repo, ["branch", "-D", branch]).catch(() => {});
+    return refused("worktree_exists", `${path} already exists`);
+  }
   const before = await adminEntries(repo);
   const added = await git(repo, ["worktree", "add", path, branch]);
   if (!added.ok) {
-    await discard(repo, path, branch, !pathTaken, before);
-    return refused(pathTaken ? "worktree_exists" : "worktree_failed", added.err);
+    await discardFailedAdd(repo, path, branch, before);
+    return refused("worktree_failed", added.err);
   }
   try {
     await ensureIgnored(repo, path);
@@ -223,7 +288,7 @@ async function create({
       await copyFile(config, join(path, ".obsidian.yaml"), constants.COPYFILE_EXCL);
     }
   } catch (error) {
-    await discard(repo, path, branch, true);
+    await discardCheckout(repo, path, branch);
     return refused("worktree_failed", String(error));
   }
   return { kind: "created", repo, path, branch, cwd: join(path, prefix) };
@@ -231,7 +296,7 @@ async function create({
 
 export function gitCardWorktrees(): CardWorktrees {
   return {
-    remove: ({ repo, path, branch }) => discard(repo, path, branch, true),
+    remove: ({ repo, path, branch }) => discardCheckout(repo, path, branch),
     // A spawn that throws (no `git` on PATH) must not launch in place as if the cwd were no repo.
     create: (request) =>
       create(request).catch((error) => ({
