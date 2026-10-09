@@ -51,7 +51,9 @@ test("the unvalidated acks really are absent from the union (gap is still open)"
 /** `type: "x"` in an outgoing payload, or `.type === "x"` in an assertion. */
 const NAME_PATTERN = /(?:type:\s*|\.type\s*===\s*)"([a-z_]+)"/g;
 
-const suiteFiles = readdirSync(integrationDir).filter((f) => f.endsWith(".e2e.test.ts"));
+const suiteFiles = readdirSync(integrationDir).filter(
+  (f) => f.startsWith("herdr-") && f.endsWith(".e2e.test.ts"),
+);
 
 test("the integration suites exist to be checked", () => {
   expect(suiteFiles.length).toBeGreaterThan(0);

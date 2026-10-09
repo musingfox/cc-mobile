@@ -11,7 +11,8 @@ import type { ServerConfig } from "./config";
 import type { EventBuffer } from "./event-buffer";
 import { writeLaunchBinding } from "./launch-binding";
 import { composeLaunchPrompt } from "./launch-prompt";
-import { isWithinRoot } from "./path-utils";
+import type { CardWorktrees } from "./launch-worktree";
+import { expandPath, isWithinRoot, validateAllowedPath, validateCwd } from "./path-utils";
 import { handleTerminalCreate, sendPrompt, type TerminalControlBackend } from "./terminal-control";
 import { bufferSessionEvent } from "./ws";
 
@@ -34,6 +35,9 @@ const STATUS: Record<string, number> = {
   unknown_profile: 400,
   invalid_message: 400,
   terminal_error: 500,
+  invalid_branch_name: 400,
+  worktree_exists: 409,
+  worktree_failed: 500,
 };
 
 /**
@@ -93,6 +97,8 @@ export function createLaunchPlugin(opts: {
   agentProfiles: AgentProfileSource;
   /** Where the writeback hook reads card bindings from. */
   launchesDir: string;
+  /** Each card gets its own worktree of the repo its cwd is in. */
+  worktrees: CardWorktrees;
   auditLog?: AuditLog;
 }) {
   const audit = async (record: Parameters<AuditLog["append"]>[0]) => {
@@ -164,10 +170,34 @@ export function createLaunchPlugin(opts: {
         set.status = 400;
         return { error: "unsupported_kind" };
       }
+      // The terminal checks run again in handleTerminalCreate, but only after
+      // the worktree exists; a refused cwd or profile must not leave one behind.
+      const repoCwd = expandPath(cwd);
+      const cwdError = validateCwd(repoCwd);
+      if (cwdError) {
+        set.status = 400;
+        return { error: "invalid_cwd", message: cwdError };
+      }
+      if (!validateAllowedPath(repoCwd, opts.config.allowedRoots)) {
+        set.status = 403;
+        return { error: "path_not_allowed", message: "Project path is not in the allowed roots" };
+      }
+      if (profileId && !profile) {
+        set.status = 400;
+        return { error: "unknown_profile", message: `Unknown agent profile: ${profileId}` };
+      }
+      const worktree = await opts.worktrees.create(repoCwd, basename(cardPath, ".md"));
+      if (worktree.kind === "refused") {
+        set.status = STATUS[worktree.code];
+        return { error: worktree.code, message: worktree.message };
+      }
+      const discardWorktree = async () => {
+        if (worktree.kind === "created") await opts.worktrees.remove(worktree);
+      };
       const claudeUuid = randomUUID();
       let reply: Record<string, unknown> = {};
       await handleTerminalCreate(
-        { claudeUuid, cwd, profileId },
+        { claudeUuid, cwd: worktree.kind === "created" ? worktree.cwd : cwd, profileId },
         {
           backend: {
             createSession: (input) => opts.backend.createSession({ ...input, side: "hangar" }),
@@ -181,6 +211,7 @@ export function createLaunchPlugin(opts: {
         },
       );
       if (reply.type !== "terminal_created") {
+        await discardWorktree();
         const code = String(reply.code);
         set.status = STATUS[code] ?? 500;
         return { error: code, message: reply.message };
@@ -196,6 +227,7 @@ export function createLaunchPlugin(opts: {
         });
       } catch {
         await opts.backend.teardown(sessionId).catch(() => {});
+        await discardWorktree();
         set.status = 500;
         return { error: "binding_failed", sessionId, claudeUuid };
       }

@@ -17,6 +17,7 @@ import { type AgentProfile, emptyAgentProfileSource } from "../agents/profiles";
 import { EventBuffer } from "../event-buffer";
 import { createLaunchPlugin } from "../launch";
 import { composeLaunchPrompt } from "../launch-prompt";
+import type { CardWorktreeResult } from "../launch-worktree";
 import type { CreateSessionInput } from "../terminal-backend";
 import { testServerConfig } from "./ws-harness";
 
@@ -63,6 +64,7 @@ interface SetupOptions {
   teardownFails?: boolean;
   launchesDir?: string;
   profiles?: AgentProfile[];
+  worktree?: CardWorktreeResult;
 }
 
 function setup(opts: SetupOptions = {}) {
@@ -107,6 +109,15 @@ function setup(opts: SetupOptions = {}) {
       : emptyAgentProfileSource(),
     eventBuffer: new EventBuffer(10),
     launchesDir,
+    worktrees: {
+      create: async (cwd: string, cardName: string) => {
+        calls.push(`worktree:${cwd}:${cardName}`);
+        return opts.worktree ?? { kind: "not_a_repo" };
+      },
+      remove: async (worktree: { path: string }) => {
+        calls.push(`remove:${worktree.path}`);
+      },
+    },
     auditLog: { append: async (r: Record<string, unknown>) => void audits.push(r) } as never,
   });
   const post = (body: unknown, auth: string | null = "Bearer s3cret") =>
@@ -455,9 +466,11 @@ describe("LaunchRefusesNonClaudeKind", () => {
     expect((await r.json()).error).toBe("unsupported_kind");
   });
   test("T3 an unknown profile falls through to unknown_profile", async () => {
-    const r = await setup().post({ ...good, profileId: "ghost" });
+    const s = setup();
+    const r = await s.post({ ...good, profileId: "ghost" });
     expect(r.status).toBe(400);
     expect((await r.json()).error).toBe("unknown_profile");
+    nothingHappened(s);
   });
   test("T4 a claude profile launches", async () => {
     const r = await setup({ profiles: [claudeAuto] }).post({ ...good, profileId: "claude-auto" });
@@ -499,12 +512,12 @@ describe("LaunchCreatesOnHangar", () => {
     const r1 = await bad.post({ ...good, cwd: "/definitely/not/here" });
     expect(r1.status).toBe(400);
     expect((await r1.json()).error).toBe("invalid_cwd");
-    expect(bad.creates).toEqual([]);
+    nothingHappened(bad);
     const roots = setup({ allowedRoots: ["/nonexistent-root"] });
     const r2 = await roots.post(good);
     expect(r2.status).toBe(403);
     expect((await r2.json()).error).toBe("path_not_allowed");
-    expect(roots.creates).toEqual([]);
+    nothingHappened(roots);
   });
 });
 
@@ -596,7 +609,7 @@ describe("LaunchBindingFailureAborts", () => {
       sessionId: "fleet@w1:p2",
       claudeUuid: s.creates[0].claudeUuid,
     });
-    expect(s.calls).toEqual(["create:/tmp", "teardown:fleet@w1:p2"]);
+    expect(s.calls).toEqual(["worktree:/tmp:card", "create:/tmp", "teardown:fleet@w1:p2"]);
     expect(s.audits).toEqual([]);
   });
   test("T2 a rejecting teardown does not change the response", async () => {
@@ -608,5 +621,71 @@ describe("LaunchBindingFailureAborts", () => {
       sessionId: "fleet@w1:p2",
       claudeUuid: s.creates[0].claudeUuid,
     });
+  });
+});
+
+describe("LaunchCardWorktree", () => {
+  const worktree = {
+    repo: "/repo",
+    path: "/repo/.claude/worktrees/card",
+    branch: "fleet/card",
+    cwd: "/tmp",
+  };
+  const created: CardWorktreeResult = { kind: "created", ...worktree };
+  test("W1 the pane starts in the card's worktree, named by the card's basename", async () => {
+    const s = setup({ worktree: { ...created, cwd: tmp } });
+    const r = await s.post(good);
+    expect(r.status).toBe(201);
+    expect(s.calls.slice(0, 2)).toEqual(["worktree:/tmp:card", `create:${tmp}`]);
+  });
+  test("W2 a cwd that is no repo launches in place", async () => {
+    const s = setup();
+    expect((await s.post(good)).status).toBe(201);
+    expect(s.creates[0].cwd).toBe("/tmp");
+  });
+  test("W3 an existing branch or worktree is 409 with nothing created, bound or typed", async () => {
+    const s = setup({
+      worktree: { kind: "refused", code: "worktree_exists", message: "fleet/card exists" },
+    });
+    const r = await s.post(good);
+    expect(r.status).toBe(409);
+    expect(await r.json()).toEqual({ error: "worktree_exists", message: "fleet/card exists" });
+    expect(s.calls).toEqual(["worktree:/tmp:card"]);
+    expect(s.launches()).toEqual([]);
+    expect(s.audits).toEqual([]);
+  });
+  test("W4 an invalid branch name is 400 and any other git failure 500", async () => {
+    const name = setup({ worktree: { kind: "refused", code: "invalid_branch_name", message: "" } });
+    expect((await name.post(good)).status).toBe(400);
+    const failed = setup({ worktree: { kind: "refused", code: "worktree_failed", message: "" } });
+    expect((await failed.post(good)).status).toBe(500);
+  });
+  test("W5 a refused session removes the worktree it was given", async () => {
+    const s = setup({ worktree: created, createError: "connect ENOENT" });
+    expect((await s.post(good)).status).toBe(500);
+    expect(s.calls).toEqual(["worktree:/tmp:card", "create:/tmp", `remove:${worktree.path}`]);
+  });
+  test("W6 a failed binding tears the pane down and removes the worktree", async () => {
+    writeFileSync(join(tmp, "afile"), "x");
+    const s = setup({ worktree: created, launchesDir: join(tmp, "afile", "sub") });
+    expect((await s.post(good)).status).toBe(500);
+    expect(s.calls).toEqual([
+      "worktree:/tmp:card",
+      "create:/tmp",
+      "teardown:fleet@w1:p2",
+      `remove:${worktree.path}`,
+    ]);
+  });
+  test("W7 a failed prompt keeps the worktree, as it keeps the binding", async () => {
+    const s = setup({ worktree: created, sendFails: true });
+    expect((await s.post(good)).status).toBe(502);
+    expect(s.calls.some((c) => c.startsWith("remove:"))).toBe(false);
+  });
+  test("W8 a nested card path still names the worktree by its basename", async () => {
+    mkdirSync(join(vault, "pm", "cc-mobile", "tasks", "sub"));
+    writeFileSync(join(vault, "pm", "cc-mobile", "tasks", "sub", "x.y.md"), CARD);
+    const s = setup();
+    await s.post({ ...good, cardPath: "pm/cc-mobile/tasks/sub/x.y.md" });
+    expect(s.calls[0]).toBe("worktree:/tmp:x.y");
   });
 });
