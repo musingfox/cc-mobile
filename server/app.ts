@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
 import { Elysia } from "elysia";
 import { type AgentProfileSource, createAgentProfileSource } from "./agents/profiles";
 import { createAuditLog } from "./audit/audit-log";
+import { createCardsPlugin, defaultObsidianConfigPath, defaultWorkspaceRoot } from "./cards";
 import type { ServerConfig } from "./config";
 import { EventBuffer } from "./event-buffer";
 import { createHerdrBackend } from "./herdr/backend";
@@ -137,6 +138,10 @@ export interface AppTestDeps {
   agentProfiles?: AgentProfileSource;
   /** Where launch bindings are written; production uses the writeback hook's default. */
   launchesDir?: string;
+  /** Where repos are scanned for `.obsidian.yaml`; production scans `~/workspace`. */
+  workspaceRoot?: string;
+  /** Obsidian's vault registry; production reads the app's own `obsidian.json`. */
+  obsidianConfigPath?: string;
   /** The built client to serve; production serves `DIST_DIR`. */
   distDir?: string;
   /**
@@ -324,6 +329,14 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
         agentProfiles,
         auditLog,
         eventBuffer,
+        launchesDir: deps.launchesDir ?? defaultLaunchesDir(),
+      }),
+    )
+    .use(
+      createCardsPlugin({
+        config: serverConfig,
+        workspaceRoot: deps.workspaceRoot ?? defaultWorkspaceRoot(),
+        obsidianConfigPath: deps.obsidianConfigPath ?? defaultObsidianConfigPath(),
         launchesDir: deps.launchesDir ?? defaultLaunchesDir(),
       }),
     )
