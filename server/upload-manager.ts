@@ -3,14 +3,16 @@ import { mkdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve, sep } from "node:path";
 
-const SAFE_SESSION_RE = /^[A-Za-z0-9_-]+$/;
+// `:` and `@` separate a herdr pane id (`w1:p1`) and a hangar key (`fleet@w1:p1`).
+// The key is percent-encoded into the directory name, so neither reaches the path.
+const SAFE_SESSION_RE = /^[A-Za-z0-9_@:-]+$/;
 export const DEFAULT_UPLOADS_ROOT = join(homedir(), ".cache", "cc-mobile", "uploads");
 
 export function safeSessionDir(sessionId: string, uploadsRoot = DEFAULT_UPLOADS_ROOT): string {
   if (!sessionId || !SAFE_SESSION_RE.test(sessionId)) {
     throw new Error("invalid sessionId");
   }
-  const dir = join(uploadsRoot, sessionId);
+  const dir = join(uploadsRoot, encodeURIComponent(sessionId));
   if (!resolve(dir).startsWith(resolve(uploadsRoot) + sep)) {
     throw new Error("invalid sessionId");
   }
