@@ -520,7 +520,7 @@ handler、`SessionManager` 的 append 緩衝與 `stopTask`、client 的兩個 se
 
 ## 2026-10-09 增修：機庫 pane 成為 90 秒 `esc` 的第四個例外
 
-§2026-09-14 之前的條件是：只對 cc-mobile 自建的 pane、送鍵前重讀比對 fingerprint、提示不是問題。這一段加**第四個**條件：不是機庫的 pane。
+到 §2026-09-14 為止的條件是：只對 cc-mobile 自建的 pane、送鍵前重讀比對 fingerprint、提示不是問題。這一段加**第四個**條件：不是機庫的 pane。
 
 ### 背景
 
@@ -534,7 +534,7 @@ handler、`SessionManager` 的 append 緩衝與 `stopTask`、client 的兩個 se
 
 1. `esc` 讓 agent 在沒有人做選擇的情況下繼續往下走。
 2. 等待正是「無 client = 全 deny + 行程暫停」裡的「行程暫停」那一半。
-3. obw hook 已經把卡片標成「需要核准」，人被明確告知要來處理。
+3. 人已經被卡片上的「需要核准」明確告知要來處理（見背景）。
 
 ### 代價
 
@@ -545,4 +545,4 @@ handler、`SessionManager` 的 append 緩衝與 `stopTask`、client 的兩個 se
 
 ### 對本 ADR 上文的影響
 
-:93「原樣繼承，不放寬」與 :142 的「無 client = 全 deny」承接再收窄一次：機庫上的「全 deny」不再自動送出，只剩「行程暫停」。
+§結論的「原樣繼承，不放寬」與 §2026-08-02「對本 ADR 上文的影響」裡的「無 client = 全 deny」承接再收窄一次：機庫上的「全 deny」不再自動送出，只剩「行程暫停」。

@@ -468,13 +468,25 @@ describe("HangarBackendDenyOff", () => {
     expect(typeof card.payload?.autoDenyMs).toBe("number");
     expect(card.payload?.autoDenyMs).toBeGreaterThan(0);
     expect(card.payload?.autoDenyMs).toBeLessThanOrEqual(90_000);
-    // The armed timer outlives the test unless the card is answered.
+    // Answered and awaited so the armed timer and the key send finish inside the test.
     phone.socket.send(
       JSON.stringify({
         type: "permission",
         requestId: card.payload?.requestId,
         optionId: "cancel",
       }),
+    );
+    await until(
+      () =>
+        existsSync(r.paths.auditLogPath) &&
+        readFileSync(r.paths.auditLogPath, "utf8")
+          .trim()
+          .split("\n")
+          .some((line) => {
+            const l = JSON.parse(line);
+            return l.action === "permission_keys_send" && l.paneId === PANE;
+          }),
+      "the cockpit keys audit line",
     );
   });
 });

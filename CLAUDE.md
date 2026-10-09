@@ -538,9 +538,8 @@ question in the final reply and end the turn), never run `/clear` (it changes
 the session id and voids the binding), and open every final reply with exactly
 one of `結果：完成`, `結果：需要你` or `結果：失敗`.
 
-No hangar pane runs the 90-second countdown, so a launched pane's permission
-prompt waits on its card until someone answers; the countdown never `esc`s it
-(ADR-015 §2026-10-09).
+A launched pane is a hangar pane, so its permission prompt never decays to
+`esc`; see **Permission flow**.
 
 With no phone connected, routing has no sink to type through or to report a
 refusal to, and the prompt was dropped silently. So the route binds its own sink
