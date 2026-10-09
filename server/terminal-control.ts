@@ -190,9 +190,17 @@ export async function handleTerminalTeardown(
  * Rethrows a failed send after auditing it.
  */
 export async function sendPrompt(
-  backend: { send(params: { claudeUuid: string; content: string }): Promise<void> },
+  backend: {
+    send(params: { claudeUuid: string; content: string; confirmStart?: boolean }): Promise<void>;
+  },
   audit: (record: AuditRecordInput) => Promise<void>,
-  p: { sessionId: string; content: string; ip: string | null; device: string | null },
+  p: {
+    sessionId: string;
+    content: string;
+    ip: string | null;
+    device: string | null;
+    confirmStart?: boolean;
+  },
   /**
    * The error code the routing reported to the pane's sink during this send,
    * if any. Routing reports a refusal there instead of throwing, so without it
@@ -202,7 +210,11 @@ export async function sendPrompt(
 ): Promise<void> {
   const identity = { ip: p.ip, device: p.device };
   try {
-    await backend.send({ claudeUuid: p.sessionId, content: p.content });
+    await backend.send({
+      claudeUuid: p.sessionId,
+      content: p.content,
+      confirmStart: p.confirmStart,
+    });
     const code = reportedError();
     await audit({
       action: "prompt_send",

@@ -87,7 +87,7 @@ function tokenMatches(presented: string, expected: string): boolean {
 export function createLaunchPlugin(opts: {
   config: ServerConfig;
   backend: TerminalControlBackend & {
-    send(params: { claudeUuid: string; content: string }): Promise<void>;
+    send(params: { claudeUuid: string; content: string; confirmStart?: boolean }): Promise<void>;
     registerClient(
       claudeUuid: string,
       sink: (msg: Record<string, unknown>) => void,
@@ -258,7 +258,13 @@ export function createLaunchPlugin(opts: {
         await sendPrompt(
           opts.backend,
           audit,
-          { sessionId, content: composeLaunchPrompt(cardText), ip, device: "launch-api" },
+          {
+            sessionId,
+            content: composeLaunchPrompt(cardText),
+            ip,
+            device: "launch-api",
+            confirmStart: true,
+          },
           () => reportedError,
         );
       } catch {

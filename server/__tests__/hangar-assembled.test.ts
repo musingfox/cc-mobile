@@ -613,13 +613,20 @@ describe("AssembledLaunchOnHangarDaemon", () => {
     const vault = join(tmp, "obsidian");
     mkdirSync(join(vault, "pm", "cc-mobile", "tasks"), { recursive: true });
     writeFileSync(join(vault, body.cardPath), CARD);
-    return rig({
+    const r = rig({
       hangarSession,
       vaultRoot: vault,
       launchToken: "tok",
       launchesDir: join(tmp, "launches"),
       agentProfiles: { list: () => [claudeAuto] },
     });
+    // A claude that takes the Enter starts its turn; the launch waits to see it.
+    const sendKeys = r.hangar.client.paneSendKeys;
+    r.hangar.client.paneSendKeys = async (pane, keys) => {
+      await sendKeys(pane, keys);
+      if (keys.includes("Enter")) r.hangar.status("working");
+    };
+    return r;
   }
   const methods = (d: ReturnType<typeof fakeDaemon>) => d.calls.map((c) => c.method);
 

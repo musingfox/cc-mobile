@@ -71,7 +71,7 @@ function setup(opts: SetupOptions = {}) {
   const calls: string[] = [];
   const worktreeRequests: CardWorktreeRequest[] = [];
   const creates: CreateSessionInput[] = [];
-  const sends: { claudeUuid: string; content: string }[] = [];
+  const sends: { claudeUuid: string; content: string; confirmStart?: boolean }[] = [];
   const audits: Record<string, unknown>[] = [];
   const launchesDir = opts.launchesDir ?? join(tmp, "launches");
   const bindingAtSend: { text: string | null }[] = [];
@@ -88,7 +88,7 @@ function setup(opts: SetupOptions = {}) {
       return { killed: true };
     },
     registerClient: () => {},
-    send: async (params: { claudeUuid: string; content: string }) => {
+    send: async (params: { claudeUuid: string; content: string; confirmStart?: boolean }) => {
       calls.push(`send:${params.claudeUuid}`);
       sends.push(params);
       const file = join(launchesDir, `${creates[0]?.claudeUuid}.json`);
@@ -565,7 +565,9 @@ describe("LaunchTypesComposedPrompt", () => {
   test("T1 exactly one send of the template plus the card as read", async () => {
     const s = setup();
     await s.post(good);
-    expect(s.sends).toEqual([{ claudeUuid: "fleet@w1:p2", content: composeLaunchPrompt(CARD) }]);
+    expect(s.sends).toEqual([
+      { claudeUuid: "fleet@w1:p2", content: composeLaunchPrompt(CARD), confirmStart: true },
+    ]);
   });
   test("T2 the audit line carries only the six fields, no card text", async () => {
     const s = setup();
