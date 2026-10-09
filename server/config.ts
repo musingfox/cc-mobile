@@ -106,13 +106,14 @@ function parsePushScope(): "phone-last" | "all" {
 
 /**
  * The hangar's herdr session name. It becomes part of a socket path and of the
- * `<name>@<pane_id>` composite key, so anything that could split either throws
- * rather than being sanitised into a different session than the operator named.
+ * `<name>@<pane_id>` composite key, which the upload route accepts only in
+ * `[A-Za-z0-9_@:-]`, so any other name throws rather than being sanitised into a
+ * different session than the operator named.
  */
 function parseHangarSession(): string | null {
   const value = process.env.CC_MOBILE_HANGAR_SESSION?.trim();
   if (!value) return null;
-  if (/[@:/\\\s]/.test(value) || value === "." || value === "..") {
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) {
     throw new Error(`CC_MOBILE_HANGAR_SESSION is not a valid herdr session name, got "${value}"`);
   }
   return value;

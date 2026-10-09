@@ -34,7 +34,10 @@ whose socket is `~/.config/herdr/sessions/<name>/herdr.sock`. Unset, there is no
 hangar and cc-mobile behaves as it did with one socket, except that
 `POST /api/launch` answers `503 hangar_unavailable`. Set, one process serves
 both daemons' panes: a hangar pane's session key is `<name>@<pane_id>`, a
-cockpit pane's key is unchanged.
+cockpit pane's key is unchanged. The name must match `[A-Za-z0-9_-]+`; any other
+value stops the server at startup, because the key has to pass the upload
+route's check, which takes `[A-Za-z0-9_@:-]` and percent-encodes it into the
+upload directory name.
 
 An unreachable daemon, either side, no longer stops the server. `index.ts`
 probes both sockets before it listens and exits 1 only for a daemon that
