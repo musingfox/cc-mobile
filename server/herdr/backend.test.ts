@@ -522,7 +522,13 @@ describe("BackendStartsWatchingOnCall", () => {
     const backend = createHerdrBackend({
       client,
       statusPollIntervalMs: 5,
-      push: { onAgentStatus: (id, status) => void seen.push([id, status]) },
+      // A registered phone, as in production when push matters: without one the
+      // poll stays dormant and first snapshots on tick 30 (~150 ms at 5 ms),
+      // which the 200 ms deadline below cannot hold under load.
+      push: {
+        onAgentStatus: (id, status) => void seen.push([id, status]),
+        subscriberCount: () => 1,
+      },
     });
     try {
       await backend.start();
