@@ -15,7 +15,7 @@
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve, sep } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { Elysia } from "elysia";
 import { createUploadPlugin } from "../upload";
 import { createUploadImagePlugin } from "../upload-image";
@@ -139,6 +139,10 @@ describe("Security: safeSessionDir rejection table", () => {
     ".hidden",
     "a\\b", // backslash
     "a\0b", // embedded NUL
+    "fleet@..",
+    "w1:p1/..",
+    "fleet@w1:p1/../x",
+    "..@w1:p1",
   ];
 
   for (const bad of rejected) {
@@ -177,6 +181,47 @@ describe("Security: legal sessionId — no regression", () => {
     } finally {
       rmSync(getUploadDir(sessionId, uploadsRoot), { recursive: true, force: true });
     }
+  });
+});
+
+// ---- herdr session keys: pane id and hangar key -----------------------------------
+
+// The status is asserted before anything derives a directory from the key, so a
+// regression fails on the route's 400, not on a throw in the test's own setup.
+describe("Security: herdr session keys upload into distinct directories", () => {
+  const keys = ["w1:p1", "fleet@w1:p1"];
+
+  async function uploadDirsFor(post: (sessionId: string) => Promise<Response>) {
+    const dirs: string[] = [];
+    for (const sessionId of keys) {
+      const res = await post(sessionId);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      const dir = dirname(resolve(body.path));
+      toClean.add(dir);
+      expect(dirname(dir)).toBe(resolve(uploadsRoot));
+      dirs.push(dir);
+    }
+    expect(dirs[0]).not.toBe(dirs[1]);
+  }
+
+  test("/api/upload-image: cockpit 'w1:p1' and hangar 'fleet@w1:p1' -> 200 each, separate dirs", async () => {
+    const app = new Elysia().use(createUploadImagePlugin(serverConfig, uploadsRoot));
+    await uploadDirsFor((sessionId) =>
+      postJson(app, { sessionId, base64: PNG_BASE64, mediaType: "image/png" }),
+    );
+  });
+
+  test("/api/upload (multipart): cockpit 'w1:p1' and hangar 'fleet@w1:p1' -> 200 each, separate dirs", async () => {
+    const app = new Elysia().use(createUploadPlugin(serverConfig, uploadsRoot));
+    await uploadDirsFor((sessionId) => {
+      const formData = new FormData();
+      formData.append("sessionId", sessionId);
+      formData.append("file", new File(["x".repeat(64)], "doc.pdf", { type: "application/pdf" }));
+      return app.handle(
+        new Request("http://localhost/api/upload", { method: "POST", body: formData }),
+      );
+    });
   });
 });
 
