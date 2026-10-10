@@ -5,6 +5,7 @@ import { tokens as T } from "../design/tokens";
 import { toastService } from "../services/toast-service";
 import { wsService } from "../services/ws-service";
 import { useAppStore } from "../stores/app-store";
+import { isWithinAllowedRoots } from "../utils/allowed-roots";
 import DrawerBase from "./drawers/DrawerBase";
 import "./linear/folder-picker.css";
 
@@ -26,15 +27,15 @@ export default function FolderPicker({
   const serverPaths = useAppStore((s) => s.serverPaths);
   const [currentPath, setCurrentPath] = useState<string | null>(null);
 
+  const allowedRoots = serverPaths?.allowedRoots ?? null;
+  const distinctRoots = [...new Set(allowedRoots ?? [])];
+  const multiRoot = distinctRoots.length >= 2;
+
   useEffect(() => {
-    if (open && !currentPath) {
-      const initialPath =
-        serverPaths?.allowedRoots && serverPaths.allowedRoots.length > 0
-          ? serverPaths.allowedRoots[0]
-          : (serverPaths?.homeDirectory ?? "~");
-      wsService.listDirectories(initialPath);
-    }
-  }, [open, currentPath, serverPaths]);
+    if (!open || currentPath || !serverPaths) return;
+    if (multiRoot) return;
+    wsService.listDirectories(distinctRoots[0] ?? serverPaths.homeDirectory);
+  }, [open, currentPath, serverPaths, multiRoot, distinctRoots[0]]);
 
   useEffect(() => {
     if (directoryListing) {
@@ -75,7 +76,9 @@ export default function FolderPicker({
     return crumbs;
   };
 
-  const breadcrumbs = getBreadcrumbs();
+  const breadcrumbs = getBreadcrumbs().filter((crumb) =>
+    isWithinAllowedRoots(crumb.path, allowedRoots),
+  );
 
   // Subscribed, not read through getState() in the dependency list: that read
   // never re-renders this component, so an error set while the picker was
@@ -88,7 +91,32 @@ export default function FolderPicker({
     }
   }, [globalError, open]);
 
-  const pickerContent = (
+  const showRootList = multiRoot && !currentPath;
+
+  const pickerContent = showRootList ? (
+    <div className="lin-folder">
+      {isLoading ? (
+        <div className="lin-folder-loading">Loading…</div>
+      ) : (
+        <div className="lin-folder-list">
+          {distinctRoots.map((root) => (
+            <button
+              key={root}
+              type="button"
+              className="lin-settings-row lin-folder-item"
+              onClick={() => handleNavigate(root)}
+            >
+              <Icon name="folder" size={16} color={T.fg2} />
+              <div className="lin-settings-row-main">
+                <div className="lin-settings-row-title">{root}</div>
+              </div>
+              <Icon name="chevronR" size={14} color={T.fg3} />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  ) : (
     <div className="lin-folder">
       <div className="lin-folder-breadcrumbs">
         {breadcrumbs.map((crumb, idx) => (
@@ -107,13 +135,14 @@ export default function FolderPicker({
 
       <div className="lin-folder-actions">
         {(() => {
-          const parent = directoryListing?.parent;
-          if (!parent) return null;
+          const parent = directoryListing?.parent ?? null;
+          const upTarget = parent && isWithinAllowedRoots(parent, allowedRoots) ? parent : null;
+          if (!upTarget && !multiRoot) return null;
           return (
             <button
               type="button"
               className="lin-folder-action"
-              onClick={() => handleNavigate(parent)}
+              onClick={() => (upTarget ? handleNavigate(upTarget) : setCurrentPath(null))}
               disabled={isLoading}
             >
               Go Up
@@ -124,13 +153,13 @@ export default function FolderPicker({
           type="button"
           className="lin-folder-action is-primary"
           onClick={handleSelectCurrent}
-          disabled={!currentPath || isLoading}
+          disabled={!currentPath || isLoading || !serverPaths}
         >
           Select This Folder
         </button>
       </div>
 
-      {isLoading ? (
+      {isLoading || !serverPaths ? (
         <div className="lin-folder-loading">Loading…</div>
       ) : directoryListing && directoryListing.entries.length > 0 ? (
         <div className="lin-folder-list">
