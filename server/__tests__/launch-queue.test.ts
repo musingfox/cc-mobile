@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
-  cardQueueKey,
+  cardKey,
   createLaunchQueue,
   type LaunchQueueOptions,
   type StartResult,
@@ -71,7 +71,7 @@ function entry(name: string) {
   const d = deferred<StartResult>();
   const probe = { started: 0 };
   return {
-    key: cardQueueKey("v", `pm/p/tasks/${name}.md`),
+    key: cardKey("v", `pm/p/tasks/${name}.md`),
     label: `v/pm/p/tasks/${name}.md`,
     start: () => {
       probe.started += 1;
@@ -82,10 +82,10 @@ function entry(name: string) {
   };
 }
 
-describe("cardQueueKey", () => {
+describe("cardKey", () => {
   test("one card, whichever way its path is spelled", () => {
-    expect(cardQueueKey("v", "pm//p/tasks/a.md")).toBe(cardQueueKey("v", "pm/p/tasks/./a.md"));
-    expect(cardQueueKey("v", "a.md")).not.toBe(cardQueueKey("w", "a.md"));
+    expect(cardKey("v", "pm//p/tasks/a.md")).toBe(cardKey("v", "pm/p/tasks/./a.md"));
+    expect(cardKey("v", "a.md")).not.toBe(cardKey("w", "a.md"));
   });
 });
 

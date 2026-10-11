@@ -29,8 +29,10 @@ import { createHerdrClient, type HerdrClient } from "./herdr/client";
 import { createSidedBackend } from "./herdr/sided-backend";
 import { hangarKey, resolveHerdrSides, routeSessionKey, type Side } from "./herdr/sides";
 import { createSocketWatch, type SocketWatchOptions } from "./herdr/socket-watch";
+import { FALLBACK_HANGAR_CAP } from "./hangar-cap";
 import { createLaunchPlugin } from "./launch";
 import { defaultLaunchesDir } from "./launch-binding";
+import { createLaunchQueue, type LaunchQueueOptions } from "./launch-queue";
 import { type CardWorktrees, gitCardWorktrees } from "./launch-worktree";
 import { stripBasePath } from "./path-utils";
 import { createAttemptLog } from "./push/attempt-log";
@@ -78,6 +80,8 @@ export interface AppBackend extends WsBackend {
   pushSubscriberCount?(): number;
   /** A pane's working directory for push copy. Optional for the same reason. */
   paneCwd?(paneId: string): Promise<string | null>;
+  /** How many agents the hangar holds, `null` when it cannot say. Optional like `paneCwd`. */
+  hangarAgentCount?(): Promise<number | null>;
 }
 
 /**
@@ -152,6 +156,8 @@ export interface AppTestDeps {
    * was open — the one moment nothing else can observe it.
    */
   eventBuffer?: EventBuffer;
+  /** Timing seams for the launch queue's poll; production passes nothing. */
+  queueTimers?: Pick<LaunchQueueOptions, "intervalMs" | "setIntervalFn" | "clearIntervalFn">;
 }
 
 /** Builds the whole server. The returned app has not been listened on. */
@@ -256,6 +262,15 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
         })
       : undefined;
 
+  // One queue for the process: the launch route submits to it, the cards route
+  // reads it, and a hangar teardown kicks it. The occupancy source is
+  // late-bound like `cwdOf`, since the backend is built below.
+  const launchQueue = createLaunchQueue({
+    cap: serverConfig.hangarCap ?? FALLBACK_HANGAR_CAP,
+    occupancy: () => backend.hangarAgentCount?.() ?? Promise.resolve(null),
+    ...deps.queueTimers,
+  });
+
   function buildSidedBackend() {
     const cockpitClient: WatchableClient =
       deps.herdrClient ?? createHerdrClient({ socketPath: cockpitSocket.socketPath });
@@ -273,6 +288,7 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
       deps.hangarHerdrClient ?? createHerdrClient({ socketPath: hangarSocket.socketPath });
     return createSidedBackend({
       cockpit,
+      onHangarTeardown: () => void launchQueue.kick(),
       hangar: {
         name,
         backend: createHerdrBackend({
@@ -334,6 +350,7 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
         eventBuffer,
         launchesDir: deps.launchesDir ?? defaultLaunchesDir(),
         worktrees: deps.cardWorktrees ?? gitCardWorktrees(),
+        queue: launchQueue,
       }),
     )
     .use(
@@ -342,6 +359,7 @@ export function createApp(serverConfig: ServerConfig, deps: AppTestDeps = {}) {
         workspaceRoot: deps.workspaceRoot ?? defaultWorkspaceRoot(),
         obsidianConfigPath: deps.obsidianConfigPath ?? defaultObsidianConfigPath(),
         launchesDir: deps.launchesDir ?? defaultLaunchesDir(),
+        hangar: hangarSession === null ? null : launchQueue,
       }),
     )
     .get("*", async ({ request }) => {

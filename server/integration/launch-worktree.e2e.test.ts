@@ -18,6 +18,7 @@ import { join } from "node:path";
 import { emptyAgentProfileSource } from "../agents/profiles";
 import { EventBuffer } from "../event-buffer";
 import { createLaunchPlugin } from "../launch";
+import { createLaunchQueue } from "../launch-queue";
 import { gitCardWorktrees } from "../launch-worktree";
 import type { CreateSessionInput } from "../terminal-backend";
 
@@ -95,6 +96,7 @@ function setup(opts: { createError?: string; allowedRoots?: string[] } = {}) {
     eventBuffer: new EventBuffer(10),
     launchesDir: join(tmp, "launches"),
     worktrees: gitCardWorktrees(),
+    queue: createLaunchQueue({ cap: 4, occupancy: async () => 0 }),
   });
   const post = (card: string, cwd = repo) => {
     writeFileSync(join(vault, "pm", "demo", "tasks", `${card}.md`), `# ${card}\n`);

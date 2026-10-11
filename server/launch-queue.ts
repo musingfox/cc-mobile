@@ -42,7 +42,7 @@ export interface LaunchQueue {
 const DEFAULT_INTERVAL_MS = 10_000;
 
 /** One card, whichever way its path was spelled. */
-export function cardQueueKey(vault: string, cardPath: string): string {
+export function cardKey(vault: string, cardPath: string): string {
   return `${vault}\0${posix.normalize(cardPath)}`;
 }
 

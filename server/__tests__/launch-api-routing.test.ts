@@ -99,7 +99,7 @@ function fakeHerdr(claude: Claude = {}) {
   return { client, typed, hooks };
 }
 
-function launchApp(claude?: Claude) {
+function launchApp(claude?: Claude, hangarAgents = 0) {
   const { client, typed, hooks } = fakeHerdr(claude);
   const backend = createHerdrBackend({
     client: client as never,
@@ -112,6 +112,7 @@ function launchApp(claude?: Claude) {
     created.push(input.claudeUuid);
     return { name: "claude", paneRef: PANE };
   };
+  backend.hangarAgentCount = async () => hangarAgents;
   const eventBuffer = new EventBuffer(500);
   const dir = mkdtempSync(join(tmpdir(), "launch-audit-"));
   const vault = join(dir, "obsidian");
@@ -126,6 +127,7 @@ function launchApp(claude?: Claude) {
       gateEnv: {},
       auditLogPath: join(dir, "a.jsonl"),
       launchesDir,
+      queueTimers: { setIntervalFn: () => 0, clearIntervalFn: () => {} },
       cardWorktrees: { create: async () => ({ kind: "not_a_repo" }), remove: async () => {} },
     },
   );
@@ -161,6 +163,15 @@ test("an HTTP launch with no WebSocket client types the template and card, press
   const { claudeUuid } = await r.json();
   expect(typed).toEqual(["text:" + composeLaunchPrompt(CARD), "keys:Enter"]);
   expect(existsSync(join(launchesDir, `${claudeUuid}.json`))).toBe(true);
+});
+
+test("a launch beyond the default cap is held with its place in line, and nothing is typed", async () => {
+  const { post, typed, created } = launchApp(undefined, 4);
+  const r = await post();
+  expect(r.status).toBe(202);
+  expect(await r.json()).toEqual({ queued: true, position: 1 });
+  expect(typed).toEqual([]);
+  expect(created).toEqual([]);
 });
 
 test("a busy pane answers 502 with the routing's code, and nothing is typed", async () => {

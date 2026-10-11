@@ -6,12 +6,21 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebSocket as WsClient } from "ws";
 import type { AgentProfileSource } from "../agents/profiles";
 import { type AppBackend, createApp } from "../app";
+import { parseServerConfig, type ServerConfig } from "../config";
 import { HerdrTransportError } from "../herdr/errors";
 import { composeLaunchPrompt } from "../launch-prompt";
 import { createSubscriptionStore } from "../push/subscription-store";
@@ -45,7 +54,7 @@ function fakeDaemon(cwd: string) {
   const calls: Array<{ method: string; params: Record<string, unknown> }> = [];
   const typed: Array<{ pane: string; text?: string; keys?: string[] }> = [];
   let shellOnly = false;
-  const behaviour = { listFails: false, compatibleFails: false };
+  const behaviour = { listFails: false, compatibleFails: false, empty: false };
   const agent = {
     terminal_id: "t1",
     agent_status: "idle",
@@ -67,7 +76,7 @@ function fakeDaemon(cwd: string) {
     agentList: async () => {
       counts.agentList++;
       if (behaviour.listFails) throw new HerdrTransportError("connect ENOENT");
-      return [agent];
+      return behaviour.empty ? [] : [agent];
     },
     agentGet: async () => ({ ...agent, interactive_ready: true }),
     sessionSnapshot: async () => ({
@@ -83,6 +92,8 @@ function fakeDaemon(cwd: string) {
     call: async (method: string, params: unknown) => {
       calls.push({ method, params: params as Record<string, unknown> });
       if (method === "workspace.create") {
+        // A pane that now exists is listed, whatever the test emptied before.
+        behaviour.empty = false;
         shellOnly = true;
         return {
           type: "workspace_created",
@@ -189,6 +200,8 @@ function rig(options: {
   launchToken?: string;
   launchesDir?: string;
   agentProfiles?: AgentProfileSource;
+  config?: ServerConfig;
+  hangarCap?: number;
 }) {
   const cockpit = options.cockpit ?? fakeDaemon("/tmp/cockpitproj");
   const hangar = options.hangar ?? fakeDaemon("/tmp/hangarproj");
@@ -196,19 +209,33 @@ function rig(options: {
   const sends: Array<{ payload: Record<string, unknown>; opts: Record<string, unknown> }> = [];
   const backendRef: { current: AppBackend | null } = { current: null };
   const handle: { fire?: () => void } = {};
+  // The queue's poll, driven by hand: nothing here waits on a real interval.
+  const queueTimer: { fn?: () => void } = {};
   const paths = {
     auditLogPath: join(tmp, "audit.jsonl"),
     pushAttemptLogPath: join(tmp, "attempts.jsonl"),
   };
   const app = createApp(
     {
-      ...testServerConfig,
+      ...(options.config ?? testServerConfig),
       hangarSession: options.hangarSession,
+      ...(options.hangarCap ? { hangarCap: options.hangarCap } : {}),
       ...(options.launchToken ? { launchToken: options.launchToken } : {}),
       ...(options.vaultRoot ? { vaultRoot: options.vaultRoot } : {}),
     },
     {
-      ...(options.launchesDir ? { launchesDir: options.launchesDir } : {}),
+      launchesDir: options.launchesDir ?? join(tmp, "launches"),
+      workspaceRoot: join(tmp, "workspace"),
+      obsidianConfigPath: join(tmp, "obsidian.json"),
+      queueTimers: {
+        setIntervalFn: (fn) => {
+          queueTimer.fn = fn;
+          return 1;
+        },
+        clearIntervalFn: () => {
+          queueTimer.fn = undefined;
+        },
+      },
       cardWorktrees: { create: async () => ({ kind: "not_a_repo" }), remove: async () => {} },
       ...(options.agentProfiles ? { agentProfiles: options.agentProfiles } : {}),
       pushStore: createSubscriptionStore({ path: join(tmp, "subs.json") }),
@@ -241,6 +268,12 @@ function rig(options: {
         body: JSON.stringify(body),
       }),
     );
+  const cards = async () => {
+    const res = await app.handle(new Request("http://localhost/api/cards"));
+    return (await res.json()) as {
+      hangar: { cap: number; occupied: number | null; queued: number } | null;
+    };
+  };
   const subscribe = () =>
     app.handle(
       new Request("http://localhost/api/push/subscribe", {
@@ -298,8 +331,10 @@ function rig(options: {
     sends,
     backendRef,
     handle,
+    queueTimer,
     paths,
     launch,
+    cards,
     subscribe,
     phone,
   };
@@ -669,5 +704,105 @@ describe("AssembledLaunchOnHangarDaemon", () => {
     expect(await res.json()).toEqual({ error: "hangar_unavailable" });
     expect(methods(r.cockpit)).not.toContain("workspace.create");
     expect(methods(r.hangar)).not.toContain("workspace.create");
+  });
+});
+
+describe("HangarCap", () => {
+  const CARD = "# Task\nCARD-BODY do the thing\n";
+  const body = {
+    cwd: "/tmp",
+    cardPath: "pm/cc-mobile/tasks/card.md",
+    vault: "obsidian",
+    project: "cc-mobile",
+  };
+
+  function capRig(options: { hangarCap?: number } = {}) {
+    const vault = join(tmp, "obsidian");
+    mkdirSync(join(vault, "pm", "cc-mobile", "tasks"), { recursive: true });
+    writeFileSync(join(vault, body.cardPath), CARD);
+    const r = rig({ hangarSession: "fleet", vaultRoot: vault, launchToken: "tok", ...options });
+    const sendKeys = r.hangar.client.paneSendKeys;
+    r.hangar.client.paneSendKeys = async (pane, keys) => {
+      await sendKeys(pane, keys);
+      if (keys.includes("Enter")) r.hangar.status("working");
+    };
+    return r;
+  }
+  const created = (r: ReturnType<typeof rig>) =>
+    r.hangar.calls.filter((c) => c.method === "workspace.create").length;
+
+  test("CardsReportHangar T6: GET /api/cards reads the hangar with one agent.list", async () => {
+    const r = rig({ hangarSession: "fleet" });
+    expect((await r.cards()).hangar).toEqual({ cap: 4, occupied: 1, queued: 0 });
+    expect(r.hangar.counts.agentList).toBe(1);
+  });
+
+  test("CardsReportHangar T8: with no hangar session the cards reply says hangar: null", async () => {
+    const r = rig({ hangarSession: null });
+    expect((await r.cards()).hangar).toBeNull();
+  });
+
+  test("CardsReportHangar T7: the cap is the pinned env, then the derived cores, then the fallback", async () => {
+    const saved = process.env.CC_MOBILE_HANGAR_CAP;
+    try {
+      process.env.CC_MOBILE_HANGAR_CAP = "7";
+      const pinned = rig({
+        hangarSession: "fleet",
+        config: parseServerConfig([], { readPerfCores: () => 10 }),
+      });
+      expect((await pinned.cards()).hangar?.cap).toBe(7);
+      delete process.env.CC_MOBILE_HANGAR_CAP;
+      const derived = rig({
+        hangarSession: "fleet",
+        config: parseServerConfig([], { readPerfCores: () => 10 }),
+      });
+      expect((await derived.cards()).hangar?.cap).toBe(8);
+    } finally {
+      if (saved === undefined) delete process.env.CC_MOBILE_HANGAR_CAP;
+      else process.env.CC_MOBILE_HANGAR_CAP = saved;
+    }
+    expect((await rig({ hangarSession: "fleet" }).cards()).hangar?.cap).toBe(4);
+  });
+
+  test("LaunchRefusedWhileHangarOffline T4: a hangar that cannot list is 503 and creates nothing", async () => {
+    const r = capRig();
+    r.hangar.behaviour.listFails = true;
+    const res = await r.launch(body);
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: "hangar_offline" });
+    expect(created(r)).toBe(0);
+  });
+
+  test("QueuedLaunchStartsOnPoll T4: a full hangar queues, and the poll starts the launch once a slot frees", async () => {
+    const r = capRig({ hangarCap: 1 });
+    const res = await r.launch(body);
+    expect(res.status).toBe(202);
+    expect(await res.json()).toEqual({ queued: true, position: 1 });
+    expect(created(r)).toBe(0);
+    expect(r.queueTimer.fn).toBeDefined();
+
+    r.hangar.behaviour.empty = true;
+    r.queueTimer.fn?.();
+    await until(() => r.hangar.typed.length >= 2, "the prompt typed into the hangar pane");
+
+    expect(created(r)).toBe(1);
+    const files = readdirSync(join(tmp, "launches"));
+    expect(files).toHaveLength(1);
+    expect(JSON.parse(readFileSync(join(tmp, "launches", files[0]), "utf8")).paneId).toBe(
+      HANGAR_KEY,
+    );
+    expect(r.hangar.typed[0]).toEqual({ pane: PANE, text: composeLaunchPrompt(CARD) });
+  });
+
+  test("QueuedLaunchStartsAfterHangarTeardown T4: closing a hangar pane starts the head without a tick", async () => {
+    const r = capRig({ hangarCap: 1 });
+    expect((await r.launch(body)).status).toBe(202);
+    expect(created(r)).toBe(0);
+    const phone = await r.phone();
+    await phone.list();
+
+    r.hangar.behaviour.empty = true;
+    phone.socket.send(JSON.stringify({ type: "terminal_teardown", sessionId: HANGAR_KEY }));
+    await until(() => created(r) === 1, "the queued launch starting");
   });
 });

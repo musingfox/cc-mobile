@@ -4,6 +4,7 @@ import { basename, join } from "node:path";
 import { Elysia } from "elysia";
 import type { ServerConfig } from "./config";
 import { resolveByLstat } from "./launch";
+import { cardKey, type HangarStatus } from "./launch-queue";
 import { isWithinRoot } from "./path-utils";
 
 export interface Card {
@@ -13,6 +14,8 @@ export interface Card {
   status: string | null;
   priority: string | null;
   blockedBy: string[];
+  /** Waiting for a hangar slot, or admitted and not yet finished starting. */
+  queued: boolean;
   dispatchable: boolean;
 }
 
@@ -27,6 +30,12 @@ export interface CardProject {
 export interface CardsReply {
   projects: CardProject[];
   skipped: { repo: string; reason: "invalid_config" | "vault_not_found" | "tasks_outside_vault" }[];
+}
+
+/** What `createCardsPlugin` reads of the launch queue. */
+export interface HangarView {
+  has(key: string): boolean;
+  status(): Promise<HangarStatus>;
 }
 
 export interface CardSources {
@@ -89,7 +98,7 @@ async function vaultPaths(configPath: string): Promise<Map<string, string>> {
   return byName;
 }
 
-/** `vault\0cardPath` of every card a launch has already bound. */
+/** The set of `cardKey` values of every card a launch has already bound. */
 async function boundCards(dir: string): Promise<Set<string>> {
   const bound = new Set<string>();
   const names = await readdir(dir).catch(() => [] as string[]);
@@ -101,7 +110,7 @@ async function boundCards(dir: string): Promise<Set<string>> {
     } catch {}
     const vault = text(binding?.vault);
     const cardPath = text(binding?.cardPath);
-    if (vault && cardPath) bound.add(`${vault}\0${cardPath}`);
+    if (vault && cardPath) bound.add(cardKey(vault, cardPath));
   }
   return bound;
 }
@@ -132,6 +141,7 @@ async function readProjectCards(
   tasksDir: string,
   project: string,
   bound: Set<string>,
+  isQueued: (vault: string, cardPath: string) => boolean,
 ): Promise<Card[]> {
   const dir = join("pm", project, "tasks");
   const entries = await readdir(tasksDir, { withFileTypes: true }).catch(() => []);
@@ -142,12 +152,14 @@ async function readProjectCards(
     const fm = frontmatter((await readOrNull(join(tasksDir, entry.name))) ?? "");
     const blockedBy = blockers(fm.blocked_by);
     const status = text(fm.status);
+    const queued = isQueued(vault, cardPath);
     cards.push({
       cardPath,
       title: text(fm.title),
       status,
       priority: text(fm.priority),
       blockedBy,
+      queued,
       // obw's frontier requires `type: task` and counts a blocker only by a
       // `[[` in its value. The template writes an empty `session:` on every
       // card, so only a value counts as bound.
@@ -156,14 +168,18 @@ async function readProjectCards(
         status === "todo" &&
         !blockedBy.some((b) => b.includes("[[")) &&
         text(fm.session) === null &&
-        !bound.has(`${vault}\0${cardPath}`),
+        !bound.has(cardKey(vault, cardPath)) &&
+        !queued,
     });
   }
   return cards.sort((a, b) => a.cardPath.localeCompare(b.cardPath));
 }
 
 /** Reads `.obsidian.yaml` files and the cards they point at. Writes nothing. */
-export async function readCards(sources: CardSources): Promise<CardsReply> {
+export async function readCards(
+  sources: CardSources,
+  isQueued: (vault: string, cardPath: string) => boolean = () => false,
+): Promise<CardsReply> {
   const vaults = await vaultPaths(sources.obsidianConfigPath).catch(
     () => new Map<string, string>(),
   );
@@ -225,7 +241,8 @@ export async function readCards(sources: CardSources): Promise<CardsReply> {
       vault,
       project,
       repos,
-      cards: tasksDir === null ? [] : await readProjectCards(vault, tasksDir, project, bound),
+      cards:
+        tasksDir === null ? [] : await readProjectCards(vault, tasksDir, project, bound, isQueued),
     });
   }
   projects.sort((a, b) => a.project.localeCompare(b.project) || a.vault.localeCompare(b.vault));
@@ -233,6 +250,15 @@ export async function readCards(sources: CardSources): Promise<CardsReply> {
   return { projects, skipped };
 }
 
-export function createCardsPlugin(opts: CardSources & { config: ServerConfig }) {
-  return new Elysia().get(`${opts.config.basePath}/api/cards`, () => readCards(opts));
+export function createCardsPlugin(
+  opts: CardSources & { config: ServerConfig; hangar?: HangarView | null },
+) {
+  const { hangar } = opts;
+  return new Elysia().get(`${opts.config.basePath}/api/cards`, async () => {
+    const reply = await readCards(
+      opts,
+      hangar ? (vault, cardPath) => hangar.has(cardKey(vault, cardPath)) : undefined,
+    );
+    return { ...reply, hangar: hangar ? await hangar.status() : null };
+  });
 }

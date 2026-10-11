@@ -12,7 +12,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createCardsPlugin } from "../cards";
+import { createCardsPlugin, type HangarView } from "../cards";
+import { cardKey } from "../launch-queue";
 import { testServerConfig } from "./ws-harness";
 
 let tmp: string;
@@ -47,9 +48,10 @@ afterEach(() => {
   rmSync(tmp, { recursive: true, force: true });
 });
 
-async function get() {
+async function get(hangar?: HangarView | null) {
   const app = createCardsPlugin({
     config: testServerConfig,
+    ...(hangar !== undefined ? { hangar } : {}),
     workspaceRoot: workspace,
     obsidianConfigPath: obsidianConfig,
     launchesDir,
@@ -69,10 +71,12 @@ interface CardsBody {
       status: string | null;
       priority: string | null;
       blockedBy: string[];
+      queued: boolean;
       dispatchable: boolean;
     }[];
   }[];
   skipped: { repo: string; reason: string }[];
+  hangar: { cap: number; occupied: number | null; queued: number } | null;
 }
 
 describe("GET /api/cards", () => {
@@ -99,6 +103,7 @@ describe("GET /api/cards", () => {
             status: "todo",
             priority: "high",
             blockedBy: ["[[b]]"],
+            queued: false,
             dispatchable: false,
           },
         ],
@@ -237,6 +242,78 @@ describe("GET /api/cards", () => {
     repo("p", "vault: obsidian\npm:\n  project: p\n");
     const { body } = await get();
     expect(body.skipped).toEqual([{ repo: join(workspace, "p"), reason: "vault_not_found" }]);
+  });
+
+  test("no hangar view reports hangar: null", async () => {
+    const { body } = await get();
+    expect(body.hangar).toBeNull();
+  });
+
+  test("a hangar view reports its cap, occupancy and queue length", async () => {
+    const hangar = { has: () => false, status: async () => ({ cap: 4, occupied: 2, queued: 0 }) };
+    const { body } = await get(hangar);
+    expect(body.hangar).toEqual({ cap: 4, occupied: 2, queued: 0 });
+  });
+
+  describe("queued cards", () => {
+    const viewOf = (...keys: string[]): HangarView => ({
+      has: (key) => keys.includes(key),
+      status: async () => ({ cap: 1, occupied: 1, queued: keys.length }),
+    });
+    const verdicts = (body: CardsBody) =>
+      Object.fromEntries(
+        body.projects[0].cards.map((c) => [
+          c.cardPath.split("/").pop(),
+          { queued: c.queued, dispatchable: c.dispatchable },
+        ]),
+      );
+
+    test("a waiting card is queued and not dispatchable; its sibling is unaffected", async () => {
+      repo("p", "vault: obsidian\npm:\n  project: p\n");
+      card("p", "a.md", "type: task\nstatus: todo");
+      card("p", "b.md", "type: task\nstatus: todo");
+      const { body } = await get(viewOf(cardKey("obsidian", "pm/p/tasks/a.md")));
+      expect(verdicts(body)).toEqual({
+        "a.md": { queued: true, dispatchable: false },
+        "b.md": { queued: false, dispatchable: true },
+      });
+    });
+
+    test("a key spelled with a doubled slash names the same card", async () => {
+      repo("p", "vault: obsidian\npm:\n  project: p\n");
+      card("p", "a.md", "type: task\nstatus: todo");
+      const { body } = await get(viewOf(cardKey("obsidian", "pm//p/tasks/a.md")));
+      expect(verdicts(body)["a.md"].queued).toBe(true);
+    });
+
+    test("a binding written with a doubled slash still binds its card", async () => {
+      repo("p", "vault: obsidian\npm:\n  project: p\n");
+      card("p", "a.md", "type: task\nstatus: todo");
+      write(
+        join(launchesDir, "u.json"),
+        JSON.stringify({ vault: "obsidian", cardPath: "pm//p/tasks/a.md" }),
+      );
+      const { body } = await get(viewOf());
+      expect(verdicts(body)["a.md"].dispatchable).toBe(false);
+    });
+
+    test("a blocked card that is queued is queued and not dispatchable", async () => {
+      repo("p", "vault: obsidian\npm:\n  project: p\n");
+      card("p", "a.md", 'type: task\nstatus: todo\nblocked_by: ["[[x]]"]');
+      const { body } = await get(viewOf(cardKey("obsidian", "pm/p/tasks/a.md")));
+      expect(verdicts(body)["a.md"]).toEqual({ queued: true, dispatchable: false });
+    });
+
+    test("a bound card that left the queue is bound, not queued, not dispatchable", async () => {
+      repo("p", "vault: obsidian\npm:\n  project: p\n");
+      card("p", "a.md", "type: task\nstatus: todo");
+      write(
+        join(launchesDir, "u.json"),
+        JSON.stringify({ vault: "obsidian", cardPath: "pm/p/tasks/a.md" }),
+      );
+      const { body } = await get(viewOf());
+      expect(verdicts(body)["a.md"]).toEqual({ queued: false, dispatchable: false });
+    });
   });
 
   test("reading writes nothing anywhere under the workspace, the vault or the launches dir", async () => {
