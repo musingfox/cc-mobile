@@ -207,4 +207,46 @@ describe("parseServerConfig", () => {
       expect(calls).toBe(1);
     });
   });
+
+  describe("CC_MOBILE_HANGAR_CAP", () => {
+    const original = process.env.CC_MOBILE_HANGAR_CAP;
+    afterEach(() => {
+      if (original === undefined) delete process.env.CC_MOBILE_HANGAR_CAP;
+      else process.env.CC_MOBILE_HANGAR_CAP = original;
+    });
+    const parse = (v: string, readPerfCores: () => number | null = () => 6) => {
+      process.env.CC_MOBILE_HANGAR_CAP = v;
+      return parseServerConfig(["node", "index.ts"], { readPerfCores });
+    };
+
+    test("pins the cap and never reads the cores", () => {
+      let calls = 0;
+      const cfg = parse("6", () => {
+        calls++;
+        return 2;
+      });
+      expect(cfg.hangarCap).toBe(6);
+      expect(calls).toBe(0);
+    });
+
+    test("trims surrounding whitespace", () => expect(parse(" 3 ").hangarCap).toBe(3));
+    test("accepts two digits", () => expect(parse("12").hangarCap).toBe(12));
+
+    test("a malformed value throws naming the variable and the value", () => {
+      for (const v of ["0", "04", "+4", "4.0", "-1", "abc", "4 4"]) {
+        expect(() => parse(v)).toThrow(/CC_MOBILE_HANGAR_CAP/);
+        expect(() => parse(v)).toThrow(v);
+      }
+    });
+
+    test("blank counts as unset", () => {
+      let calls = 0;
+      const cfg = parse("   ", () => {
+        calls++;
+        return 6;
+      });
+      expect(cfg.hangarCap).toBe(4);
+      expect(calls).toBe(1);
+    });
+  });
 });
