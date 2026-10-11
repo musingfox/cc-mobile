@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { resolve } from "node:path";
-import { resolveHangarCap } from "./hangar-cap";
+import { type HangarCapResolution, resolveHangarCapWithSource } from "./hangar-cap";
 
 export interface ServerConfig {
   port: number;
@@ -16,7 +16,7 @@ export interface ServerConfig {
   launchToken?: string | null;
   /** Absolute Obsidian vault root for `/api/launch` cards; null (unset/blank) means none. */
   vaultRoot?: string | null;
-  /** Max concurrent hangar agents. See `resolveHangarCap`. */
+  /** Max concurrent hangar agents. See `resolveHangarCapWithSource`. */
   hangarCap?: number;
 }
 
@@ -46,12 +46,19 @@ export function parseBasePath(basePath: string | undefined): string {
 
 export interface ParseServerConfigOptions {
   readPerfCores?: () => number | null;
+  /** Receives how the cap was resolved, for the startup line. */
+  onHangarCap?: (resolution: HangarCapResolution) => void;
 }
 
 export function parseServerConfig(
   argv: string[],
   options: ParseServerConfigOptions = {},
 ): ServerConfig {
+  const capResolution = resolveHangarCapWithSource(
+    process.env.CC_MOBILE_HANGAR_CAP,
+    options.readPerfCores ?? (() => null),
+  );
+  options.onHangarCap?.(capResolution);
   const config: ServerConfig = {
     port: 3001,
     hostname: "0.0.0.0",
@@ -62,10 +69,7 @@ export function parseServerConfig(
     hangarSession: parseHangarSession(),
     launchToken: process.env.CC_MOBILE_LAUNCH_TOKEN?.trim() || null,
     vaultRoot: parseVaultRoot(),
-    hangarCap: resolveHangarCap(
-      process.env.CC_MOBILE_HANGAR_CAP,
-      options.readPerfCores ?? (() => null),
-    ),
+    hangarCap: capResolution.cap,
   };
 
   for (let i = 0; i < argv.length; i++) {
