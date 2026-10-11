@@ -40,4 +40,31 @@ describe("CLAUDE.md launch docs", () => {
     );
     expect(flat).toContain("except that `POST /api/launch` answers `503 hangar_unavailable`");
   });
+
+  test("documents the hangar cap and its queue", () => {
+    for (const term of [
+      "CC_MOBILE_HANGAR_CAP",
+      "202 {queued: true, position}",
+      "409 already_queued",
+      "503 hangar_offline",
+      "hangar: {cap, occupied, queued}",
+      "agent.list",
+      "restart empties the queue",
+    ]) {
+      expect(doc.replace(/\s+/g, " ")).toContain(term);
+    }
+  });
+
+  test("states how queued, admitted and dequeued launches answer", () => {
+    const flat = doc.replace(/\s+/g, " ");
+    expect(flat).toContain("waiting, or admitted and still starting, answers `409 already_queued`");
+    expect(flat).toContain("waits for a hangar slot or was admitted and is still starting");
+    expect(flat).toContain("come after `unknown_profile` and before the worktree checks");
+    expect(flat).toContain(
+      "still writes today's `prompt_send` audit line, `failed`, or `rejected` when the pane was busy",
+    );
+    expect(flat).toContain(
+      "`hangar.queued` counts only launches still waiting for a slot; one that is starting is counted in `occupied`",
+    );
+  });
 });

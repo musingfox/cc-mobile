@@ -47,6 +47,8 @@ socket in the background, so a daemon that comes up later is picked up with no
 restart. A hangar unusable for 300 s — unreachable, or answering another protocol —
 sends one `hangar_offline` push per episode, none on recovery; the cockpit never pushes for being offline.
 
+How many agents the hangar runs at once is capped by `CC_MOBILE_HANGAR_CAP`; see **Launch API**.
+
 ## Commands
 
 ```bash
@@ -502,7 +504,7 @@ that can refuse a keystroke is a worse failure than a missing line.
 
 `POST /api/launch` (`server/launch.ts`) dispatches an Obsidian task card onto
 the **hangar** without a phone: `{cwd, cardPath, vault, project, profileId?}` →
-`201 {sessionId, claudeUuid}`. `cardPath` is relative to the vault, `vault` must
+`201 {sessionId, claudeUuid}`, or `202 {queued: true, position}` when the hangar is at its cap (below). `cardPath` is relative to the vault, `vault` must
 equal the basename of `CC_MOBILE_VAULT_ROOT`, and `project` matches
 `[A-Za-z0-9._-]+` without a leading dot. It is the same `terminal_create` +
 `terminal_send` path the WS uses, so `CC_MOBILE_ALLOWED_ROOTS` and the profile
@@ -525,7 +527,9 @@ path that does not resolve is `404 card_not_found`; one whose resolved path
 root that then cannot be read (a directory, mode 000) is `404 card_not_found`; a
 profile of a non-claude kind is `400 unsupported_kind`. The request's own
 `cwd` is checked next, with the terminal codes (`400 invalid_cwd`,
-`403 path_not_allowed`), then its profile (`400 unknown_profile`). When `cwd` is
+`403 path_not_allowed`), then its profile (`400 unknown_profile`). `409 already_queued` and
+`503 hangar_offline` come after `unknown_profile` and before the worktree checks.
+When `cwd` is
 inside a git repo the worktree checks follow, all before git writes anything: a
 repo git refuses to read (dubious ownership, a broken `.git`) is
 `500 worktree_failed`; a repo top level outside every allowed root, or a
@@ -635,6 +639,22 @@ on the new pane before sending, writing into the same replay buffer the WS uses:
 a phone that connects later replays the turn. Its audit line has
 `device: "launch-api"`.
 
+The hangar runs a bounded number of agents at once. The cap is
+`CC_MOBILE_HANGAR_CAP` when set (blank counts as unset; a value that is not a
+positive integer stops the server at startup), else performance cores − 2 with a
+minimum of 1, else 4 when the core count is unknown. Occupancy is the hangar's
+own `agent.list` plus launches admitted but not yet finished, so an agent the
+user started by hand counts. Past the cap a launch is not refused but queued,
+first in first out: the reply is `202 {queued: true, position}` and the
+request's checks have already passed. A card already waiting, or admitted and still starting, answers
+`409 already_queued`, and a hangar that cannot be asked how full it is answers
+`503 hangar_offline` rather than guess it empty — never over-admit. When a slot
+frees, the next launch is checked again against the live occupancy before it
+starts; a failure at that point has no caller left to tell and is a log line
+only, except that a dequeued launch whose prompt failed still writes today's
+`prompt_send` audit line, `failed`, or `rejected` when the pane was busy (only failures before the prompt are log-only). The queue lives in memory, so a restart empties the queue and the
+caller dispatches again.
+
 ## Cards API
 
 `GET /api/cards` (`server/cards.ts`) lists the obw task cards an inbox can
@@ -663,6 +683,12 @@ cc-mobile only reads the vault. Writeback is obw's hook, and closing or
 archiving a card is obw's, whose dependency check lives in its pm skill. The
 route needs no token, since it starts nothing; the root gate still runs in front
 of it.
+
+Each card also carries `queued`, true when its launch waits for a hangar slot or was admitted and is still starting,
+and the reply carries `hangar: {cap, occupied, queued}`. `hangar.queued` counts only
+launches still waiting for a slot; one that is starting is counted in `occupied`. `occupied` is `null`,
+not 0, when the hangar cannot be asked: offline is unknown, not empty. The GET
+reads this state and starts nothing, queued launches included.
 
 ## Security Constraints
 
