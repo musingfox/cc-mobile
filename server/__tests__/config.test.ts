@@ -19,6 +19,7 @@ describe("parseServerConfig", () => {
     delete process.env.CC_MOBILE_ALLOWED_ROOTS;
     delete process.env.BASE_PATH;
     delete process.env.CC_MOBILE_VAULT_ROOT;
+    delete process.env.CC_MOBILE_HANGAR_CAP;
     const result = parseServerConfig(["node", "index.ts"]);
     expect(result).toEqual({
       port: 3001,
@@ -30,6 +31,7 @@ describe("parseServerConfig", () => {
       hangarSession: null,
       launchToken: null,
       vaultRoot: null,
+      hangarCap: 4,
     });
     cleanup();
   });
@@ -38,6 +40,7 @@ describe("parseServerConfig", () => {
     delete process.env.CC_MOBILE_ALLOWED_ROOTS;
     delete process.env.BASE_PATH;
     delete process.env.CC_MOBILE_VAULT_ROOT;
+    delete process.env.CC_MOBILE_HANGAR_CAP;
     const result = parseServerConfig([
       "node",
       "index.ts",
@@ -58,6 +61,7 @@ describe("parseServerConfig", () => {
       hangarSession: null,
       launchToken: null,
       vaultRoot: null,
+      hangarCap: 4,
     });
     cleanup();
   });
@@ -166,6 +170,41 @@ describe("parseServerConfig", () => {
       // failure here to see.
       process.env.CC_MOBILE_PUSH_SCOPE = "always";
       expect(() => parseServerConfig(["node", "index.ts"])).toThrow("CC_MOBILE_PUSH_SCOPE");
+    });
+  });
+
+  describe("hangar cap from performance cores", () => {
+    const original = process.env.CC_MOBILE_HANGAR_CAP;
+    afterEach(() => {
+      if (original === undefined) delete process.env.CC_MOBILE_HANGAR_CAP;
+      else process.env.CC_MOBILE_HANGAR_CAP = original;
+    });
+    const capFor = (readPerfCores?: () => number | null) => {
+      delete process.env.CC_MOBILE_HANGAR_CAP;
+      return parseServerConfig(["node", "index.ts"], readPerfCores ? { readPerfCores } : undefined)
+        .hangarCap;
+    };
+
+    test("6 cores -> 4", () => expect(capFor(() => 6)).toBe(4));
+    test("10 cores -> 8", () => expect(capFor(() => 10)).toBe(8));
+    test("3, 2 or 1 cores -> 1", () => {
+      for (const n of [3, 2, 1]) expect(capFor(() => n)).toBe(1);
+    });
+    test("null -> 4", () => expect(capFor(() => null)).toBe(4));
+    test("a throwing reader -> 4", () =>
+      expect(
+        capFor(() => {
+          throw new Error("x");
+        }),
+      ).toBe(4));
+    test("no options -> 4", () => expect(capFor()).toBe(4));
+    test("reader is called exactly once", () => {
+      let calls = 0;
+      capFor(() => {
+        calls++;
+        return 6;
+      });
+      expect(calls).toBe(1);
     });
   });
 });

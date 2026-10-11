@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { resolve } from "node:path";
+import { resolveHangarCap } from "./hangar-cap";
 
 export interface ServerConfig {
   port: number;
@@ -15,6 +16,8 @@ export interface ServerConfig {
   launchToken?: string | null;
   /** Absolute Obsidian vault root for `/api/launch` cards; null (unset/blank) means none. */
   vaultRoot?: string | null;
+  /** Max concurrent hangar agents. See `resolveHangarCap`. */
+  hangarCap?: number;
 }
 
 /**
@@ -41,7 +44,14 @@ export function parseBasePath(basePath: string | undefined): string {
   return basePath;
 }
 
-export function parseServerConfig(argv: string[]): ServerConfig {
+export interface ParseServerConfigOptions {
+  readPerfCores?: () => number | null;
+}
+
+export function parseServerConfig(
+  argv: string[],
+  options: ParseServerConfigOptions = {},
+): ServerConfig {
   const config: ServerConfig = {
     port: 3001,
     hostname: "0.0.0.0",
@@ -52,6 +62,10 @@ export function parseServerConfig(argv: string[]): ServerConfig {
     hangarSession: parseHangarSession(),
     launchToken: process.env.CC_MOBILE_LAUNCH_TOKEN?.trim() || null,
     vaultRoot: parseVaultRoot(),
+    hangarCap: resolveHangarCap(
+      process.env.CC_MOBILE_HANGAR_CAP,
+      options.readPerfCores ?? (() => null),
+    ),
   };
 
   for (let i = 0; i < argv.length; i++) {
