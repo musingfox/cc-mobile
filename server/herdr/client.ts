@@ -73,6 +73,8 @@ const AGENT_WAIT_DEADLINE_MARGIN_MS = 5_000;
  * seconds, not the transport's 10 s default.
  */
 const INTEGRATION_LIST_TIMEOUT_MS = 2_000;
+/** Same reason for the launch queue's occupancy read: unknown must come back fast. */
+export const AGENT_COUNT_TIMEOUT_MS = 2_000;
 
 export interface HerdrClientOptions {
   /** Explicit socket path; falls back to $HERDR_SOCKET_PATH, then ~/.config/herdr/herdr.sock. */
@@ -135,8 +137,13 @@ export function createHerdrClient(options: HerdrClientOptions = {}) {
   }
 
   /** Lists all detected agents across the daemon. */
-  async function agentList(): Promise<AgentInfo[]> {
-    const result = await call("agent.list", {}, AgentListResultSchema);
+  async function agentList(options?: { timeoutMs?: number }): Promise<AgentInfo[]> {
+    const result = await call(
+      "agent.list",
+      {},
+      AgentListResultSchema,
+      options?.timeoutMs === undefined ? undefined : { timeoutMs: options.timeoutMs },
+    );
     return result.agents;
   }
 

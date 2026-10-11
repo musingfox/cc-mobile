@@ -22,7 +22,12 @@ import type { ClientSink, TerminalBackend, TerminalSessionInfo } from "../termin
 import { createTranscriptDelivery } from "../transcript/delivery";
 import { type PageCursor, readTranscriptPage, type TranscriptPage } from "../transcript/page";
 import { type AgentState, statesFromSnapshot } from "./agent-state";
-import { createHerdrClient, type HerdrClient, SUPPORTED_PROTOCOL } from "./client";
+import {
+  AGENT_COUNT_TIMEOUT_MS,
+  createHerdrClient,
+  type HerdrClient,
+  SUPPORTED_PROTOCOL,
+} from "./client";
 import { classifyHerdrFailure } from "./errors";
 import { createAgentNotice } from "./notice/agent-notice";
 import { createHerdrPaneEvents } from "./pane-events";
@@ -197,6 +202,13 @@ export interface HerdrTerminalBackend extends TerminalBackend {
    * rejects: whatever herdr cannot answer is null.
    */
   paneCwd(paneId: string): Promise<string | null>;
+  /**
+   * How many entries the daemon's `agent.list` returns — every one, with no
+   * label suppression, in a single call. `null` when the daemon cannot say
+   * (client without `agentList`, or the call fails); never rejects, and never
+   * opens the event stream.
+   */
+  agentCount(): Promise<number | null>;
 }
 
 /**
@@ -487,6 +499,14 @@ export function createHerdrBackend(options: HerdrBackendOptions = {}): HerdrTerm
     },
     hasSession: (claudeUuid) => registry.hasSession(claudeUuid),
     listLive: () => registry.listSessions(),
+    async agentCount() {
+      if (typeof client.agentList !== "function") return null;
+      try {
+        return (await client.agentList({ timeoutMs: AGENT_COUNT_TIMEOUT_MS })).length;
+      } catch {
+        return null;
+      }
+    },
     async paneCwd(paneId) {
       try {
         const info = await client.agentGet(paneId);

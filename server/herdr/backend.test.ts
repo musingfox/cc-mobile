@@ -1535,3 +1535,85 @@ describe("ClearRotationNotice wiring", () => {
     }
   });
 });
+
+describe("HangarAgentCount backend", () => {
+  const row = (pane: string, workspace: string) => ({
+    pane_id: pane,
+    workspace_id: workspace,
+    agent: "claude",
+    agent_status: "idle",
+    cwd: "/tmp",
+    agent_session: { kind: "id", value: pane },
+  });
+
+  function countingClient(agentList?: () => Promise<unknown>) {
+    const counts = { sessionSnapshot: 0, agentGet: 0 };
+    const client = {
+      agentGet: async () => {
+        counts.agentGet += 1;
+        return {};
+      },
+      ...(agentList ? { agentList } : {}),
+      sessionSnapshot: async () => {
+        counts.sessionSnapshot += 1;
+        return { workspaces: [], panes: [], agents: [] };
+      },
+      subscribeEvents: async () => ({ stop: () => {} }),
+    } as unknown as NonNullable<HerdrBackendOptions["client"]>;
+    return { client, counts };
+  }
+
+  test("T5 counts every entry with one agent.list and nothing else", async () => {
+    const { client, counts } = countingClient(async () => [
+      row("w1:p1", "w1"),
+      { ...row("w2:p1", "w2"), workspace_label: "ccme2e-x" },
+    ]);
+    const backend = createHerdrBackend({ client });
+    try {
+      expect(await backend.agentCount()).toBe(2);
+      expect(counts.sessionSnapshot).toBe(0);
+      expect(counts.agentGet).toBe(0);
+    } finally {
+      await backend.teardownAll();
+    }
+  });
+
+  test("T6 a transport failure is null", async () => {
+    const { client } = countingClient(async () => {
+      throw new HerdrTransportError("connect failed");
+    });
+    const backend = createHerdrBackend({ client });
+    try {
+      expect(await backend.agentCount()).toBeNull();
+    } finally {
+      await backend.teardownAll();
+    }
+  });
+
+  test("unanswered agent.list: the occupancy read is null within about 2 s", async () => {
+    // A client honouring the per-call deadline the way the transport does.
+    const { client } = countingClient((async (options?: { timeoutMs?: number }) => {
+      await new Promise((_, reject) =>
+        setTimeout(() => reject(new HerdrTransportError("timeout")), options?.timeoutMs ?? 10_000),
+      );
+    }) as never);
+    const backend = createHerdrBackend({ client });
+    try {
+      const started = Date.now();
+      expect(await backend.agentCount()).toBeNull();
+      expect(Date.now() - started).toBeLessThan(3_000);
+    } finally {
+      await backend.teardownAll();
+    }
+  });
+
+  test("T7 a client without agentList is null", async () => {
+    const { client } = countingClient();
+    const backend = createHerdrBackend({ client });
+    try {
+      expect(await backend.agentCount()).toBeNull();
+    } finally {
+      await backend.teardownAll();
+    }
+  });
+});

@@ -40,6 +40,7 @@ function fakeBackend(overrides: Record<string, unknown> = {}) {
     pushSubscriberCount: 0,
     readCapabilities: Promise.resolve({ ok: false, reason: "failed" }),
     paneCwd: Promise.resolve(null),
+    agentCount: Promise.resolve(0),
     ...overrides,
   };
   const backend: Record<string, unknown> = {};
@@ -455,5 +456,61 @@ describe("SidesStartInBackground", () => {
     expect(() => sided.start()).not.toThrow();
     await new Promise((r) => setTimeout(r, 0));
     expect(warns.some((w) => /boom/.test(w))).toBe(true);
+  });
+});
+
+describe("HangarAgentCount", () => {
+  test("T1 delegates to the hangar only", async () => {
+    const { sided, cockpit, hangar } = make({}, { agentCount: Promise.resolve(3) });
+    expect(await sided.hangarAgentCount()).toBe(3);
+    expect(hangar.calls.agentCount.length).toBe(1);
+    expect(cockpit.calls.agentCount).toBeUndefined();
+  });
+  test("T2 unknown stays null", async () => {
+    const { sided } = make({}, { agentCount: Promise.resolve(null) });
+    expect(await sided.hangarAgentCount()).toBeNull();
+  });
+  test("T3 no hangar is null", async () => {
+    const { sided } = make({}, null);
+    expect(await sided.hangarAgentCount()).toBeNull();
+  });
+  test("T4 incompatible watch issues no call", async () => {
+    const hw = fakeWatch("incompatible");
+    const { sided, hangar } = make({}, { agentCount: Promise.resolve(5) }, { hw: hw.watch });
+    expect(await sided.hangarAgentCount()).toBeNull();
+    expect(hangar.calls.agentCount).toBeUndefined();
+  });
+});
+
+describe("QueuedLaunchStartsAfterHangarTeardown", () => {
+  function withSpy(h: Record<string, unknown> = {}) {
+    const cockpit = fakeBackend();
+    const hangar = fakeBackend(h);
+    let calls = 0;
+    const sided = createSidedBackend({
+      cockpit: { backend: cockpit.backend },
+      hangar: { name: "fleet", backend: hangar.backend },
+      onHangarTeardown: () => {
+        calls += 1;
+      },
+    });
+    return { sided, hangar, calls: () => calls };
+  }
+  test("T1 hangar teardown notifies once", async () => {
+    const { sided, hangar, calls } = withSpy();
+    await sided.teardown("fleet@w1:p1");
+    expect(hangar.calls.teardown[0][0]).toBe("w1:p1");
+    expect(calls()).toBe(1);
+  });
+  test("T2 cockpit teardown does not", async () => {
+    const { sided, calls } = withSpy();
+    await sided.teardown("w1:p1");
+    expect(calls()).toBe(0);
+  });
+  test("T3 rejected teardown still notifies and rethrows", async () => {
+    const boom = new Error("boom");
+    const { sided, calls } = withSpy({ teardown: () => Promise.reject(boom) });
+    await expect(sided.teardown("fleet@w1:p1")).rejects.toBe(boom);
+    expect(calls()).toBe(1);
   });
 });

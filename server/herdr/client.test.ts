@@ -289,3 +289,16 @@ describe("herdr client: AgentWait", () => {
     expect(calls[0]?.options?.timeoutMs).toBe(65000);
   });
 });
+
+describe("herdr client: unanswered agent.list", () => {
+  it("unanswered agent.list is bounded by the caller's short deadline, the default stays the transport's", async () => {
+    const { transport, calls } = fakeTransport(() => resultOf(AGENT_LIST_LINE));
+    const client = createHerdrClient({ transport });
+
+    await client.agentList({ timeoutMs: 2_000 });
+    await client.agentList();
+
+    expect(calls[0]?.options?.timeoutMs).toBe(2_000);
+    expect(calls[1]?.options?.timeoutMs).toBeUndefined();
+  });
+});

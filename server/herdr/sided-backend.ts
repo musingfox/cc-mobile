@@ -30,6 +30,8 @@ export interface SidedBackendOptions {
   cockpit: { backend: HerdrTerminalBackend; watch?: SocketWatch };
   hangar?: { name: string; backend: HerdrTerminalBackend; watch?: SocketWatch };
   warn?: (message: string) => void;
+  /** Called once after a hangar-routed teardown settles, whether it resolved or rejected. */
+  onHangarTeardown?: () => void;
 }
 
 export function createSidedBackend(options: SidedBackendOptions) {
@@ -154,9 +156,18 @@ export function createSidedBackend(options: SidedBackendOptions) {
       const { backend, paneId } = route(params.claudeUuid);
       return backend.send({ ...params, claudeUuid: paneId });
     },
-    teardown(key: string): Promise<TeardownResult> {
-      const { backend, paneId } = route(key);
-      return backend.teardown(paneId);
+    async teardown(key: string): Promise<TeardownResult> {
+      const { backend, paneId, side } = route(key);
+      try {
+        return await backend.teardown(paneId);
+      } finally {
+        if (side === "hangar") options.onHangarTeardown?.();
+      }
+    },
+    /** `null` is unknown, never zero: no hangar, an incompatible socket, or a daemon that did not answer. */
+    async hangarAgentCount(): Promise<number | null> {
+      if (!hangar || hangar.watch?.status() === "incompatible") return null;
+      return hangar.backend.agentCount();
     },
     readTranscriptPage(
       key: string,
