@@ -1,11 +1,15 @@
 import { existsSync } from "node:fs";
 import { type AppBackend, createApp, DIST_DIR } from "./app";
 import { parseServerConfig } from "./config";
+import { describeHangarCap, readPerfCoresViaSysctl } from "./hangar-cap";
 import { verifyHerdrSides } from "./herdr/backend";
 import { resolveHerdrSides } from "./herdr/sides";
 
 const isProd = process.env.NODE_ENV === "production";
-const serverConfig = parseServerConfig(process.argv);
+const serverConfig = parseServerConfig(process.argv, {
+  readPerfCores: readPerfCoresViaSysctl,
+  onHangarCap: (resolution) => console.log(describeHangarCap(resolution)),
+});
 
 // Wrapped rather than top-level await: pm2's bun fork container loads this file
 // with require(), which rejects an async module.

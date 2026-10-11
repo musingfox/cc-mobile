@@ -99,7 +99,7 @@ export interface SessionDescriptor {
 
 /** The client slice the listing needs; the real HerdrClient satisfies it. */
 export interface SessionListingClient {
-  agentList(): Promise<AgentInfo[]>;
+  agentList(options?: { timeoutMs?: number }): Promise<AgentInfo[]>;
   agentGet(target: string): Promise<AgentInfo>;
   sessionSnapshot(): Promise<SessionSnapshot>;
   call<T = unknown>(method: string, params: unknown, schema?: unknown): Promise<T>;
